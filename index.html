@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FF Draft Valuation Calculator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+```
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+    }
+
+    .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        overflow: hidden;
+    }
+
+    .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+    }
+
+    .header h1 {
+        font-size: 28px;
+        margin-bottom: 10px;
+    }
+
+    .header p {
+        opacity: 0.9;
+        font-size: 14px;
+    }
+
+    .input-section {
+        padding: 30px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .input-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    .input-group {
+        margin-bottom: 0;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #333;
+        font-size: 14px;
+    }
+
+    input, select {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 6px;
+        font-size: 16px;
+        transition: border-color 0.3s;
+    }
+
+    input:focus, select:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+
+    button {
+        width: 100%;
+        padding: 14px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        margin-top: 10px;
+    }
+
+    button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+        transform: translateY(0);
+    }
+
+    button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .results {
+        padding: 30px;
+        display: none;
+    }
+
+    .results.show {
+        display: block;
+    }
+
+    .baseline-card {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        padding: 25px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+        text-align: center;
+    }
+
+    .baseline-card h2 {
+        font-size: 20px;
+        margin-bottom: 5px;
+        opacity: 0.9;
+    }
+
+    .baseline-card .value {
+        font-size: 48px;
+        font-weight: bold;
+    }
+
+    .positions-table {
+        overflow-x: auto;
+        margin-top: 20px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    thead {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    th {
+        padding: 15px 10px;
+        text-align: left;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    td {
+        padding: 12px 10px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    tbody tr:hover {
+        background: #f8f9fa;
+    }
+
+    .pos-label {
+        font-weight: 600;
+        color: #667eea;
+    }
+
+    .multiplier {
+        background: #e3f2fd;
+        color: #1565c0;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+
+    .elite-bonus {
+        background: #fff3e0;
+        color: #e65100;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #667eea;
+        font-size: 18px;
+    }
+
+    .error {
+        background: #fee;
+        color: #c33;
+        padding: 15px;
+        border-radius: 6px;
+        margin: 20px 30px;
+        border-left: 4px solid #c33;
+    }
+
+    .info-text {
+        background: #e3f2fd;
+        color: #1565c0;
+        padding: 12px;
+        border-radius: 6px;
+        margin-top: 15px;
+        font-size: 13px;
+    }
+
+    .export-section {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 2px solid #e0e0e0;
+    }
+
+    .export-btn {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+
+    .formula-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-top: 20px;
+        border-left: 4px solid #667eea;
+    }
+
+    .formula-section h3 {
+        color: #667eea;
+        margin-bottom: 10px;
+        font-size: 18px;
+    }
+
+    .formula-section code {
+        background: white;
+        padding: 12px;
+        display: block;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        margin-top: 8px;
+        overflow-x: auto;
+    }
+
+    .highlight {
+        background: #fff3e0;
+    }
+
+    .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #667eea;
+    }
+</style>
+```
+
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚡ Fantasy Football Draft Valuation Calculator</h1>
+            <p>Calculate position multipliers and elite bonuses based on actual league scoring</p>
+        </div>
+
+```
+    <div class="input-section">
+        <div class="input-grid">
+            <div class="input-group">
+                <label for="leagueId">League ID</label>
+                <input 
+                    type="text" 
+                    id="leagueId" 
+                    placeholder="Enter your Sleeper league ID"
+                    value="1312100327931019264"
+                >
+            </div>
+
+            <div class="input-group">
+                <label for="startWeek">Start Week</label>
+                <input 
+                    type="number" 
+                    id="startWeek" 
+                    min="1"
+                    max="18"
+                    value="1"
+                >
+            </div>
+
+            <div class="input-group">
+                <label for="endWeek">End Week</label>
+                <input 
+                    type="number" 
+                    id="endWeek" 
+                    min="1"
+                    max="18"
+                    value="14"
+                >
+            </div>
+
+            <div class="input-group">
+                <label for="baselinePos">Baseline Position</label>
+                <select id="baselinePos">
+                    <option value="QB" selected>QB (Quarterback)</option>
+                    <option value="RB">RB (Running Back)</option>
+                    <option value="WR">WR (Wide Receiver)</option>
+                    <option value="TE">TE (Tight End)</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label for="eliteCount">Elite Threshold (Top X Players)</label>
+                <input 
+                    type="number" 
+                    id="eliteCount" 
+                    min="1"
+                    max="50"
+                    value="5"
+                    placeholder="e.g., 5 for top 5"
+                >
+            </div>
+        </div>
+
+        <div class="info-text">
+            📊 This tool analyzes all position groups, calculates their value relative to your baseline position, and identifies elite player bonuses based on top performers.
+        </div>
+
+        <button id="analyzeBtn" onclick="calculateValuations()">
+            🎯 Calculate Draft Valuations
+        </button>
+    </div>
+
+    <div id="results" class="results">
+        <div id="baselineCard" class="baseline-card">
+            <h2>Baseline Position: <span id="baselinePosName">QB</span></h2>
+            <div class="value" id="baselineValue">--</div>
+            <p>Average Points Per Start</p>
+        </div>
+
+        <h3 class="section-title">Position Group Valuations</h3>
+        <div class="positions-table">
+            <table id="resultsTable">
+                <thead>
+                    <tr>
+                        <th>Position</th>
+                        <th>Avg PPG</th>
+                        <th>Total Starts</th>
+                        <th>% of Baseline</th>
+                        <th>Draft Multiplier</th>
+                        <th>Elite Avg</th>
+                        <th>Elite Bonus</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody">
+                </tbody>
+            </table>
+        </div>
+
+        <div class="formula-section">
+            <h3>📐 How to Apply These Values</h3>
+            <code id="formulaExample">
+                Player Draft Value = (Season Projection × Position Multiplier) × Elite Bonus (if applicable)
+            </code>
+            <p style="margin-top: 12px; color: #666; font-size: 13px;">
+                Example: A CB projected for 120 points with 0.45 multiplier and 1.65 elite bonus = 120 × 0.45 × 1.65 = 89.1 draft value
+            </p>
+        </div>
+
+        <div class="export-section">
+            <button class="export-btn" onclick="exportToCSV()">
+                💾 Export to CSV
+            </button>
+        </div>
+    </div>
+
+    <div id="loading" class="loading" style="display: none;">
+        ⏳ Analyzing all position groups from your league...
+    </div>
+
+    <div id="error" class="error" style="display: none;"></div>
+</div>
+
+<script>
+    let positionData = [];
+
+    const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'DT', 'DE', 'LB', 'DB', 'CB', 'S'];
+
+    async function calculateValuations() {
+        const leagueId = document.getElementById('leagueId').value.trim();
+        const startWeek = parseInt(document.getElementById('startWeek').value);
+        const endWeek = parseInt(document.getElementById('endWeek').value);
+        const baselinePos = document.getElementById('baselinePos').value;
+        const eliteCount = parseInt(document.getElementById('eliteCount').value);
+
+        // Validation
+        if (!leagueId) {
+            showError('Please enter a league ID');
+            return;
+        }
+
+        if (startWeek > endWeek) {
+            showError('Start week must be less than or equal to end week');
+            return;
+        }
+
+        // Hide results and errors
+        document.getElementById('results').classList.remove('show');
+        document.getElementById('error').style.display = 'none';
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('analyzeBtn').disabled = true;
+
+        try {
+            // Fetch all players first
+            const playersRes = await fetch('https://api.sleeper.app/v1/players/nfl');
+            if (!playersRes.ok) throw new Error('Failed to fetch players data');
+            const players = await playersRes.json();
+
+            const weeks = [];
+            for (let week = startWeek; week <= endWeek; week++) {
+                weeks.push(week);
+            }
+
+            // Store all player scores for elite calculation
+            const playerScores = {};
+
+            // Analyze each position
+            const positionStats = {};
+            
+            for (const position of POSITIONS) {
+                positionStats[position] = {
+                    totalPoints: 0,
+                    totalStarts: 0,
+                    playerScores: []
+                };
+            }
+
+            // Fetch matchups for each week
+            for (const week of weeks) {
+                const matchupsRes = await fetch(
+                    `https://api.sleeper.app/v1/league/${leagueId}/matchups/${week}`
+                );
+                
+                if (!matchupsRes.ok) {
+                    console.warn(`Could not fetch week ${week}`);
+                    continue;
+                }
+
+                const matchups = await matchupsRes.json();
+
+                // Loop through each team's matchup
+                for (const matchup of matchups) {
+                    if (!matchup.starters || !matchup.players_points) continue;
+
+                    // Check starters for all positions
+                    for (const playerId of matchup.starters) {
+                        const player = players[playerId];
+                        
+                        if (player && POSITIONS.includes(player.position)) {
+                            const points = matchup.players_points[playerId] || 0;
+                            const pos = player.position;
+                            
+                            positionStats[pos].totalPoints += points;
+                            positionStats[pos].totalStarts++;
+                            
+                            // Track individual player scores
+                            if (!playerScores[playerId]) {
+                                playerScores[playerId] = {
+                                    position: pos,
+                                    totalPoints: 0,
+                                    starts: 0
+                                };
+                            }
+                            playerScores[playerId].totalPoints += points;
+                            playerScores[playerId].starts++;
+                        }
+                    }
+                }
+            }
+
+            // Calculate averages and find baseline
+            let baselineAvg = 0;
+            positionData = [];
+
+            for (const position of POSITIONS) {
+                const stats = positionStats[position];
+                
+                if (stats.totalStarts === 0) continue;
+
+                const avg = stats.totalPoints / stats.totalStarts;
+
+                // Calculate elite players for this position
+                const positionPlayers = Object.entries(playerScores)
+                    .filter(([id, data]) => data.position === position)
+                    .map(([id, data]) => ({
+                        id,
+                        avg: data.totalPoints / data.starts
+                    }))
+                    .sort((a, b) => b.avg - a.avg)
+                    .slice(0, eliteCount);
+
+                const eliteAvg = positionPlayers.length > 0
+                    ? positionPlayers.reduce((sum, p) => sum + p.avg, 0) / positionPlayers.length
+                    : avg;
+
+                const eliteBonus = avg > 0 ? eliteAvg / avg : 1;
+
+                positionData.push({
+                    position,
+                    avg,
+                    totalStarts: stats.totalStarts,
+                    totalPoints: stats.totalPoints,
+                    eliteAvg,
+                    eliteBonus
+                });
+
+                if (position === baselinePos) {
+                    baselineAvg = avg;
+                }
+            }
+
+            if (baselineAvg === 0) {
+                showError(`No data found for baseline position ${baselinePos}`);
+                return;
+            }
+
+            // Calculate multipliers
+            positionData.forEach(pos => {
+                pos.percentOfBaseline = (pos.avg / baselineAvg) * 100;
+                pos.multiplier = pos.avg / baselineAvg;
+            });
+
+            // Sort by average descending
+            positionData.sort((a, b) => b.avg - a.avg);
+
+            // Display results
+            displayResults(baselinePos, baselineAvg);
+
+        } catch (error) {
+            console.error('Error:', error);
+            showError(`Error: ${error.message}`);
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('analyzeBtn').disabled = false;
+        }
+    }
+
+    function displayResults(baselinePos, baselineAvg) {
+        // Update baseline card
+        document.getElementById('baselinePosName').textContent = baselinePos;
+        document.getElementById('baselineValue').textContent = baselineAvg.toFixed(2);
+
+        // Build table
+        const tbody = document.getElementById('resultsBody');
+        tbody.innerHTML = '';
+
+        positionData.forEach(pos => {
+            const row = tbody.insertRow();
+            
+            // Highlight baseline position
+            if (pos.position === baselinePos) {
+                row.classList.add('highlight');
+            }
+
+            row.innerHTML = `
+                <td class="pos-label">${pos.position}</td>
+                <td>${pos.avg.toFixed(2)}</td>
+                <td>${pos.totalStarts}</td>
+                <td>${pos.percentOfBaseline.toFixed(1)}%</td>
+                <td><span class="multiplier">${pos.multiplier.toFixed(3)}</span></td>
+                <td>${pos.eliteAvg.toFixed(2)}</td>
+                <td><span class="elite-bonus">${pos.eliteBonus.toFixed(2)}x</span></td>
+            `;
+        });
+
+        document.getElementById('results').classList.add('show');
+    }
+
+    function exportToCSV() {
+        const headers = ['Position', 'Avg PPG', 'Total Starts', '% of Baseline', 'Draft Multiplier', 'Elite Avg', 'Elite Bonus'];
+        const rows = positionData.map(pos => [
+            pos.position,
+            pos.avg.toFixed(2),
+            pos.totalStarts,
+            pos.percentOfBaseline.toFixed(1),
+            pos.multiplier.toFixed(3),
+            pos.eliteAvg.toFixed(2),
+            pos.eliteBonus.toFixed(2)
+        ]);
+
+        let csv = headers.join(',') + '\n';
+        rows.forEach(row => {
+            csv += row.join(',') + '\n';
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'draft-valuations.csv';
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    function showError(message) {
+        const errorDiv = document.getElementById('error');
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('analyzeBtn').disabled = false;
+    }
+
+    // Allow Enter key to submit
+    document.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            calculateValuations();
+        }
+    });
+</script>
+```
+
+</body>
+</html>
