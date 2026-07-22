@@ -713,7 +713,6 @@
     .auth-linkbtn:hover{color:var(--accent)}
   </style>
 
-  <footer class="footer">&copy; 2026 Dynasty HQ &middot; All rights reserved</footer>
 
   <script src="js/landing-content.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"></script>
@@ -1125,5 +1124,96 @@
       if (e.key === 'Enter' && ['acctEmail', 'acctPassword'].includes(document.activeElement?.id)) handleEmailAuth();
     });
   </script>
+  <!-- ══════════ Professional footer (approved league-room mock) ══════════
+       Scoped .dhqf-* classes + local custom properties so the mock's gold
+       identity renders faithfully without touching this page's own tokens. -->
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    .dhqf{--dhqf-gold:#D4AF37;--dhqf-black:#121217;--dhqf-silver:#BDB8AD;--dhqf-white:#F5F2EA;
+      --dhqf-line1:rgba(212,175,55,.18);--dhqf-line2:rgba(212,175,55,.30);--dhqf-ov1:rgba(255,255,255,.02);
+      --dhqf-ft:'Rajdhani',sans-serif;--dhqf-fb:'DM Sans',sans-serif;--dhqf-fm:'JetBrains Mono',monospace;
+      border-top:1px solid var(--dhqf-line2);background:var(--bg-0);font-family:var(--dhqf-fb);color:var(--dhqf-white)}
+    .dhqf a{color:inherit;text-decoration:none}
+    .dhqf-in{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+    .dhqf-grid{display:grid;grid-template-columns:1.3fr 1fr 1fr 1.2fr;gap:34px;padding:34px 0 26px}
+    .dhqf-h{font-family:var(--dhqf-fm);font-size:.64rem;letter-spacing:.22em;color:var(--dhqf-gold);text-transform:uppercase;margin-bottom:14px}
+    .dhqf-brand{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+    .dhqf-brand img{width:44px;height:44px;border-radius:11px;border:1px solid var(--dhqf-line2)}
+    .dhqf-brand .dhqf-bn{font-family:var(--dhqf-ft);font-weight:700;font-size:1.2rem;letter-spacing:.1em;color:var(--dhqf-gold);text-transform:uppercase}
+    .dhqf-tag{font-size:.82rem;color:var(--dhqf-silver);line-height:1.6;max-width:30ch}
+    .dhqf-links{display:flex;flex-direction:column;gap:10px}
+    .dhqf-links a{font-size:.86rem;color:var(--dhqf-silver);transition:color .13s;width:fit-content}
+    .dhqf-links a:hover{color:var(--dhqf-gold)}
+    .dhqf-appstore{display:flex;align-items:center;gap:10px;border:1px solid var(--dhqf-line2);border-radius:11px;padding:9px 15px;width:fit-content;transition:all .15s;background:var(--dhqf-ov1)}
+    .dhqf-appstore:hover{border-color:var(--dhqf-gold);box-shadow:0 0 14px rgba(212,175,55,.2)}
+    .dhqf-appstore[data-live="false"]{cursor:default}
+    .dhqf-appstore .dhqf-ab-s{font-size:.6rem;color:var(--dhqf-silver);letter-spacing:.04em}
+    .dhqf-appstore .dhqf-ab-b{font-family:var(--dhqf-ft);font-weight:700;font-size:1rem;color:var(--dhqf-white);letter-spacing:.03em;line-height:1.1}
+    .dhqf-soon{display:block;font-family:var(--dhqf-fm);font-size:.58rem;letter-spacing:.1em;color:var(--dhqf-gold);border:1px solid var(--dhqf-line1);border-radius:5px;padding:1px 6px;margin-top:8px;width:fit-content}
+    .dhqf-socials{display:flex;gap:9px;margin-top:14px}
+    .dhqf-sq{width:42px;height:42px;border-radius:10px;border:1px solid var(--dhqf-line2);display:flex;align-items:center;justify-content:center;transition:all .16s;background:var(--dhqf-ov1)}
+    .dhqf-sq:hover{border-color:var(--dhqf-gold);box-shadow:0 0 14px rgba(212,175,55,.22)}
+    .dhqf-discord{display:flex;align-items:center;justify-content:center;gap:10px;font-family:var(--dhqf-ft);font-weight:700;font-size:1.05rem;letter-spacing:.1em;color:var(--dhqf-black);background:var(--dhqf-gold);border-radius:12px;padding:14px 22px;text-transform:uppercase;transition:all .16s;width:100%;box-sizing:border-box}
+    .dhqf-discord:hover{box-shadow:0 0 26px rgba(212,175,55,.5);transform:translateY(-1px)}
+    .dhqf-x{display:flex;align-items:center;justify-content:center;gap:9px;font-family:var(--dhqf-fm);font-size:.74rem;letter-spacing:.08em;color:var(--dhqf-silver);border:1px solid var(--dhqf-line2);border-radius:11px;padding:11px 18px;margin-top:10px;width:100%;transition:all .15s;box-sizing:border-box}
+    .dhqf-x:hover{border-color:var(--dhqf-gold);color:var(--dhqf-gold)}
+    .dhqf-base{border-top:1px solid var(--dhqf-line1);padding:16px 0 26px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-family:var(--dhqf-fm);font-size:.64rem;letter-spacing:.1em;color:var(--dhqf-silver);opacity:.7}
+    @media (max-width:900px){.dhqf-grid{grid-template-columns:1fr 1fr}}
+    @media (max-width:540px){.dhqf-grid{grid-template-columns:1fr}}
+  </style>
+  <footer class="dhqf">
+    <div class="dhqf-in">
+      <div class="dhqf-grid">
+        <div>
+          <div class="dhqf-brand">
+            <img src="img/dhq-crest.jpg" alt="">
+            <span class="dhqf-bn">Dynasty HQ</span>
+          </div>
+          <div class="dhqf-tag">The fantasy football command center. Built by owners, for owners &mdash; every league, one war room.</div>
+        </div>
+        <div>
+          <div class="dhqf-h">Get the App</div>
+          <a class="dhqf-appstore" data-live="false" aria-disabled="true" aria-label="Download on the App Store — coming soon">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="#F5F2EA"><path d="M17.05 12.54c0-2.2 1.8-3.26 1.88-3.31-1.02-1.5-2.61-1.7-3.18-1.72-1.35-.14-2.64.8-3.33.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.19-1.54 2.67-.39 6.62 1.11 8.79.73 1.06 1.6 2.25 2.75 2.21 1.1-.04 1.52-.71 2.85-.71s1.71.71 2.88.69c1.19-.02 1.94-1.08 2.67-2.15.84-1.23 1.19-2.42 1.21-2.48-.03-.01-2.32-.89-2.35-3.55zM14.86 5.9c.61-.74 1.02-1.77.91-2.8-.88.04-1.94.59-2.57 1.32-.56.65-1.06 1.7-.93 2.7.98.08 1.98-.5 2.59-1.22z"/></svg>
+            <span><span class="dhqf-ab-s">Download on the</span><br><span class="dhqf-ab-b">App Store</span></span>
+          </a>
+          <span class="dhqf-soon">IN APPLE REVIEW &mdash; LINK GOES LIVE ON APPROVAL</span>
+          <div class="dhqf-socials">
+            <a class="dhqf-sq" href="https://discord.gg/3VFRJbWVnH" target="_blank" rel="noopener" aria-label="Discord">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="#BDB8AD"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4c1.8.5 2.6 1.1 3.5 1.9a16.2 16.2 0 0 0-13.4 0c.9-.8 1.9-1.5 3.5-1.9L8.6 3a19.8 19.8 0 0 0-4.9 1.4A20.3 20.3 0 0 0 .4 18.1a19.9 19.9 0 0 0 6 3l.5-.7a12.3 12.3 0 0 1-2.4-1.2l.6-.4a14.2 14.2 0 0 0 12.2 0l.6.4c-.8.5-1.6.9-2.4 1.2l.5.7a19.9 19.9 0 0 0 6-3A20.3 20.3 0 0 0 20.3 4.4zM8.7 15.3c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>
+            </a>
+            <a class="dhqf-sq" href="https://x.com/DHQfootball" target="_blank" rel="noopener" aria-label="X">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="#BDB8AD"><path d="M18.9 2H22l-6.8 7.8L23.3 22h-6.3l-4.9-6.4L6.5 22H3.4l7.3-8.3L1 2h6.5l4.5 5.9zM17.8 20.1h1.7L7.6 3.8H5.7z"/></svg>
+            </a>
+          </div>
+        </div>
+        <div>
+          <div class="dhqf-h">Company</div>
+          <div class="dhqf-links">
+            <a href="our-vision.html">Our Vision</a>
+            <a href="mailto:admin@dhqfootball.com">Contact Us</a>
+            <a href="legal/privacy-policy.html">Privacy Policy</a>
+            <a href="legal/terms-of-service.html">Terms of Service</a>
+          </div>
+        </div>
+        <div>
+          <div class="dhqf-h">Community</div>
+          <div class="dhqf-tag" style="margin-bottom:14px">Trash talk, trade advice, and first word on new features.</div>
+          <a class="dhqf-discord" href="https://discord.gg/3VFRJbWVnH" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="#121217"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4c1.8.5 2.6 1.1 3.5 1.9a16.2 16.2 0 0 0-13.4 0c.9-.8 1.9-1.5 3.5-1.9L8.6 3a19.8 19.8 0 0 0-4.9 1.4A20.3 20.3 0 0 0 .4 18.1a19.9 19.9 0 0 0 6 3l.5-.7a12.3 12.3 0 0 1-2.4-1.2l.6-.4a14.2 14.2 0 0 0 12.2 0l.6.4c-.8.5-1.6.9-2.4 1.2l.5.7a19.9 19.9 0 0 0 6-3A20.3 20.3 0 0 0 20.3 4.4zM8.7 15.3c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>
+            Join the Discord
+          </a>
+          <a class="dhqf-x" href="https://x.com/DHQfootball" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.9 2H22l-6.8 7.8L23.3 22h-6.3l-4.9-6.4L6.5 22H3.4l7.3-8.3L1 2h6.5l4.5 5.9zM17.8 20.1h1.7L7.6 3.8H5.7z"/></svg>
+            Follow @DHQfootball
+          </a>
+        </div>
+      </div>
+      <div class="dhqf-base">
+        <span>&copy; 2026 C2FOOTBALL &middot; DYNASTY HQ</span>
+        <span>DHQFOOTBALL.COM</span>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>

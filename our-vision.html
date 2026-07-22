@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
+  <title>Our Vision — Dynasty HQ</title>
+  <meta name="description" content="Why Dynasty HQ exists: built by owners for owners, your league's own math, one war room for every league, and Alex Ingram — your AI GM.">
+  <link rel="icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --gold:#D4AF37;--black:#121217;--silver:#BDB8AD;--white:#F5F2EA;
+      --line1:rgba(212,175,55,.18);--line2:rgba(212,175,55,.30);--ov1:rgba(255,255,255,.02);
+      --ft:'Rajdhani',sans-serif;--fb:'DM Sans',sans-serif;--fm:'JetBrains Mono',monospace;
+    }
+    html{scroll-behavior:smooth}
+    html,body{min-height:100%;background:var(--black);color:var(--white);-webkit-font-smoothing:antialiased}
+    body{font-family:var(--fb);font-size:15px;line-height:1.65;
+      background-image:radial-gradient(ellipse 90% 55% at 50% -10%, rgba(212,175,55,.07), transparent 60%)}
+    a{color:var(--gold);text-decoration:none}
+    a:hover{text-decoration:underline}
+    :focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px}
+    .wrap{max-width:840px;margin:0 auto;padding:0 24px}
+
+    .top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:20px 0;border-bottom:1px solid var(--line1)}
+    .brand{display:flex;align-items:center;gap:12px}
+    .brand img{width:40px;height:40px;border-radius:10px;border:1px solid var(--line2)}
+    .brand span{font-family:var(--ft);font-weight:700;font-size:1.1rem;letter-spacing:.1em;color:var(--gold);text-transform:uppercase}
+    .backlink{font-family:var(--fm);font-size:.7rem;letter-spacing:.12em;color:var(--silver);border:1px solid var(--line1);border-radius:9px;padding:8px 14px;text-transform:uppercase;transition:all .14s}
+    .backlink:hover{border-color:var(--gold);color:var(--gold);text-decoration:none}
+
+    .hero{padding:58px 0 44px;border-bottom:1px solid var(--line1)}
+    .eyebrow{font-family:var(--fm);font-size:.66rem;letter-spacing:.28em;color:var(--silver);opacity:.8;text-transform:uppercase;display:flex;align-items:center;gap:10px;margin-bottom:16px}
+    .eyebrow::before{content:"";width:22px;height:1px;background:var(--gold)}
+    h1{font-family:var(--ft);font-weight:700;font-size:clamp(2rem,5.4vw,3.2rem);letter-spacing:.05em;line-height:1.05;color:var(--gold);text-transform:uppercase;text-shadow:0 0 32px rgba(212,175,55,.25)}
+    .hero p{margin-top:18px;font-size:1.05rem;color:var(--silver);max-width:58ch}
+    .hero p b{color:var(--white);font-weight:500}
+
+    .sections{padding:14px 0 30px}
+    .sect{display:grid;grid-template-columns:56px 1fr;gap:20px;align-items:start;padding:34px 0;border-bottom:1px solid var(--line1)}
+    .sect:last-child{border-bottom:none}
+    .s-num{font-family:var(--fm);font-size:.72rem;letter-spacing:.14em;color:var(--gold);border:1px solid var(--line2);border-radius:9px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--ov1)}
+    .sect h2{font-family:var(--ft);font-weight:700;font-size:1.35rem;letter-spacing:.08em;color:var(--white);text-transform:uppercase;margin-bottom:8px}
+    .sect h2 em{font-style:normal;color:var(--gold)}
+    .sect p{color:var(--silver);max-width:64ch}
+    .sect p+p{margin-top:10px}
+    .sect p b{color:var(--white);font-weight:500}
+
+    .cta{margin:10px 0 60px;border:1px solid var(--line2);border-radius:14px;padding:26px;background:linear-gradient(135deg,rgba(212,175,55,.10),rgba(212,175,55,.02));display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+    .cta .t{font-family:var(--ft);font-weight:700;font-size:1.2rem;letter-spacing:.08em;color:var(--gold);text-transform:uppercase}
+    .cta .s{color:var(--silver);font-size:.9rem;margin-top:4px}
+    .cta a.go{font-family:var(--ft);font-weight:700;font-size:.95rem;letter-spacing:.08em;color:var(--black);background:var(--gold);border-radius:10px;padding:12px 20px;text-transform:uppercase;transition:all .16s;white-space:nowrap}
+    .cta a.go:hover{box-shadow:0 0 20px rgba(212,175,55,.5);transform:translateY(-1px);text-decoration:none}
+
+    .base{border-top:1px solid var(--line1);padding:18px 0 30px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-family:var(--fm);font-size:.64rem;letter-spacing:.1em;color:var(--silver);opacity:.7}
+    @media (max-width:600px){.sect{grid-template-columns:1fr;gap:10px}}
+    @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand"><img src="img/dhq-crest.jpg" alt=""><span>Dynasty HQ</span></div>
+      <a class="backlink" href="landing.html?home">&larr; Back to home</a>
+    </div>
+
+    <section class="hero">
+      <div class="eyebrow">Our Vision</div>
+      <h1>Run your league like a front office.</h1>
+      <p>Fantasy football made everyone a general manager — then handed them scouting reports written for somebody else's league. Dynasty HQ exists to close that gap: <b>one command center that thinks in your league's rules, your roster, your rivals.</b></p>
+    </section>
+
+    <div class="sections">
+      <section class="sect">
+        <span class="s-num">01</span>
+        <div>
+          <h2>Built by owners, <em>for owners</em></h2>
+          <p>Dynasty HQ wasn't drawn up in a boardroom. It started as the tool we wanted on draft night and couldn't find — built by people who sweat waiver deadlines, hold grudges over vetoed trades, and keep group chats alive all offseason.</p>
+          <p>Every feature ships because an owner needed it in a real league, not because a roadmap said so.</p>
+        </div>
+      </section>
+
+      <section class="sect">
+        <span class="s-num">02</span>
+        <div>
+          <h2>Your league's <em>own math</em></h2>
+          <p>Generic rankings assume a league that isn't yours. Superflex changes what a quarterback is worth. TE-premium changes who's elite. A 16-team dynasty startup is a different sport from a 10-team redraft.</p>
+          <p>Dynasty HQ rebuilds every value, trade grade, and draft call from <b>your exact scoring and roster settings</b> — so the advice fits the league you actually play in.</p>
+        </div>
+      </section>
+
+      <section class="sect">
+        <span class="s-num">03</span>
+        <div>
+          <h2>One war room for <em>every league</em></h2>
+          <p>Serious owners don't play one league. Dynasty HQ pulls every franchise you run into a single command center — records, rosters, drafts, and trade windows side by side — so nothing slips while you're busy winning somewhere else.</p>
+        </div>
+      </section>
+
+      <section class="sect">
+        <span class="s-num">04</span>
+        <div>
+          <h2>Alex Ingram, <em>your AI GM</em></h2>
+          <p>Alex is the assistant GM every front office has and no fantasy owner ever got: an AI that knows your league's history, reads how the managers across from you actually trade, and gives it to you straight — draft night, trade deadline, and every Sunday in between.</p>
+        </div>
+      </section>
+    </div>
+
+    <div class="cta">
+      <div>
+        <div class="t">Take the chair.</div>
+        <div class="s">Free to start with your Sleeper league — your war room is ready in under a minute.</div>
+      </div>
+      <a class="go" href="landing.html?home">Enter Dynasty HQ</a>
+    </div>
+
+    <div class="base">
+      <span>&copy; 2026 C2FOOTBALL &middot; DYNASTY HQ</span>
+      <span>DHQFOOTBALL.COM</span>
+    </div>
+  </div>
+</body>
+</html>
