@@ -276,6 +276,7 @@
         mottoText: "If you're not first, you're last", mottoAttr: 'Ricky Bobby',
         avatarId: null, avatarData: null, estYear: null,
         notifDraft: true, notifTrades: true, notifBrief: false,
+        showTitles: true,
     };
     function getOwnerClub() {
         const raw = AppStorage.get(OWNER_CLUB_KEY);
@@ -494,8 +495,11 @@
     }
 
     // ── Championship titles row — cached history only, never blocks load ──
+    // Widget-style: owners can remove the row here (×) or re-add it any time
+    // from Owner Settings → League room widgets (showTitles in the club store).
     function ChampionshipBanners({ titles }) {
-        if (!titles || !titles.length) return null;
+        const [club, setClub] = useOwnerClub();
+        if (!club.showTitles || !titles || !titles.length) return null;
         return (
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '12px 16px 0', flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', letterSpacing: '0.2em', color: 'var(--silver)', opacity: 0.7, marginRight: '4px', textTransform: 'uppercase' }}>Titles</span>
@@ -507,6 +511,12 @@
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.64rem', color: 'var(--silver)', whiteSpace: 'nowrap' }}>{t.league}</span>
                     </span>
                 ))}
+                <button onClick={() => setClub({ showTitles: false })}
+                    title="Hide titles — re-add any time in Owner Settings"
+                    aria-label="Hide the titles row"
+                    style={{ width: '22px', height: '22px', borderRadius: '6px', border: '1px solid transparent', background: 'none', color: 'var(--silver)', opacity: 0.4, cursor: 'pointer', fontSize: '0.8rem', lineHeight: 1, padding: 0, transition: 'all .14s' }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.borderColor = 'var(--acc-line2, rgba(212,175,55,0.3))'; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '0.4'; e.currentTarget.style.borderColor = 'transparent'; }}>✕</button>
             </div>
         );
     }
@@ -664,6 +674,15 @@
                             <button style={btnDanger} onClick={openBilling} disabled={billingBusy}>{billingBusy ? 'Opening…' : 'Cancel subscription'}</button>
                         </div>
                         <div style={hint}>Both open your secure Stripe billing portal. Subscribed on the iPhone app instead? Manage it through your Apple subscriptions — your Pro works everywhere either way.</div>
+
+                        <div style={{ ...cardH, marginTop: '20px' }}>League room widgets</div>
+                        <div style={{ ...toggleRow, borderBottom: 'none' }}>
+                            <div>
+                                <div style={{ fontSize: '0.86rem', color: 'var(--white)' }}>Championship titles</div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.7, marginTop: '2px' }}>Banner row of your league titles on the masthead</div>
+                            </div>
+                            <Toggle on={!!club.showTitles} label="Championship titles" onFlip={() => setClub({ showTitles: !club.showTitles })} />
+                        </div>
 
                         <div style={{ ...cardH, marginTop: '20px' }}>Notifications</div>
                         {NOTIF_ROWS.map(([key, label, detail], i) => (
