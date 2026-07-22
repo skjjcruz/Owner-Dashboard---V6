@@ -1,0 +1,92 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # reconai-shared/ is gitignored, so the vendored browser modules must be
+      # regenerated from the canonical engine (skjjcruz/DHQ-Shared) at deploy
+      # time — otherwise the Pages artifact ships a stale (or missing) copy of
+      # supabase-client.js and the other shared modules.
+      - name: Checkout DHQ-Shared (canonical engine)
+        uses: actions/checkout@v6
+        with:
+          repository: skjjcruz/DHQ-Shared
+          path: dhq-shared-src
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --omit=dev
+
+      - name: Sync shared modules from DHQ-Shared
+        run: DHQ_SHARED_SOURCE="$GITHUB_WORKSPACE/dhq-shared-src" npm run sync:shared
+
+      # Precompile every type="text/babel" entry (index + free-agency +
+      # draft-warroom + trade-calculator) to plain JS so production never
+      # downloads ~3.1MB of @babel/standalone or runs the in-browser JSX
+      # transform on cold load.
+      - name: Precompile JSX for production (drop in-browser Babel)
+        run: node scripts/build-deploy.cjs
+
+      - name: Build Pages artifact
+        run: |
+          set -euo pipefail
+          mkdir -p pages-artifact
+          # Every path below is verified to exist — a missing one fails the
+          # build instead of silently shipping a broken artifact.
+          for p in \
+            index.html landing.html landing-editor.html login.html upgrade.html \
+            connect-sleeper.html draft-warroom.html free-agency.html trade-calculator.html \
+            gift.html ai-setup.html reset-password.html admin.html \
+            charts.js college-stats.js draft-history.js themes.js \
+            manifest.json icon-192.png icon-512.png .nojekyll CNAME \
+            js content legal vendor reconai-shared draft-war-room team-comps
+          do
+            [ -e "$p" ] || { echo "Missing artifact path: $p" >&2; exit 1; }
+            cp -R "$p" pages-artifact/
+          done
+          # Overlay the precompiled entries + plain-JS modules on top of the
+          # raw sources, replacing the JSX modules and the entry HTML files
+          # that loaded Babel.
+          cp -R dist-deploy/. pages-artifact/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: "pages-artifact"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
