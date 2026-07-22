@@ -245,6 +245,40 @@ const WIDGET_MODULES = {
     },
 };
 
+// ─── Content-height widget caps (owner requirement 2026-07-22) ────
+// The dashboard grid rows are content-driven (minmax(0,auto)) so every
+// card only extends as far as its text — no dead space below — and the
+// widgets beneath slide up. Sizes keep their meaning for WIDTH (column
+// span) and act as a CEILING for list-y widgets: these max-heights
+// recreate the old fixed budget (rows × 160px + 12px --space-md row
+// gaps) so long content (transaction feed, full standings, market
+// radar lists) still caps and scrolls exactly as before AT MOST, while
+// short content hugs. Applied to the card (direct child of the
+// .wr-widget shell) — inner `flex:1;minHeight:0;overflow:auto` lists
+// then resolve against the capped card instead of growing unbounded.
+// Injected by BOTH the desktop/tablet render and the phone branch.
+// Ceilings apply at ≥768px only: the phone tier's rows were already
+// minmax(160px,auto) — content there has always been free to grow past
+// the desktop budget, so a hard cap would clip what phones show today.
+// Phone keeps grow-with-content and just loses the 160px dead-space floor.
+const WIDGET_CAP_CSS = `
+    .wr-dashboard-grid>.wr-widget{ min-height:0; min-width:0; }
+    @media(min-width:768px){
+        /* 1 row (sm/md): 160px */
+        .wr-dashboard-grid>.wr-widget>*{ max-height:160px; }
+        /* 2 rows (slim/lg/xl): 2×160 + 12 */
+        .wr-dashboard-grid>.wr-widget[data-widget-size="slim"]>*,
+        .wr-dashboard-grid>.wr-widget[data-widget-size="lg"]>*,
+        .wr-dashboard-grid>.wr-widget[data-widget-size="xl"]>*{ max-height:332px; }
+        /* 4 rows (narrow/tall/xxl): 4×160 + 3×12 */
+        .wr-dashboard-grid>.wr-widget[data-widget-size="narrow"]>*,
+        .wr-dashboard-grid>.wr-widget[data-widget-size="tall"]>*,
+        .wr-dashboard-grid>.wr-widget[data-widget-size="xxl"]>*{ max-height:676px; }
+        /* Intel Brief tall reserves 3 rows (see WidgetShell): 3×160 + 2×12 */
+        .wr-dashboard-grid>.wr-widget[data-widget-key="intel-brief"][data-widget-size="tall"]>*{ max-height:504px; }
+    }
+`;
+
 // Legacy module keys → new keys (for migration of saved widget configs)
 const LEGACY_MODULE_MAP = {
     'roster': 'roster-pulse',
@@ -1150,8 +1184,11 @@ function DashboardPanel({
         const hiddenCount = Math.max(0, (transactions || []).length - visibleTransactions.length);
         const hasTxns = !!(transactions && transactions.length);
         const openDetail = () => { if (hasTxns) setTxnDetail(true); };
+        // No inline maxHeight on the card — an inline value would override the
+        // WIDGET_CAP_CSS per-size ceiling that caps this card now that grid
+        // rows are content-driven.
         return (
-            <div data-wr-widget="transaction-ticker" style={{ ...cardBase, padding: 'var(--card-pad, 14px 16px)', maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div data-wr-widget="transaction-ticker" style={{ ...cardBase, padding: 'var(--card-pad, 14px 16px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 {/* Tap the header to expand the ticker into the full-detail overlay. */}
                 <div role={hasTxns ? 'button' : undefined} tabIndex={hasTxns ? 0 : undefined}
                     title={hasTxns ? 'Tap to see every transaction in full detail' : undefined}
@@ -1441,7 +1478,9 @@ function DashboardPanel({
                     position: 'relative',
                     opacity: dragIdx === idx ? 0.4 : 1,
                     transition: theme.effects?.transition || 'opacity 0.15s',
-                    minHeight: widget.size === 'sm' ? '160px' : undefined,
+                    // No forced heights: with content-driven grid rows the card
+                    // hugs its content (WIDGET_CAP_CSS supplies the per-size
+                    // max-height ceiling that keeps long lists scrolling).
                 }}
             >
                 {children}
@@ -1953,10 +1992,13 @@ function DashboardPanel({
                     self-evident. Desktop banner (showHint, further down) is
                     untouched. */}
 
-                {/* Widgets carry inline grid spans — flatten them to the 1-col stack */}
+                {/* Widgets carry inline grid spans — flatten them to the 1-col stack.
+                    WIDGET_CAP_CSS contributes the min-height:0 reset here; its
+                    per-size ceilings are ≥768px-scoped so phone cards keep
+                    growing with content (they always could at this tier). */}
                 <style>{`@media(max-width:767px){
                     .wr-dashboard-grid>.wr-widget{ grid-column:1 / -1 !important; grid-row:auto !important; min-width:0; }
-                }`}</style>
+                }` + WIDGET_CAP_CSS}</style>
 
                 {/* Severity hero only — the sm KPI strip (Health Score /
                     Power Rankings tiles) is removed on phone (owner ask
@@ -1990,7 +2032,7 @@ function DashboardPanel({
                 <div className="wr-dashboard-grid" style={{
                     display: 'grid',
                     gridTemplateColumns: 'minmax(0,1fr)',
-                    gridAutoRows: 'minmax(160px,auto)',
+                    gridAutoRows: 'minmax(0,auto)',
                     gap: 'var(--space-md)',
                     padding: 'var(--space-md) var(--space-md) 0',
                     background: BK,
@@ -2088,11 +2130,11 @@ function DashboardPanel({
                 </div>
             )}
 
-            <style>{`
+            <style>{WIDGET_CAP_CSS + `
                 @media(max-width:767px){
                     .wr-dashboard-grid{
                         grid-template-columns:minmax(0,1fr) !important;
-                        grid-auto-rows:minmax(160px,auto) !important;
+                        grid-auto-rows:minmax(0,auto) !important;
                         padding:var(--space-md) !important;
                         gap:var(--space-md) !important;
                         overflow-x:hidden;
@@ -2161,7 +2203,10 @@ function DashboardPanel({
             <div className="wr-dashboard-grid" style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(4, minmax(140px, 1fr))',
-                gridAutoRows: '160px',
+                // Content-driven rows: unfilled spanned rows collapse to 0 so a
+                // card only extends as far as its content and the widgets below
+                // slide up (WIDGET_CAP_CSS provides the per-size ceilings).
+                gridAutoRows: 'minmax(0, auto)',
                 gap: 'var(--space-md)',
                 padding: 'var(--space-lg) var(--space-xl)',
                 background: BK,
@@ -2182,7 +2227,9 @@ function DashboardPanel({
                         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px',
                         border: '1px dashed var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: '10px',
                         background: 'transparent',
-                        cursor: 'pointer', minHeight: '160px',
+                        // 64px tap target, not 160: a forced 160px would inflate
+                        // its whole (now content-sized) grid row.
+                        cursor: 'pointer', minHeight: '64px',
                         transition: 'all 0.15s', color: 'var(--acc-line2, rgba(212,175,55,0.35))',
                         fontFamily: 'inherit',
                     }}
