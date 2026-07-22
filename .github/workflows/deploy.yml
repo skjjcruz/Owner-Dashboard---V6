@@ -64,7 +64,8 @@ jobs:
           for p in \
             index.html landing.html landing-editor.html login.html upgrade.html \
             connect-sleeper.html draft-warroom.html free-agency.html trade-calculator.html \
-            gift.html ai-setup.html reset-password.html admin.html \
+            gift.html ai-setup.html reset-password.html admin.html our-vision.html \
+            img \
             charts.js college-stats.js draft-history.js themes.js \
             manifest.json icon-192.png icon-512.png .nojekyll CNAME \
             js content legal vendor reconai-shared draft-war-room team-comps
