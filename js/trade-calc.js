@@ -218,7 +218,8 @@
             };
         }, []);
         const hide = React.useCallback(() => { tcSetShowPsychTaxPref(false); setShow(false); }, []);
-        return [show, hide];
+        const reveal = React.useCallback(() => { tcSetShowPsychTaxPref(true); setShow(true); }, []);
+        return [show, hide, reveal];
     }
 
     // ── TcVerdictPanel — extracted from the retired analyzer surface (Step-1 refactor) ──
@@ -236,7 +237,7 @@
         // ALWAYS-VISIBLE at the bottom of the panel — the old collapsed 'Why? ▾'
         // toggle made them effectively invisible. Off-switch: the ✕ on the breakdown
         // header or Owner Settings → League room widgets (showPsychTax, club store).
-        const [showPsychTax, hidePsychTax] = useTcShowPsychTax();
+        const [showPsychTax, hidePsychTax, revealPsychTax] = useTcShowPsychTax();
         return (
             <div className="tc-ta-verdict tc-ta-sticky-summary" id="wr-export-trade">
                 <div className="tc-section-hdr" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>TRADE ANALYSIS<button onClick={() => window.wrExport?.capture(document.getElementById('wr-export-trade'), 'trade-analysis')} style={{ background:'none', border:'1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius:'4px', padding:'2px 8px', color:'var(--gold)', fontSize:'var(--text-micro, 0.6875rem)', cursor:'pointer', fontFamily: 'var(--font-body)', minHeight:'44px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>Snapshot</button></div>
@@ -286,6 +287,15 @@
                 )}
                 {!_pro && typeof window.WrGatedMoreRow === 'function' && (
                     React.createElement(window.WrGatedMoreRow, { title: 'Acceptance odds & trade psychology', sub: 'Accept %, the 8-factor psych-tax breakdown, and posture, DNA, and behavior reads are Pro.', feature: 'trade-psychology' })
+                )}
+                {_pro && !showPsychTax && (
+                    <button type="button" onClick={revealPsychTax}
+                        title="Show the Owner DNA tax table for this trade"
+                        style={{ alignSelf:'flex-start', background:'none', border:'none', cursor:'pointer', padding:'0.15rem 0', fontSize:'0.72rem', color:'var(--silver)', opacity:0.55, textTransform:'uppercase', letterSpacing:'0.06em' }}
+                        onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--gold)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.opacity = '0.55'; e.currentTarget.style.color = 'var(--silver)'; }}>
+                        Show trade psychology ▸
+                    </button>
                 )}
                 {_pro && showPsychTax && <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
                     <div>
