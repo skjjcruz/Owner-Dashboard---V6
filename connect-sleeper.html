@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://api.sleeper.app https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://fantasysports.yahooapis.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
+  <title>Dynasty HQ — Connect your leagues</title>
+  <!-- Pre-paint auth gate: decide before render so this step-2 page only shows
+       to a signed-in user who hasn't linked a league platform yet. Everyone
+       else (no session, or already onboarded) is redirected without a flash. -->
+  <style id="preboot-hide">html{visibility:hidden!important}</style>
+  <noscript><style>html{visibility:visible!important}</style></noscript>
+  <script>
+    (function () {
+      function reveal(){ var s=document.getElementById('preboot-hide'); if(s&&s.parentNode){ s.parentNode.removeChild(s); } }
+      try {
+        var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
+        if (!sess || !sess.token) { window.location.replace('landing.html'); return; }
+        var profile = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
+        var legacy  = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
+        // Onboarded = any league source bound (Sleeper OR MFL) or an explicit
+        // completed flag. MFL-only users must not bounce back to this page.
+        var onboarded = (profile && (profile.onboardingComplete === true || profile.sleeperUsername))
+          || (legacy && legacy.username)
+          || localStorage.getItem('mfl_league_id');
+        if (onboarded) {
+          var pref = localStorage.getItem('fw_preferred_view');
+          window.location.replace(pref === 'scout' ? 'https://skjjcruz.github.io/ReconAI-sandbox-dev/' : 'index.html');
+          return;
+        }
+        reveal(); // signed in, no league linked -> show the connect form
+      } catch (e) { reveal(); }
+    })();
+  </script>
+  <link rel="icon" href="icon-192.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{--gold:#D4AF37;--dark-gold:#B8941E;--bg:#0A0A0A;--bg2:#141414;--border:rgba(255,255,255,.1);--white:#FFFFFF;--silver:#C0C0C0;--muted:rgba(255,255,255,.5);--green:#34d399;--red:#f87171}
+    html,body{min-height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--white);-webkit-font-smoothing:antialiased}
+    body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px 24px 12vh}
+    /* Subdued DHQ watermark — matches the in-app background (icon at low opacity). */
+    body::before{content:'';position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:clamp(400px,60vw,900px);height:clamp(400px,60vw,900px);background:url('icon-192.png') center/contain no-repeat;opacity:.06;filter:brightness(1.2);z-index:0;pointer-events:none}
+    .card{position:relative;z-index:1;width:100%;max-width:440px;text-align:center}
+    .logo{width:64px;height:64px;border-radius:15px;margin:0 auto 16px;display:block;box-shadow:0 4px 22px rgba(212,175,55,.25)}
+    .step{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);margin-bottom:8px}
+    h1{font-size:24px;font-weight:800;margin-bottom:10px}
+    .sub{font-size:14px;color:var(--silver);line-height:1.55;margin-bottom:22px}
+    .switch{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+    .switch button{position:relative;padding:18px 12px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:15px;font-weight:700;color:var(--silver);background:var(--bg2);border:1px solid var(--border);transition:border-color .15s,color .15s,box-shadow .15s,transform .12s}
+    .switch button:hover{border-color:rgba(212,175,55,.45);transform:translateY(-1px)}
+    .switch button.on{color:var(--white);border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset,0 4px 18px rgba(212,175,55,.12)}
+    .switch button .sm{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-top:4px;letter-spacing:.02em}
+    .switch button.on .sm{color:var(--gold)}
+    .switch button.linked{border-color:rgba(52,211,153,.55)}
+    .switch button.linked .sm{color:var(--green)}
+    .switch button .tick{display:none;position:absolute;top:-9px;right:-9px;width:22px;height:22px;border-radius:50%;background:var(--green);color:#062015;font-size:13px;font-weight:800;line-height:22px;box-shadow:0 2px 8px rgba(52,211,153,.5)}
+    .switch button.linked .tick{display:block}
+    .input{width:100%;padding:14px;font-size:15px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;color:var(--white);font-family:inherit;margin-bottom:12px;outline:none;transition:border-color .15s}
+    .input:focus{border-color:var(--gold)}
+    .input::placeholder{color:var(--muted)}
+    .duo{display:grid;grid-template-columns:1fr 110px;gap:10px}
+    .btn-link{width:100%;min-height:46px;font-size:14px;font-weight:700;border-radius:10px;cursor:pointer;font-family:inherit;background:transparent;border:1px solid var(--gold);color:var(--gold);transition:background .15s,color .15s}
+    .btn-link:hover{background:rgba(212,175,55,.1)}
+    .btn-link:disabled{opacity:.55;cursor:default;background:transparent}
+    .btn{width:100%;min-height:52px;font-size:15px;font-weight:800;border-radius:10px;border:none;background:linear-gradient(135deg,var(--gold),var(--dark-gold));color:#0a0a0a;cursor:pointer;transition:box-shadow .15s,opacity .15s;margin-top:14px}
+    .btn:hover{box-shadow:0 6px 20px rgba(212,175,55,.3)}
+    .btn:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
+    .hint{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.6}
+    .hint strong{color:var(--silver)}
+    .alert{font-size:13px;padding:11px 14px;border-radius:8px;margin-bottom:12px;display:none;text-align:left}
+    .alert.show{display:block}
+    .alert-error{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.25)}
+    .alert-success{background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.25)}
+    .linkedline{display:none;font-size:12.5px;color:var(--green);margin-top:12px;font-weight:600}
+    .linkedline.show{display:block}
+    .freebar{margin-top:16px;padding:11px 14px;border-radius:10px;background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.22);font-size:12.5px;color:var(--silver);line-height:1.5}
+    .freebar strong{color:var(--green)}
+    .signout{margin-top:18px;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit}
+    .signout:hover{color:var(--gold)}
+    .pane{display:none}
+    .pane.on{display:block;animation:fade .3s ease}
+    @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+    @media (prefers-reduced-motion:reduce){.pane.on{animation:none}}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <img src="icon-192.png" alt="Dynasty HQ" class="logo">
+    <div class="step">Step 2 of 2</div>
+    <h1>Connect your leagues</h1>
+    <p class="sub">Your account is set. Where do you play? Connect one or both.</p>
+
+    <div class="alert" id="alert"></div>
+
+    <div class="switch" role="group" aria-label="Where do you play?">
+      <button id="tabSleeper" onclick="pick('sleeper')">Sleeper<span class="sm" id="smSleeper">username</span><span class="tick">&#10003;</span></button>
+      <button id="tabMfl" onclick="pick('mfl')">MyFantasyLeague<span class="sm" id="smMfl">league ID</span><span class="tick">&#10003;</span></button>
+    </div>
+
+    <div class="pane" id="paneSleeper">
+      <input class="input" id="sleeperName" placeholder="Your Sleeper username" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <button class="btn-link" id="btnSleeper" onclick="connectSleeper()">Connect Sleeper</button>
+      <p class="hint">This is your <strong>username</strong> on Sleeper — not your email. We&rsquo;ll pull in <strong>all</strong> your Sleeper leagues automatically. You can change it later in Settings.</p>
+    </div>
+
+    <div class="pane" id="paneMfl">
+      <div class="duo">
+        <input class="input" id="mflLeagueId" placeholder="MFL league ID (e.g. 41208)" inputmode="numeric" autocomplete="off">
+        <input class="input" id="mflYear" value="2026" aria-label="Season" inputmode="numeric" autocomplete="off">
+      </div>
+      <button class="btn-link" id="btnMfl" onclick="connectMfl()">Connect MFL league</button>
+      <p class="hint">Your league ID is the <strong>number in your MFL web address</strong> (the part after <strong>L=</strong>). We&rsquo;ll load that league and its history.</p>
+    </div>
+
+    <div class="linkedline" id="linkedline"></div>
+
+    <button class="btn" id="enterBtn" onclick="enterApp()" disabled>Enter Dynasty HQ &rarr;</button>
+
+    <div class="freebar">You start <strong>free</strong> on every league — upgrade inside the app only if you want the full engine.</div>
+
+    <button class="signout" onclick="signOut()">Not you? Sign out</button>
+  </main>
+
+  <script>
+    const SESSION_KEY = 'fw_session_v1';
+    const AUTH_KEY = 'od_auth_v1';
+    const PROFILE_KEY = 'od_profile_v1';
+    const WARROOM_URL = 'index.html';
+    const SCOUT_URL = 'https://skjjcruz.github.io/ReconAI-sandbox-dev/';
+
+    const linked = { sleeper: false, mfl: false };
+
+    function destForUser() {
+      const pref = localStorage.getItem('fw_preferred_view');
+      if (pref === 'scout') return SCOUT_URL;
+      if (pref === 'warroom') return WARROOM_URL;
+      // Deterministic default: always the War Room league picker (no orientation flip).
+      return WARROOM_URL;
+    }
+
+    function getProfile() {
+      try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') || {}; } catch { return {}; }
+    }
+    function patchProfile(patch) {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...getProfile(), ...patch }));
+    }
+
+    function showAlert(type, message) {
+      const el = document.getElementById('alert');
+      el.className = 'alert alert-' + type + ' show';
+      el.textContent = message;
+      if (type !== 'success') setTimeout(() => el.classList.remove('show'), 6000);
+    }
+
+    function pick(which) {
+      document.getElementById('tabSleeper').classList.toggle('on', which === 'sleeper');
+      document.getElementById('tabMfl').classList.toggle('on', which === 'mfl');
+      document.getElementById('paneSleeper').className = which === 'sleeper' ? 'pane on' : 'pane';
+      document.getElementById('paneMfl').className = which === 'mfl' ? 'pane on' : 'pane';
+      const input = document.getElementById(which === 'sleeper' ? 'sleeperName' : 'mflLeagueId');
+      if (input && !input.disabled) input.focus();
+    }
+
+    function markLinked(which, subLabel) {
+      linked[which] = true;
+      const tab = document.getElementById(which === 'sleeper' ? 'tabSleeper' : 'tabMfl');
+      tab.classList.add('linked');
+      document.getElementById(which === 'sleeper' ? 'smSleeper' : 'smMfl').textContent = subLabel || 'connected';
+      const btn = document.getElementById(which === 'sleeper' ? 'btnSleeper' : 'btnMfl');
+      btn.disabled = true;
+      btn.textContent = which === 'sleeper' ? 'Sleeper connected ✓' : 'MFL league connected ✓';
+      refreshEnter();
+      // Nudge toward the other platform if it isn't linked yet.
+      if (which === 'sleeper' && !linked.mfl) pick('mfl');
+      if (which === 'mfl' && !linked.sleeper) pick('sleeper');
+    }
+
+    function refreshEnter() {
+      const n = (linked.sleeper ? 1 : 0) + (linked.mfl ? 1 : 0);
+      document.getElementById('enterBtn').disabled = n === 0;
+      const line = document.getElementById('linkedline');
+      if (n === 1) {
+        line.textContent = (linked.sleeper ? 'Sleeper connected.' : 'MFL connected.') + ' Play somewhere else too? Add it — or head in.';
+        line.className = 'linkedline show';
+      } else if (n === 2) {
+        line.textContent = 'Sleeper + MFL connected. All your leagues, one HQ.';
+        line.className = 'linkedline show';
+      }
+    }
+
+    async function connectSleeper() {
+      const input = document.getElementById('sleeperName');
+      const username = input.value.trim();
+      const btn = document.getElementById('btnSleeper');
+      if (!username) { showAlert('error', 'Enter your Sleeper username to continue.'); input.focus(); return; }
+      btn.disabled = true; btn.textContent = 'Finding your leagues…';
+      try {
+        const res = await fetch(`https://api.sleeper.app/v1/user/${encodeURIComponent(username)}`);
+        const user = res.ok ? await res.json() : null;
+        if (!user || !user.user_id) {
+          showAlert('error', "We couldn't find that Sleeper username. Check the spelling and try again.");
+          btn.disabled = false; btn.textContent = 'Connect Sleeper';
+          return;
+        }
+        const uname = user.username || username;
+        localStorage.setItem(AUTH_KEY, JSON.stringify({ username: uname, sleeperUserId: user.user_id, createdAt: new Date().toISOString() }));
+        localStorage.setItem('od_locked_username_v2', uname);
+        patchProfile({ sleeperUsername: uname, sleeperUserId: user.user_id });
+        input.disabled = true;
+        markLinked('sleeper', '@' + uname);
+      } catch (err) {
+        showAlert('error', 'Network error: ' + (err?.message || String(err)));
+        btn.disabled = false; btn.textContent = 'Connect Sleeper';
+      }
+    }
+
+    async function connectMfl() {
+      const idInput = document.getElementById('mflLeagueId');
+      const yearInput = document.getElementById('mflYear');
+      const leagueId = idInput.value.trim().replace(/\D/g, '');
+      const year = (yearInput.value.trim() || '2026').replace(/\D/g, '') || '2026';
+      const btn = document.getElementById('btnMfl');
+      if (!leagueId) { showAlert('error', 'Enter your MFL league ID — the number after L= in your MFL web address.'); idInput.focus(); return; }
+      btn.disabled = true; btn.textContent = 'Finding your league…';
+      try {
+        const res = await fetch(`https://api.myfantasyleague.com/${encodeURIComponent(year)}/export?TYPE=league&L=${encodeURIComponent(leagueId)}&JSON=1`);
+        const data = res.ok ? await res.json() : null;
+        const leagueName = data && data.league && data.league.name;
+        if (!leagueName) {
+          showAlert('error', "We couldn't find that MFL league for " + year + '. Double-check the league ID (the L= number) and season.');
+          btn.disabled = false; btn.textContent = 'Connect MFL league';
+          return;
+        }
+        localStorage.setItem('mfl_league_id', leagueId);
+        localStorage.setItem('mfl_year', year);
+        idInput.disabled = true; yearInput.disabled = true;
+        markLinked('mfl', leagueName);
+      } catch (err) {
+        showAlert('error', "We couldn't reach MyFantasyLeague. If your league is private, open it in your browser once, then try again — or add it later from inside the app.");
+        btn.disabled = false; btn.textContent = 'Connect MFL league';
+      }
+    }
+
+    function enterApp() {
+      if (!linked.sleeper && !linked.mfl) return;
+      const platforms = [];
+      if (linked.sleeper) platforms.push('sleeper');
+      if (linked.mfl) platforms.push('mfl');
+      patchProfile({ platforms, onboardingComplete: true });
+      showAlert('success', 'You’re in! Loading Dynasty HQ…');
+      setTimeout(() => { window.location.href = destForUser(); }, 700);
+    }
+
+    function signOut() {
+      try {
+        localStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(AUTH_KEY);
+      } catch {}
+      window.location.href = 'landing.html';
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const id = document.activeElement?.id;
+      if (id === 'sleeperName') connectSleeper();
+      if (id === 'mflLeagueId' || id === 'mflYear') connectMfl();
+    });
+  </script>
+</body>
+</html>

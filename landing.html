@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://api.sleeper.app https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://fantasysports.yahooapis.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
+  <title>Dynasty HQ — Your world. Your rankings. Your strategy.</title>
+  <!-- Pre-paint auth gate: a signed-in user is redirected to their destination
+       BEFORE the marketing page renders, so it never flashes on screen. Also
+       covers the OAuth round-trip return with a neutral splash instead of the
+       marketing page. Runs synchronously off localStorage; no Supabase call. -->
+  <style id="preboot-hide">html{visibility:hidden!important}</style>
+  <noscript><style>html{visibility:visible!important}</style></noscript>
+  <script>
+    (function () {
+      function reveal(){ var s=document.getElementById('preboot-hide'); if(s&&s.parentNode){ s.parentNode.removeChild(s); } }
+      function showSigningIn(){
+        try {
+          var d = document.createElement('div');
+          d.id = 'wr-signing-in';
+          // visibility:visible overrides the hidden <html>, so this splash shows
+          // while the marketing page underneath stays hidden. Includes the same
+          // subdued DHQ watermark used in-app / on the Sleeper-connect page.
+          d.setAttribute('style', 'visibility:visible!important;position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0A0A0A');
+          d.innerHTML =
+            '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:clamp(400px,60vw,1000px);height:clamp(400px,60vw,1000px);background:url(icon-192.png) center/contain no-repeat;opacity:.05;filter:brightness(1.2);pointer-events:none"></div>' +
+            '<div style="position:relative;color:#E8B23A;font:600 15px/1.4 Inter,system-ui,sans-serif;letter-spacing:.02em">Signing you in…</div>';
+          (document.body || document.documentElement).appendChild(d);
+        } catch (e) {}
+      }
+      try {
+        var q = new URLSearchParams(window.location.search);
+        // Session handoff from the marketing site (dhqfootball.com): it signs the
+        // user in on its own origin, then sends them here with the app session in
+        // the URL fragment (never sent to the server, same trick as OAuth).
+        // Ingest it before the session checks below so the user lands signed in.
+        var hs = (window.location.hash || '').match(/[#&]dhq_session=([^&]+)/);
+        var handedIsNew = false;
+        if (hs) {
+          try {
+            var b64 = hs[1].replace(/-/g, '+').replace(/_/g, '/');
+            while (b64.length % 4) b64 += '=';
+            var handed = JSON.parse(decodeURIComponent(escape(window.atob(b64))));
+            // Only ingest complete sessions. A stale cached copy of the
+            // marketing page can still hand off records without user.id (the
+            // Jul 9–11 sign-in bug shape), which the shared client resolves
+            // to the free tier — storing one would re-poison this origin.
+            if (handed && handed.token && handed.user && handed.user.id) {
+              // isNew is a one-shot routing hint, not session state — consume
+              // it here so later visits don't re-trigger onboarding.
+              handedIsNew = handed.isNew === true;
+              delete handed.isNew;
+              localStorage.setItem('fw_session_v1', JSON.stringify(handed));
+            }
+          } catch (e) {}
+          try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) {}
+        }
+        // Editor preview, explicit sign-out, and ?home (the league hub's
+        // brand icon — a deliberate visit to this page) stay on this page.
+        // Without the ?home escape this head-level check bounces a signed-in
+        // visitor back into the app before the body's STAY_HOME-aware
+        // handlers ever run, making the hub logo appear to do nothing.
+        if (q.has('landingPreview') || q.has('signout') || q.has('home')) { reveal(); return; }
+        // OAuth return: Supabase brings us back here with the session in the URL
+        // (hash #access_token=… for implicit, ?code=… for PKCE) BEFORE the page's
+        // callback handler has stored it. Show a neutral splash, not the marketing
+        // page; the handler stores the session and redirects to step 2 shortly.
+        var hash = window.location.hash || '';
+        var oauthReturn = hash.indexOf('access_token=') !== -1 || /[?&]code=/.test(window.location.search);
+        var oauthError  = hash.indexOf('error=') !== -1 || q.has('error');
+        if (oauthReturn && !oauthError) {
+          showSigningIn();
+          // Fallback: if the callback never redirects, drop the splash + reveal the
+          // page after a few seconds so no one is trapped on a blank screen.
+          setTimeout(function () {
+            var sp = document.getElementById('wr-signing-in');
+            if (sp && sp.parentNode) sp.parentNode.removeChild(sp);
+            reveal();
+          }, 8000);
+          return;
+        }
+        var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
+        if (!sess || !sess.token) { reveal(); return; } // not signed in -> show landing
+        var profile = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
+        var legacy  = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
+        var onboarded = (profile && (profile.onboardingComplete === true || profile.sleeperUsername))
+          || (legacy && legacy.username)
+          || localStorage.getItem('mfl_league_id');
+        // Brand-new accounts ALWAYS start at the connect-your-leagues page —
+        // even on a device where a previous account already finished
+        // onboarding. That progress is stored per DEVICE, so without this
+        // reset a fresh account inherits the old session's linked leagues
+        // and jumps straight to the league page.
+        if (handedIsNew) {
+          try {
+            var np = JSON.parse(localStorage.getItem('od_profile_v1') || 'null') || {};
+            delete np.sleeperUsername; delete np.sleeperUserId;
+            np.onboardingComplete = false;
+            localStorage.setItem('od_profile_v1', JSON.stringify(np));
+          } catch (e) {}
+          try { localStorage.removeItem('od_auth_v1'); } catch (e) {}
+          try { localStorage.removeItem('od_locked_username_v2'); } catch (e) {}
+          try { localStorage.removeItem('dynastyhq_username'); } catch (e) {}
+          try { localStorage.removeItem('mfl_league_id'); } catch (e) {}
+          try { localStorage.removeItem('mfl_year'); } catch (e) {}
+          try { localStorage.removeItem('mfl_franchise_id'); } catch (e) {}
+          window.location.replace('connect-sleeper.html'); return;
+        }
+        if (!onboarded) { window.location.replace('connect-sleeper.html'); return; }
+        var pref = localStorage.getItem('fw_preferred_view');
+        window.location.replace(pref === 'scout' ? 'https://skjjcruz.github.io/ReconAI-sandbox-dev/' : 'index.html');
+      } catch (e) { reveal(); }
+    })();
+  </script>
+  <link rel="icon" href="icon-192.png">
+  <meta name="description" content="Dynasty HQ scores your Sleeper league by its own rules — then reads how every manager you face actually trades. Free, or $9.99/mo.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --bg-0:#0A0C10;--bg-1:#12151B;--bg-2:#1A1F27;--bg-inset:#0C0E13;
+      --border:#232932;--border-strong:#333A45;--border-faint:#1A1E25;
+      --text-1:#E6E9ED;--text-2:#98A1AD;--text-3:#5A626E;--text-disabled:#3C434D;
+      --accent:#E8B23A;--accent-bright:#F6CF5A;--accent-dim:#8A6D1E;--accent-tint:rgba(232,178,58,.12);
+      --tactical:#4A9DDE;--tactical-bright:#6FB4E8;--tactical-tint:rgba(74,157,222,.12);
+      --pos:#2FBF88;--neg:#F0495C;--warn:#FFB000;
+      --font-mono:'IBM Plex Mono','SFMono-Regular',ui-monospace,monospace;
+      --font-sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+      --radius:2px;--maxw:1180px;
+      /* Safe-area insets (iPhone notch / home indicator); 0px on desktop */
+      --sat:env(safe-area-inset-top,0px);--sar:env(safe-area-inset-right,0px);
+      --sab:env(safe-area-inset-bottom,0px);--sal:env(safe-area-inset-left,0px);
+    }
+    html{scroll-behavior:smooth}
+    html,body{min-height:100%;background:var(--bg-0);color:var(--text-1);overflow-x:hidden;-webkit-font-smoothing:antialiased}
+    body{font-family:var(--font-sans);font-size:14px;line-height:1.55;padding-left:var(--sal);padding-right:var(--sar);padding-bottom:var(--sab)}
+    a{color:var(--tactical);text-decoration:none}
+    button{font-family:inherit;cursor:pointer}
+    .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+    .lbl{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--text-3)}
+    .num{font-variant-numeric:tabular-nums}
+    :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+    /* ── Nav ─────────────────────────────────────────── */
+    .nav{position:sticky;top:0;z-index:40;background:rgba(10,12,16,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding-top:var(--sat)}
+    .nav-in{max-width:var(--maxw);margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 24px}
+    .nav-brand{display:flex;align-items:center;gap:10px}
+    .nav-logo{width:30px;height:30px;border-radius:var(--radius);border:1px solid var(--border-strong)}
+    .nav-title{font-family:var(--font-mono);font-size:14px;font-weight:600;letter-spacing:.12em;color:var(--text-1)}
+    .nav-links{display:flex;gap:8px}
+    .btn{font-family:var(--font-mono);font-size:13px;font-weight:500;letter-spacing:.04em;min-height:42px;display:inline-flex;align-items:center;justify-content:center;padding:0 16px;border-radius:var(--radius);border:1px solid var(--border-strong);background:transparent;color:var(--text-1);transition:border-color 90ms ease,color 90ms ease,background 90ms ease}
+    .btn:hover{border-color:var(--accent);color:var(--accent)}
+    .btn--primary{background:var(--accent);color:var(--bg-0);border-color:var(--accent);font-weight:600}
+    .btn--primary:hover{background:var(--accent-bright);color:var(--bg-0);border-color:var(--accent-bright)}
+    .nav-btn{font-family:var(--font-mono);font-size:13px;font-weight:500;letter-spacing:.04em;min-height:42px;display:inline-flex;align-items:center;padding:0 14px;border-radius:var(--radius);border:1px solid var(--border-strong);background:transparent;color:var(--text-1);transition:all 90ms ease}
+    .nav-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .nav-btn.nav-btn-primary{background:var(--accent);color:var(--bg-0);border-color:var(--accent);font-weight:600}
+    .nav-btn.nav-btn-primary:hover{background:var(--accent-bright);border-color:var(--accent-bright)}
+
+    /* ── Hero ────────────────────────────────────────── */
+    .hero{position:relative;overflow:hidden;border-bottom:1px solid var(--border)}
+    .hero-grid{position:absolute;inset:0;background-image:linear-gradient(var(--border-faint) 1px,transparent 1px),linear-gradient(90deg,var(--border-faint) 1px,transparent 1px);background-size:46px 46px;opacity:.6;mask-image:radial-gradient(120% 90% at 80% 0%,#000 30%,transparent 78%)}
+    .hero-edge{position:absolute;top:-30%;right:-10%;width:60%;height:80%;background:radial-gradient(closest-side,var(--accent-tint),transparent 72%);pointer-events:none}
+    .hero-in{position:relative;z-index:3;max-width:var(--maxw);margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.02fr);gap:40px;align-items:center;padding:72px 24px 64px}
+    .hero-eyebrow{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:20px;display:inline-flex;align-items:center;gap:10px}
+    .hero-eyebrow::before{content:"";width:22px;height:1px;background:var(--accent)}
+    .hero h1{font-family:var(--font-mono);font-size:64px;font-weight:600;line-height:1.02;letter-spacing:-.01em;margin-bottom:20px;color:var(--text-1)}
+    .hero h1 .mk{color:var(--accent);text-shadow:0 0 38px rgba(232,178,58,.26)}
+    .hero-sub{font-size:17px;line-height:1.62;color:var(--text-2);max-width:540px;margin-bottom:28px}
+    .hero-sub b{color:var(--text-1);font-weight:500}
+    .hero-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .hero-cta{font-family:var(--font-mono);font-size:15px;font-weight:600;letter-spacing:.03em;min-height:50px;display:inline-flex;align-items:center;padding:0 24px;border:1px solid var(--accent);border-radius:var(--radius);background:var(--accent);color:var(--bg-0);transition:background 90ms ease}
+    .hero-cta:hover{background:var(--accent-bright);border-color:var(--accent-bright)}
+    .hero-secondary{font-family:var(--font-mono);font-size:14px;font-weight:500;letter-spacing:.03em;min-height:50px;display:inline-flex;align-items:center;padding:0 20px;border:1px solid var(--border-strong);border-radius:var(--radius);background:transparent;color:var(--text-1);transition:all 90ms ease}
+    .hero-secondary:hover{border-color:var(--accent);color:var(--accent)}
+    .hero-free{font-family:var(--font-mono);font-size:12px;letter-spacing:.02em;color:var(--text-3);margin-top:16px}
+
+    /* hero terminal mockup */
+    .rig{position:relative}
+    .term{transform:rotateY(-13deg) rotateX(3deg);transform-origin:center;background:var(--bg-1);border:1px solid var(--border-strong);box-shadow:0 28px 80px rgba(0,0,0,.6);filter:blur(13px);animation:termSharpen 2.8s ease .45s forwards}
+    .term__bar{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--border);background:var(--bg-2)}
+    .term__brand{font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--text-1)}
+    .term__grid{display:grid;grid-template-columns:1.1fr .9fr;gap:1px;background:var(--border-faint)}
+    .panel{background:var(--bg-1);padding:14px}
+    .panel--focus{border-left:2px solid var(--accent)}
+    .panel--wide{grid-column:1 / -1;border-left:2px solid var(--tactical)}
+    .pname{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text-1);display:block;margin:8px 0 2px}
+    .bigval{font-family:var(--font-mono);font-size:34px;font-weight:600;line-height:1;color:var(--accent);font-variant-numeric:tabular-nums;text-shadow:0 0 26px rgba(232,178,58,.32)}
+    .tag{display:inline-block;font-family:var(--font-mono);font-size:9px;font-weight:500;letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent-dim);border-radius:var(--radius);padding:2px 6px;margin:8px 0 10px}
+    .band{position:relative;height:8px;background:var(--bg-inset);border:1px solid var(--border)}
+    .band__fill{position:absolute;top:0;bottom:0;background:var(--tactical-tint);border-left:1px solid var(--tactical);border-right:1px solid var(--tactical)}
+    .band__tick{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--accent)}
+    .cmp{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--border-faint)}
+    .cmp span{font-family:var(--font-mono);font-size:11px;color:var(--text-3)}
+    .cmp b{font-family:var(--font-mono);font-size:14px;font-weight:500;color:var(--text-2);text-decoration:line-through;font-variant-numeric:tabular-nums}
+    .trait{display:grid;grid-template-columns:74px 1fr 26px;gap:8px;align-items:center;margin-top:9px}
+    .trait span{font-family:var(--font-mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-2)}
+    .trait b{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text-1);text-align:right;font-variant-numeric:tabular-nums}
+    .meter{height:6px;background:var(--bg-inset);border:1px solid var(--border)}
+    .meter i{display:block;height:100%;background:var(--tactical)}
+    .tell{font-family:var(--font-sans);font-size:11px;font-style:italic;color:var(--text-2);margin-top:11px;padding-top:9px;border-top:1px solid var(--border-faint);line-height:1.45}
+    .feed{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:baseline;margin-top:8px}
+    .feed__ts{font-family:var(--font-mono);font-size:10px;color:var(--text-3);white-space:nowrap}
+    .feed__msg{font-family:var(--font-sans);font-size:12px;color:var(--text-1);line-height:1.45}
+
+    /* ── Fog of war ──────────────────────────────────── */
+    .fog{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
+    .fog__grain{position:absolute;left:-25%;top:-25%;width:150%;height:150%;opacity:.72;mix-blend-mode:screen;animation:smokeDrift 70s linear infinite}
+    @keyframes smokeDrift{0%{transform:translate(0,0) scale(1)}50%{transform:translate(7%,3%) scale(1.06)}100%{transform:translate(0,0) scale(1)}}
+    .fog__blob{position:absolute;border-radius:50%;filter:blur(74px);mix-blend-mode:screen;will-change:transform}
+    .fog__blob.a{width:760px;height:540px;left:-150px;top:-120px;background:radial-gradient(closest-side,rgba(140,162,194,.66),transparent 70%);animation:drift1 32s ease-in-out infinite}
+    .fog__blob.b{width:900px;height:600px;right:-220px;top:0;background:radial-gradient(closest-side,rgba(112,130,162,.62),transparent 70%);animation:drift2 40s ease-in-out infinite}
+    .fog__blob.c{width:1080px;height:540px;left:12%;bottom:-260px;background:radial-gradient(closest-side,rgba(214,142,82,.46),transparent 70%);animation:drift3 48s ease-in-out infinite}
+    .fog__blob.d{width:600px;height:460px;left:34%;top:-80px;background:radial-gradient(closest-side,rgba(156,174,202,.54),transparent 70%);animation:drift2 36s ease-in-out infinite reverse}
+    .fog__blob.e{width:720px;height:500px;right:4%;bottom:-180px;background:radial-gradient(closest-side,rgba(126,144,176,.54),transparent 70%);animation:drift1 44s ease-in-out infinite reverse}
+    @keyframes drift1{0%,100%{transform:translate(0,0)}50%{transform:translate(190px,64px)}}
+    @keyframes drift2{0%,100%{transform:translate(0,0)}50%{transform:translate(-210px,52px)}}
+    @keyframes drift3{0%,100%{transform:translate(0,0)}50%{transform:translate(130px,-74px)}}
+    .hero-scrim{position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(90deg,rgba(10,12,16,.95),rgba(10,12,16,.6) 40%,rgba(10,12,16,0) 70%)}
+    .ember{position:absolute;left:0;right:0;bottom:-12%;height:62%;z-index:1;pointer-events:none;background:radial-gradient(62% 100% at 50% 100%,rgba(232,178,58,.24),rgba(232,178,58,.08) 42%,transparent 70%)}
+    .vignette{position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(125% 85% at 50% 28%,transparent 52%,rgba(5,6,9,.78));mix-blend-mode:multiply}
+    .ambient{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;opacity:.5}
+
+    /* fog lifts to reveal the board */
+    .term-wrap{position:relative;perspective:1500px}
+    .term__veil{position:absolute;inset:-18% -14%;z-index:5;pointer-events:none;background:radial-gradient(125% 115% at 50% 42%,rgba(198,208,222,0),rgba(150,162,184,.68) 48%,rgba(112,124,148,.96));animation:veilLift 2.8s ease .45s forwards}
+    @keyframes veilLift{from{opacity:1}to{opacity:0}}
+    @keyframes termSharpen{to{filter:blur(0)}}
+
+    /* ── Creed band ──────────────────────────────────── */
+    .creed{position:relative;overflow:hidden;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--bg-0)}
+    .creed__in{position:relative;z-index:2;max-width:920px;margin:0 auto;padding:104px 24px;text-align:center}
+    .creed__eyebrow{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:20px}
+    .creed h2{font-family:var(--font-mono);font-size:34px;font-weight:600;line-height:1.24;letter-spacing:-.01em;color:var(--text-1)}
+    .creed h2 .mk{color:var(--accent);text-shadow:0 0 34px rgba(232,178,58,.22)}
+
+    /* ── Ticker ──────────────────────────────────────── */
+    .ticker{border-bottom:1px solid var(--border);background:var(--bg-1)}
+    .ticker-in{max-width:var(--maxw);margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 22px;padding:12px 24px;font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2)}
+    .ticker-in i{font-style:normal;color:var(--accent);margin-right:7px}
+
+    /* ── Sections ────────────────────────────────────── */
+    .section{max-width:var(--maxw);margin:0 auto;padding:78px 24px}
+    .sec-head{margin-bottom:34px;max-width:760px}
+    .sec-kicker{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+    .sec-title{font-family:var(--font-mono);font-size:30px;font-weight:600;line-height:1.14;letter-spacing:-.01em;color:var(--text-1)}
+    .sec-sub{margin-top:14px;font-size:15px;color:var(--text-2);line-height:1.62;max-width:600px}
+
+    /* wedge comparison */
+    .wedge{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .vcard{background:var(--bg-1);border:1px solid var(--border);padding:20px}
+    .vcard h3{font-family:var(--font-mono);font-size:14px;font-weight:500;color:var(--text-1);margin-bottom:14px}
+    .vline{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:11px 0;border-top:1px solid var(--border-faint)}
+    .vline:first-of-type{border-top:0}
+    .vline .who{font-family:var(--font-mono);font-size:12px;color:var(--text-2)}
+    .vline .mkt{font-family:var(--font-mono);font-size:14px;color:var(--text-3);font-variant-numeric:tabular-nums;text-align:right;min-width:64px}
+    .vline .yrs{font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums;text-align:right;min-width:64px}
+    .vcard .foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);display:flex;justify-content:space-between}
+    .vcard .foot .ym{color:var(--accent)}
+
+    /* split feature blocks */
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+    .split.rev .split-media{order:-1}
+    .split-copy h2{font-family:var(--font-mono);font-size:26px;font-weight:600;line-height:1.16;color:var(--text-1);margin-bottom:14px}
+    .split-copy p{font-size:15px;color:var(--text-2);line-height:1.64;margin-bottom:18px;max-width:520px}
+    .checks{display:grid;gap:10px}
+    .checks div{display:grid;grid-template-columns:118px 1fr;gap:14px;padding-top:11px;border-top:1px solid var(--border-faint);font-size:13px}
+    .checks strong{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:.03em;text-transform:uppercase;color:var(--text-1)}
+    .checks span{color:var(--text-2);line-height:1.5}
+
+    .gm{background:var(--bg-1);border:1px solid var(--border);border-left:3px solid var(--tactical)}
+    .gm__hdr{font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-1);padding:11px 14px;border-bottom:1px solid var(--border)}
+    .gm__row{display:grid;grid-template-columns:130px 1fr 32px;gap:12px;align-items:center;padding:10px 14px}
+    .gm__row span{font-family:var(--font-mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-2)}
+    .gm__row b{font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--text-1);text-align:right;font-variant-numeric:tabular-nums}
+    .gm__tell{font-family:var(--font-sans);font-size:13px;font-style:italic;color:var(--text-2);padding:11px 14px;border-top:1px solid var(--border-faint);line-height:1.5}
+
+    .brief{background:var(--bg-1);border:1px solid var(--border)}
+    .brief__hdr{display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-1);padding:11px 14px;border-bottom:1px solid var(--border);border-left:3px solid var(--accent)}
+    .frow{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border-faint);border-left:3px solid var(--tactical)}
+    .frow.urgent{border-left-color:var(--accent)}
+    .frow.caution{border-left-color:var(--warn)}
+    .frow .ts{font-family:var(--font-mono);font-size:10px;color:var(--text-3);white-space:nowrap}
+    .frow .msg{font-family:var(--font-sans);font-size:13px;color:var(--text-1);line-height:1.45}
+
+    /* command center grid */
+    .cc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border-faint);border:1px solid var(--border)}
+    .cc{background:var(--bg-1);padding:20px}
+    .cc .lbl{margin-bottom:8px}
+    .cc h3{font-family:var(--font-mono);font-size:15px;font-weight:500;color:var(--text-1);margin-bottom:7px}
+    .cc p{font-size:13px;color:var(--text-2);line-height:1.55}
+
+    /* ── Pricing ─────────────────────────────────────── */
+    .pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:1020px}
+    .price-card{background:var(--bg-1);border:1px solid var(--border);padding:26px 24px;position:relative;display:flex;flex-direction:column}
+    .price-card.pop,.price-card.price-card-pop{border-color:var(--accent)}
+    .price-badge{position:absolute;top:-1px;right:-1px;background:var(--accent);color:var(--bg-0);font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px}
+    .price-name{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--text-2);margin-bottom:14px}
+    .price-amount{font-family:var(--font-mono);font-size:40px;font-weight:600;line-height:1;color:var(--text-1);font-variant-numeric:tabular-nums}
+    .price-amount span{font-size:15px;font-weight:500;color:var(--text-3)}
+    .price-note{font-family:var(--font-mono);font-size:12px;color:var(--text-3);margin:8px 0 18px;min-height:18px}
+    .price-features{list-style:none;display:flex;flex-direction:column;gap:9px;margin-bottom:24px}
+    .price-features li{font-size:13px;color:var(--text-2);line-height:1.4;display:flex;gap:9px}
+    .price-features li::before{content:"›";color:var(--accent);font-family:var(--font-mono);flex-shrink:0}
+    .price-btn{width:100%;min-height:46px;margin-top:auto;font-family:var(--font-mono);font-size:14px;font-weight:500;letter-spacing:.03em;border-radius:var(--radius);border:1px solid var(--border-strong);background:transparent;color:var(--text-1);transition:all 90ms ease}
+    .price-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .price-btn.accent{background:var(--accent);color:var(--bg-0);border-color:var(--accent);font-weight:600}
+    .price-btn.accent:hover{background:var(--accent-bright);border-color:var(--accent-bright);color:var(--bg-0)}
+
+    /* ── Platform band ───────────────────────────────── */
+    .platforms{max-width:var(--maxw);margin:0 auto;padding:0 24px 80px}
+    .platform-band{border:1px solid var(--border);background:var(--bg-1);padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:18px}
+    .platforms-title{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
+    .platforms-copy{font-size:14px;color:var(--text-2);line-height:1.5}
+    .platforms-list{display:flex;gap:8px;flex-wrap:wrap}
+    .plat-pill{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;padding:7px 12px;border:1px solid var(--border-strong);border-radius:var(--radius);color:var(--text-2);white-space:nowrap}
+    .plat-pill.live{color:var(--pos);border-color:var(--pos)}
+    .plat-pill.soon{color:var(--warn);border-color:var(--warn)}
+
+    /* ── Auth ────────────────────────────────────────── */
+    .auth{max-width:430px;margin:0 auto;padding:0 24px 84px}
+    .auth-logo{display:block;width:48px;height:48px;border-radius:var(--radius);border:1px solid var(--border-strong);margin:0 auto 16px}
+    .auth-title{text-align:center;font-family:var(--font-mono);font-size:18px;font-weight:600;letter-spacing:.04em;margin-bottom:22px;color:var(--text-1)}
+    .oauth-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;min-height:46px;border-radius:var(--radius);font-size:14px;font-weight:600;font-family:var(--font-sans);margin-bottom:10px;box-sizing:border-box;transition:opacity 90ms ease,box-shadow 90ms ease}
+    .oauth-google{border:1px solid #dadce0;background:#fff;color:#3c4043}
+    .oauth-google:hover{box-shadow:0 2px 8px rgba(0,0,0,.4)}
+    .oauth-apple{border:none;background:#000;color:#fff}
+    .oauth-apple:hover{opacity:.85}
+    .auth-or{display:flex;align-items:center;gap:10px;margin:6px 0 14px}
+    .auth-or div{flex:1;height:1px;background:var(--border)}
+    .auth-or span{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
+    .auth-tabs{display:flex;margin-bottom:18px;border:1px solid var(--border);background:var(--bg-inset)}
+    .auth-tab{flex:1;min-height:42px;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);background:transparent;border:none;transition:all 90ms ease}
+    .auth-tab.active{background:var(--bg-2);color:var(--text-1)}
+    .auth-panel{display:none}
+    .auth-panel.active{display:block}
+    .auth-input{width:100%;min-height:46px;padding:0 14px;font-size:14px;font-family:var(--font-mono);background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);margin-bottom:10px;outline:none;transition:border-color 90ms ease}
+    .auth-input:focus{border-color:var(--accent)}
+    .auth-input::placeholder{color:var(--text-3)}
+    .auth-submit{width:100%;min-height:48px;font-family:var(--font-mono);font-size:14px;font-weight:600;letter-spacing:.03em;border-radius:var(--radius);border:1px solid var(--accent);background:var(--accent);color:var(--bg-0);margin-top:4px;transition:background 90ms ease}
+    .auth-submit:hover{background:var(--accent-bright);border-color:var(--accent-bright)}
+    .auth-link{width:100%;border:none;background:transparent;color:var(--text-3);font-family:var(--font-mono);font-size:12px;margin-top:12px;text-align:center}
+    .auth-link:hover{color:var(--accent)}
+    .alert{font-size:13px;padding:10px 14px;border-radius:var(--radius);margin-bottom:12px;display:none;font-family:var(--font-mono)}
+    .alert.show{display:block}
+    .alert-error{background:rgba(240,73,92,.08);color:var(--neg);border:1px solid rgba(240,73,92,.3)}
+    .alert-success{background:rgba(47,191,136,.08);color:var(--pos);border:1px solid rgba(47,191,136,.3)}
+
+    .footer{text-align:center;padding:26px;font-family:var(--font-mono);font-size:11px;letter-spacing:.04em;color:var(--text-3);border-top:1px solid var(--border)}
+
+    /* ── Responsive ──────────────────────────────────── */
+    @media(max-width:960px){
+      .hero-in{grid-template-columns:1fr;gap:48px}
+      .rig,.term-wrap{perspective:none}
+      .term{transform:none;max-width:560px}
+      .split{grid-template-columns:1fr;gap:26px}
+      .split.rev .split-media{order:0}
+      .cc-grid{grid-template-columns:1fr 1fr}
+    }
+    @media(max-width:680px){
+      .nav-in{padding:11px 16px}
+      .hero-in{padding:52px 16px 48px}
+      .hero h1{font-size:42px}
+      .hero-sub{font-size:16px}
+      .section{padding:54px 16px}
+      .sec-title{font-size:24px}
+      .creed h2{font-size:23px}
+      .creed__in{padding:64px 16px}
+      .wedge{grid-template-columns:1fr}
+      .cc-grid{grid-template-columns:1fr}
+      .pricing-grid{grid-template-columns:1fr}
+      .term__grid{grid-template-columns:1fr}
+      .platform-band{flex-direction:column;align-items:flex-start}
+      .ticker-in{padding:11px 16px}
+      .platforms{padding:0 16px 64px}
+      .auth{padding:0 16px 64px}
+      .hero-actions{flex-direction:column;align-items:stretch}
+      .hero-cta,.hero-secondary{justify-content:center}
+    }
+    /* Phone tier: 44px tap floor + 16px auth inputs (kills iOS zoom-on-focus) */
+    @media(max-width:767px){
+      .btn,.nav-btn{min-height:44px}
+      .auth-input{font-size:16px}
+    }
+    @media(prefers-reduced-motion:reduce){
+      html{scroll-behavior:auto}
+      .term{transform:none;filter:none;animation:none}
+      .term__veil{display:none}
+      .fog__blob,.fog__grain{animation:none}
+      *{transition:none!important}
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient" aria-hidden="true">
+    <div class="fog__blob a"></div>
+    <div class="fog__blob c"></div>
+    <div class="fog__blob e"></div>
+  </div>
+
+  <!-- Nav -->
+  <nav class="nav">
+    <div class="nav-in">
+      <div class="nav-brand">
+        <img src="icon-192.png" alt="Dynasty HQ" class="nav-logo">
+        <span class="nav-title">DYNASTY&nbsp;HQ</span>
+      </div>
+      <div class="nav-links">
+        <button class="nav-btn" id="navSignin" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'})">Sign in</button>
+        <button class="nav-btn nav-btn-primary" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Get started</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="hero-edge" aria-hidden="true"></div>
+    <div class="ember" aria-hidden="true"></div>
+    <div class="fog" aria-hidden="true">
+      <svg class="fog__grain" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+        <filter id="fogTex" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="4" seed="7" stitchTiles="stitch"/>
+          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 -0.18"/>
+        </filter>
+        <rect width="100%" height="100%" filter="url(#fogTex)"/>
+      </svg>
+      <div class="fog__blob a"></div>
+      <div class="fog__blob b"></div>
+      <div class="fog__blob c"></div>
+      <div class="fog__blob d"></div>
+      <div class="fog__blob e"></div>
+    </div>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="hero-scrim" aria-hidden="true"></div>
+    <div class="hero-in">
+      <div class="hero-copy">
+        <div class="hero-eyebrow">Fantasy front office · Dynasty &amp; redraft · Free on Sleeper</div>
+        <h1>Generic advice: stop here.<br><span class="mk">This is your world.</span></h1>
+        <p class="hero-sub">Every other tool ranks players for a league that isn't yours. Dynasty HQ rebuilds every value, trade, and draft call around <b>your exact scoring and roster</b> — and reads <b>how each rival actually operates.</b></p>
+        <div class="hero-actions">
+          <button class="hero-cta" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free with Sleeper</button>
+          <button class="hero-secondary" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">See plans</button>
+        </div>
+        <p class="hero-free">Free on all your Sleeper leagues · no credit card</p>
+      </div>
+      <div class="rig" aria-hidden="true">
+        <div class="term-wrap">
+          <div class="term__veil"></div>
+          <div class="term">
+          <div class="term__bar">
+            <span class="term__brand">DYNASTY HQ // LEAGUE MODEL</span>
+            <span class="plat-pill live" style="padding:3px 8px;font-size:10px">SLEEPER LIVE</span>
+          </div>
+          <div class="term__grid">
+            <div class="panel panel--focus">
+              <div class="lbl">DHQ value · your league</div>
+              <span class="pname">Brock Bowers · TE</span>
+              <div class="bigval">9,420</div>
+              <span class="tag">TE PREMIUM · 12-TEAM SF</span>
+              <div class="band"><div class="band__fill" style="left:14%;right:13%"></div><div class="band__tick" style="left:56%"></div></div>
+              <div class="cmp"><span>Generic market (KTC)</span><b>6,800</b></div>
+            </div>
+            <div class="panel">
+              <div class="lbl">Owner DNA · seat 04</div>
+              <div class="trait"><span>Win-now</span><div class="meter"><i style="width:78%"></i></div><b>78</b></div>
+              <div class="trait"><span>Pick value</span><div class="meter"><i style="width:31%"></i></div><b>31</b></div>
+              <div class="tell">Overpays for WRs in-window. Anchor high.</div>
+            </div>
+            <div class="panel panel--wide">
+              <div class="lbl">Alex · recon brief</div>
+              <div class="feed"><span class="feed__ts">SUN 11:58</span><span class="feed__msg">Seat 04 lost again — panic window open. Float Bowers for their 2026 1st + Nacua.</span></div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Ticker -->
+  <div class="ticker" aria-label="Capabilities">
+    <div class="ticker-in">
+      <span><i>›</i>Values from your scoring</span>
+      <span><i>›</i>Owner DNA profiles</span>
+      <span><i>›</i>Trade finder + memory</span>
+      <span><i>›</i>Draft command</span>
+      <span><i>›</i>Alex, your AI GM</span>
+      <span><i>›</i>Sleeper live · MFL soon</span>
+    </div>
+  </div>
+
+  <!-- Wedge -->
+  <section class="section">
+    <div class="sec-head">
+      <div class="sec-kicker">See the real value</div>
+      <h2 class="sec-title">The market lies to your league.</h2>
+      <p class="sec-sub">Same players. Your scoring. The number that's actually true.</p>
+    </div>
+    <div class="wedge">
+      <div class="vcard">
+        <h3>TE-premium · the tight end tax</h3>
+        <div class="vline"><span class="who">Brock Bowers · TE</span><span class="mkt">6,800</span><span class="yrs">9,420</span></div>
+        <div class="vline"><span class="who">Trey McBride · TE</span><span class="mkt">5,900</span><span class="yrs">8,310</span></div>
+        <div class="vline"><span class="who">Sam LaPorta · TE</span><span class="mkt">4,700</span><span class="yrs">6,640</span></div>
+        <div class="foot"><span>Market (KTC)</span><span class="ym">Your league →</span></div>
+      </div>
+      <div class="vcard">
+        <h3>Superflex · the second QB premium</h3>
+        <div class="vline"><span class="who">Jayden Daniels · QB</span><span class="mkt">7,100</span><span class="yrs">9,880</span></div>
+        <div class="vline"><span class="who">Bo Nix · QB</span><span class="mkt">3,400</span><span class="yrs">5,520</span></div>
+        <div class="vline"><span class="who">2026 1st (early)</span><span class="mkt">4,200</span><span class="yrs">5,050</span></div>
+        <div class="foot"><span>Market (KTC)</span><span class="ym">Your league →</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Owner DNA -->
+  <section class="section">
+    <div class="split">
+      <div class="split-copy">
+        <div class="sec-kicker">See the table</div>
+        <h2>Read your rivals before they move.</h2>
+        <p>Every manager has a tell. Dynasty HQ reads their trade history and shows you who's buying, who's panicking, and the exact deal they'll say yes to.</p>
+      </div>
+      <div class="split-media">
+        <div class="gm">
+          <div class="gm__hdr">GM PROFILE · SEAT 04 · "THE CLOSER"</div>
+          <div class="gm__row"><span>Aggression</span><div class="meter"><i style="width:81%"></i></div><b>81</b></div>
+          <div class="gm__row"><span>Patience</span><div class="meter"><i style="width:34%"></i></div><b>34</b></div>
+          <div class="gm__row"><span>Pick value</span><div class="meter"><i style="width:31%"></i></div><b>31</b></div>
+          <div class="gm__row"><span>Loss reactivity</span><div class="meter"><i style="width:72%"></i></div><b>72</b></div>
+          <p class="gm__tell">Sells futures to win now and chases WRs after a loss. Acceptance on a win-now WR offer: 60–75%.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Alex -->
+  <section class="section">
+    <div class="split rev">
+      <div class="split-copy">
+        <div class="sec-kicker">Your AI GM</div>
+        <h2>Alex calls the move.</h2>
+        <p>Not a chatbot guessing. Alex knows your roster, your scoring, your values, and the manager across the table — then tells you exactly what to do.</p>
+      </div>
+      <div class="split-media">
+        <div class="brief">
+          <div class="brief__hdr"><span>RECON BRIEF · ALEX INGRAM</span><span style="color:var(--text-3);font-weight:400">LIVE</span></div>
+          <div class="frow urgent"><span class="ts">DO NOW</span><span class="msg">Seat 04 is in a panic window. Your Bowers is their exact need — open at their 1st + Nacua.</span></div>
+          <div class="frow caution"><span class="ts">MONITOR</span><span class="msg">McBride owner (seat 09) is a pick-hoarder. Don't lead with picks — lead with a starter.</span></div>
+          <div class="frow"><span class="ts">PREPARE</span><span class="msg">Your RB room ages out in 2 seasons. Start converting depth to 2026 capital now.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Creed -->
+  <section class="creed">
+    <div class="ember" aria-hidden="true"></div>
+    <div class="fog" aria-hidden="true">
+      <svg class="fog__grain" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+        <filter id="fogTexB" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="4" seed="11" stitchTiles="stitch"/>
+          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.62 -0.15"/>
+        </filter>
+        <rect width="100%" height="100%" filter="url(#fogTexB)"/>
+      </svg>
+      <div class="fog__blob a"></div>
+      <div class="fog__blob b"></div>
+      <div class="fog__blob c"></div>
+      <div class="fog__blob d"></div>
+      <div class="fog__blob e"></div>
+    </div>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="creed__in">
+      <div class="creed__eyebrow">The Dynasty HQ creed</div>
+      <h2>Dynasties aren't won by the best roster.<br>They're won by the manager who can <span class="mk">see through the fog of war.</span></h2>
+    </div>
+  </section>
+
+  <!-- Command center -->
+  <section class="section">
+    <div class="sec-head">
+      <div class="sec-kicker">The command center</div>
+      <h2 class="sec-title">One war room. Every move.</h2>
+      <p class="sec-sub">Trades, the draft, and your history — all reading one model of your league.</p>
+    </div>
+    <div class="cc-grid">
+      <div class="cc"><div class="lbl">01</div><h3>Trade Center</h3><p>Find the deal that clears — and who'll take it.</p></div>
+      <div class="cc"><div class="lbl">02</div><h3>Draft command</h3><p>Pick values from your league's own slots.</p></div>
+      <div class="cc"><div class="lbl">03</div><h3>Roster windows</h3><p>Contend or retool — at the right time.</p></div>
+      <div class="cc"><div class="lbl">04</div><h3>Trade memory</h3><p>Every deal and habit, remembered.</p></div>
+      <div class="cc"><div class="lbl">05</div><h3>Trophy Room</h3><p>Your league's history, kept.</p></div>
+      <div class="cc"><div class="lbl">06</div><h3>Team diagnosis</h3><p>Your next highest-leverage move.</p></div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="section pricing" id="pricing">
+    <div class="sec-head">
+      <div class="sec-kicker">Plans</div>
+      <h2 class="sec-title">Start free. Go Pro when you're ready.</h2>
+      <p class="sec-sub">Scout every one of your Sleeper leagues free. Pro unlocks the full engine — 7-day free trial, cancel anytime.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <div class="price-name">Scout</div>
+        <div class="price-amount">$0</div>
+        <div class="price-note">Free — all your leagues</div>
+        <ul class="price-features">
+          <li>All your Sleeper leagues</li>
+          <li>League-specific DHQ values</li>
+          <li>Player cards with age curves</li>
+          <li>Team diagnosis</li>
+          <li>1 AI query per day</li>
+        </ul>
+        <button class="price-btn" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Get started</button>
+      </div>
+      <div class="price-card pop">
+        <div class="price-badge">Most Popular</div>
+        <div class="price-name">Pro Monthly</div>
+        <div class="price-amount">$9.99 <span>/mo</span></div>
+        <div class="price-note">7-day free trial · cancel anytime</div>
+        <ul class="price-features">
+          <li>Everything in Scout</li>
+          <li>Unlimited Sleeper leagues</li>
+          <li>15 AI calls per day</li>
+          <li>Owner DNA profiles</li>
+          <li>Trade memory + finder</li>
+          <li>Draft command + pick values</li>
+          <li>Scout + War Room access</li>
+        </ul>
+        <button class="price-btn accent" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free trial</button>
+      </div>
+      <div class="price-card">
+        <div class="price-badge">Best Value</div>
+        <div class="price-name">Pro Annual</div>
+        <div class="price-amount">$99.99 <span>/yr</span></div>
+        <div class="price-note">Best value — ~$8.33/mo · 7-day free trial</div>
+        <ul class="price-features">
+          <li>Everything in Pro Monthly</li>
+          <li>Locked-in annual rate</li>
+          <li>Save ~17% vs monthly</li>
+          <li>Priority feature access</li>
+        </ul>
+        <button class="price-btn" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free trial</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Platforms -->
+  <section class="platforms">
+    <div class="platform-band">
+      <div>
+        <div class="platforms-title">Platform status</div>
+        <p class="platforms-copy">Dynasty HQ is Sleeper-only today — that's where dynasty lives, and where the engine goes deepest. MFL is next.</p>
+      </div>
+      <div class="platforms-list">
+        <span class="plat-pill live">Sleeper · live</span>
+        <span class="plat-pill soon">MFL · coming soon</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Join -->
+  <section class="auth" id="auth">
+    <img src="icon-192.png" alt="Dynasty HQ" style="display:block;width:56px;height:56px;border-radius:14px;margin:0 auto 16px;box-shadow:0 4px 20px rgba(212,175,55,.2)">
+    <h2 class="auth-title" id="authTitle">Create your account</h2>
+    <p id="authSub" style="text-align:center;font-size:14px;color:var(--silver);line-height:1.55;margin:-12px 0 22px">Step 1 of 2 — create your account with Google or email. Next, you'll connect your leagues.</p>
+
+    <div class="alert" id="alertJoin"></div>
+
+    <!-- Google -->
+    <button id="btnGoogle" class="auth-google" onclick="handleGoogle()">
+      <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29.1 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29.1 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35 26.7 36 24 36c-5.3 0-9.7-2.6-11.3-7l-6.6 5.1C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.6l6.2 5.2C39.9 36 44 30.6 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
+      Continue with Google
+    </button>
+
+    <!-- Apple -->
+    <button id="btnApple" class="auth-apple" onclick="handleApple()">
+      <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="currentColor"><path d="M17.05 12.04c-.03-2.65 2.16-3.92 2.26-3.98-1.23-1.8-3.15-2.05-3.83-2.08-1.63-.16-3.18.96-4.01.96-.82 0-2.1-.94-3.46-.91-1.78.03-3.42 1.03-4.34 2.62-1.85 3.21-.47 7.95 1.33 10.55.88 1.27 1.93 2.7 3.3 2.65 1.32-.05 1.82-.85 3.42-.85 1.59 0 2.04.85 3.44.82 1.42-.02 2.32-1.3 3.19-2.58 1-1.47 1.42-2.89 1.44-2.97-.03-.01-2.76-1.06-2.79-4.2zM14.6 4.48c.73-.89 1.22-2.12 1.08-3.35-1.05.04-2.32.7-3.07 1.58-.67.78-1.26 2.03-1.1 3.23 1.17.09 2.36-.6 3.09-1.46z"/></svg>
+      Continue with Apple
+    </button>
+
+    <div class="auth-or"><span>or</span></div>
+
+    <!-- Email signup / signin -->
+    <input class="auth-input" type="email" id="acctEmail" placeholder="Email" autocomplete="email" autocapitalize="off">
+    <input class="auth-input" type="password" id="acctPassword" placeholder="Password (8+ characters)" autocomplete="current-password">
+    <button class="auth-submit" id="btnJoin" onclick="handleEmailAuth()">Create account →</button>
+
+    <p style="text-align:center;font-size:12px;color:var(--muted);margin-top:12px">
+      <span id="sleeperHint">Step 1 of 2 — next you'll connect your leagues (Sleeper or MFL).</span>
+    </p>
+    <div style="text-align:center;margin-top:14px;font-size:13px">
+      <button class="auth-linkbtn" id="toggleMode" onclick="toggleAuthMode()">Already have an account? Sign in</button>
+      <button class="auth-linkbtn" id="forgotBtn" onclick="handleForgot()" style="display:none">Forgot password?</button>
+    </div>
+  </section>
+
+  <style>
+    .auth-google{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;min-height:48px;border-radius:10px;border:1px solid var(--border);background:#fff;color:#1f2328;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:6px}
+    .auth-google:hover{box-shadow:0 4px 14px rgba(0,0,0,.25)}
+    .auth-apple{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;min-height:48px;border-radius:10px;border:1px solid #000;background:#000;color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:6px}
+    .auth-apple:hover{box-shadow:0 4px 14px rgba(0,0,0,.4)}
+    .auth-or{display:flex;align-items:center;text-align:center;color:var(--muted);font-size:12px;margin:14px 0;gap:10px}
+    .auth-or::before,.auth-or::after{content:'';flex:1;height:1px;background:var(--border)}
+    .auth-linkbtn{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;text-decoration:underline;font-family:inherit}
+    .auth-linkbtn:hover{color:var(--accent)}
+  </style>
+
+  <footer class="footer">&copy; 2026 Dynasty HQ &middot; All rights reserved</footer>
+
+  <script src="js/landing-content.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"></script>
+  <script>
+    const FW_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4c2hpcXl4aGhpZnZ0ZnFhd2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTExMzAsImV4cCI6MjA4ODI4NzEzMH0.zJi9W986ZLaANiZN6pt6ReFwaQU6yPeidsERIWo2ibI';
+    const SUPABASE_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co';
+    const SESSION_KEY = 'fw_session_v1';
+    const SCOUT_URL = 'https://skjjcruz.github.io/ReconAI-sandbox-dev/';
+    const LANDING_EDITOR_PREVIEW = new URLSearchParams(window.location.search).has('landingPreview');
+    // ?signout — arrive here from the DHQ logo to land on the sign-in page and
+    // stay put. Suppresses the auto-redirects below and clears the session.
+    const FORCE_SIGNOUT = new URLSearchParams(window.location.search).has('signout');
+    // ?home: deliberate visit to this page (league hub brand icon) — stay here
+    // instead of bouncing a signed-in visitor straight back into the app.
+    const STAY_HOME = new URLSearchParams(window.location.search).has('home');
+
+    // Supabase client — used only for lightweight landing analytics below.
+    let _sbClient = null;
+    function getSbClient() {
+      if (!_sbClient && window.supabase) {
+        _sbClient = window.supabase.createClient(SUPABASE_URL, FW_ANON_KEY);
+      }
+      return _sbClient;
+    }
+
+    const LANDING_ANALYTICS_SESSION_KEY = 'fw_landing_analytics_session_v1';
+    function landingAnalyticsSessionId() {
+      try {
+        let sid = sessionStorage.getItem(LANDING_ANALYTICS_SESSION_KEY);
+        if (!sid) {
+          sid = 'sess_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+          sessionStorage.setItem(LANDING_ANALYTICS_SESSION_KEY, sid);
+        }
+        return sid;
+      } catch {
+        return 'sess_' + Date.now().toString(36);
+      }
+    }
+    function safeLandingMeta(meta) {
+      const out = { route: window.location.pathname || '/landing.html' };
+      Object.entries(meta || {}).forEach(([key, value]) => {
+        if (/email|password|token|secret|message|content|body/i.test(key)) return;
+        if (value == null) return;
+        if (['string', 'number', 'boolean'].includes(typeof value)) out[key] = value;
+      });
+      return out;
+    }
+    function safeReferrerHost() {
+      try { return document.referrer ? new URL(document.referrer).hostname : null; }
+      catch { return null; }
+    }
+    function trackLandingEvent(eventName, metadata = {}) {
+      try {
+        if (LANDING_EDITOR_PREVIEW) return;
+        const db = getSbClient();
+        if (!db || !eventName) return;
+        db.from('analytics_events').insert([{
+          event_id: 'evt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10),
+          username: null,
+          league_id: null,
+          session_id: landingAnalyticsSessionId(),
+          platform: 'warroom',
+          module: 'landing',
+          widget: metadata.widget || null,
+          event_name: eventName,
+          event_ts: new Date().toISOString(),
+          entity_type: metadata.entityType || null,
+          entity_id: metadata.entityId || null,
+          metadata: safeLandingMeta(metadata),
+        }]).then(() => {}).catch(() => {});
+      } catch {}
+    }
+    trackLandingEvent('landing_viewed', {
+      referrerHost: safeReferrerHost(),
+      viewport: window.innerWidth < 768 ? 'mobile' : 'desktop',
+    });
+    document.addEventListener('click', (evt) => {
+      const target = evt.target.closest?.('.hero-cta,.hero-secondary,.price-btn,.nav-btn,.auth-submit');
+      if (!target) return;
+      trackLandingEvent('landing_cta_clicked', {
+        widget: target.className.split(/\s+/)[0],
+        entityType: 'cta',
+        entityId: target.id || target.className.split(/\s+/)[0],
+      });
+    }, { capture: true });
+
+    const WARROOM_URL = 'index.html';
+    const AUTH_KEY = 'od_auth_v1';
+    const PROFILE_KEY = 'od_profile_v1';
+
+    // A brand-new account must walk the full funnel (plan -> Sleeper connect)
+    // even on a device where a previous account already finished onboarding —
+    // that progress is per DEVICE, and inheriting it skips the journey.
+    function resetDeviceOnboardingForNewAccount() {
+      try {
+        const prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null') || {};
+        delete prof.sleeperUsername;
+        delete prof.sleeperUserId;
+        prof.onboardingComplete = false;
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(prof));
+      } catch {}
+      try { localStorage.removeItem(AUTH_KEY); } catch {}
+      try { localStorage.removeItem('od_locked_username_v2'); } catch {}
+      try { localStorage.removeItem('dynastyhq_username'); } catch {}
+      try { localStorage.removeItem('mfl_league_id'); } catch {}
+      try { localStorage.removeItem('mfl_year'); } catch {}
+      try { localStorage.removeItem('mfl_franchise_id'); } catch {}
+    }
+    const FW_API_BASE = SUPABASE_URL + '/functions/v1';
+
+    let authMode = 'signup'; // 'signup' | 'signin'
+
+    function destForUser() {
+      const pref = localStorage.getItem('fw_preferred_view');
+      if (pref === 'scout') return SCOUT_URL;
+      if (pref === 'warroom') return WARROOM_URL;
+      // Deterministic default: always the War Room league picker. (Previously this
+      // keyed off window.innerWidth, which made iPads flip between Scout and War
+      // Room by orientation.) An explicit 'scout' preference still wins above.
+      return WARROOM_URL;
+    }
+
+    const CONNECT_URL = 'connect-sleeper.html';
+
+    function showAlert(type, message) {
+      const el = document.getElementById('alertJoin');
+      el.className = 'alert alert-' + type + ' show';
+      el.textContent = message;
+      if (type !== 'success') setTimeout(() => el.classList.remove('show'), 6000);
+    }
+
+    // Where to send a signed-in user: the connect-your-leagues page until a
+    // league source (Sleeper or MFL) is bound; the app once one is.
+    function nextAfterAuth() {
+      try {
+        const profile = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
+        const legacy = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+        if (profile?.onboardingComplete === true || profile?.sleeperUsername || legacy?.username
+          || localStorage.getItem('mfl_league_id')) return destForUser();
+      } catch {}
+      return CONNECT_URL;
+    }
+
+    function toggleAuthMode() {
+      authMode = authMode === 'signup' ? 'signin' : 'signup';
+      const signup = authMode === 'signup';
+      document.getElementById('authTitle').textContent = signup ? 'Create your account' : 'Welcome back';
+      document.getElementById('authSub').textContent = signup
+        ? "Step 1 of 2 \u2014 create your account with Google or email. Next, you'll connect your leagues."
+        : 'Sign in to your Dynasty HQ account.';
+      document.getElementById('sleeperHint').parentElement.style.display = signup ? '' : 'none';
+      document.getElementById('btnJoin').textContent = signup ? 'Create account \u2192' : 'Sign in \u2192';
+      document.getElementById('btnGoogle').lastChild.textContent = signup ? ' Continue with Google' : ' Sign in with Google';
+      document.getElementById('btnApple').lastChild.textContent = signup ? ' Continue with Apple' : ' Sign in with Apple';
+      document.getElementById('toggleMode').textContent = signup ? 'Already have an account? Sign in' : 'Need an account? Sign up';
+      document.getElementById('forgotBtn').style.display = signup ? 'none' : '';
+    }
+
+    // \u2500\u2500 Email signup / signin (account only \u2014 Sleeper handled on step 2) \u2500
+    async function handleEmailAuth() {
+      const email = document.getElementById('acctEmail').value.trim();
+      const password = document.getElementById('acctPassword').value;
+      const btn = document.getElementById('btnJoin');
+      const signup = authMode === 'signup';
+      if (!email || !password) { showAlert('error', 'Email and password are required.'); return; }
+      if (signup && password.length < 8) { showAlert('error', 'Password must be at least 8 characters.'); return; }
+      trackLandingEvent(signup ? 'signup_started' : 'signin_started');
+      btn.disabled = true; btn.textContent = signup ? 'Creating account\u2026' : 'Signing in\u2026';
+      try {
+        const path = signup ? 'fw-signup' : 'fw-signin';
+        const res = await fetch(`${FW_API_BASE}/${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': FW_ANON_KEY, 'Authorization': `Bearer ${FW_ANON_KEY}` },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.token) {
+          trackLandingEvent(signup ? 'signup_failed' : 'signin_failed', { status: res.status });
+          showAlert('error', data.error || (signup ? 'Sign-up failed.' : 'Invalid email or password.'));
+          btn.disabled = false; btn.textContent = signup ? 'Create account \u2192' : 'Sign in \u2192';
+          return;
+        }
+        localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+        if (signup) resetDeviceOnboardingForNewAccount();
+        trackLandingEvent(signup ? 'signup_succeeded' : 'signin_succeeded');
+        showAlert('success', signup ? 'Account ready \u2014 connect your leagues\u2026' : 'Welcome back\u2026');
+        // New accounts go straight to the connect-your-leagues page;
+        // returning sign-ins resume wherever they left off.
+        setTimeout(() => { window.location.href = signup ? CONNECT_URL : nextAfterAuth(); }, 600);
+      } catch (err) {
+        trackLandingEvent(signup ? 'signup_failed' : 'signin_failed', { reason: 'network' });
+        showAlert('error', 'Network error: ' + (err?.message || String(err)));
+        btn.disabled = false; btn.textContent = signup ? 'Create account \u2192' : 'Sign in \u2192';
+      }
+    }
+
+    // \u2500\u2500 Google OAuth (account only) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    function handleGoogle() {
+      const db = getSbClient();
+      if (!db) { showAlert('error', 'Sign-in is still loading \u2014 try again in a moment.'); return; }
+      trackLandingEvent('oauth_started', { provider: 'google' });
+      db.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
+    }
+
+    // ── Apple OAuth (account only) ──────────────────────────────────────────
+    function handleApple() {
+      const db = getSbClient();
+      if (!db) { showAlert('error', 'Sign-in is still loading — try again in a moment.'); return; }
+      trackLandingEvent('oauth_started', { provider: 'apple' });
+      db.auth.signInWithOAuth({ provider: 'apple', options: { redirectTo: window.location.origin + window.location.pathname } });
+    }
+
+    // Handle Google redirect back: store session, then route to step 2.
+    // Captured before Supabase's client consumes the URL: a fresh OAuth return
+    // must always re-sync and replace any stored session — the old "skip if a
+    // token already exists" rule meant a stale or malformed saved session
+    // could never be repaired by signing in again.
+    const FRESH_OAUTH_RETURN =
+      (window.location.hash || '').indexOf('access_token=') !== -1 ||
+      /[?&]code=/.test(window.location.search || '');
+
+    // Best-effort JWT expiry check (mirrors the shared client): true only when
+    // a decodable `exp` claim is in the past (30s skew).
+    function jwtExpired(token) {
+      try {
+        const part = String(token).split('.')[1];
+        if (!part) return false;
+        const claims = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')));
+        if (typeof claims?.exp !== 'number') return false;
+        return Date.now() >= claims.exp * 1000 - 30 * 1000;
+      } catch { return false; }
+    }
+    // A session is only worth acting on when it can pass the shared client's
+    // checks in the app: token present, not expired, and user.id attached
+    // (id-less sessions — the Jul 9–11 sign-in bug shape — resolve free).
+    function sessionHealthy(s) {
+      return !!(s?.token && s?.user?.id && !jwtExpired(s.token));
+    }
+    // Cover the OAuth landing bounce with a calm full-screen state instead of
+    // flashing the marketing page mid-redirect. Removed only on paths that
+    // stay on this page; successful sign-ins navigate away underneath it.
+    let _oauthOverlay = null;
+    if (FRESH_OAUTH_RETURN) {
+      _oauthOverlay = document.createElement('div');
+      _oauthOverlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#0a0c10;display:flex;align-items:center;justify-content:center;color:#e6e9ed;font-family:"JetBrains Mono",monospace;font-size:.85rem;letter-spacing:.12em;text-transform:uppercase';
+      _oauthOverlay.textContent = 'Signing you in…';
+      document.body.appendChild(_oauthOverlay);
+    }
+    function dropOAuthOverlay() {
+      try { if (_oauthOverlay) { _oauthOverlay.remove(); _oauthOverlay = null; } } catch {}
+    }
+    (async function handleOAuthCallback() {
+      try {
+        if (LANDING_EDITOR_PREVIEW || FORCE_SIGNOUT || STAY_HOME) { dropOAuthOverlay(); return; }
+        const db = getSbClient();
+        if (!db) { dropOAuthOverlay(); return; }
+        const { data } = await db.auth.getSession();
+        if (!data?.session) { dropOAuthOverlay(); return; }
+        const user = data.session.user;
+        const fallbackName = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
+        const existing = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+        let appSession = null;
+        // Re-sync on a fresh OAuth return, when nothing usable is stored, and
+        // also when the stored session is damaged (no user.id / expired) —
+        // a lingering Supabase session is exactly what lets us repair those.
+        if (FRESH_OAUTH_RETURN || !sessionHealthy(existing)) {
+          // Exchange the Supabase OAuth token for a Dynasty HQ app session so the
+          // user is registered in app_users and accepted by authenticated APIs.
+          try {
+            const res = await fetch(`${FW_API_BASE}/fw-oauth-sync`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.session.access_token}` },
+              body: JSON.stringify({ productSlug: 'war_room' }),
+            });
+            if (res.ok) appSession = await res.json();
+          } catch (syncErr) { console.warn('[WR] OAuth sync error:', syncErr); }
+
+          if (appSession?.token && appSession?.user?.id) {
+            // Store the WHOLE user record — id/tier/products included. The
+            // shared client refuses account sessions without user.id, so
+            // dropping the id here is what locked every Google sign-in to
+            // the free tier once gating went live.
+            localStorage.setItem(SESSION_KEY, JSON.stringify({
+              token: appSession.token,
+              user: Object.assign({}, appSession.user || {}, {
+                email: appSession.user.email || user.email,
+                displayName: appSession.user.displayName || fallbackName,
+              }),
+            }));
+          } else if (!sessionHealthy(existing)) {
+            // The sync failed and there is no healthy session to fall back
+            // on. Do NOT store the raw Supabase token: a session without
+            // user.id is refused by the shared client and reads as free
+            // tier — the exact shape that locked Google sign-ins to Scout.
+            // Stay here so the user can retry.
+            dropOAuthOverlay();
+            trackLandingEvent('oauth_sync_failed', { provider: 'google' });
+            showAlert('error', 'Sign-in hit a snag finishing your account setup. Please try again in a moment.');
+            return;
+          }
+        }
+        trackLandingEvent('oauth_succeeded', { provider: 'google' });
+        // First-ever sign-in (fw-oauth-sync just created the account): route
+        // to the connect-your-leagues page instead of straight in.
+        if (appSession && appSession.isNew === true) {
+          resetDeviceOnboardingForNewAccount();
+          window.location.href = CONNECT_URL;
+        } else {
+          window.location.href = nextAfterAuth();
+        }
+      } catch (e) { dropOAuthOverlay(); console.warn('[WR] OAuth callback error:', e); }
+    })();
+
+    // \u2500\u2500 Forgot password \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    async function handleForgot() {
+      const email = document.getElementById('acctEmail').value.trim();
+      if (!email) { showAlert('error', 'Enter your email first, then tap \u201cForgot password?\u201d'); document.getElementById('acctEmail').focus(); return; }
+      trackLandingEvent('password_reset_requested');
+      try {
+        await fetch(`${FW_API_BASE}/fw-request-password-reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': FW_ANON_KEY, 'Authorization': `Bearer ${FW_ANON_KEY}` },
+          body: JSON.stringify({ email }),
+        });
+      } catch {}
+      // Always show success \u2014 never reveal whether an email exists.
+      showAlert('success', 'If that email has an account, a password reset link is on the way.');
+    }
+
+    // If already signed in, skip ahead \u2014 to step 2 if Sleeper isn't bound yet,
+    // else straight into the app.
+    // Forced sign-out (DHQ logo → ?signout): clear local + Supabase sessions and
+    // stay on this page. The redirect guards above already bail on FORCE_SIGNOUT.
+    (async function forceSignOut() {
+      if (!FORCE_SIGNOUT) return;
+      try { localStorage.removeItem(SESSION_KEY); } catch {}
+      try { localStorage.removeItem(AUTH_KEY); } catch {}
+      try { localStorage.removeItem('od_locked_username_v2'); } catch {}
+      // Drop the Sleeper binding so signing back in lands on the Sleeper connect
+      // page (connect-sleeper.html) rather than skipping straight into the app.
+      // Tier/onboarding state is preserved.
+      try {
+        const prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
+        if (prof) {
+          delete prof.sleeperUsername;
+          delete prof.sleeperUserId;
+          localStorage.setItem(PROFILE_KEY, JSON.stringify(prof));
+        }
+      } catch {}
+      try { const db = getSbClient(); if (db) await db.auth.signOut(); } catch {}
+      try { if (authMode === 'signup') toggleAuthMode(); } catch {}
+      try { history.replaceState(null, '', window.location.pathname); } catch {}
+    })();
+
+    (function checkSession() {
+      try {
+        // STAY_HOME (?home): the league hub's brand icon lands here on
+        // purpose — a signed-in visitor must be able to look at this page
+        // without being bounced straight back into the app. Their way back
+        // in is the nav button, which flips from "Sign in" to "Open app".
+        if (LANDING_EDITOR_PREVIEW || FORCE_SIGNOUT || STAY_HOME) {
+          try {
+            const staySession = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+            const navBtn = document.getElementById('navSignin');
+            if (STAY_HOME && staySession?.token && navBtn) {
+              navBtn.textContent = 'Open app';
+              navBtn.onclick = () => { window.location.href = nextAfterAuth(); };
+            }
+          } catch {}
+          return;
+        }
+        if (FRESH_OAUTH_RETURN) return; // the OAuth callback owns this visit
+        const session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+        if (!session?.token) return;
+        if (sessionHealthy(session)) {
+          trackLandingEvent('landing_existing_session_redirected');
+          window.location.href = nextAfterAuth();
+          return;
+        }
+        // Damaged (no user.id) or expired session: repair it through
+        // fw-refresh-session before entering the app — entering with it
+        // shows the account as free tier. Unrepairable ones are cleared so
+        // the normal sign-in flow is the recovery path.
+        (async () => {
+          if (!jwtExpired(session.token)) {
+            try {
+              const res = await fetch(`${FW_API_BASE}/fw-refresh-session`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${session.token}`, 'apikey': FW_ANON_KEY },
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data?.token && data?.user?.id) {
+                  localStorage.setItem(SESSION_KEY, JSON.stringify({ token: data.token, user: data.user }));
+                  trackLandingEvent('landing_session_repaired');
+                  window.location.href = nextAfterAuth();
+                  return;
+                }
+              }
+            } catch {}
+          }
+          localStorage.removeItem(SESSION_KEY);
+          trackLandingEvent('landing_dead_session_cleared');
+        })();
+      } catch {}
+    })();
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && ['acctEmail', 'acctPassword'].includes(document.activeElement?.id)) handleEmailAuth();
+    });
+  </script>
+</body>
+</html>

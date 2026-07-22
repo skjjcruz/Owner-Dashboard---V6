@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "pages": {
+    "landing": {
+      "_editor": {
+        "label": "Dynasty HQ Landing",
+        "previewPath": "landing.html"
+      },
+      "meta": {
+        "title": "Dynasty HQ - Dynasty Fantasy Intelligence"
+      },
+      "nav": {
+        "brand": "DYNASTY HQ",
+        "signIn": "Sign In",
+        "primaryCta": "Get Started"
+      },
+      "hero": {
+        "eyebrow": "League-specific dynasty intelligence",
+        "title": "Dynasty HQ",
+        "subtitle": "Most tools stop at player rankings. Dynasty HQ turns your Sleeper league into the model: DHQ values, owner tendencies, draft history, trade memory, and Scout decisions in one operating system.",
+        "primaryCta": "Start free with Sleeper",
+        "secondaryCta": "View plans",
+        "freeLine": "Free on all your Sleeper leagues · no credit card"
+      },
+      "dashboard": {
+        "brand": "DYNASTY HQ",
+        "status": "Sleeper live",
+        "panels": [
+          {
+            "label": "DHQ Model",
+            "headline": "Values built from this league",
+            "copy": "Roster settings, scoring, draft history, and market context feed every player and pick value."
+          },
+          {
+            "label": "Edge Score",
+            "score": "82",
+            "copy": "Actionable roster leverage"
+          },
+          {
+            "label": "Owner DNA",
+            "rows": [
+              {
+                "title": "Pick Hoarder",
+                "copy": "Trade picks last"
+              },
+              {
+                "title": "Panic Seller",
+                "copy": "Act after losses"
+              }
+            ]
+          },
+          {
+            "label": "History Engine",
+            "rows": [
+              {
+                "title": "Draft ROI",
+                "copy": "4 seasons mapped"
+              },
+              {
+                "title": "Trade memory",
+                "copy": "Owner patterns saved"
+              },
+              {
+                "title": "Trophy Room",
+                "copy": "League scoped"
+              }
+            ]
+          }
+        ],
+        "phoneKicker": "SCOUT",
+        "phoneCards": [
+          {
+            "title": "Ask the move",
+            "copy": "Get a direct answer from current league context."
+          },
+          {
+            "title": "Save the read",
+            "copy": "Decision notes travel with the player."
+          },
+          {
+            "title": "Open the board",
+            "copy": "Continue deeper in War Room."
+          }
+        ]
+      },
+      "productSummary": [
+        {
+          "title": "League-specific DHQ",
+          "copy": "Values tuned to your format"
+        },
+        {
+          "title": "Owner DNA",
+          "copy": "Manager behavior, not guesses"
+        },
+        {
+          "title": "Scout to War Room",
+          "copy": "Quick answer to full board"
+        }
+      ],
+      "differentiators": {
+        "eyebrow": "Why it is different",
+        "title": "Dynasty advice gets useful when it knows your league.",
+        "subtitle": "Generic ranks can tell you who is good. Dynasty HQ tells you what matters inside this room: your scoring, your owners, your history, your roster window.",
+        "cards": [
+          {
+            "eyebrow": "DHQ Engine",
+            "title": "Values built from your league, not a public list.",
+            "copy": "DHQ values every player and pick against the rules that actually decide your league: scoring settings, roster structure, age windows, positional scarcity, draft outcomes, and market context.",
+            "rows": [
+              {
+                "title": "Scoring aware",
+                "copy": "Superflex, TE premium, IDP, bench depth, and custom formats change the math."
+              },
+              {
+                "title": "Pick aware",
+                "copy": "Draft capital is tied to your league history and slot-specific outcomes, not flat round labels."
+              },
+              {
+                "title": "Window aware",
+                "copy": "Roster decisions account for build, peak, decline, and value windows by position."
+              }
+            ]
+          },
+          {
+            "eyebrow": "Owner DNA",
+            "title": "The trade partner matters as much as the trade chart.",
+            "copy": "Dynasty HQ tracks owner tendencies: who hoards picks, who overreacts after losses, who buys name value, and which roster pressures create real leverage.",
+            "rows": [
+              {
+                "title": "Trade fit",
+                "copy": "Find the managers with both need and motivation."
+              },
+              {
+                "title": "Timing",
+                "copy": "Know when to hold the line and when to send the offer."
+              }
+            ]
+          }
+        ]
+      },
+      "features": {
+        "eyebrow": "Product advantages",
+        "title": "The pieces compound because they share the same context.",
+        "subtitle": "Scout, War Room, Trophy Room, and the trade tools are not separate widgets. They all read from the same league memory.",
+        "cards": [
+          {
+            "icon": "S",
+            "title": "Scout is the fast layer",
+            "copy": "Ask a lineup, waiver, trade, or roster question on mobile and get an answer using your current Sleeper league context."
+          },
+          {
+            "icon": "WR",
+            "title": "War Room is the deep layer",
+            "copy": "Turn quick reads into trade boards, roster plans, draft strategy, and owner-specific negotiation paths."
+          },
+          {
+            "icon": "TM",
+            "title": "Trade memory",
+            "copy": "Completed trades, manager habits, and saved targets stay connected so advice improves with league history."
+          },
+          {
+            "icon": "TR",
+            "title": "Trophy Room history",
+            "copy": "Championships, draft results, owner records, Hall of Fame entries, and chronicles stay scoped to the active league."
+          },
+          {
+            "icon": "AI",
+            "title": "AI with real context",
+            "copy": "Alex answers with your roster, scoring, history, values, owner profiles, and current league state in the prompt."
+          },
+          {
+            "icon": "DB",
+            "title": "Decision backlog",
+            "copy": "Save tags, notes, targets, and trade ideas so today's thought is still there when you return at the deadline."
+          }
+        ]
+      },
+      "pricing": {
+        "eyebrow": "Plans",
+        "title": "Start free. Go Pro when you're ready.",
+        "subtitle": "Scout every one of your Sleeper leagues free. Pro unlocks the full engine — 7-day free trial, cancel anytime.",
+        "plans": [
+          {
+            "name": "Scout",
+            "price": "$0",
+            "billing": "",
+            "note": "Free — all your leagues",
+            "badge": "",
+            "primary": false,
+            "features": [
+              "All your Sleeper leagues",
+              "League-specific DHQ values",
+              "Player cards with age curves",
+              "Team diagnosis",
+              "1 AI query per day"
+            ],
+            "cta": "Get started"
+          },
+          {
+            "name": "Pro Monthly",
+            "price": "$9.99",
+            "billing": "/mo",
+            "note": "7-day free trial · cancel anytime",
+            "badge": "Most Popular",
+            "primary": true,
+            "features": [
+              "Everything in Scout",
+              "Unlimited Sleeper leagues",
+              "15 AI calls per day",
+              "Owner DNA profiles",
+              "Trade memory + finder",
+              "Draft command + pick values",
+              "Scout + War Room access"
+            ],
+            "cta": "Start free trial"
+          },
+          {
+            "name": "Pro Annual",
+            "price": "$99.99",
+            "billing": "/yr",
+            "note": "Best value — ~$8.33/mo · 7-day free trial",
+            "badge": "Best Value",
+            "primary": false,
+            "features": [
+              "Everything in Pro Monthly",
+              "Locked-in annual rate",
+              "Save ~17% vs monthly",
+              "Priority feature access"
+            ],
+            "cta": "Start free trial"
+          }
+        ],
+        "leaguePassLabel": "League Pass",
+        "leaguePassCopy": "Get your whole league on Dynasty HQ at a group discount.",
+        "leaguePassCta": "Contact us",
+        "leaguePassEmail": "fantasywarsapp@gmail.com"
+      },
+      "platforms": {
+        "title": "Platform status",
+        "copy": "Live versions are Sleeper-only. Additional connectors remain in sandbox beta until they are ready.",
+        "badges": [
+          "Sleeper live",
+          "More in beta"
+        ]
+      },
+      "auth": {
+        "title": "Get Dynasty HQ",
+        "googleCta": "Continue with Google",
+        "appleCta": "Continue with Apple",
+        "divider": "or",
+        "signupTab": "Create Account",
+        "signinTab": "Sign In",
+        "displayNamePlaceholder": "Display name (optional)",
+        "signupEmailPlaceholder": "Email",
+        "signupPasswordPlaceholder": "Password (8+ characters)",
+        "signupSubmit": "Create Free Account",
+        "signinEmailPlaceholder": "Email",
+        "signinPasswordPlaceholder": "Password",
+        "signinSubmit": "Sign In",
+        "resetCta": "Forgot password?"
+      },
+      "footer": "Copyright 2026 Dynasty HQ - All rights reserved"
+    }
+  }
+}
