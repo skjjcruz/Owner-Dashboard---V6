@@ -277,6 +277,10 @@
         avatarId: null, avatarData: null, estYear: null,
         notifDraft: true, notifTrades: true, notifBrief: false,
         showTitles: true,
+        // Psychological Tax Breakdown (Owner DNA tax table) in the trade builder's
+        // Trade Analysis panel. trade-calc.js reads this flag straight from the
+        // dhq_owner_club_v1 localStorage object (default ON when absent).
+        showPsychTax: true,
     };
     function getOwnerClub() {
         const raw = AppStorage.get(OWNER_CLUB_KEY);
@@ -676,12 +680,19 @@
                         <div style={hint}>Both open your secure Stripe billing portal. Subscribed on the iPhone app instead? Manage it through your Apple subscriptions — your Pro works everywhere either way.</div>
 
                         <div style={{ ...cardH, marginTop: '20px' }}>League room widgets</div>
-                        <div style={{ ...toggleRow, borderBottom: 'none' }}>
+                        <div style={toggleRow}>
                             <div>
                                 <div style={{ fontSize: '0.86rem', color: 'var(--white)' }}>Championship titles</div>
                                 <div style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.7, marginTop: '2px' }}>Banner row of your league titles on the masthead</div>
                             </div>
                             <Toggle on={!!club.showTitles} label="Championship titles" onFlip={() => setClub({ showTitles: !club.showTitles })} />
+                        </div>
+                        <div style={{ ...toggleRow, borderBottom: 'none' }}>
+                            <div>
+                                <div style={{ fontSize: '0.86rem', color: 'var(--white)' }}>Trade psychology breakdown</div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.7, marginTop: '2px' }}>Owner DNA tax table in the trade builder</div>
+                            </div>
+                            <Toggle on={!!club.showPsychTax} label="Trade psychology breakdown" onFlip={() => setClub({ showPsychTax: !club.showPsychTax })} />
                         </div>
 
                         <div style={{ ...cardH, marginTop: '20px' }}>Notifications</div>
