@@ -186,6 +186,41 @@
         return 'var(--loss-red)';
     }
 
+    // ── Psych-tax visibility preference (Owner Settings → League room widgets) ──
+    // Reads/writes the SAME dhq_owner_club_v1 club object app.js owns, but through a
+    // tiny local helper — this file must not depend on app.js internals or load order.
+    // Merge-write like app.js's saveOwnerClub (read object, spread patch, write back)
+    // so no other club field is ever clobbered. Default ON when the key/flag is absent.
+    // Sync: 'dhq:owner-club-changed' (same tab — the Owner Settings toggle and the
+    // ✕ here both fire it) + the native 'storage' event (change made in another tab).
+    const TC_OWNER_CLUB_KEY = 'dhq_owner_club_v1';
+    function tcReadOwnerClub() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(TC_OWNER_CLUB_KEY) || 'null');
+            return raw && typeof raw === 'object' ? raw : {};
+        } catch (e) { return {}; }
+    }
+    function tcShowPsychTaxPref() { return tcReadOwnerClub().showPsychTax !== false; }
+    function tcSetShowPsychTaxPref(on) {
+        try { localStorage.setItem(TC_OWNER_CLUB_KEY, JSON.stringify({ ...tcReadOwnerClub(), showPsychTax: !!on })); } catch (e) { /* non-fatal */ }
+        try { window.dispatchEvent(new CustomEvent('dhq:owner-club-changed')); } catch (e) { /* non-fatal */ }
+    }
+    function useTcShowPsychTax() {
+        const [show, setShow] = React.useState(tcShowPsychTaxPref);
+        React.useEffect(() => {
+            const sync = () => setShow(tcShowPsychTaxPref());
+            const onStorage = (e) => { if (!e.key || e.key === TC_OWNER_CLUB_KEY) sync(); };
+            window.addEventListener('dhq:owner-club-changed', sync);
+            window.addEventListener('storage', onStorage);
+            return () => {
+                window.removeEventListener('dhq:owner-club-changed', sync);
+                window.removeEventListener('storage', onStorage);
+            };
+        }, []);
+        const hide = React.useCallback(() => { tcSetShowPsychTaxPref(false); setShow(false); }, []);
+        return [show, hide];
+    }
+
     // ── TcVerdictPanel — extracted from the retired analyzer surface (Step-1 refactor) ──
     // Pure presentational: takes already-computed deal-evaluation values and renders the verdict
     // headline, impact grid, posture/DNA chips, 8-factor psych-tax table, and likelihood bar.
@@ -197,10 +232,11 @@
     // (wrIsPro() only — never canAccess).
     function TcVerdictPanel({ verdictColor, diffDisplay, grade, totalA, totalB, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, FAAB_RATE, likelihoodColor, likelihood, netTaxTotal, manualBehaviorFit, otherOwnerId, theirPosture, otherDnaKey, otherDna, manualBehaviorProfile, psychTaxes, grudgeTax, gmFloor, gmModeLabel, gmViability, gmWarnings }) {
         const _pro = typeof window.wrIsPro === 'function' ? window.wrIsPro() : true;
-        // Post-review: the 8-factor psych-tax table + approach line live behind a
-        // collapsed-by-default 'Why? ▾' toggle (owner-approved wireframe) so the rail
-        // Verdict card stays short enough to keep the DNA-mini card above the fold.
-        const [whyOpen, setWhyOpen] = React.useState(false);
+        // Owner ruling (restored): the 8-factor psych-tax table + approach line render
+        // ALWAYS-VISIBLE at the bottom of the panel — the old collapsed 'Why? ▾'
+        // toggle made them effectively invisible. Off-switch: the ✕ on the breakdown
+        // header or Owner Settings → League room widgets (showPsychTax, club store).
+        const [showPsychTax, hidePsychTax] = useTcShowPsychTax();
         return (
             <div className="tc-ta-verdict tc-ta-sticky-summary" id="wr-export-trade">
                 <div className="tc-section-hdr" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>TRADE ANALYSIS<button onClick={() => window.wrExport?.capture(document.getElementById('wr-export-trade'), 'trade-analysis')} style={{ background:'none', border:'1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius:'4px', padding:'2px 8px', color:'var(--gold)', fontSize:'var(--text-micro, 0.6875rem)', cursor:'pointer', fontFamily: 'var(--font-body)', minHeight:'44px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>Snapshot</button></div>
@@ -251,13 +287,17 @@
                 {!_pro && typeof window.WrGatedMoreRow === 'function' && (
                     React.createElement(window.WrGatedMoreRow, { title: 'Acceptance odds & trade psychology', sub: 'Accept %, the 8-factor psych-tax breakdown, and posture, DNA, and behavior reads are Pro.', feature: 'trade-psychology' })
                 )}
-                {_pro && <div>
-                    <button type="button" className="tc-dhq-detail-toggle" onClick={() => setWhyOpen(v => !v)}>
-                        {whyOpen ? 'Hide why ▴' : 'Why? ▾'}
-                    </button>
-                    {whyOpen && <div style={{ marginTop:'0.45rem', display:'flex', flexDirection:'column', gap:'0.5rem' }}>
+                {_pro && showPsychTax && <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
                     <div>
-                    <div style={{ fontSize:'0.72rem', color:'var(--silver)', opacity:0.65, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.35rem' }}>Psychological Tax Breakdown {React.createElement(Tip, null, 'Each owner\'s DNA type creates percentage-point acceptance modifiers beyond pure value. Taxes reduce likelihood, bonuses increase it. Factors: endowment effect, panic premium, status tax, loss aversion, rebuilding discount, need fulfillment, window alignment, and posture.')}</div>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem', marginBottom:'0.35rem' }}>
+                        <span style={{ fontSize:'0.72rem', color:'var(--silver)', opacity:0.65, textTransform:'uppercase', letterSpacing:'0.06em' }}>Psychological Tax Breakdown {React.createElement(Tip, null, 'Each owner\'s DNA type creates percentage-point acceptance modifiers beyond pure value. Taxes reduce likelihood, bonuses increase it. Factors: endowment effect, panic premium, status tax, loss aversion, rebuilding discount, need fulfillment, window alignment, and posture.')}</span>
+                        <button type="button" onClick={hidePsychTax}
+                            title="Hide psychological tax — re-enable in Owner Settings"
+                            aria-label="Hide the psychological tax breakdown"
+                            style={{ width:'22px', height:'22px', borderRadius:'6px', border:'1px solid transparent', background:'none', color:'var(--silver)', opacity:0.4, cursor:'pointer', fontSize:'0.8rem', lineHeight:1, padding:0, flexShrink:0, transition:'all .14s' }}
+                            onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.borderColor = 'var(--acc-line2, rgba(212,175,55,0.3))'; }}
+                            onMouseLeave={e => { e.currentTarget.style.opacity = '0.4'; e.currentTarget.style.borderColor = 'transparent'; }}>✕</button>
+                    </div>
                     <div className="tc-tax-table">
                         {psychTaxes.map((t,i) => (
                             <div key={i} className={`tc-tax-table-row ${t.type === 'BONUS' ? 'tc-bonus' : 'tc-tax'}`}>
@@ -282,7 +322,7 @@
                         )}
                         <div className="tc-tax-table-row tc-total">
                             <span className="tc-tax-name">NET MODIFIER</span>
-                            <span className="tc-tax-desc">Folded into effective surplus</span>
+                            <span className="tc-tax-desc">Applied to verdict score & acceptance likelihood</span>
                             <span className="tc-tax-val" style={{ color: netTaxTotal > 0 ? 'var(--win-green)' : netTaxTotal < 0 ? 'var(--loss-red)' : 'var(--silver)' }}>{netTaxTotal > 0 ? '+' : ''}{netTaxTotal}%</span>
                         </div>
                     </div>
@@ -290,7 +330,6 @@
                     {otherDnaKey !== 'NONE' && otherDna.strategy && (
                         <div style={{ fontSize:'0.76rem', color:otherDna.color, fontStyle:'italic', background:`${otherDna.color}0d`, border:`1px solid ${otherDna.color}25`, borderRadius:5, padding:'0.4rem 0.6rem' }}>Approach: {otherDna.strategy}</div>
                     )}
-                    </div>}
                 </div>}
                 {_pro && <div>
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.3rem' }}>
@@ -3803,6 +3842,11 @@
                                 {TcTradeSide({ side: 'A', color: 'var(--k-5dade2, #5dade2)', label: 'YOU SEND', ..._tsDeps })}
                                 {TcTradeSide({ side: 'B', color: 'var(--k-e74c3c, #e74c3c)', label: 'YOU GET', ..._tsDeps })}
                             </div>
+                            {/* Full TRADE ANALYSIS panel (grade, impact grid, psych-tax
+                                breakdown, likelihood bar) — same TcVerdictPanel the phone
+                                builder sheet mounts, restored here so the desktop builder
+                                shows the Psychological Tax Breakdown by default too. */}
+                            {_verdict.hasTrade && React.createElement(TcVerdictPanel, { ..._verdict, FAAB_RATE })}
                         </section>
                     )}
                     {/* League Teams inline — narrow/portrait only (rail is hidden <1281px). */}
