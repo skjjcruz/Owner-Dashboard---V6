@@ -1137,50 +1137,51 @@
         const [reconLeagueId, setReconLeagueId] = useState(null);
 
         // ── Championship titles for the masthead banner row ──
-        // Reads the league-history store (window.WrHistory, localStorage
-        // 'wr_history_<id>'). A background sweep below fills the store for
-        // every league; histEpoch re-runs this read as each league lands so
-        // titles surface across ALL leagues without blocking hub load.
-        const [histEpoch, setHistEpoch] = useState(0);
+        // Authoritative source: DhqTitleSweep, which walks the ACCOUNT season
+        // by season (/user/<id>/leagues/nfl/<year>) — catching titles from
+        // leagues the owner has since left, bracketless winners recorded only
+        // in league metadata, and co-owned teams. Completed seasons cache
+        // forever. The league-history store fills in only for seasons the
+        // sweep hasn't locked yet, so cached chips paint instantly.
+        const [titleSweep, setTitleSweep] = useState(() => {
+            try { return window.DhqTitleSweep?.getCached?.(sleeperUser?.user_id) || { titles: [], doneSeasons: [] }; }
+            catch (e) { return { titles: [], doneSeasons: [] }; }
+        });
         React.useEffect(() => {
-            const bump = () => setHistEpoch(n => n + 1);
-            window.addEventListener('wr_history_loaded', bump);
-            return () => window.removeEventListener('wr_history_loaded', bump);
-        }, []);
-        React.useEffect(() => {
-            if (!sleeperLeagues.length || !window.WrHistory?.loadIfMissing) return;
+            if (!sleeperUser?.user_id || !window.DhqTitleSweep?.sweep) return;
             let cancelled = false;
-            (async () => {
-                for (const l of sleeperLeagues) {
-                    if (cancelled) return;
-                    let hadCache = true;
-                    try { hadCache = !!window.WrHistory.getCached?.(l.id); } catch (e) { hadCache = false; }
-                    try { await window.WrHistory.loadIfMissing(l); } catch (e) { /* league contributes nothing */ }
-                    // Pause between UNCACHED leagues only — stays polite to
-                    // Sleeper's API without stalling the common all-cached case.
-                    if (!hadCache && !cancelled) await new Promise(r => setTimeout(r, 350));
-                }
-            })();
+            const apply = (res) => { if (!cancelled) setTitleSweep(res); };
+            apply(window.DhqTitleSweep.getCached(sleeperUser.user_id));
+            window.DhqTitleSweep.sweep(sleeperUser.user_id, apply).then(apply).catch(() => {});
             return () => { cancelled = true; };
-        }, [sleeperLeagues]);
+        }, [sleeperUser?.user_id]);
         const ownerTitles = React.useMemo(() => {
             try {
-                if (!sleeperUser?.user_id || !window.WrHistory?.getChampionships) return [];
-                const out = [];
-                sleeperLeagues.forEach(l => {
-                    let champs = null;
-                    try { champs = window.WrHistory.getChampionships(l.id); } catch (e) { champs = null; }
-                    if (!champs) return;
-                    Object.keys(champs).forEach(season => {
-                        const c = champs[season];
-                        if (c && c.championOwnerId && String(c.championOwnerId) === String(sleeperUser.user_id)) {
+                if (!sleeperUser?.user_id) return [];
+                const out = [...titleSweep.titles];
+                const done = new Set(titleSweep.doneSeasons.map(String));
+                const seen = new Set(out.map(t => t.year + '·' + String(t.league).trim().toLowerCase()));
+                // Fallback rows from already-cached league history, only for
+                // seasons the account sweep hasn't finished yet.
+                if (window.WrHistory?.getChampionships) {
+                    sleeperLeagues.forEach(l => {
+                        let champs = null;
+                        try { champs = window.WrHistory.getChampionships(l.id); } catch (e) { champs = null; }
+                        if (!champs) return;
+                        Object.keys(champs).forEach(season => {
+                            if (done.has(String(season))) return;
+                            const c = champs[season];
+                            if (!c || !c.championOwnerId || String(c.championOwnerId) !== String(sleeperUser.user_id)) return;
+                            const key = season + '·' + String(l.name).trim().toLowerCase();
+                            if (seen.has(key)) return;
+                            seen.add(key);
                             out.push({ year: season, league: l.name });
-                        }
+                        });
                     });
-                });
+                }
                 return out.sort((a, b) => Number(b.year) - Number(a.year));
             } catch (e) { return []; }
-        }, [sleeperLeagues, sleeperUser, histEpoch]);
+        }, [sleeperLeagues, sleeperUser, titleSweep]);
 
         // popstate listener for back/forward navigation — MUST be before early return
         React.useEffect(() => {
