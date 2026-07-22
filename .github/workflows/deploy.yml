@@ -34,9 +34,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: skjjcruz/DHQ-Shared
-          # TEMPORARY PIN: kicker-calibration branch under evaluation on the
-          # test site. Revert to default (main) once DHQ-Shared merges it.
-          ref: claude/owner-dashboard-v6-web-avvg96
           path: dhq-shared-src
 
       - name: Setup Node
