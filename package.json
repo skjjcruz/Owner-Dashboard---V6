@@ -1,0 +1,43 @@
+{
+  "name": "owner-dashboard-v6",
+  "version": "1.0.0",
+  "description": "Dynasty HQ web app (web-only) — draft war room, earnings tracking, free agent targets",
+  "main": "index.html",
+  "scripts": {
+    "test": "node tests/run.js",
+    "test:core": "node tests/run.js",
+    "sync:shared": "node scripts/sync-reconai-shared.cjs",
+    "build:preview": "npm run sync:shared && node scripts/build-preview.cjs",
+    "build:deploy": "npm run sync:shared && node scripts/build-deploy.cjs",
+    "preview:prod": "npm run build:preview && node scripts/serve-static.cjs --port=3002",
+    "prepare": "husky || true",
+    "start": "npm run sync:shared && node scripts/serve-static.cjs --port=3001 --compile",
+    "dev": "npm run sync:shared && node scripts/serve-static.cjs --port=3001 --compile",
+    "dev:raw": "npm run sync:shared && node scripts/serve-static.cjs --port=3001",
+    "landing:edit": "node scripts/serve-static.cjs --port=3011 --open=landing-editor.html"
+  },
+  "keywords": [
+    "fantasy",
+    "football",
+    "dashboard"
+  ],
+  "author": "skjjcruz",
+  "license": "SEE LICENSE IN LICENSE",
+  "dependencies": {
+    "@babel/standalone": "^7.29.7",
+    "esbuild": "^0.28.0",
+    "terser": "^5.48.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7"
+  },
+  "lint-staged": {
+    "*.js": [
+      "eslint --fix",
+      "eslint"
+    ]
+  }
+}
