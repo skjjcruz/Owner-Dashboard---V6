@@ -277,6 +277,10 @@ const WIDGET_CAP_CSS = `
         /* Intel Brief tall reserves 3 rows (see WidgetShell): 3×160 + 2×12 */
         .wr-dashboard-grid>.wr-widget[data-widget-key="intel-brief"][data-widget-size="tall"]>*{ max-height:504px; }
     }
+    /* Transaction Ticker narrow: compact ceiling on EVERY tier (phone too) —
+       cut-down day feeds run hundreds deep, so this card stays short and the
+       feed scrolls inside it instead of running down the page. */
+    .wr-dashboard-grid>.wr-widget[data-widget-key="transaction-ticker"][data-widget-size="narrow"]>*{ max-height:360px; }
 `;
 
 // Legacy module keys → new keys (for migration of saved widget configs)
@@ -1113,9 +1117,10 @@ function DashboardPanel({
     function renderTransactionTicker(size) {
         // Row budget per size: each entry is ~46px (2 lines). md = 1 grid row
         // (160px) fits 2 entries after the header; lg (2 rows, ~330px) fits 5;
-        // the skinny side-column sizes are tall — slim (2 rows) ~4, narrow
-        // (4 rows) ~12 — and reuse the same vertical list, just narrower.
-        const transactionLimit = size === 'narrow' ? 12 : size === 'lg' ? 5 : size === 'slim' ? 4 : 2;
+        // slim (2 rows) ~4. Narrow is the deep-feed view: its card is capped
+        // short (360px, see WIDGET_CAP_CSS) and the list scrolls inside it, so
+        // it carries a cut-down-day-sized backlog instead of a visual budget.
+        const transactionLimit = size === 'narrow' ? 50 : size === 'lg' ? 5 : size === 'slim' ? 4 : 2;
         let visibleTransactions = (transactions || []).slice(0, transactionLimit);
         if (size === 'lg' && !visibleTransactions.some(t => t.type === 'trade')) {
             const firstTrade = (transactions || []).find(t => t.type === 'trade');
