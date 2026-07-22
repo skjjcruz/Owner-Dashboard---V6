@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Dynasty HQ — Admin</title>
+  <link rel="icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap"></noscript>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --gold:      #D4AF37;
+      --dark-gold: #B8941E;
+      --black:     #0A0A0A;
+      --off-black: #1A1A1A;
+      --charcoal:  #2A2A2A;
+      --white:     #FFFFFF;
+      --silver:    #C0C0C0;
+      --muted:     rgba(255,255,255,0.45);
+      --green:     #2ECC71;
+      --red:       #E74C3C;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--black);
+      color: var(--white);
+      min-height: 100vh;
+    }
+
+    /* ── Gate ─────────────────────────────────────────────── */
+    #gate {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 1.5rem;
+      padding: 2rem;
+    }
+
+    #gate h1 {
+      font-family: 'Inter', sans-serif;
+      font-size: 2.5rem;
+      color: var(--gold);
+      letter-spacing: 0.15em;
+    }
+
+    #gate p { color: var(--muted); font-size: 0.9rem; }
+
+    .field {
+      width: 100%;
+      max-width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .field label {
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      color: var(--silver);
+      text-transform: uppercase;
+    }
+
+    .field input {
+      background: var(--charcoal);
+      border: 1px solid rgba(212,175,55,0.3);
+      border-radius: 4px;
+      padding: 0.75rem 1rem;
+      color: var(--white);
+      font-family: 'Inter', sans-serif;
+      font-size: 1rem;
+      outline: none;
+      width: 100%;
+    }
+    .field input:focus { border-color: var(--gold); }
+
+    .btn-gold {
+      width: 100%;
+      max-width: 360px;
+      padding: 0.85rem;
+      background: linear-gradient(135deg, var(--gold), var(--dark-gold));
+      border: none;
+      border-radius: 4px;
+      color: var(--black);
+      font-family: 'Inter', sans-serif;
+      font-size: 1.2rem;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+    }
+    .btn-gold:hover { filter: brightness(1.15); }
+    .btn-gold:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-google {
+      width: 100%; max-width: 360px; padding: 0.8rem;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      background: #fff; color: #1f2328; border: 1px solid #dadce0; border-radius: 4px;
+      font-family: 'Inter', sans-serif; font-size: 1rem; font-weight: 500; cursor: pointer;
+    }
+    .btn-google:hover { box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+    .btn-google:disabled { opacity: 0.5; cursor: not-allowed; }
+    .gate-or {
+      max-width: 360px; width: 100%; text-align: center; color: var(--silver, #98a1ad);
+      font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 4px 0;
+    }
+    .gate-advanced { max-width: 360px; width: 100%; margin-top: 6px; }
+    .gate-advanced summary { color: var(--silver, #98a1ad); font-size: 0.8rem; cursor: pointer; text-align: center; }
+    .gate-advanced .field { margin-top: 8px; }
+
+    .error-msg {
+      color: var(--red);
+      font-size: 0.85rem;
+      text-align: center;
+      min-height: 1.2em;
+    }
+
+    /* ── Dashboard ────────────────────────────────────────── */
+    #dashboard { display: none; }
+
+    .header {
+      background: linear-gradient(135deg, var(--black), var(--off-black));
+      border-bottom: 3px solid var(--gold);
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .header-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.5rem;
+      color: var(--gold);
+      letter-spacing: 0.15em;
+    }
+
+    .header-controls {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #search-input {
+      background: var(--charcoal);
+      border: 1px solid rgba(212,175,55,0.3);
+      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      min-height: 44px;
+      color: var(--white);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.9rem;
+      width: 220px;
+      outline: none;
+    }
+    #search-input:focus { border-color: var(--gold); }
+
+    .btn-sm {
+      padding: 0.5rem 1rem;
+      min-height: 44px;
+      min-width: 44px;
+      background: var(--charcoal);
+      border: 1px solid rgba(212,175,55,0.4);
+      border-radius: 4px;
+      color: var(--gold);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-sm:hover { background: var(--off-black); border-color: var(--gold); }
+
+    .stat-bar {
+      display: flex;
+      gap: 2rem;
+      padding: 1rem 1.5rem;
+      background: var(--off-black);
+      border-bottom: 1px solid rgba(212,175,55,0.15);
+      flex-wrap: wrap;
+    }
+
+    .stat { display: flex; flex-direction: column; gap: 0.15rem; }
+    .stat-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+    .stat-value { font-family: 'Inter', sans-serif; font-size: 1.6rem; color: var(--gold); letter-spacing: 0.05em; }
+
+    .table-wrap {
+      overflow-x: auto;
+      padding: 1.5rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 0.6rem 1rem;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--gold);
+      border-bottom: 2px solid rgba(212,175,55,0.3);
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      transition: background 0.15s;
+    }
+    tbody tr:hover { background: rgba(212,175,55,0.05); }
+    .row-delete-btn {
+      background: transparent; border: 1px solid rgba(224,82,82,0.5); color: #e05252;
+      border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 0.78rem; cursor: pointer;
+    }
+    .row-delete-btn:hover { background: rgba(224,82,82,0.12); border-color: #e05252; }
+
+    tbody td {
+      padding: 0.65rem 1rem;
+      color: var(--silver);
+      vertical-align: middle;
+    }
+
+    .email-cell { color: var(--white); font-weight: 400; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 3px;
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge-pro  { background: rgba(212,175,55,0.2); color: var(--gold); border: 1px solid rgba(212,175,55,0.4); }
+    .badge-free { background: rgba(192,192,192,0.1); color: var(--silver); border: 1px solid rgba(192,192,192,0.2); }
+
+    .products-cell { font-size: 0.8rem; color: var(--muted); }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 1.5rem;
+      border-top: 1px solid rgba(212,175,55,0.15);
+    }
+    .pagination span { color: var(--muted); font-size: 0.85rem; }
+
+    .loading {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      letter-spacing: 0.05em;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+    }
+    .empty strong { display: block; font-family: 'Inter', sans-serif; font-size: 1.5rem; color: var(--silver); margin-bottom: 0.5rem; letter-spacing: 0.1em; }
+
+    .ops-panel {
+      margin: 1.5rem;
+      border: 1px solid rgba(212,175,55,0.18);
+      border-radius: 8px;
+      background: var(--off-black);
+      overflow: hidden;
+    }
+    .ops-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem;
+      border-bottom: 1px solid rgba(212,175,55,0.14);
+      flex-wrap: wrap;
+    }
+    .ops-title {
+      color: var(--gold);
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .ops-controls { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+    .ops-controls select {
+      background: var(--charcoal);
+      border: 1px solid rgba(212,175,55,0.35);
+      color: var(--white);
+      border-radius: 4px;
+      padding: 0.45rem 0.65rem;
+      min-height: 44px;
+      font: inherit;
+      font-size: 0.85rem;
+    }
+    .ops-body { padding: 1rem; }
+    .ops-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .ops-card {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.03);
+      padding: 0.8rem;
+      min-width: 0;
+    }
+    .ops-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.64rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.3rem;
+    }
+    .ops-card strong {
+      display: block;
+      color: var(--white);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ops-columns {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+    .ops-block h3 {
+      color: var(--gold);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.6rem;
+    }
+    .ops-list { display: grid; gap: 0.45rem; }
+    .ops-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.7rem;
+      align-items: center;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 5px;
+      padding: 0.55rem 0.65rem;
+      background: rgba(0,0,0,0.16);
+    }
+    .ops-row strong {
+      color: var(--white);
+      font-size: 0.82rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ops-row span {
+      color: var(--silver);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+    .ops-muted { color: var(--muted); font-size: 0.82rem; padding: 0.75rem 0; }
+    @media (max-width: 1023px) {
+      .ops-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 767px) {
+      .ops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .ops-columns { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Login gate ──────────────────────────────────────── -->
+<div id="gate">
+  <h1>Admin Panel</h1>
+  <p>Dynasty HQ — User Management</p>
+
+  <!-- Sign in with the owner account right here — no token juggling. -->
+  <button class="btn-google" id="google-btn">
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+    <span>Continue with Google</span>
+  </button>
+
+  <div class="gate-or">or sign in with email</div>
+  <div class="field">
+    <input type="email" id="admin-email" placeholder="Email" autocomplete="username">
+  </div>
+  <div class="field">
+    <input type="password" id="admin-password" placeholder="Password" autocomplete="current-password">
+  </div>
+  <button class="btn-gold" id="email-login-btn">Sign in</button>
+
+  <details class="gate-advanced">
+    <summary>Advanced: paste an access token</summary>
+    <div class="field">
+      <input type="password" id="secret-input" placeholder="Access token" autocomplete="off">
+    </div>
+    <button class="btn-sm" id="login-btn">Unlock with token</button>
+  </details>
+
+  <div class="error-msg" id="gate-error"></div>
+</div>
+
+<!-- ── Dashboard ─────────────────────────────────────────── -->
+<div id="dashboard">
+  <div class="header">
+    <span class="header-title">User Accounts</span>
+    <div class="header-controls">
+      <input type="search" id="search-input" placeholder="Search by email…">
+      <button class="btn-sm" id="refresh-btn">Refresh</button>
+      <button class="btn-sm" id="export-btn">Export CSV</button>
+      <button class="btn-sm" id="logout-btn">Log Out</button>
+    </div>
+  </div>
+
+  <div class="stat-bar">
+    <div class="stat">
+      <span class="stat-label">Total Users</span>
+      <span class="stat-value" id="stat-total">—</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Pro</span>
+      <span class="stat-value" id="stat-pro">—</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Free</span>
+      <span class="stat-value" id="stat-free">—</span>
+    </div>
+  </div>
+
+  <section class="ops-panel" aria-label="Launch analytics">
+    <div class="ops-head">
+      <div>
+        <div class="ops-title">Launch Analytics</div>
+        <div class="stat-label" id="analytics-window-label">Server-side report</div>
+      </div>
+      <div class="ops-controls">
+        <select id="analytics-days">
+          <option value="1">1 day</option>
+          <option value="7" selected>7 days</option>
+          <option value="30">30 days</option>
+          <option value="90">90 days</option>
+        </select>
+        <button class="btn-sm" id="analytics-refresh-btn">Refresh Analytics</button>
+      </div>
+    </div>
+    <div class="ops-body">
+      <div id="analytics-loading" class="loading" style="padding:1rem">Loading analytics…</div>
+      <div id="analytics-content" style="display:none">
+        <div class="ops-grid" id="analytics-totals"></div>
+        <div class="ops-columns">
+          <div class="ops-block">
+            <h3>Launch Funnel</h3>
+            <div class="ops-list" id="analytics-funnel"></div>
+          </div>
+          <div class="ops-block">
+            <h3>Largest Drop-Offs</h3>
+            <div class="ops-list" id="analytics-dropoffs"></div>
+          </div>
+          <div class="ops-block">
+            <h3>Top Modules</h3>
+            <div class="ops-list" id="analytics-modules"></div>
+          </div>
+          <div class="ops-block">
+            <h3>AI Margin</h3>
+            <div class="ops-list" id="analytics-ai-margin"></div>
+          </div>
+          <div class="ops-block">
+            <h3>Error Correlation</h3>
+            <div class="ops-list" id="analytics-errors"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="table-wrap">
+    <div id="table-loading" class="loading">Loading…</div>
+    <table id="users-table" style="display:none">
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Display Name</th>
+          <th>Tier</th>
+          <th>Products</th>
+          <th>Joined</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="users-tbody"></tbody>
+    </table>
+    <div id="table-empty" class="empty" style="display:none">
+      <strong>No Users Found</strong>
+      <span id="empty-sub">No accounts have been created yet.</span>
+    </div>
+  </div>
+
+  <div class="pagination" id="pagination" style="display:none">
+    <button class="btn-sm" id="prev-btn">← Prev</button>
+    <span id="page-info"></span>
+    <button class="btn-sm" id="next-btn">Next →</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"></script>
+<script>
+  // ── Config ──────────────────────────────────────────────────
+  const SUPABASE_PROJECT = 'sxshiqyxhhifvtfqawbq';
+  const SUPABASE_URL = `https://${SUPABASE_PROJECT}.supabase.co`;
+  const FN_BASE = `${SUPABASE_URL}/functions/v1`;
+  const FW_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4c2hpcXl4aGhpZnZ0ZnFhd2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTExMzAsImV4cCI6MjA4ODI4NzEzMH0.zJi9W986ZLaANiZN6pt6ReFwaQU6yPeidsERIWo2ibI';
+  const FW_SESSION_KEY = 'fw_session_v1';
+  const PAGE_SIZE = 50;
+
+  // Supabase client (Google OAuth only — email sign-in uses the fw- functions).
+  let _sb = null;
+  function sbClient() {
+    if (!_sb && window.supabase) _sb = window.supabase.createClient(SUPABASE_URL, FW_ANON_KEY);
+    return _sb;
+  }
+
+  // ── State ───────────────────────────────────────────────────
+  let adminSecret = sessionStorage.getItem('fw_admin_secret') ?? '';
+  let currentPage = 0;
+  let currentSearch = '';
+  let allUsersCache = [];   // holds current page rows for CSV export
+  let totalCount = 0;
+
+  // ── Gate ────────────────────────────────────────────────────
+  // Sign in right here with Google or email; the resulting app session is
+  // stored in localStorage and reused. A pasted token stays as a fallback.
+  function storedToken() {
+    try { return JSON.parse(localStorage.getItem(FW_SESSION_KEY) || 'null')?.token || ''; } catch { return ''; }
+  }
+  function storedEmail() {
+    try { return JSON.parse(localStorage.getItem(FW_SESSION_KEY) || 'null')?.user?.email || ''; } catch { return ''; }
+  }
+
+  // Try the stored session against the admin API; unlock or explain.
+  async function tryUnlockWithStoredSession() {
+    const token = storedToken();
+    if (!token) return false;
+    try {
+      const res = await fetchUsers(token, 0, '');
+      if (res.ok) {
+        adminSecret = token;
+        sessionStorage.setItem('fw_admin_secret', token);
+        showDashboard(res);
+        return true;
+      }
+      if (res.status === 401) {
+        const email = storedEmail();
+        document.getElementById('gate-error').textContent = email
+          ? `Signed in as ${email} — this account isn’t an owner. Sign in with your owner account.`
+          : 'This account isn’t an owner. Sign in with your owner account.';
+      }
+    } catch { /* leave the gate visible */ }
+    return false;
+  }
+
+  // Google OAuth returns to this same page with the session in the URL; the
+  // Supabase client picks it up, then we exchange it for an app session.
+  async function handleOAuthReturn() {
+    const hash = window.location.hash || '';
+    const isReturn = hash.indexOf('access_token=') !== -1 || /[?&]code=/.test(window.location.search || '');
+    if (!isReturn) return false;
+    const db = sbClient();
+    if (!db) return false;
+    try {
+      const { data } = await db.auth.getSession();
+      if (!data?.session) return false;
+      const res = await fetch(`${FN_BASE}/fw-oauth-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.session.access_token}` },
+        body: JSON.stringify({ productSlug: 'war_room' }),
+      });
+      if (res.ok) {
+        const app = await res.json();
+        if (app?.token && app?.user?.id) {
+          localStorage.setItem(FW_SESSION_KEY, JSON.stringify({ token: app.token, user: app.user }));
+        }
+      }
+      try { history.replaceState(null, '', window.location.pathname); } catch {}
+      return true;
+    } catch { return false; }
+  }
+
+  (async function autoUnlock() {
+    if (adminSecret) { showDashboard(); return; }
+    await handleOAuthReturn();      // consume a Google return, if any
+    await tryUnlockWithStoredSession();
+  })();
+
+  // Google button → OAuth round-trip back to this admin page.
+  document.getElementById('google-btn').addEventListener('click', () => {
+    const db = sbClient();
+    if (!db) { document.getElementById('gate-error').textContent = 'Still loading — try again in a moment.'; return; }
+    db.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
+  });
+
+  // Email sign-in → fw-signin → store app session → unlock.
+  async function emailSignIn() {
+    const email = document.getElementById('admin-email').value.trim();
+    const password = document.getElementById('admin-password').value;
+    const btn = document.getElementById('email-login-btn');
+    if (!email || !password) { document.getElementById('gate-error').textContent = 'Email and password required.'; return; }
+    btn.disabled = true; btn.textContent = 'Signing in…';
+    document.getElementById('gate-error').textContent = '';
+    try {
+      const res = await fetch(`${FN_BASE}/fw-signin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': FW_ANON_KEY, 'Authorization': `Bearer ${FW_ANON_KEY}` },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.token || !data.user?.id) {
+        document.getElementById('gate-error').textContent = data.error || 'Invalid email or password.';
+        return;
+      }
+      localStorage.setItem(FW_SESSION_KEY, JSON.stringify({ token: data.token, user: data.user }));
+      const unlocked = await tryUnlockWithStoredSession();
+      if (!unlocked && !document.getElementById('gate-error').textContent) {
+        document.getElementById('gate-error').textContent = 'Signed in, but this account isn’t an owner.';
+      }
+    } catch {
+      document.getElementById('gate-error').textContent = 'Network error — check connection.';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Sign in';
+    }
+  }
+  document.getElementById('email-login-btn').addEventListener('click', emailSignIn);
+  document.getElementById('admin-password').addEventListener('keydown', e => { if (e.key === 'Enter') emailSignIn(); });
+
+  document.getElementById('secret-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('login-btn').click();
+  });
+
+  document.getElementById('login-btn').addEventListener('click', async () => {
+    const secret = document.getElementById('secret-input').value.trim();
+    if (!secret) return;
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+
+    try {
+      const res = await fetchUsers(secret, 0, '');
+      if (res.status === 401) {
+        document.getElementById('gate-error').textContent = 'Invalid admin secret.';
+      } else if (!res.ok) {
+        document.getElementById('gate-error').textContent = 'Server error — try again.';
+      } else {
+        adminSecret = secret;
+        sessionStorage.setItem('fw_admin_secret', secret);
+        showDashboard(res);
+      }
+    } catch {
+      document.getElementById('gate-error').textContent = 'Network error — check connection.';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Unlock';
+    }
+  });
+
+  // ── Dashboard controls ───────────────────────────────────────
+  let searchTimer;
+  document.getElementById('search-input').addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      currentSearch = e.target.value.trim();
+      currentPage = 0;
+      loadUsers();
+    }, 350);
+  });
+
+  document.getElementById('refresh-btn').addEventListener('click', () => loadUsers());
+  document.getElementById('analytics-refresh-btn').addEventListener('click', () => loadAnalytics());
+  document.getElementById('analytics-days').addEventListener('change', () => loadAnalytics());
+  document.getElementById('prev-btn').addEventListener('click', () => { if (currentPage > 0) { currentPage--; loadUsers(); } });
+  document.getElementById('next-btn').addEventListener('click', () => {
+    if ((currentPage + 1) * PAGE_SIZE < totalCount) { currentPage++; loadUsers(); }
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    sessionStorage.removeItem('fw_admin_secret');
+    adminSecret = '';
+    // Full sign-out so a different account can be used next (clears both the
+    // app session and any lingering Supabase OAuth session on this origin).
+    try { localStorage.removeItem(FW_SESSION_KEY); } catch {}
+    try { const db = sbClient(); if (db) await db.auth.signOut(); } catch {}
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('gate').style.display = 'flex';
+    const si = document.getElementById('secret-input'); if (si) si.value = '';
+    document.getElementById('gate-error').textContent = '';
+  });
+
+  document.getElementById('export-btn').addEventListener('click', exportCSV);
+
+  // ── Core ────────────────────────────────────────────────────
+  function showDashboard(preloadedRes) {
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    if (preloadedRes) {
+      preloadedRes.json().then(data => renderTable(data));
+    } else {
+      loadUsers();
+    }
+    loadAnalytics();
+  }
+
+  async function fetchUsers(secret, page, search) {
+    const params = new URLSearchParams({ page, limit: PAGE_SIZE });
+    if (search) params.set('search', search);
+    return fetch(`${FN_BASE}/admin-list-users?${params}`, {
+      headers: { 'Authorization': `Bearer ${secret}` },
+    });
+  }
+
+  async function fetchAnalytics(secret) {
+    const days = document.getElementById('analytics-days').value || '7';
+    return fetch(`${FN_BASE}/admin-analytics-report?days=${encodeURIComponent(days)}`, {
+      headers: { 'Authorization': `Bearer ${secret}` },
+    });
+  }
+
+  async function loadUsers() {
+    document.getElementById('table-loading').style.display = 'block';
+    document.getElementById('users-table').style.display = 'none';
+    document.getElementById('table-empty').style.display = 'none';
+    document.getElementById('pagination').style.display = 'none';
+
+    try {
+      const res = await fetchUsers(adminSecret, currentPage, currentSearch);
+      if (res.status === 401) { alert('Session expired — please log in again.'); return; }
+      const data = await res.json();
+      renderTable(data);
+    } catch (e) {
+      document.getElementById('table-loading').textContent = 'Failed to load. Check network.';
+    }
+  }
+
+  // ── Admin delete (support tooling) ────────────────────────────
+  // Typed-email confirmation; a live paying subscription requires a second
+  // explicit confirm (server answers 409 paying_customer until force:true).
+  async function requestDelete(email, force) {
+    return fetch(`${FN_BASE}/admin-delete-user`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${adminSecret}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(force ? { email, force: true } : { email }),
+    });
+  }
+
+  async function deleteUserFlow(email) {
+    // One-tap confirm (typing the email was too fiddly on tablets). The real
+    // guardrails live server-side: can't delete yourself or another admin, and
+    // a paying customer needs the second explicit confirm below.
+    const ok = confirm(
+      `Delete this account?\n\n${email}\n\nThis permanently removes the account and ALL its data, and forgets its Google/Apple sign-ins so the person can start over.`);
+    if (!ok) return;
+    try {
+      let res = await requestDelete(email, false);
+      if (res.status === 409) {
+        const data = await res.json().catch(() => ({}));
+        const go = confirm(
+          `⚠️ ${data.message || 'This account has a LIVE PAID subscription.'}
+
+Deleting will cancel their billing. Delete anyway?`);
+        if (!go) return;
+        res = await requestDelete(email, true);
+      }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        alert(`Deleted. (sign-in records removed: ${data.deletedAuthUsers ?? 0})`);
+        loadUsers();
+      } else {
+        alert('Delete failed: ' + (data.error || res.status));
+      }
+    } catch (e) {
+      alert('Delete failed: network error.');
+    }
+  }
+
+  document.getElementById('users-tbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('.row-delete-btn');
+    if (btn && btn.dataset.email) deleteUserFlow(btn.dataset.email);
+  });
+
+  async function loadAnalytics() {
+    document.getElementById('analytics-loading').style.display = 'block';
+    document.getElementById('analytics-loading').textContent = 'Loading analytics…';
+    document.getElementById('analytics-content').style.display = 'none';
+    try {
+      const res = await fetchAnalytics(adminSecret);
+      if (res.status === 401) { document.getElementById('analytics-loading').textContent = 'Analytics locked — log in again.'; return; }
+      const data = await res.json();
+      renderAnalytics(data);
+    } catch {
+      document.getElementById('analytics-loading').textContent = 'Failed to load analytics.';
+    }
+  }
+
+  function renderTable(data) {
+    const { users = [], total = 0 } = data;
+    totalCount = total;
+    allUsersCache = users;
+
+    document.getElementById('table-loading').style.display = 'none';
+
+    // Stats
+    const proCount  = users.filter(u => u.tier === 'pro').length;
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-pro').textContent   = proCount;
+    document.getElementById('stat-free').textContent  = total - proCount;
+
+    if (users.length === 0) {
+      document.getElementById('table-empty').style.display = 'block';
+      document.getElementById('empty-sub').textContent =
+        currentSearch ? `No accounts matching "${currentSearch}".` : 'No accounts have been created yet.';
+      return;
+    }
+
+    // Table rows
+    const tbody = document.getElementById('users-tbody');
+    tbody.innerHTML = users.map(u => `
+      <tr>
+        <td class="email-cell">${esc(u.email)}</td>
+        <td>${esc(u.displayName ?? '—')}</td>
+        <td><span class="badge badge-${u.tier}">${u.tier}</span></td>
+        <td class="products-cell">${u.products.length ? u.products.map(p => esc(p)).join(', ') : '—'}</td>
+        <td>${formatDate(u.createdAt)}</td>
+        <td><button class="row-delete-btn" data-email="${esc(u.email)}" title="Delete this account">Delete</button></td>
+      </tr>
+    `).join('');
+
+    document.getElementById('users-table').style.display = 'table';
+
+    // Pagination
+    const totalPages = Math.ceil(total / PAGE_SIZE);
+    if (totalPages > 1) {
+      document.getElementById('page-info').textContent = `Page ${currentPage + 1} of ${totalPages}`;
+      document.getElementById('prev-btn').disabled = currentPage === 0;
+      document.getElementById('next-btn').disabled = (currentPage + 1) >= totalPages;
+      document.getElementById('pagination').style.display = 'flex';
+    }
+  }
+
+  function renderAnalytics(data) {
+    const report = data.report || {};
+    const totals = report.totals || {};
+    const aiMargin = report.aiMargin || {};
+    document.getElementById('analytics-loading').style.display = 'none';
+    document.getElementById('analytics-content').style.display = 'block';
+    document.getElementById('analytics-window-label').textContent =
+      `${data.days || 7} day window · since ${formatDate(data.since || report.since)}`;
+
+    document.getElementById('analytics-totals').innerHTML = [
+      ['Events', totals.events],
+      ['Sessions', totals.sessions],
+      ['Known Users', totals.knownUsers],
+      ['Anonymous', totals.anonymousSessions],
+      ['AI Cost', formatUsd(aiMargin.totalCostUsd)],
+      ['AI Calls', aiMargin.calls],
+      ['Client Errors', totals.clientErrors],
+      ['Sentry Linked', totals.sentryLinkedErrors],
+    ].map(([label, value]) => `<div class="ops-card"><span>${label}</span><strong>${formatNum(value)}</strong></div>`).join('');
+
+    renderOpsRows('analytics-funnel', report.funnel || [], row => ({
+      label: row.label || row.eventName,
+      value: `${formatNum(row.sessions)} sessions`,
+    }));
+    renderOpsRows('analytics-dropoffs', (report.dropoffs || []).filter(row => Number(row.fromSessions || 0) > 0), row => ({
+      label: `${row.from} → ${row.to}`,
+      value: `${row.dropoffPct == null ? '—' : row.dropoffPct + '%'} drop`,
+    }));
+    renderOpsRows('analytics-modules', report.topModules || [], row => ({
+      label: row.module,
+      value: `${formatNum(row.sessions)} sessions`,
+    }));
+    const aiRows = [
+      { label: 'Total cost', value: formatUsd(aiMargin.totalCostUsd) },
+      { label: 'Avg cost', value: formatUsd(aiMargin.avgCostUsd) },
+      { label: 'P95 latency', value: `${formatNum(aiMargin.p95LatencyMs)} ms` },
+      { label: 'Error rate', value: `${formatNum(aiMargin.errorRatePct)}%` },
+      { label: 'Fallback rate', value: `${formatNum(aiMargin.fallbackRatePct)}%` },
+      { label: 'Downgrade rate', value: `${formatNum(aiMargin.downgradeRatePct)}%` },
+      { label: 'AI errors', value: formatNum(aiMargin.errors) },
+      { label: 'Quota denials', value: formatNum(aiMargin.quotaDenials) },
+      ...(aiMargin.byModel || []).slice(0, 4).map(row => ({
+        label: `${row.provider || 'provider'} · ${row.model || 'model'}`,
+        value: `${formatNum(row.calls)} calls · ${formatUsd(row.costUsd)}`,
+      })),
+    ];
+    renderOpsRows('analytics-ai-margin', aiRows, row => row);
+    renderOpsRows('analytics-errors', report.errors || [], row => ({
+      label: `${row.source} · ${row.errorName}`,
+      value: `${formatNum(row.events)} events`,
+    }));
+  }
+
+  function renderOpsRows(id, rows, mapRow) {
+    const host = document.getElementById(id);
+    if (!rows.length) {
+      host.innerHTML = '<div class="ops-muted">No data in this window.</div>';
+      return;
+    }
+    host.innerHTML = rows.slice(0, 8).map(row => {
+      const mapped = mapRow(row);
+      return `<div class="ops-row"><strong>${esc(mapped.label || '—')}</strong><span>${esc(mapped.value || '—')}</span></div>`;
+    }).join('');
+  }
+
+  function exportCSV() {
+    if (!allUsersCache.length) return;
+    const headers = ['Email', 'Display Name', 'Tier', 'Products', 'Joined'];
+    const rows = allUsersCache.map(u => [
+      csvCell(u.email),
+      csvCell(u.displayName ?? ''),
+      csvCell(u.tier),
+      csvCell(u.products.join('; ')),
+      csvCell(formatDate(u.createdAt)),
+    ]);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `fw-users-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function csvCell(s) {
+    const str = String(s);
+    return str.includes(',') || str.includes('"') ? `"${str.replace(/"/g,'""')}"` : str;
+  }
+  function formatDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+  function formatNum(n) {
+    if (typeof n === 'string' && n.startsWith('$')) return n;
+    return Number(n || 0).toLocaleString();
+  }
+  function formatUsd(n) {
+    const value = Number(n || 0);
+    if (!Number.isFinite(value)) return '$0.00';
+    return '$' + value.toFixed(value >= 1 ? 2 : 4);
+  }
+</script>
+</body>
+</html>

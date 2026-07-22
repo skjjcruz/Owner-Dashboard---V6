@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+npx lint-staged

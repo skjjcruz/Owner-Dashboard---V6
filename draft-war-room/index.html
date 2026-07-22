@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Draft Room</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../js/shared/shared-loader.js?v=20260427a"></script>
+  <script>WRShared.load('rookie-data.js');</script>
+  <script src="./csv-loader.js"></script>
+  <!-- Supabase JS v2 (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- Supabase project credentials — edit before deploying -->
+  <script src="./supabase-config.js"></script>
+  <!-- Draft board + mock draft Supabase helpers -->
+  <script src="./supabase-draft-client.js"></script>
+  <!-- Draft DNA: historical pick analysis -->
+  <script src="../draft-history.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gold: '#D4AF37',
+            'dark-gold': '#B8941E',
+            black: '#0A0A0A',
+            'off-black': '#1A1A1A',
+            charcoal: '#2A2A2A',
+            silver: '#C0C0C0',
+            'win-green': '#2ECC71',
+            'loss-red': '#E74C3C',
+          },
+          fontFamily: {
+            'bebas': ['Rajdhani', 'sans-serif'],
+            'oswald': ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background: #0A0A0A;
+    }
+    .scroll-container {
+      scrollbar-width: thin;
+      scrollbar-color: #D4AF37 #1A1A1A;
+    }
+    .scroll-container::-webkit-scrollbar { width: 6px; }
+    .scroll-container::-webkit-scrollbar-track { background: #1A1A1A; border-radius: 3px; }
+    .scroll-container::-webkit-scrollbar-thumb { background: #D4AF37; border-radius: 3px; }
+
+    /* Mobile optimizations for phones only */
+    @media (max-width: 768px) {
+      .mobile-compact { font-size: 0.75rem; }
+      .mobile-compact-xs { font-size: 0.65rem; }
+      .mobile-padding { padding: 0.5rem; }
+      .mobile-gap { gap: 0.5rem; }
+
+      /* More aggressive phone-specific optimizations */
+      .font-bold { font-weight: 600 !important; }
+      h2 { font-size: 0.875rem !important; }
+      h3 { font-size: 0.8rem !important; }
+
+      /* Draft Board optimizations */
+      .draft-board-container .space-y-2 { gap: 0.25rem !important; }
+      .draft-board-pick { padding: 0.5rem !important; }
+      .pick-number { font-size: 0.7rem !important; }
+      .pick-overall { font-size: 0.6rem !important; }
+      .pick-name { font-size: 0.7rem !important; }
+      .pick-details { font-size: 0.6rem !important; }
+
+      /* Player Rankings optimizations */
+      .player-card-mobile { padding: 0.5rem 0.25rem !important; }
+      .player-name { font-size: 0.7rem !important; line-height: 1.2 !important; }
+      .player-details { font-size: 0.6rem !important; line-height: 1.1 !important; }
+      .player-rank-number { font-size: 0.65rem !important; }
+
+      /* Position filters - better spacing */
+      .position-filter-btn {
+        font-size: 0.65rem !important;
+        padding: 0.5rem 0.8rem !important;
+        margin: 0.2rem !important;
+      }
+
+      /* Ranking mode buttons - more compact */
+      .ranking-mode-btn {
+        font-size: 0.6rem !important;
+        padding: 0.25rem 0.375rem !important;
+      }
+
+      /* Search bar - more compact */
+      .search-input-mobile {
+        font-size: 0.7rem !important;
+        padding: 0.375rem 0.5rem !important;
+      }
+    }
+
+    /* Info icon in top-right corner of player cards */
+.player-info-icon {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    background: rgba(212, 175, 55, 0.9);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0A0A0A;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 10;
+    transition: all 0.3s ease;
+    border: 2px solid #D4AF37;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.player-info-icon:hover {
+    background: rgba(184, 148, 30, 1);
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.player-card {
+    position: relative;
+}
+
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const SPORT = "nfl";
+    const DEFAULT_LEAGUE_SEASON = "2026";
+    const DEFAULT_STATS_SEASON = "2025";
+    const LS_LOCKED_USERNAME = "draft_board_v2_username";
+
+    const mockPlayers = [
+      { id: 1, name: 'Cameron Ward', pos: 'QB', school: 'Miami', size: '6\'2"', weight: 223, speed: 4.58, tier: 1 },
+      { id: 2, name: 'Shedeur Sanders', pos: 'QB', school: 'Colorado', size: '6\'2"', weight: 215, speed: 4.6, tier: 1 },
+      { id: 3, name: 'Quinn Ewers', pos: 'QB', school: 'Texas', size: '6\'2"', weight: 195, speed: 4.7, tier: 1 },
+      { id: 4, name: 'Riley Leonard', pos: 'QB', school: 'Notre Dame', size: '6\'4"', weight: 212, speed: 4.5, tier: 2 },
+      { id: 5, name: 'Ashton Jeanty', pos: 'RB', school: 'Boise State', size: '5\'9"', weight: 215, speed: 4.42, tier: 1 },
+      { id: 6, name: 'Omarion Hampton', pos: 'RB', school: 'UNC', size: '6\'0"', weight: 220, speed: 4.5, tier: 1 },
+      { id: 7, name: 'Travis Hunter', pos: 'WR', school: 'Colorado', size: '6\'1"', weight: 185, speed: 4.3, tier: 1 },
+      { id: 8, name: 'Tetairoa McMillan', pos: 'WR', school: 'Arizona', size: '6\'5"', weight: 210, speed: 4.5, tier: 1 },
+      { id: 9, name: 'Emeka Egbuka', pos: 'WR', school: 'Ohio State', size: '6\'1"', weight: 206, speed: 4.3, tier: 1 },
+      { id: 10, name: 'Abdul Carter', pos: 'EDGE', school: 'Penn State', size: '6\'3"', weight: 252, speed: 4.4, tier: 1 },
+    ];
+
+    const positions = ['QB', 'RB', 'WR', 'TE', 'EDGE', 'DL', 'LB', 'CB', 'S', 'K'];
+
+    async function fetchJSON(url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    // Read URL parameters
+    function getUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        username: params.get('username') || '',
+        season: params.get('season') || DEFAULT_LEAGUE_SEASON
+      };
+    }
+
+    const DraftBoard = () => {
+      const [numTeams, setNumTeams] = useState(16);
+      const [numRounds, setNumRounds] = useState(7);
+      const [draftType, setDraftType] = useState('linear');
+      const [selectedPos, setSelectedPos] = useState('ALL');
+      const [searchTerm, setSearchTerm] = useState('');
+      const [rankingMode, setRankingMode] = useState('fantasy'); // 'consensus' or 'fantasy'
+      const [showPositionFilters, setShowPositionFilters] = useState(false); // toggle for position filter tabs
+      const [players, setPlayers] = useState([]);
+      const [draftPicks, setDraftPicks] = useState({});
+      const [selectedPickSlot, setSelectedPickSlot] = useState(null);
+      const [selectedPlayerDetail, setSelectedPlayerDetail] = useState(null);
+      
+      // Get URL params on mount
+      const urlParams = getUrlParams();
+      
+      const [sleeperUsername, setSleeperUsername] = useState(() => {
+        return urlParams.username || localStorage.getItem(LS_LOCKED_USERNAME) || 'skjjcruz';
+      });
+      const [sleeperUserId, setSleeperUserId] = useState(null);
+      const [userLeagues, setUserLeagues] = useState([]);
+      const [selectedLeague, setSelectedLeague] = useState(null);
+      const [leagueSeason, setLeagueSeason] = useState(urlParams.season || DEFAULT_LEAGUE_SEASON);
+      const [statsSeason, setStatsSeason] = useState(DEFAULT_STATS_SEASON);
+      const [loading, setLoading] = useState(false);
+      const [status, setStatus] = useState('Loading from dashboard...');
+      
+      // Draft history
+      const [availableDrafts, setAvailableDrafts] = useState([]);
+      const [selectedDraft, setSelectedDraft] = useState(null);
+      const [draftYear, setDraftYear] = useState(null);
+      const [sleeperPlayers, setSleeperPlayers] = useState(null);
+      const [leagueRosters, setLeagueRosters] = useState([]);
+      const [leagueUsers, setLeagueUsers] = useState([]);
+      const [draftSlotOwners, setDraftSlotOwners] = useState({}); // { slotNum: {userId, displayName, avatar} }
+
+      // Refs: prevent auto-save from firing during initial load/restore
+      const isRestoringRef = React.useRef(true);
+      const autoSaveTimerRef = React.useRef(null);
+
+      // AI Scout state
+      const [rightTab,    setRightTab]    = useState('rankings'); // 'rankings' | 'ai'
+      const [aiMode,      setAiMode]      = useState('rookies');
+      const [aiAnalysis,  setAiAnalysis]  = useState(null);
+      const [aiLoading,   setAiLoading]   = useState(false);
+      const [aiError,     setAiError]     = useState(null);
+      const [aiChatInput, setAiChatInput] = useState('');
+
+      // Mock Draft state
+      const [mockMySlot,       setMockMySlot]       = useState(1);
+      const [mockResults,      setMockResults]      = useState(null);
+      const [mockCurrentPick,  setMockCurrentPick]  = useState(0);
+      const [mockIsPlaying,    setMockIsPlaying]    = useState(false);
+      const [mockLoading,      setMockLoading]      = useState(false);
+      const [mockError,        setMockError]        = useState(null);
+      const [draftDnaSyncing,  setDraftDnaSyncing]  = useState(false);
+      const [draftDnaSyncMsg,  setDraftDnaSyncMsg]  = useState(null);
+      const preMockPicksRef = React.useRef(null); // saves real picks before mock overwrites board
+
+      // Auto-load on mount if we have URL params
+      useEffect(() => {
+        if (urlParams.username) {
+          fetchSleeperUser(urlParams.username);
+        } else if (localStorage.getItem(LS_LOCKED_USERNAME)) {
+          fetchSleeperUser(localStorage.getItem(LS_LOCKED_USERNAME));
+        } else {
+          setStatus('Enter Sleeper username and click Reload');
+        }
+      }, []);
+
+      // Load players from CSV files
+      useEffect(() => {
+        loadPlayersFromCSV()
+          .then(data => {
+            console.log(`Loaded ${data.length} players from CSV files`);
+            setPlayers(data);
+          })
+          .catch(err => {
+            console.error('Error loading players:', err);
+            // Fallback to mock players if CSV fails to load
+            setPlayers(mockPlayers);
+          });
+      }, []);
+
+      // Auto-advance mock draft picks + inject each pick into the board as it reveals
+      useEffect(() => {
+        if (!mockIsPlaying || !mockResults) return;
+        if (mockCurrentPick >= mockResults.length) { setMockIsPlaying(false); return; }
+        const t = setTimeout(() => {
+          const pick = mockResults[mockCurrentPick];
+          if (pick) {
+            const parts = (pick.player || '').split(' ');
+            const boardKey = `${pick.round}.${String(pick.slot).padStart(2, '0')}`;
+            setDraftPicks(prev => ({
+              ...prev,
+              [boardKey]: {
+                metadata: { first_name: parts[0] || pick.player, last_name: parts.slice(1).join(' ') || '', position: pick.pos },
+                reason: pick.reason || '',
+                isMock: true,
+              },
+            }));
+          }
+          setMockCurrentPick(p => p + 1);
+        }, 220);
+        return () => clearTimeout(t);
+      }, [mockIsPlaying, mockCurrentPick, mockResults]);
+
+      const fetchSleeperUser = async (username, season) => {
+        if (!username) {
+          setStatus('Enter a Sleeper username.');
+          return;
+        }
+
+        const activeSeason = season || leagueSeason;
+        setLoading(true);
+
+        try {
+          setStatus('Loading Sleeper user…');
+          const userData = await fetchJSON(`https://api.sleeper.app/v1/user/${encodeURIComponent(username)}`);
+          setSleeperUserId(userData.user_id);
+          localStorage.setItem(LS_LOCKED_USERNAME, username);
+
+          setStatus('Loading leagues…');
+          const leaguesData = await fetchJSON(
+            `https://api.sleeper.app/v1/user/${userData.user_id}/leagues/${SPORT}/${activeSeason}`
+          );
+          
+          if (!leaguesData || leaguesData.length === 0) {
+            setStatus('No leagues found for that season.');
+            setUserLeagues([]);
+            return;
+          }
+          
+          const mappedLeagues = leaguesData.map(league => ({
+            id: league.league_id,
+            name: league.name,
+            type: league.settings?.type || 'redraft',
+            totalRosters: league.total_rosters,
+            season: league.season,
+            status: league.status,
+            draftId: league.draft_id
+          }));
+          
+          setUserLeagues(mappedLeagues);
+          
+          let auto = mappedLeagues[0];
+          const psycho = mappedLeagues.find(l => (l.name || '').toLowerCase().includes('psycho'));
+          if (psycho) auto = psycho;
+          
+          setSelectedLeague(auto);
+          
+          // Load drafts for selected league
+          await loadDraftsForLeague(auto.id);
+          
+          setStatus(`Leagues loaded ✅ - ${mappedLeagues.length} league(s) found`);
+          
+        } catch (err) {
+          setStatus(`Error: ${err.message}`);
+          console.error('Sleeper API Error:', err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const loadDraftsForLeague = async (leagueId) => {
+        if (!leagueId) return;
+
+        // Pre-load DNA from Supabase into localStorage so buildMockContext() reads fresh data
+        SupabaseDraftClient.preloadDNAFromSupabase(leagueId).catch(() => {});
+
+        try {
+          setStatus('Loading draft history…');
+
+          // Load league rosters and users for owner info
+          const [draftsData, rostersData, usersData] = await Promise.all([
+            fetchJSON(`https://api.sleeper.app/v1/league/${leagueId}/drafts`),
+            fetchJSON(`https://api.sleeper.app/v1/league/${leagueId}/rosters`),
+            fetchJSON(`https://api.sleeper.app/v1/league/${leagueId}/users`)
+          ]);
+          
+          setLeagueRosters(rostersData || []);
+          setLeagueUsers(usersData || []);
+          
+          if (!draftsData || draftsData.length === 0) {
+            setAvailableDrafts([]);
+            setSelectedDraft(null);
+            setDraftYear(null);
+            setStatus('No drafts found for this league.');
+            return;
+          }
+          
+          // Sort drafts by most recent first
+          const sortedDrafts = draftsData.sort((a, b) => {
+            return Number(b.season || 0) - Number(a.season || 0);
+          });
+          
+          setAvailableDrafts(sortedDrafts);
+          
+          // Auto-select most recent draft
+          const mostRecent = sortedDrafts[0];
+          setSelectedDraft(mostRecent);
+          setDraftYear(mostRecent.season);
+          
+          // Load picks for this draft (pass fresh rosters/users/leagueId before React state settles)
+          await loadDraftPicks(mostRecent.draft_id, rostersData, usersData, leagueId);
+
+          // Auto-sync draft DNA in the background — no spinner, no blocking
+          if (window.DraftHistory) {
+            window.DraftHistory.syncDraftDNA(leagueId).catch(() => {});
+          }
+          
+        } catch (err) {
+          console.error('Error loading drafts:', err);
+          setStatus('Failed to load draft history.');
+        }
+      };
+
+      const loadDraftPicks = async (draftId, rostersOverride, usersOverride, leagueIdOverride) => {
+        if (!draftId) return;
+
+        isRestoringRef.current = true;
+        try {
+          setStatus('Loading draft picks…');
+
+          // 1. Fetch draft details + traded picks in parallel to resolve current pick ownership
+          const leagueId = leagueIdOverride !== undefined ? leagueIdOverride : selectedLeague?.id;
+          const [draftDetails, tradedPicksRaw] = await Promise.all([
+            fetchJSON(`https://api.sleeper.app/v1/draft/${draftId}`),
+            leagueId
+              ? fetchJSON(`https://api.sleeper.app/v1/league/${leagueId}/traded_picks`).catch(() => [])
+              : Promise.resolve([])
+          ]);
+
+          const slotToRosterId = draftDetails?.slot_to_roster_id || {};
+          const draftSeason = draftDetails?.season;
+          const rosters = rostersOverride !== undefined ? rostersOverride : leagueRosters;
+          const users = usersOverride !== undefined ? usersOverride : leagueUsers;
+
+          // Sync board config from the actual Sleeper draft settings
+          const sleeperRounds = draftDetails?.settings?.rounds;
+          const sleeperTeams  = draftDetails?.settings?.teams;
+          const sleeperType   = draftDetails?.type; // 'snake' | 'linear'
+          const effectiveRounds = sleeperRounds || numRounds;
+          const effectiveTeams  = sleeperTeams  || numTeams;
+          if (sleeperRounds) setNumRounds(sleeperRounds);
+          if (sleeperTeams)  setNumTeams(sleeperTeams);
+          if (sleeperType)   setDraftType(sleeperType);
+
+          // Filter traded picks to this draft's season & normalize owner_id → roster_id
+          let tradedPicks = (tradedPicksRaw || []).filter(tp => String(tp.season) === String(draftSeason));
+          if (tradedPicks.length && rosters.length) {
+            const _rids = new Set(rosters.map(r => String(r.roster_id)));
+            const _uids = new Set(rosters.map(r => String(r.owner_id)));
+            let _rH = 0, _uH = 0;
+            for (const tp of tradedPicks) { const o = String(tp.owner_id ?? ''); if (_rids.has(o)) _rH++; if (_uids.has(o)) _uH++; }
+            if (_rH < _uH) {
+              const _u2r = {}; for (const r of rosters) _u2r[String(r.owner_id)] = String(r.roster_id);
+              tradedPicks = tradedPicks.map(tp => { const rid = _u2r[String(tp.owner_id ?? '')]; return rid ? { ...tp, owner_id: rid } : tp; });
+            }
+          }
+
+          if (Object.keys(slotToRosterId).length && rosters.length && users.length) {
+            const slotOwners = {};
+            // Key: "round_slot" so each round can have a different owner after trades
+            Object.entries(slotToRosterId).forEach(([slot, originalRosterId]) => {
+              const slotNum = parseInt(slot);
+              for (let round = 1; round <= effectiveRounds; round++) {
+                // Check if this pick was traded — traded_picks uses roster_id (original team) to identify picks
+                const traded = tradedPicks.find(
+                  tp => tp.roster_id === originalRosterId && parseInt(tp.round) === round
+                );
+                const currentRosterId = traded ? traded.owner_id : originalRosterId;
+                const roster = rosters.find(r => r.roster_id === currentRosterId);
+                if (roster) {
+                  const user = users.find(u => u.user_id === roster.owner_id);
+                  if (user) {
+                    slotOwners[`${round}_${slotNum}`] = {
+                      userId: user.user_id,
+                      displayName: user.display_name || user.username,
+                      avatar: user.avatar
+                    };
+                  }
+                }
+              }
+            });
+            setDraftSlotOwners(slotOwners);
+          }
+
+          // 2. Check Supabase for a previously saved board first.
+          //    If the owner already built one, restore it and skip Sleeper.
+          if (window.SupabaseDraftClient) {
+            const { data: saved } = await window.SupabaseDraftClient.loadDraftBoardBySleeperDraftId(draftId);
+            if (saved && saved.picks && Object.keys(saved.picks).length > 0) {
+              setDraftPicks(saved.picks);
+              setStatus(`Board restored ✅ - ${Object.keys(saved.picks).length} picks`);
+              return;
+            }
+          }
+
+          // 3. No saved board — fall back to Sleeper API picks as a baseline.
+          // Load Sleeper player database if not already loaded
+          if (!sleeperPlayers) {
+            setStatus('Loading player database…');
+            const playersData = await fetchJSON(`https://api.sleeper.app/v1/players/${SPORT}`);
+            setSleeperPlayers(playersData);
+          }
+
+          const picksData = await fetchJSON(`https://api.sleeper.app/v1/draft/${draftId}/picks`);
+
+          if (!picksData || picksData.length === 0) {
+            setDraftPicks({});
+            setStatus('No picks found for this draft.');
+            return;
+          }
+
+          // Map picks to our format with player data
+          const mappedPicks = {};
+          picksData.forEach(pick => {
+            const key = `${pick.round}.${String(pick.draft_slot).padStart(2, '0')}`;
+            mappedPicks[key] = {
+              playerId: pick.player_id,
+              metadata: pick.metadata,
+              pickedBy: pick.picked_by
+            };
+          });
+
+          setDraftPicks(mappedPicks);
+          setStatus(`Draft loaded ✅ - ${picksData.length} picks`);
+
+        } catch (err) {
+          console.error('Error loading picks:', err);
+          setStatus('Failed to load draft picks.');
+        } finally {
+          isRestoringRef.current = false;
+        }
+      };
+
+      const handleDraftYearChange = (year) => {
+        const draft = availableDrafts.find(d => d.season === year);
+        if (draft) {
+          setSelectedDraft(draft);
+          setDraftYear(year);
+          loadDraftPicks(draft.draft_id, undefined, undefined, selectedLeague?.id);
+        }
+      };
+
+      const handleLeagueChange = (leagueId) => {
+        const league = userLeagues.find(l => l.id === leagueId);
+        setSelectedLeague(league);
+        loadDraftsForLeague(leagueId);
+      };
+
+      const handleReload = () => {
+        fetchSleeperUser(sleeperUsername);
+      };
+
+      const handleBackToDashboard = () => {
+        // Always navigate back to the dashboard URL
+        window.location.href = '../';
+      };
+
+      // ---- Supabase: stable key for the current board -----------------------
+      // Uses the Sleeper draft_id when available, otherwise a composite key.
+      const getBoardKey = () => {
+        if (selectedDraft?.draft_id) return selectedDraft.draft_id;
+        return `custom_${sleeperUsername || 'anon'}_${selectedLeague?.id || 'none'}`;
+      };
+
+      // ---- Supabase: auto-save on every draftPicks change (debounced 600ms) -
+      useEffect(() => {
+        if (isRestoringRef.current) return;   // skip while loading/restoring
+        if (!window.SupabaseDraftClient) return;
+
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = setTimeout(async () => {
+          const { error } = await window.SupabaseDraftClient.saveDraftBoard({
+            picks:           draftPicks,
+            sleeperDraftId:  getBoardKey(),
+            sleeperUsername: sleeperUsername || null,
+            leagueId:        selectedLeague?.id || null,
+            draftYear:       draftYear || null,
+            boardName:       `${sleeperUsername || 'owner'} — ${draftYear || 'custom'}`,
+            numTeams,
+            numRounds,
+            draftType,
+          });
+          if (error) console.error('[auto-save] Failed:', error.message);
+        }, 600);
+      }, [draftPicks]);
+
+      const generateDraftOrder = () => {
+        const order = [];
+        for (let round = 1; round <= numRounds; round++) {
+          for (let team = 1; team <= numTeams; team++) {
+            const pickNum = draftType === 'snake' && round % 2 === 0 
+              ? numTeams - team + 1 
+              : team;
+            order.push({
+              round,
+              pick: pickNum,
+              overall: (round - 1) * numTeams + team,
+              team: pickNum,
+              slot: team, // draft slot (owner's assigned position, 1-N)
+              key: `${round}.${String(pickNum).padStart(2, '0')}`
+            });
+          }
+        }
+        return order;
+      };
+
+      const draftOrder = generateDraftOrder();
+
+      // Positions to always exclude (OL/special teams - no fantasy value)
+      const excludedPositions = ['OL', 'OT', 'IOL', 'T', 'G', 'C', 'OG', 'P', 'LS'];
+
+      const filteredPlayers = players
+        .filter(p => {
+          const matchesPos = selectedPos === 'ALL' || p.pos === selectedPos;
+          const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                               (p.school && p.school.toLowerCase().includes(searchTerm.toLowerCase()));
+          const notDrafted = !Object.values(draftPicks).includes(p.id);
+          // Always exclude OL/special teams positions
+          const notExcludedPosition = !excludedPositions.includes(p.pos);
+          return matchesPos && matchesSearch && notDrafted && notExcludedPosition;
+        })
+        .sort((a, b) => {
+          if (rankingMode === 'fantasy') {
+            // For fantasy, sort by fantasyRank ascending (lower is better)
+            return (a.fantasyRank || 999) - (b.fantasyRank || 999);
+          } else {
+            // For consensus, sort by consensusRank ascending (lower is better)
+            return (a.consensusRank || 999) - (b.consensusRank || 999);
+          }
+        });
+
+      const positionCounts = positions.reduce((acc, pos) => {
+        acc[pos] = players.filter(p => p.pos === pos && !Object.values(draftPicks).includes(p.id)).length;
+        return acc;
+      }, {});
+      const totalAvailable = players.filter(p => !Object.values(draftPicks).includes(p.id)).length;
+
+      const handlePlayerClick = (player) => {
+        if (!selectedPickSlot) {
+          const nextPick = draftOrder.find(pick => !draftPicks[pick.key]);
+          if (nextPick) {
+            setDraftPicks(prev => ({ ...prev, [nextPick.key]: player.id }));
+          }
+        } else {
+          setDraftPicks(prev => ({ ...prev, [selectedPickSlot]: player.id }));
+          setSelectedPickSlot(null);
+        }
+      };
+
+      const handlePickSlotClick = (pickKey) => {
+        if (draftPicks[pickKey]) {
+          const newPicks = { ...draftPicks };
+          delete newPicks[pickKey];
+          setDraftPicks(newPicks);
+        } else {
+          setSelectedPickSlot(pickKey);
+        }
+      };
+
+      // ---- AI Scout helpers -----------------------------------------------
+      function renderMarkdown(text) {
+        if (!text) return '';
+        const esc = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        return esc
+          .replace(/\*\*([^*\n]+)\*\*/g, '<strong style="color:#D4AF37;font-weight:700">$1</strong>')
+          .replace(/^### (.+)$/gm, '<div style="font-family:Rajdhani, sans-serif;font-size:0.88rem;color:#D4AF37;margin:0.75rem 0 0.2rem;letter-spacing:0.08em">$1</div>')
+          .replace(/^## (.+)$/gm,  '<div style="font-family:Rajdhani, sans-serif;font-size:0.95rem;color:#D4AF37;margin:0.9rem 0 0.25rem;letter-spacing:0.1em">$1</div>')
+          .replace(/^# (.+)$/gm,   '<div style="font-family:Rajdhani, sans-serif;font-size:1.05rem;color:#D4AF37;margin:1rem 0 0.3rem;letter-spacing:0.12em">$1</div>')
+          .replace(/\n\n/g, '<div style="margin:0.25rem 0"></div>');
+      }
+
+      function buildDraftContext() {
+        const myRosterObj = leagueRosters.find(r => r.owner_id === sleeperUserId);
+        const myRosterSummary = (myRosterObj?.players || []).map(id => {
+          const p = sleeperPlayers?.[id];
+          if (!p) return null;
+          return {
+            pos: p.position,
+            name: p.full_name || `${p.first_name||''} ${p.last_name||''}`.trim(),
+            team: p.team || 'FA',
+            yrsExp: p.years_exp ?? null,
+            isStarter: (myRosterObj.starters||[]).includes(id),
+            isTaxi: (myRosterObj.taxi||[]).includes(id),
+          };
+        }).filter(Boolean);
+
+        const availableRookies = players.slice(0, 80).map(p => ({
+          pos: p.pos,
+          name: p.name,
+          team: p.school || 'College',
+        }));
+
+        return {
+          leagueName: selectedLeague?.name || 'Fantasy League',
+          myOwner: sleeperUsername,
+          faabBudget: 0, startingBudget: 0,
+          myRoster: myRosterSummary,
+          rosterPositions: [],
+          topFreeAgents: [],
+          availableRookies,
+          question: aiChatInput,
+        };
+      }
+
+      async function runAIAnalysis() {
+        setAiLoading(true); setAiError(null); setAiAnalysis(null);
+        try {
+          const ctx = buildDraftContext();
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-analyze`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'apikey': SUPABASE_ANON_KEY,
+            },
+            body: JSON.stringify({ type: aiMode, context: ctx }),
+          });
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `AI call failed (${response.status})`);
+          }
+          const result = await response.json();
+          setAiAnalysis(result.analysis);
+        } catch(e) {
+          setAiError(e.message);
+        } finally {
+          setAiLoading(false);
+        }
+      }
+      // ---- Mock Draft helpers ---------------------------------------------
+      // DNA key (trade-calculator) → mock draft archetype
+      const DNA_TO_ARCHETYPE = {
+        FLEECER:   'Aggressive',
+        DOMINATOR: 'Contrarian',
+        STALWART:  'Value Drafter',
+        ACCEPTOR:  'Rebuilder',
+        DESPERATE: 'Need Drafter',
+        NONE:      'Unknown',
+      };
+
+      function buildMockContext() {
+        const numTeamCount  = selectedLeague?.totalRosters || numTeams;
+        const roundCount    = selectedDraft?.settings?.rounds || 3;
+        const leagueId      = selectedLeague?.id;
+
+        // Detect IDP league: Sleeper sets player_type=1 for IDP drafts
+        const isIDP = (selectedDraft?.settings?.player_type === 1);
+
+        // Load trade DNA from localStorage (same store as trade-calculator)
+        let ownerDnaMap = {};
+        try { ownerDnaMap = JSON.parse(localStorage.getItem(`od_owner_dna_v1_${leagueId}`) || '{}'); } catch(e) {}
+
+        // Load draft DNA from localStorage (synced via Sync Draft History button)
+        const draftDnaMap = window.DraftHistory?.loadDraftDNA(leagueId) || {};
+
+        // Build userId → roster position counts (requires sleeperPlayers to be loaded)
+        const userPosCounts = {};
+        if (sleeperPlayers && leagueRosters.length) {
+          leagueRosters.forEach(roster => {
+            if (!roster.owner_id) return;
+            const counts = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, LB: 0, DL: 0, DB: 0 };
+            (roster.players || []).forEach(pid => {
+              const p = sleeperPlayers[pid];
+              if (!p) return;
+              const rawPos = p.fantasy_positions?.[0] || p.position || '';
+              // Normalize to fantasy slot
+              const pos = ['QB','RB','WR','TE','K'].includes(rawPos) ? rawPos
+                        : ['LB','OLB','ILB','MLB'].includes(rawPos) ? 'LB'
+                        : ['DE','DT','NT','DL'].includes(rawPos) ? 'DL'
+                        : ['CB','S','SS','FS','DB'].includes(rawPos) ? 'DB'
+                        : null;
+              if (pos && counts[pos] !== undefined) counts[pos]++;
+            });
+            userPosCounts[roster.owner_id] = counts;
+          });
+        }
+
+        // Compute positional needs from roster counts; fall back to common dynasty needs
+        function computeNeeds(userId) {
+          const c = userPosCounts[userId];
+          if (!c) return ['QB', 'RB', 'WR']; // sensible default
+          const needs = [];
+          if (c.QB < 2)  needs.push('QB');
+          if (c.RB < 4)  needs.push('RB');
+          if (c.WR < 4)  needs.push('WR');
+          if (c.TE < 2)  needs.push('TE');
+          if (isIDP) {
+            if (c.LB < 3) needs.push('LB');
+            if (c.DL < 2) needs.push('DL');
+            if (c.DB < 2) needs.push('DB');
+          }
+          return needs.slice(0, 4); // cap at 4 to keep prompt tight
+        }
+
+        // Build slot list + detect my slot — prefer draftSlotOwners (round 1), fall back to leagueUsers
+        const draftSlots = [];
+        let detectedMySlot = 1;
+        for (let slot = 1; slot <= numTeamCount; slot++) {
+          const ownerInfo = draftSlotOwners[`1_${slot}`];
+          if (!ownerInfo) continue; // skip missing slots, don't break
+          const dnaKey      = ownerDnaMap[ownerInfo.userId] || 'NONE';
+          const archetype   = DNA_TO_ARCHETYPE[dnaKey] || 'Unknown';
+          const draftDna    = draftDnaMap[ownerInfo.userId] || null;
+          draftSlots.push({
+            slot, name: ownerInfo.displayName, dna: archetype,
+            draftDna:       draftDna?.label || null,
+            draftTendency:  draftDna?.tendency || null,
+            roundProfile:   draftDna?.roundProfile || null,
+            earlyDefPct:    draftDna?.earlyDefPct ?? null,
+            overallDefPct:  draftDna?.overallDefPct ?? null,
+            needs: computeNeeds(ownerInfo.userId),
+          });
+          if (ownerInfo.userId === sleeperUserId) detectedMySlot = slot;
+        }
+
+        // Fallback to leagueUsers when draftSlotOwners isn't populated yet
+        // (upcoming draft with no confirmed slot assignments, or owner has no current picks)
+        if (draftSlots.length < 2 && leagueUsers.length) {
+          draftSlots.length = 0; // clear partial results
+          leagueUsers.forEach((u, i) => {
+            const slot       = i + 1;
+            const dnaKey     = ownerDnaMap[u.user_id] || 'NONE';
+            const archetype  = DNA_TO_ARCHETYPE[dnaKey] || 'Unknown';
+            const draftDna   = draftDnaMap[u.user_id] || null;
+            draftSlots.push({
+              slot, name: u.display_name || u.username, dna: archetype,
+              draftDna:       draftDna?.label || null,
+              draftTendency:  draftDna?.tendency || null,
+              roundProfile:   draftDna?.roundProfile || null,
+              earlyDefPct:    draftDna?.earlyDefPct ?? null,
+              overallDefPct:  draftDna?.overallDefPct ?? null,
+              needs: computeNeeds(u.user_id),
+            });
+            if (u.user_id === sleeperUserId) detectedMySlot = slot;
+          });
+        }
+
+        // Sort by fantasyRank so the AI sees skill positions first.
+        // fantasyRank = consensusRank / fantasyMultiplier, where QB=2.0, RB=1.90, WR=1.75, TE=1.5,
+        // EDGE=0.35, LB=0.30, CB/S=0.25 — so defenders naturally sink to the bottom of the pool.
+        const excludedPos = new Set(['OL', 'OT', 'IOL', 'T', 'G', 'C', 'OG', 'P', 'LS', 'K']);
+        const fantasyRankedPlayers = [...players]
+          .filter(p => !excludedPos.has(p.pos))
+          .sort((a, b) => (a.fantasyRank || 999) - (b.fantasyRank || 999));
+        const topPlayers = fantasyRankedPlayers.slice(0, numTeamCount * roundCount + 20).map((p, i) => ({
+          name: p.name, pos: p.pos, tier: p.tier, fantasyRank: i + 1,
+        }));
+
+        return {
+          numTeams:   draftSlots.length || numTeamCount,
+          numRounds:  roundCount,
+          draftType:  'snake',
+          mySlot:     detectedMySlot,
+          isIDP,
+          draftSlots,
+          players:    topPlayers,
+          leagueName: selectedLeague?.name || 'Mock Draft',
+          _mySlot:    detectedMySlot, // pass back so we can set state
+        };
+      }
+
+      async function runMockDraft() {
+        setMockLoading(true); setMockError(null); setMockResults(null); setMockCurrentPick(0); setMockIsPlaying(false);
+        try {
+          const ctx = buildMockContext();
+          if (!ctx.draftSlots.length) throw new Error('No league owners found — load your Sleeper league first.');
+          setMockMySlot(ctx._mySlot);
+          // Save real picks so we can restore after mock
+          preMockPicksRef.current = draftPicks;
+          const resp = await fetch(`${SUPABASE_URL}/functions/v1/ai-analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'apikey': SUPABASE_ANON_KEY },
+            body: JSON.stringify({ type: 'mock_draft', context: ctx }),
+          });
+          if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error || `HTTP ${resp.status}`); }
+          const result = await resp.json();
+          const picks = result.picks || (() => {
+            let raw = (result.analysis || '').trim();
+            if (raw.startsWith('```')) raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+            try { return JSON.parse(raw); }
+            catch { const m = raw.match(/\[[\s\S]*\]/); return m ? JSON.parse(m[0]) : null; }
+          })();
+          if (!picks?.length) throw new Error(`Draft simulation failed — AI response: "${String(result.analysis || '').slice(0, 120)}"`);
+          // Clear the board and start fresh for mock
+          setDraftPicks({});
+          setMockResults(picks);
+          setMockCurrentPick(0); // effect fires at 0, injects pick[0] after 220ms
+          setMockIsPlaying(true);
+        } catch(e) {
+          setMockError(e.message);
+        } finally {
+          setMockLoading(false);
+        }
+      }
+      // ---------------------------------------------------------------------
+
+      const picksByRound = draftOrder.reduce((acc, pick) => {
+        if (!acc[pick.round]) acc[pick.round] = [];
+        acc[pick.round].push(pick);
+        return acc;
+      }, {});
+
+      return (
+        <div className="min-h-screen bg-black text-white">
+          <div className="bg-off-black border-b-2 border-gold px-2 md:px-4 py-1.5 md:py-3">
+            <div className="overflow-x-auto">
+              <div className="flex gap-2 items-center min-w-max justify-between">
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    placeholder="Username"
+                    value={sleeperUsername}
+                    onChange={(e) => setSleeperUsername(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleReload()}
+                    className="bg-charcoal border border-gold/30 rounded px-2 py-1 text-xs text-white w-20 md:w-32"
+                  />
+
+                  <label className="text-xs text-silver whitespace-nowrap">League Season:</label>
+                  <select
+                    value={leagueSeason}
+                    onChange={(e) => {
+                      const s = e.target.value;
+                      setLeagueSeason(s);
+                      if (sleeperUsername) fetchSleeperUser(sleeperUsername, s);
+                    }}
+                    className="bg-charcoal border border-gold/30 rounded px-2 py-1 text-xs text-white"
+                  >
+                    {['2026', '2025', '2024', '2023'].map(year => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+
+                  <label className="text-xs text-silver whitespace-nowrap">Stats Season:</label>
+                  <select
+                    value={statsSeason}
+                    onChange={(e) => setStatsSeason(e.target.value)}
+                    className="bg-charcoal border border-gold/30 rounded px-2 py-1 text-xs text-white"
+                  >
+                    {['2025', '2024', '2023', '2022'].map(year => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={selectedLeague?.id || ''}
+                    onChange={(e) => handleLeagueChange(e.target.value)}
+                    className="bg-charcoal border border-gold/30 rounded px-2 py-1 text-xs text-white max-w-[140px] md:min-w-[200px]"
+                    disabled={loading || userLeagues.length === 0}
+                  >
+                    {userLeagues.length === 0 ? (
+                      <option value="">No leagues</option>
+                    ) : (
+                      userLeagues.map(league => (
+                        <option key={league.id} value={league.id}>{league.name}</option>
+                      ))
+                    )}
+                  </select>
+
+                  <select
+                    value={draftYear || ''}
+                    onChange={(e) => handleDraftYearChange(e.target.value)}
+                    className="bg-charcoal border border-gold/30 rounded px-2 py-1 text-xs text-white"
+                    disabled={loading || availableDrafts.length === 0}
+                  >
+                    {availableDrafts.length === 0 ? (
+                      <option value="">No drafts</option>
+                    ) : (
+                      availableDrafts.map(draft => (
+                        <option key={draft.draft_id} value={draft.season}>
+                          {draft.season} {draft.status === 'complete' ? '✓' : draft.status === 'in_progress' ? '⏳' : ''}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <div className="flex gap-2 items-center">
+                  <button
+                    onClick={() => setDraftPicks({})}
+                    className="px-2 py-1 bg-loss-red hover:bg-loss-red rounded text-xs font-bold text-white whitespace-nowrap"
+                  >
+                    Clear
+                  </button>
+
+                  <button
+                    onClick={handleReload}
+                    disabled={loading || !sleeperUsername}
+                    className="px-3 py-1 bg-gold hover:bg-dark-gold disabled:bg-charcoal disabled:cursor-not-allowed text-black rounded text-xs font-bold whitespace-nowrap"
+                  >
+                    {loading ? '...' : 'Reload'}
+                  </button>
+
+                  <button
+                    onClick={handleBackToDashboard}
+                    className="px-3 py-1 bg-transparent border border-gold text-gold hover:bg-gold/10 rounded text-xs font-bold whitespace-nowrap uppercase tracking-wide font-oswald"
+                  >
+                    ← Dashboard
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-1 text-[10px] text-silver truncate px-2">
+              {status}
+            </div>
+          </div>
+
+          <div className="flex flex-row-reverse gap-1 md:gap-4 p-1 md:p-4 h-[calc(100vh-80px)] md:h-[calc(100vh-100px)]">
+            <div className="w-1/2 bg-off-black border border-gold/20 rounded-lg overflow-hidden flex flex-col">
+              <div className="bg-charcoal px-2 md:px-4 py-2 md:py-3 border-b border-gold/20 flex-shrink-0 flex items-center gap-2 flex-wrap">
+                <h2 className="font-bebas font-bold text-gold text-sm md:text-base tracking-wider">Draft Board</h2>
+                {mockResults && <>
+                  <span className="text-[8px] px-1.5 py-0.5 rounded border border-gold/40 text-gold font-bold font-oswald tracking-widest">MOCK</span>
+                  <span className="text-[9px] text-silver font-mono ml-1">Pick {Math.min(mockCurrentPick, mockResults.length)}/{mockResults.length}</span>
+                  <div className="flex-1" />
+                  <button onClick={() => setMockIsPlaying(p => !p)}
+                    className="text-gold text-[10px] px-2 py-0.5 border border-gold/40 rounded hover:bg-gold/10 font-oswald">
+                    {mockIsPlaying ? '⏸ Pause' : '▶ Play'}
+                  </button>
+                  <button onClick={() => {
+                      setMockIsPlaying(false);
+                      const allPicks = {};
+                      (mockResults || []).forEach(pick => {
+                        const parts = (pick.player || '').split(' ');
+                        allPicks[`${pick.round}.${String(pick.slot).padStart(2,'0')}`] = {
+                          metadata: { first_name: parts[0], last_name: parts.slice(1).join(' '), position: pick.pos },
+                          reason: pick.reason || '',
+                          isMock: true,
+                        };
+                      });
+                      setDraftPicks(prev => ({ ...prev, ...allPicks }));
+                      setMockCurrentPick(mockResults.length);
+                    }}
+                    className="text-silver text-[10px] px-1.5 py-0.5 border border-gold/20 rounded hover:bg-charcoal font-oswald">
+                    ⏭ All
+                  </button>
+                  <button onClick={() => {
+                      setMockResults(null); setMockCurrentPick(0); setMockIsPlaying(false);
+                      if (preMockPicksRef.current !== null) { setDraftPicks(preMockPicksRef.current); preMockPicksRef.current = null; }
+                    }}
+                    className="text-silver text-[10px] px-1.5 py-0.5 border border-gold/20 rounded hover:bg-charcoal font-oswald">
+                    ↺ Reset
+                  </button>
+                  {mockIsPlaying && mockCurrentPick < mockResults.length && (
+                    <span style={{display:'inline-block',width:'10px',height:'10px',border:'2px solid rgba(212,175,55,0.3)',borderTopColor:'#D4AF37',borderRadius:'50%',animation:'ai-spin 0.75s linear infinite'}} />
+                  )}
+                  {mockCurrentPick >= mockResults.length && (
+                    <span className="text-gold text-[9px] opacity-60 font-oswald tracking-widest">COMPLETE</span>
+                  )}
+                </>}
+              </div>
+
+              <div className="flex-1 p-1 md:p-4 space-y-2 md:space-y-6 overflow-y-auto scroll-container draft-board-container">
+                {Object.entries(picksByRound).map(([round, picks]) => (
+                  <div key={round}>
+                    <div className="sticky top-0 bg-off-black py-0.5 md:py-2 mb-1 md:mb-3 border-b-2 border-gold z-10">
+                      <h3 className="font-bebas font-bold text-gold text-xs md:text-lg tracking-wide">Round {round}</h3>
+                    </div>
+
+                    <div className="space-y-1 md:space-y-2">
+                      {picks.map(pick => {
+                        const pickData = draftPicks[pick.key];
+                        const isSelected = selectedPickSlot === pick.key;
+
+                        // Slot owner — current post-trade owner of this round+slot pick
+                        const slotOwner = draftSlotOwners[`${pick.round}_${pick.slot}`] || null;
+                        const isMySlot = slotOwner?.userId === sleeperUserId;
+
+                        let player = null;
+                        let displayName = 'Available';
+                        let displayDetails = null;
+                        let isMyPick = false;
+                        let playerRank = null;
+
+                        const MOCK_POS_COLORS = { QB:'#EF4444', RB:'#22C55E', WR:'#3B82F6', TE:'#A855F7', EDGE:'#F97316', DL:'#6B7280', LB:'#84CC16', CB:'#06B6D4', S:'#14B8A6', K:'#9CA3AF' };
+
+                        if (pickData) {
+                          // Check if it's historical Sleeper data
+                          if (typeof pickData === 'object' && pickData.playerId) {
+                            const sleeperPlayer = sleeperPlayers?.[pickData.playerId];
+                            if (sleeperPlayer) {
+                              displayName = sleeperPlayer.full_name || sleeperPlayer.first_name + ' ' + sleeperPlayer.last_name || 'Unknown Player';
+                              displayDetails = `${sleeperPlayer.position || ''} • ${sleeperPlayer.team || 'FA'}`;
+                            } else {
+                              displayName = pickData.metadata?.first_name && pickData.metadata?.last_name
+                                ? `${pickData.metadata.first_name} ${pickData.metadata.last_name}`
+                                : 'Unknown Player';
+                              displayDetails = pickData.metadata?.position || '';
+                            }
+                            // Check if logged-in user actually made this pick
+                            isMyPick = pickData.pickedBy === sleeperUserId;
+                          } else if (typeof pickData === 'object' && pickData.isMock) {
+                            // AI mock draft pick — render name + position badge + reason
+                            const m = pickData.metadata || {};
+                            displayName = `${m.first_name || ''} ${m.last_name || ''}`.trim() || 'Unknown';
+                            const pos = m.position || '';
+                            const posColor = MOCK_POS_COLORS[pos] || '#6B7280';
+                            displayDetails = (
+                              <span className="flex items-center gap-1 flex-wrap">
+                                {pos && <span className="px-1 rounded text-[8px] md:text-[10px] font-bold text-black flex-shrink-0" style={{ backgroundColor: posColor }}>{pos}</span>}
+                                {pickData.reason && <span className="text-silver/60 truncate text-[8px] md:text-[10px] italic">{pickData.reason}</span>}
+                              </span>
+                            );
+                          } else {
+                            // Manual pick — pickData is a player ID string
+                            player = players.find(p => p.id === pickData);
+                            if (player) {
+                              displayName = player.name;
+                              displayDetails = `${player.pos} • ${player.school}`;
+                              // Get the rank based on current ranking mode
+                              playerRank = rankingMode === 'fantasy' ? player.fantasyRank : player.rank;
+                            }
+                          }
+                        }
+
+                        return (
+                          <div
+                            key={pick.key}
+                            onClick={() => handlePickSlotClick(pick.key)}
+                            className={`draft-board-pick p-1 md:p-3 rounded border cursor-pointer transition-all flex items-center gap-1 md:gap-3 ${
+                              isSelected ? 'border-gold bg-gold bg-opacity-10' :
+                              isMySlot && pickData?.isMock ? 'border-gold bg-gold/15' :
+                              isMySlot ? 'border-red-700 bg-red-950' :
+                              pickData?.isMock ? 'border-indigo-500/40 bg-indigo-950/20' :
+                              pickData ? 'border-gold/30 bg-charcoal' :
+                              'border-gold/30 bg-charcoal hover:border-gold/40'
+                            }`}
+                          >
+                            <div className="w-10 md:w-20 text-center flex-shrink-0">
+                              <div className="pick-number font-bold text-gold text-xs md:text-base">{pick.key}</div>
+                              {playerRank && (
+                                <div className="pick-overall text-silver text-[9px] md:text-xs mt-0.5">#{playerRank}</div>
+                              )}
+                            </div>
+
+                            {player && (
+                              <img
+                                src={player.photoUrl}
+                                alt={player.name}
+                                className="hidden md:block w-10 h-10 rounded-full object-cover flex-shrink-0 bg-charcoal"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(player.name)}&background=D4AF37&color=0A0A0A&size=128&bold=true`;
+                                }}
+                              />
+                            )}
+
+                            <div className="flex-1 min-w-0">
+                              <div className="pick-name font-bold truncate text-xs md:text-base">{displayName}</div>
+                              {displayDetails && (
+                                <div className="pick-details text-[9px] md:text-sm text-silver flex gap-0.5 md:gap-3 mt-0.5">
+                                  {displayDetails}
+                                </div>
+                              )}
+                              {/* Always show the slot owner subdued — helps all owners see their picks */}
+                              {slotOwner && (
+                                <div className="flex items-center gap-0.5 md:gap-1 mt-0.5">
+                                  {slotOwner.avatar && (
+                                    <img
+                                      src={`https://sleepercdn.com/avatars/thumbs/${slotOwner.avatar}`}
+                                      alt=""
+                                      className="w-2 h-2 md:w-3.5 md:h-3.5 rounded-full opacity-50"
+                                      onError={(e) => e.target.style.display = 'none'}
+                                    />
+                                  )}
+                                  <span className={`text-[8px] md:text-[10px] ${isMySlot ? 'text-red-300/70' : 'text-silver/40'}`}>
+                                    {slotOwner.displayName}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {player && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedPlayerDetail(player);
+                                }}
+                                className="text-xs px-1.5 md:px-3 py-0.5 md:py-1.5 rounded bg-charcoal hover:bg-charcoal flex-shrink-0"
+                              >
+                                <span className="md:hidden">ℹ️</span>
+                                <span className="hidden md:inline">Details</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="w-1/2 bg-off-black border border-gold/20 rounded-lg overflow-hidden flex flex-col">
+              <div className="bg-charcoal px-2 md:px-4 py-1 md:py-3 border-b border-gold/20 flex-shrink-0">
+
+                {rightTab === 'rankings' && (
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="search-input-mobile w-full bg-off-black border border-gold/30 rounded px-2 md:px-3 py-0.5 md:py-2 text-xs md:text-sm text-white mb-1 md:mb-3"
+                  />
+                )}
+
+                <div className="flex gap-0.5 md:gap-2 mb-1 md:mb-3">
+                  {rightTab === 'rankings' ? (
+                    <>
+                      <button
+                        onClick={() => setRankingMode('fantasy')}
+                        className={`ranking-mode-btn flex-1 px-1 md:px-3 py-0 md:py-2 rounded text-xs md:text-sm font-semibold ${
+                          rankingMode === 'fantasy' ? 'bg-gold text-black' : 'bg-charcoal text-silver'
+                        }`}
+                      >
+                        🏈 Fantasy Rank
+                      </button>
+                      <button
+                        onClick={() => setRankingMode('consensus')}
+                        className={`ranking-mode-btn flex-1 px-1 md:px-3 py-0 md:py-2 rounded text-xs md:text-sm font-semibold ${
+                          rankingMode === 'consensus' ? 'bg-gold text-black' : 'bg-charcoal text-silver'
+                        }`}
+                      >
+                        📊 Consensus Rank
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setAiMode('rookies')}
+                        className={`flex-1 px-1 md:px-2 py-0.5 md:py-1 rounded text-[10px] md:text-xs font-semibold font-oswald uppercase tracking-wide ${
+                          aiMode === 'rookies' ? 'border border-gold text-gold bg-gold/10' : 'border border-gold/30 text-silver'
+                        }`}
+                      >
+                        Rookie Targets
+                      </button>
+                      <button
+                        onClick={() => setAiMode('fa_chat')}
+                        className={`flex-1 px-1 md:px-2 py-0.5 md:py-1 rounded text-[10px] md:text-xs font-semibold font-oswald uppercase tracking-wide ${
+                          aiMode === 'fa_chat' ? 'border border-gold text-gold bg-gold/10' : 'border border-gold/30 text-silver'
+                        }`}
+                      >
+                        Ask AI
+                      </button>
+                      <button
+                        onClick={() => setAiMode('mock_draft')}
+                        className={`flex-1 px-1 md:px-2 py-0.5 md:py-1 rounded text-[10px] md:text-xs font-semibold font-oswald uppercase tracking-wide ${
+                          aiMode === 'mock_draft' ? 'border border-gold text-gold bg-gold/10' : 'border border-gold/30 text-silver'
+                        }`}
+                      >
+                        ⚡ Mock Draft
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => setRightTab(rightTab === 'ai' ? 'rankings' : 'ai')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold font-oswald tracking-wide ${
+                      rightTab === 'ai' ? 'bg-gold text-black' : 'bg-charcoal text-gold border border-gold/40'
+                    }`}
+                    title="AI Scout"
+                  >
+                    ✦ AI
+                  </button>
+                  {rightTab === 'rankings' && (
+                    <button
+                      onClick={() => setShowPositionFilters(!showPositionFilters)}
+                      className={`px-1 md:px-3 py-0 md:py-2 rounded text-xs md:text-sm font-semibold ${
+                        showPositionFilters ? 'bg-gold text-black' : 'bg-charcoal text-silver'
+                      }`}
+                      title="Toggle position filters"
+                    >
+                      {showPositionFilters ? '▼' : '▶'} {selectedPos === 'ALL' ? 'Positions' : selectedPos}
+                    </button>
+                  )}
+                </div>
+
+                {rightTab === 'rankings' && showPositionFilters && (
+                  <div className="grid grid-cols-6 gap-1 md:gap-2 mb-1 md:mb-2">
+                    <button
+                      onClick={() => setSelectedPos('ALL')}
+                      className={`position-filter-btn flex items-center justify-center px-0.5 md:px-3 py-0.5 md:py-1 rounded text-[4px] md:text-xs font-bold ${
+                        selectedPos === 'ALL' ? 'bg-gold text-black' : 'bg-charcoal'
+                      }`}
+                    >
+                      ALL ({totalAvailable})
+                    </button>
+                    {positions.map(pos => (
+                      <button
+                        key={pos}
+                        onClick={() => setSelectedPos(pos)}
+                        className={`position-filter-btn flex items-center justify-center px-0.5 md:px-3 py-0.5 md:py-1 rounded text-[4px] md:text-xs font-bold ${
+                          selectedPos === pos ? 'bg-gold text-black' : 'bg-charcoal'
+                        }`}
+                      >
+                        {pos} ({positionCounts[pos] || 0})
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {rightTab === 'rankings' ? (
+                <div className="flex-1 overflow-y-auto scroll-container">
+                  {filteredPlayers.map((player, displayIndex) => (
+                    <div
+                      key={player.id}
+                      className="player-card-mobile p-1 md:p-3 hover:bg-charcoal border-b border-gold/20"
+                    >
+                      <div className="flex items-center gap-0.5 md:gap-3">
+                        <div className="player-rank-number w-10 md:w-16 text-silver font-bold text-xs md:text-base text-center flex-shrink-0 flex items-center justify-center gap-0.5">
+                          <span>#{displayIndex + 1}</span>
+                          {rankingMode === 'consensus' && player.rankChange > 0 && (
+                            <span className="text-win-green text-[8px] md:text-xs" title={`Up ${player.rankChange} from #${player.previousRank}`}>▲</span>
+                          )}
+                          {rankingMode === 'consensus' && player.rankChange < 0 && (
+                            <span className="text-loss-red text-[8px] md:text-xs" title={`Down ${Math.abs(player.rankChange)} from #${player.previousRank}`}>▼</span>
+                          )}
+                        </div>
+                        <img
+                          src={player.photoUrl}
+                          alt={player.name}
+                          className="hidden md:block w-10 h-10 rounded-full object-cover flex-shrink-0 bg-charcoal"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(player.name)}&background=D4AF37&color=0A0A0A&size=128&bold=true`;
+                          }}
+                        />
+                        <div
+                          className="flex-1 min-w-0 cursor-pointer"
+                          onClick={() => setSelectedPlayerDetail(player)}
+                        >
+                          <div className="player-name font-bold text-xs md:text-base truncate flex items-center gap-1">
+                            {player.name}
+                          </div>
+                          <div className="player-details text-[9px] md:text-xs text-silver truncate">
+                            {player.pos} • {player.school} • {player.size} • {player.weight} lbs
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePlayerClick(player);
+                          }}
+                          className="text-xs px-1.5 md:px-3 py-0.5 md:py-1.5 rounded bg-dark-gold hover:bg-gold text-black font-bold flex-shrink-0"
+                        >
+                          <span className="md:hidden">+</span>
+                          <span className="hidden md:inline">DB</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : aiMode === 'mock_draft' ? (
+                /* AI Mock Draft panel */
+                (() => {
+                  const numSlots = Object.keys(draftSlotOwners).length || leagueUsers.length || 12;
+                  const slots = Array.from({ length: numSlots }, (_, i) => i + 1);
+                  const DNA_TYPES = ['Unknown', 'Win Now', 'Rebuilder', 'Value Drafter', 'Need Drafter', 'Contrarian', 'Risk Averse', 'Aggressive'];
+                  const POS_BG = { QB: '#EF4444', RB: '#22C55E', WR: '#3B82F6', TE: '#A855F7', EDGE: '#F97316', DL: '#6B7280', LB: '#84CC16', CB: '#06B6D4', S: '#14B8A6', K: '#9CA3AF' };
+
+                  // Build preview from current state (no renders needed)
+                  const numTeamCount = selectedLeague?.totalRosters || numTeams;
+                  const roundCount   = selectedDraft?.settings?.rounds || 3;
+                  const leagueId     = selectedLeague?.id;
+                  let ownerDnaMap = {};
+                  try { ownerDnaMap = JSON.parse(localStorage.getItem(`od_owner_dna_v1_${leagueId}`) || '{}'); } catch(e) {}
+                  const draftDnaMap  = window.DraftHistory?.loadDraftDNA(leagueId) || {};
+                  const hasDraftDna  = Object.keys(draftDnaMap).length > 0;
+
+                  const previewSlots = [];
+                  for (let slot = 1; slot <= numTeamCount; slot++) {
+                    const ownerInfo = draftSlotOwners[`1_${slot}`];
+                    if (!ownerInfo) break;
+                    const dnaKey      = ownerDnaMap[ownerInfo.userId] || 'NONE';
+                    const archetype   = DNA_TO_ARCHETYPE[dnaKey] || 'Unknown';
+                    const draftDna    = draftDnaMap[ownerInfo.userId];
+                    previewSlots.push({ slot, name: ownerInfo.displayName, archetype, draftDnaLabel: draftDna?.label || null, isMe: ownerInfo.userId === sleeperUserId });
+                  }
+                  // Fallback to leagueUsers if slot owners not ready
+                  if (!previewSlots.length && leagueUsers.length) {
+                    leagueUsers.forEach((u, i) => {
+                      const dnaKey    = ownerDnaMap[u.user_id] || 'NONE';
+                      const draftDna  = draftDnaMap[u.user_id];
+                      previewSlots.push({ slot: i+1, name: u.display_name || u.username, archetype: DNA_TO_ARCHETYPE[dnaKey] || 'Unknown', draftDnaLabel: draftDna?.label || null, isMe: u.user_id === sleeperUserId });
+                    });
+                  }
+
+                  const hasLeague = !!selectedLeague;
+
+                  return (
+                    <div className="flex-1 overflow-y-auto scroll-container p-3">
+                      {!hasLeague ? (
+                        <div className="text-center text-silver opacity-40 text-xs mt-8">Load a Sleeper league first.</div>
+                      ) : (
+                        <>
+                          {/* League info line */}
+                          <div className="flex items-center gap-2 mb-3 text-[10px] text-silver opacity-60">
+                            <span>{selectedLeague.name}</span>
+                            <span>·</span>
+                            <span>{numTeamCount} teams</span>
+                            <span>·</span>
+                            <span>{roundCount} rounds</span>
+                            <span>·</span>
+                            <span>Snake</span>
+                          </div>
+
+                          {/* Owner DNA preview */}
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="text-[9px] text-silver uppercase tracking-wider opacity-40 font-bold">
+                              Owner DNA {hasDraftDna && <span className="text-indigo-400 opacity-80">+ Draft History</span>}
+                            </div>
+                          </div>
+                          <div className="space-y-0.5 mb-3 max-h-56 overflow-y-auto scroll-container">
+                            {previewSlots.map(({ slot, name, archetype, draftDnaLabel, isMe }) => (
+                              <div key={slot} className={`flex items-center gap-1.5 py-0.5 px-1.5 rounded text-[9px] ${isMe ? 'bg-gold/10 border border-gold/30' : ''}`}>
+                                <span className="w-5 text-silver opacity-40 font-mono text-center flex-shrink-0">{slot}</span>
+                                <span className={`flex-1 truncate ${isMe ? 'text-gold font-bold' : 'text-white'}`}>
+                                  {name}{isMe && ' ★'}
+                                </span>
+                                {draftDnaLabel && (
+                                  <span className="text-[8px] px-1 py-0 rounded border border-indigo-500/40 text-indigo-300 flex-shrink-0">
+                                    {draftDnaLabel}
+                                  </span>
+                                )}
+                                <span className={`text-[8px] px-1 py-0 rounded border flex-shrink-0 ${archetype === 'Unknown' ? 'border-gold/20 text-silver opacity-40' : 'border-gold/40 text-gold'}`}>
+                                  {archetype}
+                                </span>
+                              </div>
+                            ))}
+                            {!previewSlots.length && (
+                              <div className="text-silver opacity-40 text-[9px] py-2">Loading owners…</div>
+                            )}
+                          </div>
+
+                          {/* Sync Draft History */}
+                          <button
+                            onClick={async () => {
+                              if (!leagueId) return;
+                              setDraftDnaSyncing(true);
+                              setDraftDnaSyncMsg(null);
+                              try {
+                                const map = await window.DraftHistory.syncDraftDNA(leagueId);
+                                const n = Object.keys(map).length;
+                                setDraftDnaSyncMsg(`✓ Draft DNA synced for ${n} owners (3 seasons)`);
+                              } catch (e) {
+                                setDraftDnaSyncMsg(`⚠ ${e.message}`);
+                              } finally {
+                                setDraftDnaSyncing(false);
+                              }
+                            }}
+                            disabled={draftDnaSyncing || !leagueId}
+                            className="w-full text-[9px] px-2 py-1.5 border border-indigo-500/30 text-indigo-300 rounded hover:bg-indigo-500/10 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 mb-2 font-oswald tracking-wide"
+                          >
+                            {draftDnaSyncing
+                              ? <><span style={{display:'inline-block',width:'8px',height:'8px',border:'1.5px solid rgba(165,180,252,0.3)',borderTopColor:'#a5b4fc',borderRadius:'50%',animation:'ai-spin 0.75s linear infinite'}} /> Syncing Draft History...</>
+                              : `↻ Sync Draft History ${hasDraftDna ? '(synced)' : '(3 seasons)'}`}
+                          </button>
+                          {draftDnaSyncMsg && (
+                            <div className={`text-[9px] mb-2 ${draftDnaSyncMsg.startsWith('✓') ? 'text-green-400' : 'text-amber-400'}`}>
+                              {draftDnaSyncMsg}
+                            </div>
+                          )}
+
+                          <button onClick={runMockDraft} disabled={mockLoading}
+                            className="w-full px-4 py-2 border border-gold text-gold bg-gold/10 hover:bg-gold/20 disabled:opacity-40 disabled:cursor-not-allowed rounded text-xs font-bold font-oswald tracking-widest uppercase flex items-center justify-center gap-2">
+                            {mockLoading ? (
+                              <>
+                                <span style={{display:'inline-block',width:'10px',height:'10px',border:'2px solid rgba(212,175,55,0.3)',borderTopColor:'#D4AF37',borderRadius:'50%',animation:'ai-spin 0.75s linear infinite'}} />
+                                Simulating Draft...
+                              </>
+                            ) : '⚡ Run AI Mock Draft'}
+                          </button>
+                          {mockError && <div className="mt-3 text-loss-red text-xs">⚠ {mockError}</div>}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()
+              ) : (
+                /* AI Scout panel */
+                <div className="flex-1 overflow-y-auto scroll-container p-3 md:p-4">
+                  <p className="text-silver text-[10px] md:text-xs mb-3 opacity-60 leading-relaxed">
+                    {aiMode === 'rookies'
+                      ? 'Rookie draft targets ranked by fit with your roster needs and dynasty timeline'
+                      : 'Ask anything about the draft, player rankings, or dynasty strategy'}
+                  </p>
+                  {aiMode === 'fa_chat' && (
+                    <textarea
+                      value={aiChatInput}
+                      onChange={e => setAiChatInput(e.target.value)}
+                      placeholder="e.g. Should I take the best available RB or address my WR need at pick 3?"
+                      className="w-full bg-charcoal border border-gold/30 rounded p-2 text-xs text-white resize-none mb-3 focus:outline-none focus:border-gold"
+                      rows={3}
+                    />
+                  )}
+                  <button
+                    onClick={runAIAnalysis}
+                    disabled={aiLoading || (aiMode === 'fa_chat' && !aiChatInput.trim())}
+                    className="px-4 py-1.5 border border-gold text-gold bg-gold/10 hover:bg-gold/20 disabled:opacity-40 disabled:cursor-not-allowed rounded text-xs font-bold font-oswald tracking-widest uppercase flex items-center gap-2"
+                  >
+                    {aiLoading ? (
+                      <>
+                        <span style={{display:'inline-block',width:'10px',height:'10px',border:'2px solid rgba(212,175,55,0.3)',borderTopColor:'#D4AF37',borderRadius:'50%',animation:'ai-spin 0.75s linear infinite'}}/>
+                        Analyzing...
+                      </>
+                    ) : '✦ Run Analysis'}
+                  </button>
+                  {aiError && (
+                    <div className="mt-3 text-loss-red text-xs">⚠ {aiError}</div>
+                  )}
+                  {aiAnalysis && (
+                    <div className="mt-3 bg-gold/5 border border-gold/20 rounded-lg p-3 text-xs text-silver leading-relaxed"
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(aiAnalysis) }} />
+                  )}
+                  {!aiAnalysis && !aiLoading && !aiError && (
+                    <div className="mt-8 text-center text-silver opacity-25 text-xs">
+                      Select a mode and run analysis
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Player Detail Modal */}
+          {selectedPlayerDetail && (
+            <div
+              className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+              onClick={() => setSelectedPlayerDetail(null)}
+            >
+              <div
+                className="bg-off-black rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-gold/20"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="sticky top-0 bg-charcoal px-6 py-4 border-b border-gold/20 flex justify-between items-center">
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={selectedPlayerDetail.photoUrl}
+                      alt={selectedPlayerDetail.name}
+                      className="w-16 h-16 rounded-full object-cover bg-charcoal"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedPlayerDetail.name)}&background=D4AF37&color=0A0A0A&size=128&bold=true`;
+                      }}
+                    />
+                    <div>
+                      <h2 className="font-bebas text-2xl font-bold text-gold tracking-wide">{selectedPlayerDetail.name}</h2>
+                      <div className="text-sm text-silver">{selectedPlayerDetail.school} • {selectedPlayerDetail.year}</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedPlayerDetail(null)}
+                    className="text-silver hover:text-white text-2xl"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="p-6">
+                  {/* Player Info Badges */}
+                  <div className="flex gap-3 mb-6 flex-wrap">
+                    <span className="px-3 py-1 bg-gold text-black rounded font-bold text-sm">
+                      {selectedPlayerDetail.pos}
+                    </span>
+                    <span className="px-3 py-1 bg-charcoal text-white rounded font-bold text-sm">
+                      {selectedPlayerDetail.school}
+                    </span>
+                    <span className="px-3 py-1 bg-charcoal text-white rounded font-bold text-sm">
+                      {selectedPlayerDetail.year}
+                    </span>
+                    <a
+                      href={selectedPlayerDetail.highlightUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1 bg-loss-red hover:bg-loss-red text-white rounded font-bold text-sm flex items-center gap-1"
+                    >
+                      ▶ Watch Highlights
+                    </a>
+                  </div>
+
+                  {/* Player Summary/Scouting Report */}
+                  {selectedPlayerDetail.summary && (
+                    <div className="bg-charcoal rounded-lg p-4 border border-gold/20 mb-6">
+                      <h3 className="font-bebas text-gold font-bold tracking-wide text-sm mb-2">Scouting Report</h3>
+                      <p className="text-silver text-sm leading-relaxed">{selectedPlayerDetail.summary}</p>
+                    </div>
+                  )}
+
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-4 gap-4 mb-6">
+                    <div className="bg-charcoal rounded-lg p-4 border border-gold/20">
+                      <div className="text-silver text-xs uppercase mb-1">Height</div>
+                      <div className="text-gold text-xl font-bold">{selectedPlayerDetail.size || 'N/A'}</div>
+                    </div>
+                    <div className="bg-charcoal rounded-lg p-4 border border-gold/20">
+                      <div className="text-silver text-xs uppercase mb-1">Weight</div>
+                      <div className="text-gold text-xl font-bold">{selectedPlayerDetail.weight ? selectedPlayerDetail.weight + ' lbs' : 'N/A'}</div>
+                    </div>
+                    <div className="bg-charcoal rounded-lg p-4 border border-gold/20">
+                      <div className="text-silver text-xs uppercase mb-1">40 Time</div>
+                      <div className="text-gold text-xl font-bold">{selectedPlayerDetail.speed ? selectedPlayerDetail.speed + 's' : 'N/A'}</div>
+                    </div>
+                    <div className="bg-charcoal rounded-lg p-4 border border-gold/20">
+                      <div className="text-silver text-xs uppercase mb-1">{rankingMode === 'fantasy' ? 'Fantasy' : 'Consensus'} Rank</div>
+                      {(() => {
+                        const displayRank = filteredPlayers.findIndex(p => p.id === selectedPlayerDetail.id) + 1;
+                        const change = selectedPlayerDetail.rankChange;
+                        const prevRank = selectedPlayerDetail.previousRank;
+                        const showArrows = rankingMode === 'consensus';
+                        return (
+                          <React.Fragment>
+                            <div className="text-gold text-xl font-bold flex items-center gap-1">
+                              #{displayRank || '—'}
+                              {showArrows && change > 0 && (
+                                <span className="text-win-green text-sm">▲{change}</span>
+                              )}
+                              {showArrows && change < 0 && (
+                                <span className="text-loss-red text-sm">▼{Math.abs(change)}</span>
+                              )}
+                            </div>
+                            {showArrows && prevRank && change !== 0 && (
+                              <div className="text-silver text-xs mt-1">Previously #{prevRank}</div>
+                            )}
+                          </React.Fragment>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Fantasy Scoring */}
+                  {selectedPlayerDetail.draftScore && (
+                    <div className="bg-gold/10 bg-opacity-30 rounded-lg p-4 border border-gold/40 mb-6">
+                      <h3 className="font-bebas text-gold font-bold tracking-wide text-sm mb-2 flex items-center gap-1">
+                        🏈 Fantasy Draft Score
+                        {selectedPlayerDetail.isGenerational && (
+                          <span className="text-gold text-xs">Generational</span>
+                        )}
+                      </h3>
+                      <div className="grid grid-cols-4 gap-2">
+                        <div>
+                          <div className="text-silver text-[10px] uppercase mb-0.5">Draft Score</div>
+                          <div className="text-gold text-base font-bold">{selectedPlayerDetail.draftScore}</div>
+                        </div>
+                        <div>
+                          <div className="text-silver text-[10px] uppercase mb-0.5">Fantasy Rank</div>
+                          <div className="text-gold text-base font-bold">#{filteredPlayers.findIndex(p => p.id === selectedPlayerDetail.id) + 1 || '—'}</div>
+                        </div>
+                        <div>
+                          <div className="text-silver text-[10px] uppercase mb-0.5">Grade</div>
+                          <div className="text-gold text-base font-bold">{selectedPlayerDetail.grade}/10</div>
+                        </div>
+                        <div>
+                          <div className="text-silver text-[10px] uppercase mb-0.5">Position Mult</div>
+                          <div className="text-gold text-base font-bold">{selectedPlayerDetail.fantasyMultiplier}x</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-[10px] text-silver">
+                        <div className="mt-0.5">
+                          Formula: Grade ({selectedPlayerDetail.grade}) × Multiplier ({selectedPlayerDetail.fantasyMultiplier})
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Source Rankings */}
+                  {selectedPlayerDetail.sources && selectedPlayerDetail.sources.length > 0 && (
+                    <div className="bg-charcoal rounded-lg p-4 border border-gold/20">
+                      <h3 className="font-bebas text-gold font-bold tracking-wide text-sm mb-3">Source Rankings</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[...selectedPlayerDetail.sources]
+                          .sort((a, b) => a.rank - b.rank)
+                          .map((s, i) => (
+                            <div key={i} className="flex justify-between items-center py-1.5 px-3 bg-off-black rounded border border-gold/10">
+                              <span className="text-silver text-xs">{s.source}</span>
+                              <span className="text-gold font-bold text-xs">#{s.rank}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    ReactDOM.render(<DraftBoard />, document.getElementById('root'));
+  </script>
+<footer style="text-align:center;padding:16px;font-size:12px;color:#666;border-top:1px solid #1a1a1a;margin-top:32px;">&copy; 2026 C2 Football LLC. All rights reserved.</footer>
+</body>
+</html>

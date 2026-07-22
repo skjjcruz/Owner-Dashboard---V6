@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://api.sleeper.app https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://fantasysports.yahooapis.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
+
+    <title>Draft Command Center - Dynasty HQ</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap"></noscript>
+    <style>
+        :root {
+            --gold: #D4AF37;
+            --dark-gold: #B8941E;
+            --black: #0A0A0A;
+            --off-black: #1A1A1A;
+            --charcoal: #2A2A2A;
+            --silver: #C0C0C0;
+            --white: #FFFFFF;
+            /* iPhone safe-area tokens (viewport-fit=cover above) — same names
+               as index.html so the idiom carries across pages. 0px elsewhere. */
+            --sat: env(safe-area-inset-top, 0px);
+            --sar: env(safe-area-inset-right, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+            --sal: env(safe-area-inset-left, 0px);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--black); color: var(--white); min-height: 100vh; overflow-x: hidden; }
+        /* App root: full-height flex shell (height lives here, not inline, so
+           the dvh line can fall back to vh on pre-15.4 iOS). dvh tracks the
+           visual viewport — Safari's URL bar can't permanently clip the
+           bottom, since inner-panel scrolling never collapses it. */
+        .page-shell { height: 100vh; height: 100dvh; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(212,175,55,0.05); }
+        ::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 2px; }
+
+        /* ---- Header ---- */
+        .wr-header {
+            background: linear-gradient(135deg, var(--off-black) 0%, var(--charcoal) 100%);
+            border-bottom: 2px solid var(--gold);
+            padding: 0.55rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        .wr-title { font-family: 'Inter', sans-serif; font-size: 1.25rem; color: var(--gold); letter-spacing: 0.1em; flex: 1; white-space: nowrap; }
+        .back-btn {
+            background: transparent; border: 1.5px solid var(--gold); color: var(--gold);
+            font-family: 'Inter', sans-serif; font-size: 0.7rem; font-weight: 600;
+            padding: 0.32rem 0.65rem; border-radius: 4px; cursor: pointer;
+            text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0;
+        }
+        .back-btn:hover { background: rgba(212,175,55,0.1); }
+        .league-select {
+            background: var(--charcoal); border: 1.5px solid rgba(212,175,55,0.4);
+            color: var(--white); font-family: 'Inter', sans-serif; font-size: 0.76rem;
+            padding: 0.32rem 0.55rem; border-radius: 4px; cursor: pointer; max-width: 200px;
+        }
+
+        /* ---- Grid ---- */
+        .wr-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px 400px;
+            height: calc(100vh - 46px);
+            overflow: hidden;
+            gap: 0.6rem;
+            padding: 0.6rem;
+            box-sizing: border-box;
+        }
+        @media (min-width: 1024px) and (max-width: 1200px) { .wr-grid { grid-template-columns: 1fr 320px 340px; } }
+        @media (max-width: 1023px) { .wr-grid { grid-template-columns: 1fr; height: auto; overflow: visible; } }
+
+        /* ---- Panels ---- */
+        .panel { display: flex; flex-direction: column; overflow: hidden; background: rgba(10,10,10,0.85); border: 2px solid rgba(212,175,55,0.2); border-radius: 10px; }
+        .panel-header { background: rgba(212,175,55,0.07); border-bottom: 1px solid rgba(212,175,55,0.18); border-radius: 10px 10px 0 0; font-family: 'Inter', sans-serif; font-size: 1.3rem; color: var(--gold); letter-spacing: 0.1em; flex-shrink: 0; display: flex; flex-direction: column; }
+        .ph-title { display: flex; align-items: center; gap: 0.4rem; padding: 0 0.7rem; height: 50px; overflow: hidden; flex-shrink: 0; white-space: nowrap; }
+        .ph-sub { display: flex; align-items: center; gap: 0.2rem; padding: 0 0.5rem; height: 36px; overflow: hidden; border-top: 1px solid rgba(212,175,55,0.1); flex-shrink: 0; }
+        .panel-body { flex: 1; overflow-y: auto; padding: 0.4rem 0.45rem; }
+
+        /* ---- Roster Table ---- */
+        .roster-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .roster-table thead th { background: rgba(10,10,10,0.97); color: var(--gold); padding: 0.32rem 0.45rem; font-family: 'Inter', sans-serif; font-size: 0.72rem; font-weight: 400; letter-spacing: 0.07em; border-bottom: 1px solid rgba(212,175,55,0.18); text-align: right; }
+        .roster-table thead th.rth-pos { text-align: center; width: 44px; }
+        .roster-table thead th.rth-player { text-align: left; }
+        .roster-table thead th.rth-yrs { width: 40px; }
+        .roster-table thead th.rth-pts { width: 56px; }
+        .roster-table thead th.rth-gp { width: 36px; }
+        .roster-table thead th.rth-avg { width: 52px; }
+        .roster-table td { padding: 0.27rem 0.45rem; vertical-align: middle; text-align: right; font-size: 0.72rem; font-weight: 600; border: none; }
+        .roster-table td.rtd-pos { text-align: center; width: 44px; font-family: 'Inter', sans-serif; font-size: 0.68rem; color: var(--gold); background: rgba(212,175,55,0.13); letter-spacing: 0.04em; }
+        .roster-table td.rtd-player { text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.82rem; }
+        .roster-table td.rtd-player a { color: var(--white); text-decoration: none; }
+        .roster-table td.rtd-player a:hover { color: var(--gold); }
+        .roster-table td.rtd-num { color: var(--silver); opacity: 0.75; }
+        .roster-table td.rtd-pts { color: var(--gold); opacity: 1; }
+        .roster-table tr.rt-group td { background: rgba(8,8,8,0.95); color: var(--gold); font-family: 'Inter', sans-serif; font-size: 0.75rem; letter-spacing: 0.08em; padding: 0.28rem 0.45rem; border-bottom: 1px solid rgba(212,175,55,0.12); text-align: left; }
+        .roster-table tr.rt-group .rt-gw { display: flex; justify-content: space-between; }
+        .roster-table tr.rt-sep td { background: rgba(212,175,55,0.07); height: 2px; padding: 0; }
+        .roster-table td.ps-starter { background: rgba(6,78,59,0.55); color: #ecfdf5 !important; opacity:1 !important; }
+        .roster-table td.ps-ir      { background: rgba(127,29,29,0.55); color: #fee2e2 !important; opacity:1 !important; }
+        .roster-table td.ps-taxi    { background: rgba(49,46,129,0.55);  color: #e0e7ff !important; opacity:1 !important; }
+        .roster-table tbody tr:not(.rt-group):not(.rt-sep):hover td { background: rgba(212,175,55,0.07); }
+        .roster-table tbody tr:not(.rt-group):not(.rt-sep):hover td.rtd-pos { background: rgba(212,175,55,0.22); }
+
+        /* ---- Rookie rows ---- */
+        .player-row { display: flex; align-items: center; padding: 0.22rem 0.35rem; margin-bottom: 0.15rem; background: rgba(255,255,255,0.02); border-radius: 4px; gap: 0.35rem; transition: background 0.12s; }
+        .player-row:hover { background: rgba(212,175,55,0.06); }
+        .pos-badge { display: inline-flex; align-items: center; justify-content: center; width: 34px; flex-shrink: 0; font-size: 0.62rem; font-weight: 700; border: 1.5px solid var(--gold); border-radius: 3px; padding: 2px 0; background: rgba(212,175,55,0.08); letter-spacing: 0.02em; }
+        .player-name { flex: 1; min-width: 0; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .player-team { font-size: 0.63rem; color: var(--silver); opacity: 0.5; }
+        .filter-btn { background: transparent; border: 1px solid rgba(212,175,55,0.27); color: var(--silver); font-family: 'Inter', sans-serif; font-size: 0.67rem; font-weight: 600; padding: 0.18rem 0.4rem; border-radius: 3px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em; }
+        .filter-btn.active { background: var(--gold); border-color: var(--gold); color: var(--black); }
+        .search-input { flex: 0 1 90px; min-width: 50px; background: rgba(255,255,255,0.04); border: 1px solid rgba(212,175,55,0.27); color: var(--white); font-family: 'Inter', sans-serif; font-size: 0.76rem; padding: 0.18rem 0.42rem; border-radius: 3px; }
+        .search-input::placeholder { color: rgba(192,192,192,0.33); }
+        .search-input:focus { outline: none; border-color: rgba(212,175,55,0.58); }
+        .center-msg { text-align: center; color: var(--silver); opacity: 0.5; padding: 2rem 1rem; font-size: 0.78rem; }
+        .rk-badge { background: rgba(212,175,55,0.18); color: var(--gold); font-family: 'Inter', sans-serif; font-size: 0.6rem; letter-spacing: 0.05em; padding: 1px 4px; border-radius: 3px; flex-shrink: 0; }
+
+        /* ---- AI Scout Panel ---- */
+        .ai-mode-btn { padding: 0.22rem 0.6rem; border: 1.5px solid rgba(212,175,55,0.3); background: transparent; color: rgba(255,255,255,0.45); font-family: 'Inter', sans-serif; font-size: 0.62rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+        .ai-mode-btn.active { border-color: var(--gold); color: var(--gold); background: rgba(212,175,55,0.08); }
+        .ai-mode-btn:hover:not(.active) { border-color: rgba(212,175,55,0.5); color: rgba(212,175,55,0.7); }
+        .ai-analyze-btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.38rem 1.1rem; background: linear-gradient(135deg,rgba(212,175,55,0.15),rgba(212,175,55,0.07)); border: 1.5px solid var(--gold); color: var(--gold); font-family: 'Inter', sans-serif; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; border-radius: 4px; cursor: pointer; transition: all 0.2s; }
+        .ai-analyze-btn:hover:not(:disabled) { background: rgba(212,175,55,0.2); box-shadow: 0 0 10px rgba(212,175,55,0.18); }
+        .ai-analyze-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+        .ai-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(212,175,55,0.3); border-top-color: var(--gold); border-radius: 50%; animation: ai-spin 0.75s linear infinite; }
+        @keyframes ai-spin { to { transform: rotate(360deg); } }
+        .ai-output { background: rgba(212,175,55,0.04); border: 1px solid rgba(212,175,55,0.18); border-radius: 6px; padding: 0.85rem 0.95rem; margin-top: 0.65rem; font-size: 0.75rem; color: var(--silver); line-height: 1.72; }
+        .ai-output strong { color: var(--gold); font-weight: 700; }
+        .ai-chat-input { width: 100%; background: var(--charcoal); border: 1.5px solid rgba(212,175,55,0.25); color: var(--white); font-family: 'Inter', sans-serif; font-size: 0.74rem; padding: 0.5rem 0.6rem; border-radius: 5px; resize: vertical; min-height: 58px; margin-bottom: 0.6rem; box-sizing: border-box; }
+        .ai-chat-input:focus { outline: none; border-color: var(--gold); }
+        .ai-error-msg { color: #E74C3C; font-size: 0.73rem; padding: 0.5rem 0; }
+
+        /* ---- Touch hit-area targets (tablet / coarse pointer) ---- */
+        @media (pointer: coarse) {
+            .back-btn,
+            .league-select,
+            .filter-btn,
+            .search-input,
+            .ai-analyze-btn,
+            .ai-mode-btn { min-height: 44px; }
+            .player-row { min-height: 44px; }
+        }
+
+        /* ---- iPhone pass (≤767, plan Phase 3 item 17): safe-area chrome,
+             16px inputs (iOS zoom-on-focus guard), home-indicator clearance.
+             Phone-scoped — the tablet tier above is untouched. ---- */
+        @media (max-width: 767px) {
+            /* Header rides below the notch/status bar (installed-PWA draws
+               under it with viewport-fit=cover). */
+            .wr-header { padding: calc(0.55rem + var(--sat)) calc(1rem + var(--sar)) 0.55rem calc(1rem + var(--sal)); }
+            /* Safari zooms any focused input under 16px (same rule as the
+               main app's phone tier). */
+            input, select, textarea { font-size: 16px !important; }
+            /* The 100dvh page shell is overflow:hidden inline; at ≤1023 the
+               grid is height:auto, so the page itself must scroll or the
+               stacked panels get clipped at the viewport edge. */
+            .page-shell { overflow-y: auto !important; }
+            /* Last stacked panel clears the home indicator. */
+            .wr-grid { padding-bottom: calc(0.6rem + var(--sab)); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/shared/shared-loader.js?v=20260705fdn1"></script>
+    <script>
+    // The /api/dev-ai-analyze proxy only exists in the local static dev server
+    // (scripts/serve-static.cjs).
+    const WR_IS_NATIVE_APP = false; // web-only build — never a native app shell
+    if (!WR_IS_NATIVE_APP && ['localhost', '127.0.0.1'].includes(window.location.hostname || '')) {
+      const existingConfig = window.DYNASTY_HQ_CONFIG || {};
+      window.DYNASTY_HQ_CONFIG = {
+        ...existingConfig,
+        devPreviewAI: true,
+        endpoints: {
+          ...(existingConfig.endpoints || {}),
+          aiAnalyze: `${window.location.origin}/api/dev-ai-analyze`,
+        },
+      };
+    }
+    WRShared.loadMany([
+      'app-config.js',
+      'constants.js',
+      'utils.js',
+      'storage.js',
+      'sleeper-api.js',
+      'supabase-client.js',
+      'tier.js',
+      'pick-value-model.js',
+      'dhq-core.js',
+      'intelligence-context.js',
+      'dhq-engine.js',
+      'nfl-fit.js',
+      'trade-engine.js',
+      'mock-engine.js',
+      'dhq-ai.js',
+      'ai-dispatch.js',
+      'player-modal.js',
+      'rookie-data.js',
+    ]);
+    </script>
+    <!-- Scout-free vs Pro gate: wrIsPro() + chrome + lock card; boots loadUserTier(). -->
+    <script src="js/shared/pro-gate.js?v=20260705gate1"></script>
+    <script src="vendor/react.production.min.js"></script>
+    <script src="vendor/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="js/mock-draft.js" type="text/babel"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // ===== DEV MODE =====
+        // Auth bypass is allowed only on a local dev machine — never via ?dev or a
+        // "sandbox" hostname, which anyone could reach.
+        const IS_LOCAL = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+        const DEV_MODE = IS_LOCAL;
+        if (DEV_MODE) {
+            console.log('%c[DEV MODE] All features unlocked, auth bypassed','color:#D4AF37;font-weight:bold;font-size:14px');
+            const b = document.createElement('div');
+            b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#D4AF37;color:#000;font-size:11px;font-weight:700;text-align:center;padding:3px;letter-spacing:.05em;font-family:monospace';
+            b.textContent = '⚡ SANDBOX — changes here do not affect production';
+            document.body.prepend(b);
+        }
+
+        // ===== AUTH =====
+        // Require a valid, unexpired session token (Supabase JWT). Presence of
+        // od_auth_v1 is only a Sleeper-username link and is NOT proof of identity.
+        const AUTH_KEY = 'od_auth_v1';
+        const SESSION_KEY = 'fw_session_v1';
+        const authRaw = localStorage.getItem(AUTH_KEY);
+        function jwtUnexpired(t) {
+            try {
+                const p = String(t || '').split('.')[1];
+                if (!p) return false;
+                const b = p.replace(/-/g, '+').replace(/_/g, '/');
+                const pad = b.length % 4 ? b + '='.repeat(4 - (b.length % 4)) : b;
+                const o = JSON.parse(decodeURIComponent(window.atob(pad).split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('')));
+                return !o.exp || Number(o.exp) * 1000 > Date.now();
+            } catch (e) { return false; }
+        }
+        const sessionToken = (() => { try { return (JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') || {}).token || ''; } catch (e) { return ''; } })();
+        const isAuthed = !!sessionToken && jwtUnexpired(sessionToken);
+        if (!isAuthed && !DEV_MODE) { try { localStorage.removeItem(AUTH_KEY); } catch (e) {} window.location.href = 'login.html'; }
+        let sleeperUsername = '';
+        if (DEV_MODE) {
+            sleeperUsername = new URLSearchParams(window.location.search).get('user') || 'jcc100218';
+        }
+        try {
+            if (authRaw && !sleeperUsername) {
+                sleeperUsername = JSON.parse(authRaw).username || '';
+            }
+        } catch (e) {
+            localStorage.removeItem(AUTH_KEY);
+            if (!DEV_MODE) window.location.href = 'login.html';
+        }
+
+        // ===== SLEEPER API =====
+        const DW_SLEEPER = 'https://api.sleeper.app/v1';
+        async function apiFetch(url) {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        }
+        const fetchUser       = u      => apiFetch(`${DW_SLEEPER}/user/${encodeURIComponent(u)}`);
+        const fetchLeagues    = (uid,yr)=> apiFetch(`${DW_SLEEPER}/user/${uid}/leagues/nfl/${yr}`);
+        const fetchRosters      = id => apiFetch(`${DW_SLEEPER}/league/${id}/rosters`);
+        const fetchLeagueInfo   = id => apiFetch(`${DW_SLEEPER}/league/${id}`);
+        const fetchTradedPicks  = id => apiFetch(`${DW_SLEEPER}/league/${id}/traded_picks`);
+
+        let _wrPlayersCache = null;
+        async function fetchPlayers() {
+            if (_wrPlayersCache) return _wrPlayersCache;
+            _wrPlayersCache = await apiFetch(`${DW_SLEEPER}/players/nfl`);
+            return _wrPlayersCache;
+        }
+
+        let _wrStatsCache = {};
+        async function fetchSeasonStats(season) {
+            if (_wrStatsCache[season]) return _wrStatsCache[season];
+            try { _wrStatsCache[season] = await apiFetch(`${DW_SLEEPER}/stats/nfl/regular/${season}`); }
+            catch (e) { _wrStatsCache[season] = {}; }
+            return _wrStatsCache[season];
+        }
+
+        const SEASON      = '2026';
+        const STATS_YEAR  = '2025';
+        const AVAILABLE_YEARS = ['2023','2024','2025','2026'];
+        const DRAFT_ROUNDS  = 7;
+        const PICK_HORIZON  = 3;
+
+        // ─── PICK RESOLUTION (matches trade-calculator logic) ────────────────
+        function detectPickIdMode(rosters, tradedPicks) {
+            const rosterIds = new Set(rosters.map(r => String(r.roster_id)));
+            const userIds   = new Set(rosters.map(r => String(r.owner_id)));
+            let rosterHits = 0, userHits = 0;
+            for (const tp of tradedPicks || []) {
+                const oid = String(tp.owner_id ?? '');
+                if (rosterIds.has(oid)) rosterHits++;
+                if (userIds.has(oid))   userHits++;
+            }
+            return rosterHits >= userHits ? 'roster' : 'user';
+        }
+
+        function buildPicksByOwner(rosters, tradedPicks, leagueSeason) {
+            const PICK_YEARS_INT = Array.from({ length: PICK_HORIZON }, (_, i) => leagueSeason + i);
+            const mode           = detectPickIdMode(rosters, tradedPicks);
+            const rosterById     = {};
+            for (const r of rosters) rosterById[String(r.roster_id)] = r;
+
+            const ownerByKey = {};
+            for (const r of rosters) {
+                const originRosterId = String(r.roster_id);
+                const ownerUserId    = String(r.owner_id);
+                for (const y of PICK_YEARS_INT) {
+                    for (let rd = 1; rd <= DRAFT_ROUNDS; rd++) {
+                        ownerByKey[`${y}-${rd}-${originRosterId}`] = ownerUserId;
+                    }
+                }
+            }
+            for (const tp of tradedPicks || []) {
+                const y  = Number(tp.season);
+                if (!PICK_YEARS_INT.includes(y)) continue;
+                const rd = Number(tp.round);
+                if (!Number.isFinite(rd) || rd < 1 || rd > DRAFT_ROUNDS) continue;
+                const originRosterId = String(tp.roster_id);
+                let newOwnerUserId;
+                if (mode === 'user') {
+                    newOwnerUserId = String(tp.owner_id ?? '');
+                } else {
+                    const r = rosterById[String(tp.owner_id ?? '')];
+                    newOwnerUserId = r?.owner_id ? String(r.owner_id) : null;
+                }
+                if (!newOwnerUserId) continue;
+                const key = `${y}-${rd}-${originRosterId}`;
+                if (key in ownerByKey) ownerByKey[key] = newOwnerUserId;
+            }
+            const picksByOwner = {};
+            for (const [key, ownerUserId] of Object.entries(ownerByKey)) {
+                const parts = key.split('-');
+                const y = Number(parts[0]), rd = Number(parts[1]), fromRosterId = parts[2];
+                if (!picksByOwner[ownerUserId]) picksByOwner[ownerUserId] = [];
+                picksByOwner[ownerUserId].push({ year: y, round: rd, fromRosterId });
+            }
+            for (const oid of Object.keys(picksByOwner)) {
+                picksByOwner[oid].sort((a, b) => a.year - b.year || a.round - b.round);
+            }
+            return picksByOwner;
+        }
+
+        const POS_COLORS = { QB:'#FF6B6B', RB:'#4ECDC4', WR:'#45B7D1', TE:'#F7DC6F', K:'#BB8FCE', DEF:'#85929E', LB:'#F0A500', DL:'#E67E22', DB:'#5DADE2', CB:'#5DADE2', S:'#5DADE2' };
+        const posColor = p => POS_COLORS[p] || 'var(--silver)';
+        const DW_POS_ORDER = { QB:0, RB:1, WR:2, TE:3, K:4, DEF:5, DL:5, LB:6, DB:7 };
+
+        function normPos(pos) {
+            if (!pos) return null;
+            if (['DB','CB','S','SS','FS'].includes(pos)) return 'DB';
+            if (['DL','DE','DT','NT','IDL','EDGE'].includes(pos)) return 'DL';
+            if (['LB','OLB','ILB','MLB'].includes(pos)) return 'LB';
+            return pos;
+        }
+        const posOrder = pos => DW_POS_ORDER[normPos(pos)] ?? 9;
+
+        const OFFENSIVE_POS = new Set(['QB','RB','WR','TE','K']);
+        const IDP_POS = new Set(['QB','RB','WR','TE','K','LB','OLB','ILB','MLB','DL','DE','DT','NT','IDL','EDGE','DB','CB','S','SS','FS']);
+
+        const POS_FILTERS_OFF = ['ALL','QB','RB','WR','TE'];
+        const POS_FILTERS_IDP = ['ALL','QB','RB','WR','TE','LB','DL','DB'];
+
+        const AI_MODES = [
+            { id: 'rookies',   label: 'Rookie Targets', desc: 'Best rookies to draft ranked by fit with your roster needs and dynasty timeline' },
+            { id: 'fa_chat',   label: 'Ask AI',         desc: 'Ask anything about the draft, rookie rankings, or dynasty strategy' },
+        ];
+
+        function renderMarkdown(text) {
+            if (!text) return '';
+            const esc = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            return esc
+                .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/^### (.+)$/gm, '<div style="font-family:Inter,sans-serif;font-size:0.88rem;color:var(--gold);margin:0.75rem 0 0.2rem;letter-spacing:0.08em">$1</div>')
+                .replace(/^## (.+)$/gm,  '<div style="font-family:Inter,sans-serif;font-size:0.95rem;color:var(--gold);margin:0.9rem 0 0.25rem;letter-spacing:0.1em">$1</div>')
+                .replace(/^# (.+)$/gm,   '<div style="font-family:Inter,sans-serif;font-size:1.05rem;color:var(--gold);margin:1rem 0 0.3rem;letter-spacing:0.12em">$1</div>')
+                .replace(/\n\n/g, '<div style="margin:0.25rem 0"></div>');
+        }
+
+        function DraftWarRoom() {
+            const [phase, setPhase]   = useState('boot');
+            const [errMsg, setErrMsg] = useState('');
+            const [userId, setUserId] = useState('');
+            const [userAvatar, setUserAvatar] = useState('');
+            const [selectedYear, setSelectedYear] = useState(SEASON);
+            const [leagues, setLeagues]   = useState([]);
+            const [leagueId, setLeagueId] = useState('');
+            const [leagueInfo, setLeagueInfo]   = useState(null);
+            const [myRoster, setMyRoster]       = useState(null);
+            const [allRosters, setAllRosters]   = useState([]);
+            const [tradedPicks, setTradedPicks] = useState([]);
+            const [playersData, setPlayersData] = useState({});
+            const [statsData, setStatsData]     = useState({});
+            const [leagueLoading, setLeagueLoading] = useState(false);
+
+            const [posFilter, setPosFilter] = useState('ALL');
+            const [search, setSearch]       = useState('');
+
+            // AI state
+            const [aiMode,      setAiMode]      = useState('rookies');
+            const [aiAnalysis,  setAiAnalysis]  = useState(null);
+            const [aiLoading,   setAiLoading]   = useState(false);
+            const [aiError,     setAiError]     = useState(null);
+            const [aiChatInput, setAiChatInput] = useState('');
+            // Scout-free vs Pro (js/shared/pro-gate.js, loaded above the React
+            // chain). Ranked-by-fit recs + Ask AI are Pro; raw board/pick values
+            // stay free. The trigger gate here matters because BYOK users bypass
+            // the OD.callAI server tripwire.
+            const isPro = typeof window.wrIsPro !== 'function' || window.wrIsPro();
+            // One re-render once the async server tier resolves — a paying user
+            // whose local trial stamp lapsed reads 'free' pre-resolve and must
+            // not stay locked (trade-calculator.html tierTick pattern).
+            const [, setTierTick] = useState(0);
+            useEffect(() => { Promise.resolve(window.loadUserTier?.()).catch(() => {}).then(() => setTierTick(t => t + 1)); }, []);
+
+            const userIdRef = useRef('');
+            useEffect(() => { userIdRef.current = userId; }, [userId]);
+
+            useEffect(() => { boot(); }, []);
+
+            useEffect(() => {
+                if (!userIdRef.current) return;
+                fetchLeagues(userIdRef.current, selectedYear).then(lgs => {
+                    setLeagues(lgs || []);
+                    if (lgs?.length) setLeagueId(lgs[0].league_id);
+                }).catch(() => {});
+            }, [selectedYear]);
+
+            async function boot() {
+                try {
+                    const [user] = await Promise.all([fetchUser(sleeperUsername)]);
+                    setUserId(user.user_id);
+                    if (user.avatar) setUserAvatar(user.avatar);
+                    const lgs = await fetchLeagues(user.user_id, selectedYear);
+                    setLeagues(lgs || []);
+                    if (lgs && lgs.length > 0) setLeagueId(lgs[0].league_id);
+                    setPhase('ready');
+                } catch (e) {
+                    setErrMsg('Failed to connect to Sleeper. Check your network and try again.');
+                    setPhase('error');
+                }
+            }
+
+            useEffect(() => {
+                if (!leagueId || !userId || phase !== 'ready') return;
+                loadLeague();
+            }, [leagueId, userId, phase]);
+
+            async function loadLeague() {
+                setLeagueLoading(true);
+                setMyRoster(null); setAllRosters([]); setPlayersData({}); setStatsData({});
+                setTradedPicks([]); setAiAnalysis(null); setAiError(null);
+                try {
+                    const [rosters, info, stats, picks] = await Promise.all([
+                        fetchRosters(leagueId), fetchLeagueInfo(leagueId),
+                        fetchSeasonStats(STATS_YEAR), fetchTradedPicks(leagueId),
+                    ]);
+                    const myR = rosters.find(r => r.owner_id === userId) || null;
+                    setMyRoster(myR); setAllRosters(rosters);
+                    setLeagueInfo(info); setStatsData(stats);
+                    setTradedPicks(Array.isArray(picks) ? picks : []);
+
+                    // Bridge data for dhqContext() — enables full league format, quality gates, team mode
+                    if (!window.S) window.S = {};
+                    window.S.players = {};
+                    window.S.rosters = rosters || [];
+                    window.S.leagues = [{ league_id: leagueId, name: info?.name, scoring_settings: info?.scoring_settings, roster_positions: info?.roster_positions, settings: info?.settings }];
+                    window.S.currentLeagueId = leagueId;
+                    window.S.season = info?.season || STATS_YEAR;
+                    window.S.myRosterId = myR?.roster_id;
+                    window.S.tradedPicks = Array.isArray(picks) ? picks : [];
+                    window.S.playerStats = {};
+                    for (const [pid, s] of Object.entries(stats || {})) {
+                        const scoring = info?.scoring_settings || {};
+                        const pts = typeof calcPoints === 'function' ? calcPoints(s, scoring) : (s.pts_half_ppr ?? null);
+                        const gp = s.gp || s.gms_active || 0;
+                        window.S.playerStats[pid] = { prevTotal: pts ? Math.round(pts * 10) / 10 : 0, prevAvg: gp > 0 ? Math.round(pts / gp * 10) / 10 : 0 };
+                    }
+
+                    // Load player names in background — large payload, non-blocking
+                    fetchPlayers().then(p => { setPlayersData(p); if (window.S) window.S.players = p; }).catch(() => {});
+                } catch (e) {
+                    console.error('League load failed:', e);
+                    setErrMsg('Failed to load league data. Check your connection and try again.');
+                    setPhase('error');
+                } finally {
+                    setLeagueLoading(false);
+                }
+            }
+
+            // Derived
+            const isIDP = useMemo(() => {
+                const rp = leagueInfo?.roster_positions || [];
+                return !rp.includes('DEF');
+            }, [leagueInfo]);
+
+            const posFilters = isIDP ? POS_FILTERS_IDP : POS_FILTERS_OFF;
+            const relevantPosSet = isIDP ? IDP_POS : OFFENSIVE_POS;
+
+            const takenIds = useMemo(() => new Set(allRosters.flatMap(r => r.players || [])), [allRosters]);
+
+            function calcRawPts(s) {
+                if (!s) return null;
+                const scoring = leagueInfo?.scoring_settings;
+                if (scoring) {
+                    let total = 0;
+                    for (const [field, weight] of Object.entries(scoring)) {
+                        if (typeof weight !== 'number') continue;
+                        if (s[field] != null) total += Number(s[field]) * weight;
+                    }
+                    return total;
+                }
+                const pre = s.pts_half_ppr ?? s.pts_ppr ?? s.pts_std ?? null;
+                return pre !== null ? Number(pre) : null;
+            }
+
+            function getPts(id) {
+                const s = statsData[id];
+                if (!s) return -1;
+                const raw = calcRawPts(s);
+                return raw !== null ? raw : -1;
+            }
+
+            // My roster grouped
+            const myGrouped = useMemo(() => {
+                if (!myRoster?.players || !Object.keys(playersData).length) return {};
+                const g = {};
+                for (const id of myRoster.players) {
+                    const p = playersData[id];
+                    if (!p) continue;
+                    const grp = normPos(p.position) || 'Other';
+                    if (!g[grp]) g[grp] = [];
+                    g[grp].push({ id, p });
+                }
+                for (const grp of Object.keys(g)) g[grp].sort((a,b) => getPts(b.id) - getPts(a.id));
+                return g;
+            }, [myRoster, playersData, statsData]);
+            const myGroups = Object.keys(myGrouped).sort((a,b) => posOrder(a) - posOrder(b));
+
+            function rosterStatusClass(id) {
+                if (!myRoster) return '';
+                if ((myRoster.starters||[]).includes(id)) return 'ps-starter';
+                if ((myRoster.reserve||[]).includes(id))  return 'ps-ir';
+                if ((myRoster.taxi||[]).includes(id))     return 'ps-taxi';
+                return '';
+            }
+
+            // Available rookies (not on any roster, years_exp === 0)
+            const allRookies = useMemo(() => {
+                if (!Object.keys(playersData).length || !allRosters.length) return [];
+                return Object.entries(playersData)
+                    .filter(([id, p]) =>
+                        !takenIds.has(id) &&
+                        p.years_exp === 0 &&
+                        relevantPosSet.has(p.position) &&
+                        (p.team || p.search_rank != null)
+                    )
+                    .map(([id, p]) => ({
+                        id,
+                        name: p.full_name || `${p.first_name||''} ${p.last_name||''}`.trim() || id,
+                        pos: p.position,
+                        norm: normPos(p.position),
+                        team: p.team,
+                        searchRank: p.search_rank ?? 9999,
+                    }))
+                    .sort((a,b) => {
+                        const posOrd = posOrder(a.pos) - posOrder(b.pos);
+                        if (posOrd !== 0) return posOrd;
+                        return a.searchRank - b.searchRank;
+                    });
+            }, [playersData, takenIds, isIDP]);
+
+            const filteredRookies = useMemo(() => {
+                return allRookies.filter(r => {
+                    let posOk = posFilter === 'ALL' || r.norm === posFilter || r.pos === posFilter;
+                    const q = search.toLowerCase();
+                    const srchOk = !q || r.name.toLowerCase().includes(q) || (r.team||'').toLowerCase().includes(q);
+                    return posOk && srchOk;
+                });
+            }, [allRookies, posFilter, search]);
+
+            // AI context
+            function buildContext() {
+                const rosterPositions = (leagueInfo?.roster_positions || []).filter(p => p !== 'BN' && p !== 'IR');
+                const myRosterSummary = (myRoster?.players || []).map(id => {
+                    const p = playersData[id];
+                    if (!p) return null;
+                    const s = statsData[id];
+                    const rawPts = calcRawPts(s);
+                    return {
+                        pos: p.position,
+                        name: p.full_name || `${p.first_name||''} ${p.last_name||''}`.trim(),
+                        team: p.team || 'FA',
+                        pts: rawPts ? Number(rawPts).toFixed(1) : null,
+                        yrsExp: p.years_exp ?? null,
+                        isStarter: (myRoster.starters||[]).includes(id),
+                        isTaxi: (myRoster.taxi||[]).includes(id),
+                    };
+                }).filter(Boolean);
+
+                const availableRookies = allRookies.slice(0, 60).map(r => ({
+                    pos: r.pos, name: r.name, team: r.team || 'UFA',
+                }));
+
+                // Draft pick calculation — same logic as trade-calculator
+                const leagueSeason = parseInt(leagueInfo?.season || SEASON);
+                const picksByOwner = buildPicksByOwner(allRosters, tradedPicks, leagueSeason);
+                const myPicks = picksByOwner[String(userId)] || [];
+                // Standard pick count = DRAFT_ROUNDS * PICK_HORIZON if no trades happened
+                const standardTotal = DRAFT_ROUNDS * PICK_HORIZON;
+
+                // Team assessment for mode-aware AI
+                const teamAssess = typeof window.assessTeamFromGlobal === 'function'
+                    ? window.assessTeamFromGlobal(myRoster?.roster_id) : null;
+
+                return {
+                    leagueName: leagueInfo?.name || 'Fantasy League',
+                    myOwner: sleeperUsername,
+                    faabBudget: 0, startingBudget: 0,
+                    myRoster: myRosterSummary, rosterPositions,
+                    // League format fields for AI context
+                    scoringSettings: leagueInfo?.scoring_settings || {},
+                    scoring_settings: leagueInfo?.scoring_settings || {},
+                    roster_positions: leagueInfo?.roster_positions || [],
+                    // Team mode fields for AI context
+                    teamTier: teamAssess?.tier || '',
+                    teamWindow: teamAssess?.window || '',
+                    healthScore: teamAssess?.healthScore || 0,
+                    tier: teamAssess?.tier || '',
+                    tradeWindow: teamAssess?.window || '',
+                    topFreeAgents: [], availableRookies,
+                    myDraftPicks: myPicks,
+                    standardPickTotal: standardTotal,
+                    question: aiChatInput,
+                };
+            }
+
+            async function runAnalysis() {
+                // Trigger gate (not just the server tripwire): free never calls AI.
+                if (typeof window.wrIsPro === 'function' && !window.wrIsPro()) {
+                    if (window.showProLaunchPage) window.showProLaunchPage();
+                    else if (window.showUpgradePrompt) window.showUpgradePrompt('draft_ai_standalone');
+                    return;
+                }
+                setAiLoading(true); setAiError(null); setAiAnalysis(null);
+                try {
+                    const ctx = buildContext();
+                    const dhqEnrichment = (typeof dhqContext === 'function') ? dhqContext(false) : null;
+                    const enrichedCtx = dhqEnrichment ? { ...ctx, _dhqContext: dhqEnrichment } : ctx;
+                    const result = await window.OD.callAI({ type: aiMode, context: enrichedCtx });
+                    setAiAnalysis(result.analysis);
+                } catch(e) {
+                    setAiError(e.message);
+                } finally {
+                    setAiLoading(false);
+                }
+            }
+
+            // ---- Computed data for new panels ----
+            const PICK_VALUES = { 1:6250, 2:3150, 3:1650, 4:850, 5:450, 6:225, 7:125 };
+            function getPickDHQ(season, round, totalTeams) {
+                if (window.App?.LI?.dhqPickValueFn) {
+                    const val = window.App.LI.dhqPickValueFn(season, round, Math.ceil((totalTeams || 12) / 2));
+                    if (val != null) return val;
+                }
+                return PICK_VALUES[round] || 100;
+            }
+
+            const leagueSeason = parseInt(leagueInfo?.season || SEASON);
+            const totalTeams = allRosters.length || 12;
+            const picksByOwner = useMemo(() => {
+                if (!allRosters.length) return {};
+                return buildPicksByOwner(allRosters, tradedPicks, leagueSeason);
+            }, [allRosters, tradedPicks, leagueSeason]);
+            const myPicks = picksByOwner[String(userId)] || [];
+
+            const myPicksWithValue = useMemo(() => {
+                return myPicks.map(pk => ({
+                    ...pk,
+                    dhq: getPickDHQ(pk.year, pk.round, totalTeams),
+                    label: `${pk.year} Rd ${pk.round}`,
+                }));
+            }, [myPicks, totalTeams]);
+
+            const totalDraftCapital = useMemo(() => myPicksWithValue.reduce((s, p) => s + p.dhq, 0), [myPicksWithValue]);
+
+            // Next pick: earliest pick in current season
+            const nextPick = useMemo(() => {
+                const currentYearPicks = myPicksWithValue.filter(p => p.year === leagueSeason).sort((a,b) => a.round - b.round);
+                return currentYearPicks[0] || null;
+            }, [myPicksWithValue, leagueSeason]);
+
+            // Positional needs analysis
+            const positionalNeeds = useMemo(() => {
+                const rp = leagueInfo?.roster_positions || [];
+                const required = {};
+                for (const pos of rp) {
+                    if (pos === 'BN' || pos === 'IR') continue;
+                    const norm = (pos === 'FLEX' || pos === 'SUPER_FLEX' || pos === 'REC_FLEX' || pos === 'WRRB_FLEX') ? null : normPos(pos);
+                    if (norm) {
+                        required[norm] = (required[norm] || 0) + 1;
+                    }
+                }
+                // Count FLEX slots as fractional needs for RB/WR/TE
+                const flexCount = rp.filter(p => p === 'FLEX').length;
+                const sfCount = rp.filter(p => p === 'SUPER_FLEX').length;
+
+                const have = {};
+                for (const grp of myGroups) {
+                    have[grp] = myGrouped[grp]?.length || 0;
+                }
+
+                const positions = ['QB','RB','WR','TE'];
+                if (isIDP) positions.push('LB','DL','DB');
+
+                return positions.map(pos => {
+                    const req = required[pos] || 0;
+                    const got = have[pos] || 0;
+                    const starterGap = req - got;
+                    let depth = got - req;
+                    let level, color;
+                    if (starterGap > 0) { level = 'CRITICAL'; color = '#E74C3C'; }
+                    else if (depth <= 1) { level = 'HIGH'; color = '#F39C12'; }
+                    else if (depth <= 3) { level = 'MODERATE'; color = '#F7DC6F'; }
+                    else { level = 'CAN WAIT'; color = '#58D68D'; }
+                    return { pos, required: req, have: got, level, color, priority: starterGap > 0 ? 3 : depth <= 1 ? 2 : depth <= 3 ? 1 : 0 };
+                }).sort((a,b) => b.priority - a.priority || a.pos.localeCompare(b.pos));
+            }, [leagueInfo, myGrouped, myGroups, isIDP]);
+
+            // Fit score for prospect
+            const getFitScore = (rookiePos) => {
+                const need = positionalNeeds.find(n => n.pos === normPos(rookiePos));
+                if (!need) return 40;
+                if (need.level === 'CRITICAL') return 100;
+                if (need.level === 'HIGH') return 85;
+                if (need.level === 'MODERATE') return 60;
+                return 35;
+            };
+
+            const fitColor = (score) => score >= 80 ? '#58D68D' : score >= 50 ? '#F7DC6F' : '#888';
+
+            // Tiered rookies for center panel
+            const tieredRookies = useMemo(() => {
+                const withFit = allRookies.map((r, idx) => ({ ...r, fit: getFitScore(r.pos), rank: idx }));
+                return {
+                    elite: withFit.slice(0, 5),
+                    solid: withFit.slice(5, 15),
+                    depth: withFit.slice(15, 40),
+                };
+            }, [allRookies, positionalNeeds]);
+
+            // Team health
+            const teamHealth = useMemo(() => {
+                if (!myRoster || !window.assessTeamFromGlobal) return null;
+                try { return window.assessTeamFromGlobal(myRoster.roster_id); } catch(e) { return null; }
+            }, [myRoster]);
+
+            // Auto recommendations for AI panel
+            const autoRecs = useMemo(() => {
+                if (!nextPick || !allRookies.length || !positionalNeeds.length) return [];
+                const topNeeds = positionalNeeds.filter(n => n.priority >= 2).map(n => n.pos);
+                const candidates = allRookies.slice(0, 20).map(r => ({ ...r, fit: getFitScore(r.pos) }));
+                // Sort by fit then rank
+                candidates.sort((a,b) => b.fit - a.fit || a.searchRank - b.searchRank);
+                return candidates.slice(0, 5);
+            }, [nextPick, allRookies, positionalNeeds]);
+
+            // ---- Render states ----
+            if (phase === 'boot') return (
+                <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'0.75rem' }}>
+                    <div style={{ color:'var(--gold)', fontFamily:'Inter,sans-serif', fontSize:'1.4rem', letterSpacing:'0.12em' }}>LOADING DRAFT COMMAND CENTER</div>
+                    <div style={{ color:'var(--silver)', fontSize:'0.75rem', opacity:0.6 }}>Connecting to Sleeper API...</div>
+                </div>
+            );
+            if (phase === 'error') return (
+                <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'2rem' }}>
+                    <div style={{ textAlign:'center' }}>
+                        <div style={{ color:'#E74C3C', marginBottom:'1rem', fontSize:'0.9rem' }}>{errMsg}</div>
+                        <button onClick={() => window.location.href='index.html'}
+                            style={{ padding:'0.5rem 1.2rem', background:'var(--gold)', border:'none', borderRadius:'4px', cursor:'pointer', fontFamily:'Inter,sans-serif', fontWeight:700, fontSize:'0.85rem' }}>
+                            &larr; Back to Dashboard
+                        </button>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="page-shell" style={{ display:'flex', flexDirection:'column', overflow:'hidden' }}>
+
+                    {/* HEADER */}
+                    <div className="wr-header">
+                        <button className="back-btn" onClick={() => window.location.href='index.html'}>&larr; Dashboard</button>
+                        <div className="wr-title">&#9965; {selectedYear} DRAFT COMMAND CENTER</div>
+                        <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
+                            style={{ background:'var(--charcoal)', border:'1px solid rgba(212,175,55,0.4)', borderRadius:'4px', color:'var(--gold)', fontFamily:'Inter,sans-serif', fontWeight:'700', fontSize:'0.72rem', padding:'0.18rem 0.45rem', minHeight:'44px', cursor:'pointer', outline:'none', flexShrink:0 }}>
+                            {AVAILABLE_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                        <select className="league-select" value={leagueId} onChange={e => setLeagueId(e.target.value)}>
+                            {leagues.map(l => <option key={l.league_id} value={l.league_id}>{l.name}</option>)}
+                        </select>
+                        {nextPick && (
+                            <span style={{ fontFamily:'Inter,sans-serif', fontSize:'0.7rem', fontWeight:600, color:'var(--white)', background:'rgba(212,175,55,0.12)', border:'1px solid rgba(212,175,55,0.3)', borderRadius:'4px', padding:'0.2rem 0.55rem', whiteSpace:'nowrap' }}>
+                                Next pick: <span style={{ color:'var(--gold)', fontWeight:700 }}>{nextPick.year} Rd {nextPick.round}</span>
+                            </span>
+                        )}
+                        {totalDraftCapital > 0 && (
+                            <span style={{ fontFamily:'Inter,sans-serif', fontSize:'0.65rem', fontWeight:600, color:'var(--silver)', whiteSpace:'nowrap' }}>
+                                Capital: <span style={{ color:'var(--gold)' }}>{totalDraftCapital.toLocaleString()} DHQ</span>
+                            </span>
+                        )}
+                        {userAvatar && <img src={`https://sleepercdn.com/avatars/thumbs/${userAvatar}`} alt="" style={{ width:'28px', height:'28px', borderRadius:'4px', flexShrink:0 }} />}
+                    </div>
+
+                    {leagueLoading ? (
+                        <div className="center-msg" style={{ paddingTop:'4rem' }}>Loading league data...</div>
+                    ) : (
+                        <div className="wr-grid">
+
+                            {/* ===== LEFT: DRAFT STRATEGY ===== */}
+                            <div className="panel">
+                                <div className="panel-header">
+                                    <div className="ph-title">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M9 3v18"/>
+                                        </svg>
+                                        DRAFT STRATEGY
+                                        {myRoster && (
+                                            <span style={{ marginLeft:'auto', color:'var(--silver)', fontSize:'0.58rem', opacity:0.5 }}>
+                                                {myRoster.players?.length||0} rostered
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="ph-sub"></div>
+                                </div>
+                                <div className="panel-body" style={{ padding:'0.5rem 0.6rem' }}>
+                                    {!myRoster && <div className="center-msg">No roster data</div>}
+
+                                    {myRoster && (<>
+                                        {/* Positional Priority Stack */}
+                                        <div style={{ marginBottom:'0.9rem' }}>
+                                            <div style={{ fontFamily:'Inter,sans-serif', fontSize:'0.85rem', color:'var(--gold)', letterSpacing:'0.08em', marginBottom:'0.4rem' }}>POSITIONAL PRIORITY</div>
+                                            {positionalNeeds.map((n, i) => (
+                                                <div key={n.pos} style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.25rem 0.35rem', marginBottom:'0.15rem', background:'rgba(255,255,255,0.02)', borderRadius:'4px', borderLeft:`3px solid ${n.color}` }}>
+                                                    <span style={{ fontFamily:'Inter,sans-serif', fontSize:'0.75rem', color:'var(--silver)', width:'18px', textAlign:'right' }}>{i+1}.</span>
+                                                    <span style={{ fontFamily:'Inter,sans-serif', fontSize:'0.8rem', color: posColor(n.pos), width:'30px' }}>{n.pos}</span>
+                                                    <span style={{ fontSize:'0.65rem', fontWeight:700, color: n.color, textTransform:'uppercase', letterSpacing:'0.04em' }}>{n.level}</span>
+                                                    <span style={{ marginLeft:'auto', fontSize:'0.6rem', color:'var(--silver)', opacity:0.5 }}>{n.have} on roster / {n.required} starter slots</span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Your Picks */}
+                                        <div style={{ marginBottom:'0.9rem' }}>
+                                            <div style={{ fontFamily:'Inter,sans-serif', fontSize:'0.85rem', color:'var(--gold)', letterSpacing:'0.08em', marginBottom:'0.4rem' }}>YOUR PICKS</div>
+                                            {myPicksWithValue.length === 0 && <div style={{ fontSize:'0.7rem', color:'var(--silver)', opacity:0.4 }}>No picks found</div>}
+                                            {myPicksWithValue.map((pk, i) => (
+                                                <div key={`${pk.year}-${pk.round}-${pk.fromRosterId}`} style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.2rem 0.35rem', marginBottom:'0.1rem', background: pk.year === leagueSeason ? 'rgba(212,175,55,0.06)' : 'rgba(255,255,255,0.02)', borderRadius:'4px' }}>
+                                                    <span style={{ fontFamily:'Inter,sans-serif', fontSize:'0.72rem', color: pk.year === leagueSeason ? 'var(--gold)' : 'var(--silver)', width:'68px' }}>{pk.year} RD {pk.round}</span>
+                                                    <span style={{ fontSize:'0.62rem', color:'var(--silver)', opacity:0.5, flex:1 }}>
+                                                        {pk.fromRosterId !== String(myRoster?.roster_id) ? '(acquired)' : '(own)'}
+                                                    </span>
+                                                    <span style={{ fontSize:'0.65rem', fontWeight:700, color:'var(--gold)' }}>{pk.dhq.toLocaleString()} DHQ</span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Pick Value Summary */}
+                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.4rem 0.5rem', background:'rgba(212,175,55,0.08)', border:'1px solid rgba(212,175,55,0.2)', borderRadius:'6px', marginBottom:'0.9rem' }}>
+                                            <span style={{ fontFamily:'Inter,sans-serif', fontSize:'0.8rem', color:'var(--gold)', letterSpacing:'0.06em' }}>TOTAL DRAFT CAPITAL</span>
+                                            <span style={{ fontFamily:'Inter,sans-serif', fontSize:'1rem', color:'var(--gold)' }}>{totalDraftCapital.toLocaleString()} DHQ</span>
+                                        </div>
+
+                                        {/* Current Roster Health */}
+                                        {teamHealth && (
+                                            <div style={{ marginBottom:'0.5rem' }}>
+                                                <div style={{ fontFamily:'Inter,sans-serif', fontSize:'0.85rem', color:'var(--gold)', letterSpacing:'0.08em', marginBottom:'0.4rem' }}>ROSTER HEALTH</div>
+                                                <div style={{ display:'flex', alignItems:'center', gap:'0.6rem', padding:'0.35rem 0.5rem', background:'rgba(255,255,255,0.03)', borderRadius:'6px', border:'1px solid rgba(212,175,55,0.12)' }}>
+                                                    <span style={{ fontFamily:'Inter,sans-serif', fontSize:'1.3rem', color: (teamHealth.score||teamHealth.overall||0) >= 70 ? '#58D68D' : (teamHealth.score||teamHealth.overall||0) >= 45 ? '#F7DC6F' : '#E74C3C' }}>
+                                                        {Math.round(teamHealth.score ?? teamHealth.overall ?? 0)}
+                                                    </span>
+                                                    <span style={{ fontSize:'0.65rem', color:'var(--silver)', opacity:0.6 }}>/ 100</span>
+                                                    {teamHealth.grade && <span style={{ fontFamily:'Inter,sans-serif', fontSize:'0.85rem', color:'var(--gold)', marginLeft:'auto' }}>{teamHealth.grade}</span>}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>)}
+                                </div>
+                            </div>
+
+                            {/* ===== CENTER: PROSPECT BOARD ===== */}
+                            <div className="panel">
+                                <div className="panel-header">
+                                    <div className="ph-title">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{color:'var(--gold)'}}>
+                                            <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+                                        </svg>
+                                        PROSPECT BOARD
+                                        <span style={{ color:'var(--silver)', fontSize:'0.65rem', opacity:0.55, marginLeft:'auto' }}>{filteredRookies.length}</span>
+                                    </div>
+                                    <div className="ph-sub">
+                                        {posFilters.map(p => (
+                                            <button key={p} className={`filter-btn${posFilter===p?' active':''}`}
+                                                onClick={() => setPosFilter(p)}>{p}</button>
+                                        ))}
+                                        <input className="search-input" placeholder="Search..."
+                                            value={search} onChange={e => setSearch(e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="panel-body" style={{ padding:'0.4rem' }}>
+                                    {Object.keys(playersData).length === 0 && <div className="center-msg">Loading player data...</div>}
+
+                                    {Object.keys(playersData).length > 0 && posFilter === 'ALL' && !search && (<>
+                                        {/* TIER 1: ELITE */}
+                                        {tieredRookies.elite.length > 0 && (
+                                            <div style={{ border:'1.5px solid var(--gold)', borderRadius:'8px', padding:'0.4rem', marginBottom:'0.5rem', background:'rgba(212,175,55,0.04)' }}>
+                                                <div style={{ fontFamily:'Inter,sans-serif', fontSize:'0.8rem', color:'var(--gold)', letterSpacing:'0.1em', marginBottom:'0.3rem', display:'flex', alignItems:'center', gap:'0.4rem' }}>
+                                                    <span style={{ background:'var(--gold)', color:'var(--black)', fontSize:'0.55rem', fontWeight:700, padding:'1px 5px', borderRadius:'3px', fontFamily:'Inter,sans-serif' }}>TIER 1</span>
+                                                    ELITE PROSPECTS
+                                                </div>
+                                                {tieredRookies.elite.map(r => {
+                                                    const fit = r.fit;
+                                                    return (
+                                                        <div key={r.id} className="player-row" style={{ borderLeft:`3px solid var(--gold)` }}>
+                                                            <span className="pos-badge" style={{ color: posColor(r.pos), borderColor: posColor(r.pos) }}>{r.pos}</span>
+                                                            <a className="player-name" href="#"
+                                                                onClick={e => { e.preventDefault(); if (window.WR?.openPlayerCard) window.WR.openPlayerCard(r.id); else if (window.openFWPlayerModal) openFWPlayerModal(r.id, playersData, statsData);}}
+                                                                style={{ color:'inherit', textDecoration:'none', cursor:'pointer' }}
+                                                                onMouseEnter={e=>e.currentTarget.style.color='var(--gold)'}
+                                                                onMouseLeave={e=>e.currentTarget.style.color='inherit'}>
+                                                                {r.name}
+                                                                <span className="player-team"> {r.team||'UFA'}</span>
+                                                            </a>
+                                                            {isPro && <span style={{ fontSize:'0.6rem', fontWeight:700, color: fitColor(fit), flexShrink:0 }}>FIT {fit}%</span>}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* TIER 2: SOLID STARTERS */}
+                                        {tieredRookies.solid.length > 0 && (
+                                            <div style={{ border:'1.5px solid var(--silver)', borderRadius:'8px', padding:'0.4rem', marginBottom:'0.5rem', background:'rgba(192,192,192,0.03)' }}>
+                                                <div style={{ fontFamily:'Inter,sans-serif', fontSize:'0.8rem', color:'var(--silver)', letterSpacing:'0.1em', marginBottom:'0.3rem', display:'flex', alignItems:'center', gap:'0.4rem' }}>
+                                                    <span style={{ background:'var(--silver)', color:'var(--black)', fontSize:'0.55rem', fontWeight:700, padding:'1px 5px', borderRadius:'3px', fontFamily:'Inter,sans-serif' }}>TIER 2</span>
+                                                    SOLID STARTERS
+                                                </div>
+                                                {tieredRookies.solid.map(r => {
+                                                    const fit = r.fit;
+                                                    return (
+                                                        <div key={r.id} className="player-row">
+                                                            <span className="pos-badge" style={{ color: posColor(r.pos), borderColor: posColor(r.pos) }}>{r.pos}</span>
+                                                            <a className="player-name" href="#"
+                                                                onClick={e => { e.preventDefault(); if (window.WR?.openPlayerCard) window.WR.openPlayerCard(r.id); else if (window.openFWPlayerModal) openFWPlayerModal(r.id, playersData, statsData);}}
+                                                                style={{ color:'inherit', textDecoration:'none', cursor:'pointer' }}
+                                                                onMouseEnter={e=>e.currentTarget.style.color='var(--gold)'}
+                                                                onMouseLeave={e=>e.currentTarget.style.color='inherit'}>
+                                                                {r.name}
+                                                                <span className="player-team"> {r.team||'UFA'}</span>
+                                                            </a>
+                                                            {isPro && <span style={{ fontSize:'0.6rem', fontWeight:700, color: fitColor(fit), flexShrink:0 }}>FIT {fit}%</span>}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* TIER 3: DEPTH / UPSIDE */}
+                                        {tieredRookies.depth.length > 0 && (
+                                            <div style={{ border:'1.5px solid rgba(192,192,192,0.25)', borderRadius:'8px', padding:'0.4rem', marginBottom:'0.5rem', background:'rgba(255,255,255,0.01)' }}>
+                                                <div style={{ fontFamily:'Inter,sans-serif', fontSize:'0.8rem', color:'rgba(192,192,192,0.5)', letterSpacing:'0.1em', marginBottom:'0.3rem', display:'flex', alignItems:'center', gap:'0.4rem' }}>
+                                                    <span style={{ background:'rgba(192,192,192,0.3)', color:'var(--black)', fontSize:'0.55rem', fontWeight:700, padding:'1px 5px', borderRadius:'3px', fontFamily:'Inter,sans-serif' }}>TIER 3</span>
+                                                    DEPTH / UPSIDE
+                                                </div>
+                                                {tieredRookies.depth.map(r => {
+                                                    const fit = r.fit;
+                                                    return (
+                                                        <div key={r.id} className="player-row" style={{ opacity:0.75 }}>
+                                                            <span className="pos-badge" style={{ color: posColor(r.pos), borderColor: posColor(r.pos) }}>{r.pos}</span>
+                                                            <a className="player-name" href="#"
+                                                                onClick={e => { e.preventDefault(); if (window.WR?.openPlayerCard) window.WR.openPlayerCard(r.id); else if (window.openFWPlayerModal) openFWPlayerModal(r.id, playersData, statsData);}}
+                                                                style={{ color:'inherit', textDecoration:'none', cursor:'pointer' }}
+                                                                onMouseEnter={e=>e.currentTarget.style.color='var(--gold)'}
+                                                                onMouseLeave={e=>e.currentTarget.style.color='inherit'}>
+                                                                {r.name}
+                                                                <span className="player-team"> {r.team||'UFA'}</span>
+                                                            </a>
+                                                            {isPro && <span style={{ fontSize:'0.6rem', fontWeight:700, color: fitColor(fit), flexShrink:0 }}>FIT {fit}%</span>}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </>)}
+
+                                    {/* Full filtered list (shown when filtering/searching, or below tiers) */}
+                                    {(posFilter !== 'ALL' || search) && (<>
+                                        {filteredRookies.length === 0 && <div className="center-msg">No rookies found</div>}
+                                        {filteredRookies.map((r, idx) => {
+                                            const fit = getFitScore(r.pos);
+                                            return (
+                                                <div key={r.id} className="player-row">
+                                                    <span style={{ color:'var(--silver)', opacity:0.4, fontSize:'0.6rem', width:'20px', textAlign:'right', flexShrink:0 }}>{idx+1}</span>
+                                                    <span className="pos-badge" style={{ color: posColor(r.pos), borderColor: posColor(r.pos) }}>{r.pos}</span>
+                                                    <a className="player-name" href="#"
+                                                        onClick={e => { e.preventDefault(); if (window.WR?.openPlayerCard) window.WR.openPlayerCard(r.id); else if (window.openFWPlayerModal) openFWPlayerModal(r.id, playersData, statsData);}}
+                                                        style={{ color:'inherit', textDecoration:'none', cursor:'pointer' }}
+                                                        onMouseEnter={e=>e.currentTarget.style.color='var(--gold)'}
+                                                        onMouseLeave={e=>e.currentTarget.style.color='inherit'}>
+                                                        {r.name}
+                                                        <span className="player-team"> {r.team||'UFA'}</span>
+                                                    </a>
+                                                    {isPro && <span style={{ fontSize:'0.6rem', fontWeight:700, color: fitColor(fit), flexShrink:0 }}>FIT {fit}%</span>}
+                                                </div>
+                                            );
+                                        })}
+                                    </>)}
+                                </div>
+                            </div>
+
+                            {/* ===== RIGHT: DRAFT AI ===== */}
+                            <div className="panel">
+                                <div className="panel-header">
+                                    <div className="ph-title">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{color:'var(--gold)',flexShrink:0}}>
+                                            <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+                                        </svg>
+                                        DRAFT AI
+                                        <span style={{ background:'var(--gold)', color:'var(--black)', fontFamily:'Inter,sans-serif', fontSize:'0.52rem', fontWeight:700, padding:'0.1rem 0.35rem', borderRadius:'3px', letterSpacing:'0.06em', marginLeft:'0.4rem' }}>BETA</span>
+                                    </div>
+                                    <div className="ph-sub" style={{ gap:'0.35rem' }}>
+                                        {isPro && AI_MODES.map(m => (
+                                            <button key={m.id} className={`ai-mode-btn${aiMode===m.id?' active':''}`}
+                                                onClick={() => setAiMode(m.id)}>{m.label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="panel-body" style={{ padding:'0.85rem 0.8rem' }}>
+
+                                    {/* Free: one lock card replaces the rec/AI stack; the raw
+                                        pick-value row below stays. */}
+                                    {!isPro && (
+                                        <div dangerouslySetInnerHTML={{ __html: window.wrLockCard
+                                            ? window.wrLockCard('Draft AI', 'draft_ai_standalone', 'Fit-ranked rookie targets and Ask AI are Scout Pro.')
+                                            : '' }} />
+                                    )}
+
+                                    {/* Auto-generated pick recommendations */}
+                                    {isPro && nextPick && autoRecs.length > 0 && (
+                                        <div style={{ marginBottom:'0.9rem', padding:'0.5rem', background:'rgba(212,175,55,0.05)', border:'1px solid rgba(212,175,55,0.18)', borderRadius:'6px' }}>
+                                            <div style={{ fontFamily:'Inter,sans-serif', fontSize:'0.82rem', color:'var(--gold)', letterSpacing:'0.08em', marginBottom:'0.15rem' }}>
+                                                AT YOUR NEXT PICK ({nextPick.year} Rd {nextPick.round})
+                                            </div>
+                                            <div style={{ fontSize:'0.62rem', color:'var(--silver)', opacity:0.5, marginBottom:'0.4rem' }}>
+                                                Pick value: <span style={{ color:'var(--gold)', fontWeight:700 }}>{getPickDHQ(nextPick.year, nextPick.round, totalTeams).toLocaleString()} DHQ</span>
+                                            </div>
+                                            {autoRecs.map((r, i) => (
+                                                <div key={r.id} style={{ display:'flex', alignItems:'center', gap:'0.4rem', padding:'0.18rem 0.25rem', marginBottom:'0.1rem', borderRadius:'3px', background: i === 0 ? 'rgba(212,175,55,0.08)' : 'transparent' }}>
+                                                    <span style={{ fontFamily:'Inter,sans-serif', fontSize:'0.68rem', color: i === 0 ? 'var(--gold)' : 'var(--silver)', width:'16px' }}>{i+1}.</span>
+                                                    <span className="pos-badge" style={{ color: posColor(r.pos), borderColor: posColor(r.pos), transform:'scale(0.9)' }}>{r.pos}</span>
+                                                    <span style={{ fontSize:'0.75rem', fontWeight:600, flex:1, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{r.name}</span>
+                                                    <span style={{ fontSize:'0.58rem', fontWeight:700, color: fitColor(r.fit) }}>FIT {r.fit}%</span>
+                                                </div>
+                                            ))}
+                                            <div style={{ fontSize:'0.58rem', color:'var(--silver)', opacity:0.35, marginTop:'0.3rem', fontStyle:'italic' }}>Based on roster needs and prospect rankings</div>
+                                        </div>
+                                    )}
+
+                                    {/* Pick trade value */}
+                                    {nextPick && (
+                                        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.3rem 0.45rem', marginBottom:'0.75rem', background:'rgba(255,255,255,0.02)', borderRadius:'4px', border:'1px solid rgba(212,175,55,0.1)' }}>
+                                            <span style={{ fontSize:'0.68rem', color:'var(--silver)' }}>Your {nextPick.year} Rd {nextPick.round} is worth</span>
+                                            <span style={{ fontFamily:'Inter,sans-serif', fontSize:'0.9rem', color:'var(--gold)', marginLeft:'auto' }}>{getPickDHQ(nextPick.year, nextPick.round, totalTeams).toLocaleString()} DHQ</span>
+                                        </div>
+                                    )}
+
+                                    {isPro && <React.Fragment>
+                                    <div style={{ fontSize:'0.68rem', color:'var(--silver)', opacity:0.55, marginBottom:'0.75rem', lineHeight:1.5 }}>
+                                        {AI_MODES.find(m => m.id === aiMode)?.desc}
+                                    </div>
+                                    {aiMode === 'fa_chat' && (
+                                        <textarea className="ai-chat-input"
+                                            placeholder="e.g. Should I take the best available RB at pick 3 or go WR given my roster needs?"
+                                            value={aiChatInput}
+                                            onChange={e => setAiChatInput(e.target.value)} />
+                                    )}
+                                    <button type="button" className="ai-analyze-btn" onClick={runAnalysis}
+                                        disabled={aiLoading || (aiMode==='fa_chat' && !aiChatInput.trim()) || !myRoster}>
+                                        {aiLoading
+                                            ? <><span className="ai-spinner"/>&nbsp;Analyzing...</>
+                                            : '✦ Run Analysis'}
+                                    </button>
+                                    {aiError && <div className="ai-error-msg">Error: {aiError}</div>}
+                                    {aiAnalysis && (
+                                        <div className="ai-output"
+                                            dangerouslySetInnerHTML={{ __html: renderMarkdown(aiAnalysis) }} />
+                                    )}
+                                    {!aiAnalysis && !aiLoading && !aiError && !autoRecs.length && (
+                                        <div style={{ textAlign:'center', padding:'2.5rem 1rem', color:'var(--silver)', opacity:0.28, fontSize:'0.73rem' }}>
+                                            Select a mode and run analysis
+                                        </div>
+                                    )}
+                                    </React.Fragment>}
+                                </div>
+                            </div>
+
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<DraftWarRoom />);
+    </script>
+<footer style="text-align:center;padding:16px;font-size:12px;color:#666;border-top:1px solid #1a1a1a;margin-top:32px;">&copy; 2026 C2 Football LLC. All rights reserved.</footer>
+</body>
+</html>

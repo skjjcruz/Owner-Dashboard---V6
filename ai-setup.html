@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
+  <title>Dynasty HQ — Your AI Key</title>
+  <style id="preboot-hide">html{visibility:hidden!important}</style>
+  <noscript><style>html{visibility:visible!important}</style></noscript>
+  <script>
+    (function () {
+      function reveal(){ var s=document.getElementById('preboot-hide'); if(s&&s.parentNode){ s.parentNode.removeChild(s); } }
+      try {
+        var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
+        if (!sess || !sess.token) { window.location.replace('landing.html'); return; }
+        reveal();
+      } catch (e) { reveal(); }
+    })();
+  </script>
+  <link rel="icon" href="icon-192.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{--gold:#D4AF37;--dark-gold:#B8941E;--bg:#0A0A0A;--bg2:#141414;--border:rgba(255,255,255,.1);--white:#FFFFFF;--silver:#C0C0C0;--muted:rgba(255,255,255,.5);--green:#34d399;--red:#f87171}
+    html,body{min-height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--white);-webkit-font-smoothing:antialiased}
+    body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px 24px 8vh}
+    body::before{content:'';position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:clamp(400px,60vw,900px);height:clamp(400px,60vw,900px);background:url('icon-192.png') center/contain no-repeat;opacity:.06;filter:brightness(1.2);z-index:0;pointer-events:none}
+    .card{position:relative;z-index:1;width:100%;max-width:460px;text-align:center}
+    .logo{width:64px;height:64px;border-radius:15px;margin:0 auto 16px;display:block;box-shadow:0 4px 22px rgba(212,175,55,.25)}
+    .step{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);margin-bottom:8px}
+    h1{font-size:24px;font-weight:800;margin-bottom:10px}
+    .sub{font-size:14px;color:var(--silver);line-height:1.55;margin-bottom:22px}
+    .panel{text-align:left;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 6px}
+    .field{margin-bottom:12px}
+    .input,select.input{width:100%;padding:12px;font-size:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--white);font-family:inherit;outline:none;transition:border-color .15s}
+    .input:focus{border-color:var(--gold)}
+    .input::placeholder{color:var(--muted)}
+    .mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+    .provider-hint{font-size:12px;color:var(--muted);line-height:1.5;margin:-4px 0 12px}
+    .xai{margin-top:4px;padding-top:12px;border-top:1px solid var(--border)}
+    .xai p{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:8px}
+    .xai p strong{color:var(--silver)}
+    .lock{margin-top:12px;font-size:12px;color:var(--muted);line-height:1.6}
+    .lock strong{color:var(--silver)}
+    .alert{font-size:13px;padding:11px 14px;border-radius:8px;margin-top:12px;display:none;text-align:left}
+    .alert.show{display:block}
+    .alert-error{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.25)}
+    .alert-success{background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.25)}
+    .btn{width:100%;min-height:50px;font-size:15px;font-weight:800;border-radius:10px;border:none;background:linear-gradient(135deg,var(--gold),var(--dark-gold));color:#0a0a0a;cursor:pointer;transition:box-shadow .15s;margin-top:14px}
+    .btn:hover{box-shadow:0 6px 20px rgba(212,175,55,.3)}
+    .back{margin-top:18px;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit}
+    .back:hover{color:var(--gold)}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <img src="icon-192.png" alt="Dynasty HQ" class="logo">
+    <div class="step">Optional</div>
+    <h1>Bring your own AI</h1>
+    <p class="sub">Connect your own AI key for unlimited queries — you control usage and billing directly with your provider.</p>
+
+    <div class="panel">
+      <div class="row">
+        <div class="field">
+          <label for="ai-provider-sel">Provider</label>
+          <select id="ai-provider-sel" class="input" onchange="updateProviderHint()">
+            <option value="anthropic">Claude (Anthropic)</option>
+            <option value="groq">Groq — Free (Llama 3.3)</option>
+            <option value="gemini">Gemini Flash — Free (Google)</option>
+            <option value="openai">OpenAI — GPT-5.4 Mini</option>
+            <option value="grok">Grok (xAI)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ai-model-in">Model (optional)</label>
+          <input type="text" id="ai-model-in" class="input" placeholder="auto" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <p class="provider-hint" id="provider-hint"></p>
+
+      <div class="field">
+        <label for="api-key-in">API key</label>
+        <input class="input mono" type="password" id="api-key-in" placeholder="Paste API key…" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="xai">
+        <p><strong>Real-time news (optional)</strong> — add an xAI key to get live player news from X/Twitter via Grok.</p>
+        <input class="input mono" type="password" id="xai-key-in" placeholder="xai-… (optional)" autocomplete="off">
+      </div>
+
+      <p class="lock">&#128274; Keys are kept <strong>only for this browser session</strong>. Never sent to our servers — all AI calls go directly to your provider.</p>
+    </div>
+
+    <div id="key-status" class="alert"></div>
+    <button class="btn" onclick="saveKey()">Save key</button>
+
+    <button class="back" onclick="goBack()">&larr; Back</button>
+  </main>
+
+  <script>
+    const PROFILE_KEY = 'od_profile_v1';
+    const AI_SESSION_KEYS = ['dynastyhq_ai_provider', 'dynastyhq_ai_key', 'dynastyhq_ai_model', 'dynastyhq_xai_key'];
+    const AI_LEGACY_KEYS = ['dynastyhq_provider', 'dynastyhq_gemini_key', 'dynastyhq_anthropic_key', ...AI_SESSION_KEYS];
+
+    function getProfile() {
+      try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') || {}; } catch { return {}; }
+    }
+    function patchProfile(patch) {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...getProfile(), ...patch }));
+    }
+
+    // One-time hygiene: any key a past build left in localStorage moves to
+    // sessionStorage (and is wiped from disk) so BYO keys never persist.
+    function migrateAIKeysToSession() {
+      try {
+        AI_LEGACY_KEYS.forEach(name => {
+          const value = localStorage.getItem(name);
+          if (value && !sessionStorage.getItem(name)) sessionStorage.setItem(name, value);
+          localStorage.removeItem(name);
+        });
+      } catch (e) {}
+    }
+
+    function updateProviderHint() {
+      const provider = document.getElementById('ai-provider-sel').value;
+      const hints = {
+        anthropic: 'Get your free API key at console.anthropic.com. Claude 3.5 Sonnet is recommended.',
+        groq:      'Free Llama 3.3 inference. Get your key at console.groq.com (no credit card needed).',
+        gemini:    'Free Google Gemini Flash. Get your key at ai.google.dev (includes generous free tier).',
+        openai:    'Paid OpenAI access. GPT-5.4 Mini is the default BYO model; GPT-5.5 can be entered manually for premium analysis.',
+        grok:      'Get your key at x.ai. Includes real-time X/Twitter data for news.',
+      };
+      document.getElementById('provider-hint').textContent = hints[provider] || '';
+    }
+
+    function showStatus(type, message) {
+      const el = document.getElementById('key-status');
+      el.className = 'alert alert-' + type + ' show';
+      el.textContent = message;
+    }
+
+    function saveKey() {
+      const provider = document.getElementById('ai-provider-sel').value;
+      const key      = document.getElementById('api-key-in').value.trim();
+      const model    = document.getElementById('ai-model-in').value.trim() || '';
+
+      if (!key) { showStatus('error', 'Paste an API key first.'); return; }
+
+      try {
+        migrateAIKeysToSession();
+        sessionStorage.setItem('dynastyhq_ai_provider', provider);
+        sessionStorage.setItem('dynastyhq_ai_key', key);
+        if (model) sessionStorage.setItem('dynastyhq_ai_model', model);
+        else sessionStorage.removeItem('dynastyhq_ai_model');
+
+        const xaiKey = document.getElementById('xai-key-in').value.trim();
+        if (xaiKey) sessionStorage.setItem('dynastyhq_xai_key', xaiKey);
+        else sessionStorage.removeItem('dynastyhq_xai_key');
+      } catch (e) {
+        showStatus('error', 'Storage error: ' + e.message);
+        return;
+      }
+
+      patchProfile({ byoAI: provider, hasBYOKey: true });
+      showStatus('success', '✓ API key saved for this browser session.');
+      setTimeout(goBack, 900);
+    }
+
+    function goBack() {
+      // Came from in-app Settings almost always; the app reopens Settings state itself.
+      window.location.href = 'index.html';
+    }
+
+    // Pre-fill any keys already saved this session.
+    (function loadStoredAIKeys() {
+      try {
+        migrateAIKeysToSession();
+        const p = sessionStorage.getItem('dynastyhq_ai_provider');
+        const k = sessionStorage.getItem('dynastyhq_ai_key');
+        const m = sessionStorage.getItem('dynastyhq_ai_model');
+        const x = sessionStorage.getItem('dynastyhq_xai_key');
+        if (p) document.getElementById('ai-provider-sel').value = p;
+        if (k) document.getElementById('api-key-in').value = k;
+        if (m) document.getElementById('ai-model-in').value = m;
+        if (x) document.getElementById('xai-key-in').value = x;
+      } catch (e) {}
+      updateProviderHint();
+    })();
+  </script>
+</body>
+</html>

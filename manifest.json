@@ -1,0 +1,38 @@
+{
+  "name": "Dynasty HQ \u2014 War Room",
+  "short_name": "Dynasty HQ",
+  "description": "Dynasty fantasy football command center \u2014 AI-powered draft board, projections, roster management, and league analytics",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "warroom",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0A0A0A",
+  "theme_color": "#D4AF37",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

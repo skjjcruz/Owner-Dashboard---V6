@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
+  <title>Dynasty HQ — Go Pro</title>
+  <style id="preboot-hide">html{visibility:hidden!important}</style>
+  <noscript><style>html{visibility:visible!important}</style></noscript>
+  <script>
+    // Pre-paint gate: checkout needs a signed-in account to attach the
+    // subscription to. No session -> landing page.
+    (function () {
+      function reveal(){ var s=document.getElementById('preboot-hide'); if(s&&s.parentNode){ s.parentNode.removeChild(s); } }
+      try {
+        var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
+        if (!sess || !sess.token) { window.location.replace('landing.html'); return; }
+        reveal();
+      } catch (e) { reveal(); }
+    })();
+  </script>
+  <link rel="icon" href="icon-192.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{--gold:#D4AF37;--dark-gold:#B8941E;--bg:#0A0A0A;--bg2:#141414;--border:rgba(255,255,255,.1);--white:#FFFFFF;--silver:#C0C0C0;--muted:rgba(255,255,255,.5);--green:#34d399;--red:#f87171}
+    html,body{min-height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--white);-webkit-font-smoothing:antialiased}
+    body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px 24px 10vh}
+    body::before{content:'';position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:clamp(400px,60vw,900px);height:clamp(400px,60vw,900px);background:url('icon-192.png') center/contain no-repeat;opacity:.06;filter:brightness(1.2);z-index:0;pointer-events:none}
+    .card{position:relative;z-index:1;width:100%;max-width:460px;text-align:center}
+    .logo{width:64px;height:64px;border-radius:15px;margin:0 auto 16px;display:block;box-shadow:0 4px 22px rgba(212,175,55,.25)}
+    .step{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);margin-bottom:8px}
+    h1{font-size:24px;font-weight:800;margin-bottom:10px}
+    .sub{font-size:14px;color:var(--silver);line-height:1.55;margin-bottom:22px}
+    .plans{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+    .plan{position:relative;padding:18px 14px;border-radius:12px;cursor:pointer;font-family:inherit;text-align:center;background:var(--bg2);border:1px solid var(--border);color:var(--silver);transition:border-color .15s,box-shadow .15s,transform .12s}
+    .plan:hover{border-color:rgba(212,175,55,.45);transform:translateY(-1px)}
+    .plan.on{color:var(--white);border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset,0 4px 18px rgba(212,175,55,.12)}
+    .plan .nm{font-size:13px;font-weight:700;letter-spacing:.02em}
+    .plan .pr{font-size:22px;font-weight:800;color:var(--white);margin:6px 0 2px}
+    .plan .pr span{font-size:12px;font-weight:600;color:var(--muted)}
+    .plan .note{font-size:11px;font-weight:600;color:var(--muted)}
+    .plan.on .note{color:var(--gold)}
+    .plan .badge{position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:var(--gold);color:#1a1204;border-radius:5px;padding:2px 7px;white-space:nowrap}
+    .perks{text-align:left;font-size:12.5px;color:var(--silver);line-height:1.7;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px}
+    .perks strong{color:var(--white)}
+    .alert{font-size:13px;padding:11px 14px;border-radius:8px;margin-bottom:12px;display:none;text-align:left}
+    .alert.show{display:block}
+    .alert-error{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.25)}
+    .alert-success{background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.25)}
+    .btn{width:100%;min-height:52px;font-size:15px;font-weight:800;border-radius:10px;border:none;background:linear-gradient(135deg,var(--gold),var(--dark-gold));color:#0a0a0a;cursor:pointer;transition:box-shadow .15s,opacity .15s}
+    .btn:hover{box-shadow:0 6px 20px rgba(212,175,55,.3)}
+    .btn:disabled{opacity:.6;cursor:not-allowed;box-shadow:none}
+    .hint{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.6}
+    .back{margin-top:18px;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit}
+    .back:hover{color:var(--gold)}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <img src="icon-192.png" alt="Dynasty HQ" class="logo">
+    <div class="step" id="eyebrow">Go Pro</div>
+    <h1 id="title">Unlock the full engine</h1>
+    <p class="sub" id="subtitle">7-day free trial on either plan. Cancel anytime.</p>
+
+    <div class="alert" id="alertPayment"></div>
+
+    <div id="chooser">
+      <div class="plans" role="group" aria-label="Billing period">
+        <button class="plan on" id="planMonthly" onclick="pickBilling('monthly')">
+          <div class="nm">PRO MONTHLY</div>
+          <div class="pr">$9.99 <span>/mo</span></div>
+          <div class="note">7-day free trial</div>
+        </button>
+        <button class="plan" id="planAnnual" onclick="pickBilling('annual')">
+          <span class="badge">Best value</span>
+          <div class="nm">PRO ANNUAL</div>
+          <div class="pr">$99.99 <span>/yr</span></div>
+          <div class="note">~$8.33/mo · save ~17%</div>
+        </button>
+      </div>
+
+      <div class="perks">
+        <strong>Everything in Pro:</strong> unlimited Sleeper leagues, 15 AI calls a day, Owner DNA profiles, trade memory + finder, draft command center, Scout + War Room access.
+      </div>
+
+      <button class="btn" id="stripeBtn" onclick="goToStripe()">Proceed to Secure Checkout &rarr;</button>
+      <p class="hint">Payments are handled by Stripe. We never see your card details.</p>
+      <p class="hint">Subscriptions renew automatically at the price shown until cancelled. Manage or cancel anytime from Settings inside the app. (Subscribed through the iOS App Store? Manage that plan in your Apple&nbsp;ID settings — it unlocks Pro here too.)</p>
+    </div>
+
+    <!-- Shown instead of the plan chooser when the account is already Pro:
+         opens the Stripe Billing Portal (cancel / change plan / update card)
+         via the fw-billing-portal edge function. -->
+    <button class="btn" id="manageBtn" style="display:none" onclick="manageSubscription()">Manage Subscription</button>
+
+    <p class="hint" style="margin-top:16px"><a href="legal/terms-of-service.html" style="color:rgba(255,255,255,.5)">Terms of Use</a> &nbsp;&middot;&nbsp; <a href="legal/privacy-policy.html" style="color:rgba(255,255,255,.5)">Privacy Policy</a></p>
+
+    <button class="back" onclick="window.location.href='index.html'">&larr; Back to my leagues</button>
+  </main>
+
+  <script src="js/billing.js?v=20260722webonly1"></script>
+  <script>
+    const SUPABASE_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co';
+    const SESSION_KEY = 'fw_session_v1';
+    let selectedBilling = 'monthly';
+
+    function pickBilling(which) {
+      selectedBilling = which === 'annual' ? 'annual' : 'monthly';
+      document.getElementById('planMonthly').classList.toggle('on', selectedBilling === 'monthly');
+      document.getElementById('planAnnual').classList.toggle('on', selectedBilling === 'annual');
+    }
+
+    function showAlert(type, message) {
+      const el = document.getElementById('alertPayment');
+      el.className = 'alert alert-' + type + ' show';
+      el.textContent = message;
+    }
+
+    function getSession() {
+      try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; }
+    }
+
+    async function goToStripe() {
+      const btn = document.getElementById('stripeBtn');
+      const session = getSession();
+      const token = session?.token;
+      if (!token) { showAlert('error', 'Session expired. Please sign in again.'); return; }
+
+      // Web build: all purchases go through Stripe Checkout (fw-create-checkout).
+      // Apple In-App Purchase exists only in the separate iOS app; both funnels
+      // land in the same public.subscriptions rows server-side.
+      btn.disabled = true;
+      btn.textContent = 'Redirecting to Checkout…';
+      try {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/fw-create-checkout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            productSlug: 'dhq',
+            billing: selectedBilling === 'annual' ? 'annual' : 'monthly',
+            successUrl: window.location.origin + window.location.pathname + '?payment=success',
+            cancelUrl: window.location.origin + window.location.pathname + '?payment=cancel',
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.checkoutUrl) throw new Error(data.error || 'Failed to create checkout session.');
+        window.location.href = data.checkoutUrl;
+      } catch (err) {
+        showAlert('error', err.message || 'Something went wrong. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Proceed to Secure Checkout →';
+      }
+    }
+
+    // After a confirmed payment: re-mint the session so the fresh Pro
+    // entitlement lands immediately (the JWT would otherwise stay Scout-tier
+    // for up to a day), then head into the app. Retries briefly because
+    // Stripe's webhook can land a few seconds after the redirect.
+    async function onPaymentConfirmed() {
+      document.getElementById('chooser').style.display = 'none';
+      document.getElementById('eyebrow').textContent = 'Payment confirmed';
+      document.getElementById('title').textContent = 'Welcome to Pro';
+      document.getElementById('subtitle').textContent = 'Activating your upgrade…';
+      showAlert('success', 'Payment confirmed — unlocking the full engine…');
+      for (const delayMs of [0, 4000, 10000]) {
+        if (delayMs) await new Promise(r => setTimeout(r, delayMs));
+        try {
+          const cur = getSession();
+          if (!cur?.token) break;
+          const resp = await fetch(`${SUPABASE_URL}/functions/v1/fw-refresh-session`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${cur.token}` },
+          });
+          if (!resp.ok) continue;
+          const data = await resp.json();
+          if (data?.token && data?.user?.id) {
+            localStorage.setItem(SESSION_KEY, JSON.stringify(
+              Object.assign({}, cur, { token: data.token, user: Object.assign({}, cur.user || {}, data.user) })
+            ));
+            if (data.user.tier === 'pro') break; // entitlement landed
+          }
+        } catch { /* transient — next attempt */ }
+      }
+      window.location.href = 'index.html';
+    }
+
+    // Already Pro: open the Stripe Billing Portal (fw-billing-portal) where
+    // cancel / change-plan / update-card live. Accounts with no Stripe
+    // history (e.g. subscribed on iOS) get a helpful message instead.
+    async function manageSubscription() {
+      const btn = document.getElementById('manageBtn');
+      const token = getSession()?.token;
+      if (!token) { showAlert('error', 'Session expired. Please sign in again.'); return; }
+      btn.disabled = true;
+      btn.textContent = 'Opening Billing Portal…';
+      try {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/fw-billing-portal`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ returnUrl: window.location.origin + window.location.pathname }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.url) {
+          throw new Error(data.code === 'no_stripe_customer'
+            ? 'No web subscription on this account. If you subscribed through the App Store, manage it in your Apple ID settings.'
+            : (data.error || 'Could not open the billing portal.'));
+        }
+        window.location.href = data.url;
+        return;
+      } catch (err) {
+        showAlert('error', err.message || 'Could not open the billing portal. Please try again.');
+      }
+      btn.disabled = false;
+      btn.textContent = 'Manage Subscription';
+    }
+
+    (function handleReturn() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('payment') === 'success') { onPaymentConfirmed(); return; }
+      if (params.get('payment') === 'cancel') {
+        showAlert('error', 'Checkout cancelled — you have not been charged. Pick a plan whenever you’re ready.');
+        return;
+      }
+      // Already Pro? Hide the Buy buttons and offer Manage instead of selling again.
+      const tier = getSession()?.user?.tier;
+      if (tier === 'pro') {
+        document.getElementById('eyebrow').textContent = 'Your plan';
+        document.getElementById('title').textContent = 'You’re on Pro';
+        document.getElementById('subtitle').textContent = 'The full engine is already unlocked on this account.';
+        document.getElementById('chooser').style.display = 'none';
+        document.getElementById('manageBtn').style.display = '';
+      }
+    })();
+  </script>
+</body>
+</html>

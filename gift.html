@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://api.sleeper.app https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://fantasysports.yahooapis.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
+
+    <title>Gift a Dashboard — Dynasty HQ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap"></noscript>
+    <style>
+        :root {
+            --gold: #D4AF37;
+            --dark-gold: #B8941E;
+            --black: #08080B;
+            --off-black: #1B1B22;
+            --charcoal: #27262E;
+            --white: #F5F2EA;
+            --silver: #BDB8AD;
+            --win-green: #2ECC71;
+            --loss-red: #E74C3C;
+            /* Safe-area insets (iPhone notch / home indicator); 0px on desktop */
+            --sat: env(safe-area-inset-top, 0px);
+            --sar: env(safe-area-inset-right, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+            --sal: env(safe-area-inset-left, 0px);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--black);
+            color: var(--white);
+            min-height: 100vh;
+            padding: max(2rem, var(--sat)) max(1rem, var(--sar)) max(2rem, var(--sab)) max(1rem, var(--sal));
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .page-header img {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 0.75rem;
+            filter: drop-shadow(0 0 10px rgba(212,175,55,0.5));
+        }
+
+        .page-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 2rem;
+            color: var(--gold);
+            letter-spacing: 0.15em;
+        }
+
+        .page-subtitle {
+            font-size: 0.9rem;
+            color: var(--silver);
+            margin-top: 0.35rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            min-height: 44px;
+            padding: 12px 0;
+            margin-bottom: 1rem;
+            color: var(--gold);
+            font-size: 0.85rem;
+            text-decoration: none;
+            opacity: 0.8;
+        }
+
+        .back-link:hover { opacity: 1; }
+
+        .card {
+            background: linear-gradient(135deg, var(--off-black) 0%, var(--charcoal) 100%);
+            border: 1px solid rgba(212,175,55,0.2);
+            border-radius: 10px;
+            padding: 16px 18px;
+            max-width: 500px;
+            margin: 0 auto 1.5rem;
+        }
+
+        .card-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.1rem;
+            color: var(--gold);
+            letter-spacing: 0.12em;
+            margin-bottom: 1rem;
+        }
+
+        .step-badge {
+            display: inline-block;
+            background: var(--gold);
+            color: var(--black);
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 0.15rem 0.5rem;
+            border-radius: 20px;
+            margin-right: 0.5rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.4rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--black);
+            border: 1px solid rgba(212,175,55,0.3);
+            border-radius: 8px;
+            color: var(--white);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--gold);
+        }
+
+        .form-input::placeholder { color: rgba(255,255,255,0.3); }
+
+        .validate-row {
+            display: flex;
+            gap: 0.6rem;
+            margin-bottom: 1rem;
+        }
+
+        .validate-row .form-input { margin-bottom: 0; }
+
+        .btn {
+            padding: 0.7rem 1.25rem;
+            min-height: 44px;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--gold) 0%, var(--dark-gold) 100%);
+            color: var(--black);
+        }
+
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(212,175,55,0.4); }
+        .btn-primary:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
+
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--gold);
+            color: var(--gold);
+        }
+
+        .btn-full { width: 100%; }
+
+        /* Validated badge */
+        .validated-badge {
+            display: none;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            color: var(--win-green);
+            margin-bottom: 1rem;
+        }
+
+        .validated-badge.show { display: flex; }
+
+        .avatar-img {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2px solid var(--win-green);
+        }
+
+        /* Success state */
+        .success-panel {
+            display: none;
+            text-align: center;
+        }
+
+        .success-panel.show { display: block; }
+
+        .success-icon {
+            font-size: 3rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .success-title {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.5rem;
+            color: var(--win-green);
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+        }
+
+        .success-text {
+            font-size: 0.85rem;
+            color: var(--silver);
+            margin-bottom: 1.25rem;
+            line-height: 1.6;
+        }
+
+        .share-url-box {
+            background: var(--black);
+            border: 1px solid rgba(212,175,55,0.4);
+            border-radius: 8px;
+            padding: 0.85rem 1rem;
+            font-size: 0.8rem;
+            color: var(--gold);
+            word-break: break-all;
+            margin-bottom: 0.75rem;
+            text-align: left;
+        }
+
+        .error-msg {
+            font-size: 0.8rem;
+            color: var(--loss-red);
+            margin-top: 0.5rem;
+            display: none;
+        }
+
+        .error-msg.show { display: block; }
+
+        .divider {
+            border: none;
+            border-top: 1px solid rgba(212,175,55,0.15);
+            margin: 1rem 0;
+        }
+
+        .hint {
+            font-size: 0.72rem;
+            color: rgba(255,255,255,0.4);
+            line-height: 1.5;
+        }
+
+        /* Phone tier: 16px inputs kill iOS Safari zoom-on-focus (.btn already 44px) */
+        @media (max-width: 767px) {
+            .form-input { font-size: 16px; }
+        }
+
+        @media (max-width: 420px) {
+            .validate-row { flex-wrap: wrap; }
+            .validate-row .form-input { margin-bottom: 0.6rem; }
+            .validate-row .btn { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div style="max-width: 500px; margin: 0 auto;">
+    <div class="page-header">
+        <img src="icon-192.png" alt="Dynasty HQ">
+        <div class="page-title">Gift a Dashboard</div>
+        <div class="page-subtitle">Create a personalized Dynasty HQ dashboard for a league mate</div>
+    </div>
+
+    <a href="index.html" class="back-link">← Back to dashboard</a>
+
+    <!-- STEP 1: Sleeper Username -->
+    <div class="card" id="step1Card">
+        <div class="card-title"><span class="step-badge">1</span>League Mate's Sleeper Username</div>
+        <label class="form-label" for="sleeperInput">Sleeper Username</label>
+        <div class="validate-row">
+            <input type="text" id="sleeperInput" class="form-input" placeholder="e.g. big_pete_ff" autocomplete="off" />
+            <button class="btn btn-primary" id="validateBtn" onclick="validateSleeper()">Verify</button>
+        </div>
+        <div class="validated-badge" id="validatedBadge">
+            <img id="validatedAvatar" class="avatar-img" src="" alt="" style="display:none;">
+            <span id="validatedName"></span>
+            <span style="color:var(--silver);">— verified on Sleeper</span>
+        </div>
+        <div class="error-msg" id="step1Error"></div>
+    </div>
+
+    <!-- STEP 2: Name + Password -->
+    <div class="card" id="step2Card" style="opacity:0.4; pointer-events:none;">
+        <div class="card-title"><span class="step-badge">2</span>Personalise &amp; Set Password</div>
+
+        <label class="form-label" for="displayNameInput">Display Name (optional)</label>
+        <input type="text" id="displayNameInput" class="form-input" placeholder="e.g. Big Pete — leave blank to use Sleeper name" />
+
+        <label class="form-label" for="giftPassword">Initial Password</label>
+        <input type="password" id="giftPassword" class="form-input" placeholder="They can change this after logging in" />
+        <div class="hint">Share this password with them along with the link below. They can change it in Settings after first login.</div>
+
+        <hr class="divider">
+
+        <button class="btn btn-primary btn-full" id="createBtn" onclick="createGift()">Create Gift Dashboard</button>
+        <div class="error-msg" id="step2Error"></div>
+    </div>
+
+    <!-- SUCCESS -->
+    <div class="card success-panel" id="successPanel">
+        <div class="success-icon">🎁</div>
+        <div class="success-title">Dashboard Created!</div>
+        <div class="success-text">
+            Send your league mate this link and their initial password.<br>
+            They'll land on their own personalized dashboard.
+        </div>
+        <div class="share-url-box" id="shareUrl"></div>
+        <button class="btn btn-primary btn-full" onclick="copyLink(event)" style="margin-bottom:0.75rem;">Copy Link</button>
+        <button class="btn btn-outline btn-full" onclick="resetForm()">Create Another</button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/shared/shared-loader.js?v=20260531sandbox2"></script>
+<script>WRShared.load('supabase-client.js');</script>
+<script>
+    let verifiedUsername = null;
+    let generatedUrl = '';
+
+    async function validateSleeper() {
+        const username = document.getElementById('sleeperInput').value.trim();
+        const btn = document.getElementById('validateBtn');
+        const err = document.getElementById('step1Error');
+        const badge = document.getElementById('validatedBadge');
+
+        if (!username) { showErr(err, 'Enter a Sleeper username'); return; }
+        err.classList.remove('show');
+        badge.classList.remove('show');
+        btn.textContent = 'Checking...';
+        btn.disabled = true;
+
+        try {
+            const resp = await fetch(`https://api.sleeper.app/v1/user/${encodeURIComponent(username)}`);
+            const user = resp.ok ? await resp.json() : null;
+            if (!user || !user.user_id) {
+                showErr(err, 'Sleeper username not found. Check spelling and try again.');
+                btn.textContent = 'Verify'; btn.disabled = false;
+                return;
+            }
+            verifiedUsername = user.username || username;
+            // Show badge
+            document.getElementById('validatedName').textContent = user.display_name || user.username || username;
+            if (user.avatar) {
+                const av = document.getElementById('validatedAvatar');
+                av.src = `https://sleepercdn.com/avatars/thumbs/${user.avatar}`;
+                av.style.display = 'inline-block';
+            }
+            badge.classList.add('show');
+            btn.textContent = '✓ Verified'; btn.disabled = false;
+            // Unlock step 2
+            document.getElementById('step2Card').style.opacity = '1';
+            document.getElementById('step2Card').style.pointerEvents = 'auto';
+        } catch {
+            showErr(err, 'Failed to reach Sleeper API. Check your connection.');
+            btn.textContent = 'Verify'; btn.disabled = false;
+        }
+    }
+
+    async function createGift() {
+        const err = document.getElementById('step2Error');
+        const password = document.getElementById('giftPassword').value;
+        const displayName = document.getElementById('displayNameInput').value.trim();
+        const btn = document.getElementById('createBtn');
+
+        err.classList.remove('show');
+        if (!verifiedUsername) { showErr(err, 'Verify the Sleeper username first (Step 1)'); return; }
+        if (!password || password.length < 4) { showErr(err, 'Password must be at least 4 characters'); return; }
+
+        btn.textContent = 'Creating...';
+        btn.disabled = true;
+        try {
+            await window.OD.createGiftUser({
+                sleeperUsername: verifiedUsername,
+                password,
+                displayName: displayName || ''
+            });
+
+            // Generate shareable URL
+            const base = window.location.href.replace('gift.html', 'login.html');
+            generatedUrl = `${base}?for=${encodeURIComponent(verifiedUsername)}`;
+            document.getElementById('shareUrl').textContent = generatedUrl;
+
+            // Show success
+            document.getElementById('successPanel').classList.add('show');
+            document.getElementById('step1Card').style.display = 'none';
+            document.getElementById('step2Card').style.display = 'none';
+        } catch (e) {
+            showErr(err, 'Failed to save. Make sure Supabase is configured. ' + (e.message || ''));
+            btn.textContent = 'Create Gift Dashboard';
+            btn.disabled = false;
+        }
+    }
+
+    function copyLink(event) {
+        navigator.clipboard.writeText(generatedUrl).then(() => {
+            const btn = event.target;
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => btn.textContent = 'Copy Link', 2000);
+        });
+    }
+
+    function resetForm() {
+        verifiedUsername = null; generatedUrl = '';
+        document.getElementById('sleeperInput').value = '';
+        document.getElementById('displayNameInput').value = '';
+        document.getElementById('giftPassword').value = '';
+        document.getElementById('validateBtn').textContent = 'Verify';
+        document.getElementById('validatedBadge').classList.remove('show');
+        document.getElementById('step1Error').classList.remove('show');
+        document.getElementById('step2Error').classList.remove('show');
+        document.getElementById('step2Card').style.opacity = '0.4';
+        document.getElementById('step2Card').style.pointerEvents = 'none';
+        ['step1Card','step2Card'].forEach(id => document.getElementById(id).style.display = '');
+        document.getElementById('successPanel').classList.remove('show');
+        document.getElementById('createBtn').textContent = 'Create Gift Dashboard';
+        document.getElementById('createBtn').disabled = false;
+    }
+
+    function showErr(el, msg) { el.textContent = msg; el.classList.add('show'); }
+</script>
+<footer style="text-align:center;padding:16px;font-size:12px;color:#666;border-top:1px solid #1a1a1a;margin-top:32px;">&copy; 2026 C2 Football LLC. All rights reserved.</footer>
+</body>
+</html>

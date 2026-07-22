@@ -1,0 +1,1523 @@
+player_id,source,rank,weight
+1,PFF,2,1.2
+1,NFL Draft Buzz,4,0.9
+1,PFN,6,0.9
+1,TANKATHON,4,0.9
+1,Drafttech,1,1
+1,CBS,1,1
+1,Mel Kiper,1,1.1
+1,Field Yates,1,1
+1,Matt Miller,5,1
+1,Charlie Campbell,2,1
+2,PFF,1,1.2
+2,NFL Draft Buzz,2,0.9
+2,PFN,1,0.9
+2,TANKATHON,3,0.9
+2,Drafttech,2,1
+2,CBS,6,1
+2,Mel Kiper,6,1.1
+2,Field Yates,3,1
+2,Matt Miller,2,1
+2,Charlie Campbell,4,1
+3,PFF,3,1.2
+3,NFL Draft Buzz,7,0.9
+3,PFN,2,0.9
+3,TANKATHON,1,0.9
+3,Drafttech,4,1
+3,CBS,5,1
+3,Mel Kiper,4,1.1
+3,Field Yates,2,1
+3,Matt Miller,3,1
+3,Charlie Campbell,5,1
+4,PFF,4,1.2
+4,NFL Draft Buzz,3,0.9
+4,PFN,5,0.9
+4,TANKATHON,8,0.9
+4,Drafttech,8,1
+4,CBS,9,1
+4,Mel Kiper,2,1.1
+4,Field Yates,5,1
+4,Matt Miller,1,1
+4,Charlie Campbell,1,1
+5,PFF,5,1.2
+5,NFL Draft Buzz,1,0.9
+5,PFN,3,0.9
+5,TANKATHON,2,0.9
+5,Drafttech,3,1
+5,CBS,2,1
+5,Mel Kiper,7,1.1
+5,Field Yates,13,1
+5,Matt Miller,4,1
+5,Charlie Campbell,15,1
+6,PFF,8,1.2
+6,NFL Draft Buzz,10,0.9
+6,PFN,4,0.9
+6,TANKATHON,5,0.9
+6,Drafttech,10,1
+6,CBS,4,1
+6,Mel Kiper,3,1.1
+6,Field Yates,7,1
+6,Matt Miller,6,1
+6,Charlie Campbell,17,1
+7,PFF,7,1.2
+7,NFL Draft Buzz,12,0.9
+7,PFN,9,0.9
+7,TANKATHON,6,0.9
+7,Drafttech,7,1
+7,CBS,3,1
+7,Mel Kiper,9,1.1
+7,Field Yates,6,1
+7,Matt Miller,12,1
+7,Charlie Campbell,7,1
+8,PFF,6,1.2
+8,NFL Draft Buzz,11,0.9
+8,PFN,12,0.9
+8,TANKATHON,7,0.9
+8,Drafttech,17,1
+8,CBS,13,1
+8,Mel Kiper,5,1.1
+8,Field Yates,4,1
+8,Matt Miller,14,1
+8,Charlie Campbell,3,1
+9,PFF,9,1.2
+9,NFL Draft Buzz,5,0.9
+9,PFN,10,0.9
+9,TANKATHON,10,0.9
+9,Drafttech,5,1
+9,CBS,7,1
+9,Mel Kiper,16,1.1
+9,Field Yates,10,1
+9,Matt Miller,8,1
+9,Charlie Campbell,19,1
+10,PFF,13,1.2
+10,NFL Draft Buzz,6,0.9
+10,PFN,16,0.9
+10,TANKATHON,9,0.9
+10,Drafttech,6,1
+10,CBS,12,1
+10,Mel Kiper,13,1.1
+10,Field Yates,12,1
+10,Matt Miller,15,1
+10,Charlie Campbell,8,1
+11,PFF,12,1.2
+11,NFL Draft Buzz,9,0.9
+11,PFN,14,0.9
+11,TANKATHON,13,0.9
+11,Drafttech,9,1
+11,CBS,8,1
+11,Mel Kiper,14,1.1
+11,Field Yates,14,1
+11,Matt Miller,10,1
+11,Charlie Campbell,9,1
+12,PFF,14,1.2
+12,NFL Draft Buzz,8,0.9
+12,PFN,11,0.9
+12,TANKATHON,11,0.9
+12,Drafttech,11,1
+12,CBS,18,1
+12,Mel Kiper,17,1.1
+12,Field Yates,11,1
+12,Matt Miller,7,1
+12,Charlie Campbell,11,1
+13,PFF,11,1.2
+13,NFL Draft Buzz,13,0.9
+13,PFN,8,0.9
+13,TANKATHON,12,0.9
+13,Drafttech,13,1
+13,CBS,15,1
+13,Mel Kiper,10,1.1
+13,Field Yates,9,1
+13,Matt Miller,16,1
+13,Charlie Campbell,32,1
+14,PFF,10,1.2
+14,NFL Draft Buzz,32,0.9
+14,PFN,7,0.9
+14,TANKATHON,14,0.9
+14,Drafttech,24,1
+14,CBS,10,1
+14,Mel Kiper,8,1.1
+14,Field Yates,8,1
+14,Matt Miller,17,1
+14,Charlie Campbell,16,1
+15,PFF,24,1.2
+15,NFL Draft Buzz,17,0.9
+15,PFN,13,0.9
+15,TANKATHON,15,0.9
+15,Drafttech,21,1
+15,CBS,17,1
+15,Mel Kiper,12,1.1
+15,Field Yates,16,1
+15,Matt Miller,11,1
+15,Charlie Campbell,10,1
+16,PFF,18,1.2
+16,NFL Draft Buzz,16,0.9
+16,PFN,15,0.9
+16,TANKATHON,16,0.9
+16,Drafttech,14,1
+16,CBS,11,1
+16,Field Yates,20,1
+16,Matt Miller,22,1
+16,Charlie Campbell,21,1
+17,PFF,34,1.2
+17,NFL Draft Buzz,15,0.9
+17,PFN,23,0.9
+17,TANKATHON,22,0.9
+17,Drafttech,12,1
+17,CBS,25,1
+17,Mel Kiper,21,1.1
+17,Matt Miller,9,1
+17,Charlie Campbell,6,1
+18,PFF,20,1.2
+18,NFL Draft Buzz,18,0.9
+18,PFN,27,0.9
+18,TANKATHON,18,0.9
+18,Drafttech,18,1
+18,CBS,29,1
+18,Mel Kiper,20,1.1
+18,Field Yates,17,1
+18,Matt Miller,19,1
+18,Charlie Campbell,12,1
+19,PFF,21,1.2
+19,NFL Draft Buzz,21,0.9
+19,PFN,17,0.9
+19,TANKATHON,17,0.9
+19,Drafttech,33,1
+19,CBS,19,1
+19,Mel Kiper,15,1.1
+19,Matt Miller,26,1
+20,PFF,28,1.2
+20,NFL Draft Buzz,33,0.9
+20,PFN,22,0.9
+20,TANKATHON,21,0.9
+20,Drafttech,20,1
+20,CBS,26,1
+20,Mel Kiper,18,1.1
+20,Field Yates,18,1
+20,Matt Miller,13,1
+20,Charlie Campbell,25,1
+21,PFF,26,1.2
+21,NFL Draft Buzz,29,0.9
+21,PFN,20,0.9
+21,TANKATHON,20,0.9
+21,Drafttech,19,1
+21,CBS,16,1
+21,Matt Miller,31,1
+21,Charlie Campbell,22,1
+22,PFF,15,1.2
+22,NFL Draft Buzz,19,0.9
+22,PFN,39,0.9
+22,TANKATHON,19,0.9
+22,Drafttech,16,1
+22,CBS,24,1
+22,Field Yates,15,1
+22,Matt Miller,38,1
+22,Charlie Campbell,23,1
+23,PFF,23,1.2
+23,NFL Draft Buzz,14,0.9
+23,PFN,21,0.9
+23,TANKATHON,23,0.9
+23,Drafttech,15,1
+23,CBS,14,1
+23,Matt Miller,24,1
+23,Charlie Campbell,61,1
+24,PFF,16,1.2
+24,NFL Draft Buzz,23,0.9
+24,PFN,18,0.9
+24,TANKATHON,25,0.9
+24,Drafttech,39,1
+24,Charlie Campbell,26,1
+25,PFF,30,1.2
+25,NFL Draft Buzz,22,0.9
+25,PFN,25,0.9
+25,TANKATHON,28,0.9
+25,Drafttech,23,1
+25,CBS,31,1
+25,Matt Miller,34,1
+26,PFF,29,1.2
+26,NFL Draft Buzz,25,0.9
+26,PFN,24,0.9
+26,TANKATHON,26,0.9
+26,Drafttech,30,1
+26,CBS,44,1
+26,Matt Miller,21,1
+27,PFF,32,1.2
+27,NFL Draft Buzz,38,0.9
+27,PFN,37,0.9
+27,TANKATHON,24,0.9
+27,Drafttech,31,1
+27,CBS,36,1
+27,Matt Miller,20,1
+27,Charlie Campbell,13,1
+28,PFF,36,1.2
+28,NFL Draft Buzz,26,0.9
+28,PFN,35,0.9
+28,TANKATHON,33,0.9
+28,Drafttech,28,1
+28,CBS,55,1
+28,Matt Miller,29,1
+28,Charlie Campbell,18,1
+29,PFF,37,1.2
+29,NFL Draft Buzz,20,0.9
+29,PFN,31,0.9
+29,TANKATHON,29,0.9
+29,Drafttech,41,1
+29,CBS,60,1
+29,Charlie Campbell,20,1
+30,PFF,33,1.2
+30,NFL Draft Buzz,53,0.9
+30,PFN,47,0.9
+30,TANKATHON,27,0.9
+30,Drafttech,50,1
+30,CBS,34,1
+30,Mel Kiper,11,1.1
+30,Field Yates,19,1
+30,Charlie Campbell,31,1
+31,PFF,46,1.2
+31,NFL Draft Buzz,27,0.9
+31,PFN,48,0.9
+31,TANKATHON,30,0.9
+31,Drafttech,29,1
+31,CBS,33,1
+31,Matt Miller,25,1
+31,Charlie Campbell,36,1
+32,PFF,35,1.2
+32,NFL Draft Buzz,39,0.9
+32,PFN,19,0.9
+32,TANKATHON,36,0.9
+32,Drafttech,46,1
+32,CBS,38,1
+33,PFF,43,1.2
+33,NFL Draft Buzz,41,0.9
+33,PFN,26,0.9
+33,TANKATHON,32,0.9
+33,Drafttech,57,1
+33,CBS,42,1
+34,PFF,56,1.2
+34,NFL Draft Buzz,28,0.9
+34,PFN,74,0.9
+34,TANKATHON,31,0.9
+34,Drafttech,25,1
+34,CBS,37,1
+34,Charlie Campbell,46,1
+35,PFF,52,1.2
+35,NFL Draft Buzz,40,0.9
+35,PFN,42,0.9
+35,TANKATHON,34,0.9
+35,Drafttech,22,1
+35,CBS,84,1
+35,Matt Miller,27,1
+36,PFF,55,1.2
+36,NFL Draft Buzz,34,0.9
+36,PFN,34,0.9
+36,TANKATHON,48,0.9
+36,Drafttech,38,1
+36,CBS,75,1
+36,Matt Miller,32,1
+36,Charlie Campbell,30,1
+37,PFF,49,1.2
+37,NFL Draft Buzz,37,0.9
+37,PFN,51,0.9
+37,TANKATHON,37,0.9
+37,Drafttech,34,1
+37,CBS,59,1
+37,Charlie Campbell,35,1
+38,PFF,40,1.2
+38,NFL Draft Buzz,45,0.9
+38,PFN,61,0.9
+38,TANKATHON,35,0.9
+38,Drafttech,53,1
+38,CBS,62,1
+38,Matt Miller,18,1
+38,Charlie Campbell,38,1
+39,PFF,51,1.2
+39,NFL Draft Buzz,56,0.9
+39,PFN,33,0.9
+39,TANKATHON,38,0.9
+39,Drafttech,74,1
+39,CBS,21,1
+39,Matt Miller,38,1
+40,PFN,30,0.9
+40,TANKATHON,40,0.9
+40,Charlie Campbell,60,1
+41,PFF,63,1.2
+41,NFL Draft Buzz,24,0.9
+41,PFN,58,0.9
+41,TANKATHON,54,0.9
+41,Drafttech,37,1
+41,CBS,61,1
+41,Matt Miller,30,1
+42,PFF,76,1.2
+42,NFL Draft Buzz,30,0.9
+42,PFN,45,0.9
+42,TANKATHON,42,0.9
+42,Drafttech,63,1
+42,CBS,30,1
+43,PFF,58,1.2
+43,NFL Draft Buzz,90,0.9
+43,PFN,32,0.9
+43,TANKATHON,46,0.9
+43,Drafttech,36,1
+43,CBS,39,1
+43,Charlie Campbell,37,1
+44,PFF,37,1.2
+44,NFL Draft Buzz,67,0.9
+44,PFN,50,0.9
+44,TANKATHON,44,0.9
+44,Drafttech,82,1
+44,CBS,20,1
+44,Matt Miller,37,1
+45,PFF,41,1.2
+45,NFL Draft Buzz,49,0.9
+45,PFN,43,0.9
+45,TANKATHON,43,0.9
+45,Drafttech,66,1
+45,CBS,52,1
+46,PFF,71,1.2
+46,NFL Draft Buzz,50,0.9
+46,PFN,28,0.9
+46,TANKATHON,55,0.9
+46,Drafttech,61,1
+46,CBS,43,1
+46,Charlie Campbell,49,1
+47,PFF,66,1.2
+47,NFL Draft Buzz,35,0.9
+47,PFN,41,0.9
+47,TANKATHON,39,0.9
+47,Drafttech,49,1
+47,CBS,77,1
+48,PFF,47,1.2
+48,NFL Draft Buzz,44,0.9
+48,PFN,72,0.9
+48,TANKATHON,45,0.9
+48,Drafttech,76,1
+48,CBS,85,1
+48,Matt Miller,23,1
+48,Charlie Campbell,14,1
+49,PFF,54,1.2
+49,NFL Draft Buzz,58,0.9
+49,PFN,29,0.9
+49,TANKATHON,52,0.9
+49,Drafttech,86,1
+49,CBS,27,1
+50,PFF,70,1.2
+50,NFL Draft Buzz,57,0.9
+50,PFN,60,0.9
+50,TANKATHON,47,0.9
+50,Drafttech,44,1
+50,CBS,48,1
+50,Charlie Campbell,39,1
+51,PFF,39,1.2
+51,NFL Draft Buzz,79,0.9
+51,TANKATHON,56,0.9
+51,Drafttech,27,1
+51,CBS,79,1
+51,Charlie Campbell,33,1
+52,PFF,53,1.2
+52,NFL Draft Buzz,60,0.9
+52,Drafttech,79,1
+52,CBS,28,1
+53,PFF,62,1.2
+53,NFL Draft Buzz,55,0.9
+53,TANKATHON,53,0.9
+53,Drafttech,72,1
+53,CBS,35,1
+54,PFF,48,1.2
+54,NFL Draft Buzz,48,0.9
+54,PFN,78,0.9
+54,TANKATHON,49,0.9
+54,Drafttech,40,1
+54,Charlie Campbell,62,1
+55,PFF,103,1.2
+55,Matt Miller,28,1
+56,PFF,86,1.2
+56,NFL Draft Buzz,94,0.9
+56,TANKATHON,41,0.9
+56,Drafttech,59,1
+56,CBS,68,1
+56,Mel Kiper,19,1.1
+56,Matt Miller,33,1
+57,PFF,60,1.2
+57,NFL Draft Buzz,68,0.9
+57,PFN,53,0.9
+57,TANKATHON,57,0.9
+57,Drafttech,90,1
+57,CBS,22,1
+58,PFF,65,1.2
+58,NFL Draft Buzz,61,0.9
+58,PFN,89,0.9
+58,TANKATHON,59,0.9
+58,Drafttech,35,1
+58,CBS,67,1
+58,Matt Miller,35,1
+59,PFF,61,1.2
+59,NFL Draft Buzz,52,0.9
+59,PFN,101,0.9
+59,TANKATHON,64,0.9
+59,Drafttech,91,1
+59,CBS,47,1
+59,Matt Miller,36,1
+59,Charlie Campbell,27,1
+60,PFF,50,1.2
+60,NFL Draft Buzz,54,0.9
+60,PFN,102,0.9
+60,TANKATHON,62,0.9
+60,Drafttech,36,1
+60,CBS,50,1
+61,PFF,80,1.2
+61,NFL Draft Buzz,36,0.9
+61,PFN,49,0.9
+61,TANKATHON,65,0.9
+61,Drafttech,54,1
+61,CBS,91,1
+62,PFF,82,1.2
+62,NFL Draft Buzz,62,0.9
+62,PFN,64,0.9
+62,TANKATHON,69,0.9
+62,Drafttech,43,1
+63,PFF,87,1.2
+63,NFL Draft Buzz,63,0.9
+63,PFN,55,0.9
+63,TANKATHON,58,0.9
+63,Drafttech,81,1
+63,CBS,45,1
+64,PFF,97,1.2
+64,NFL Draft Buzz,47,0.9
+64,PFN,86,0.9
+64,TANKATHON,60,0.9
+64,Drafttech,64,1
+64,CBS,63,1
+64,Charlie Campbell,41,1
+65,PFF,68,1.2
+65,NFL Draft Buzz,70,0.9
+65,PFN,56,0.9
+65,TANKATHON,73,0.9
+66,PFF,92,1.2
+66,NFL Draft Buzz,42,0.9
+66,PFN,118,0.9
+66,TANKATHON,51,0.9
+66,Drafttech,26,1
+66,CBS,107,1
+66,Charlie Campbell,44,1
+67,TANKATHON,63,0.9
+68,PFF,108,1.2
+68,NFL Draft Buzz,64,0.9
+68,PFN,63,0.9
+68,TANKATHON,61,0.9
+68,Drafttech,48,1
+68,CBS,83,1
+69,PFF,88,1.2
+69,NFL Draft Buzz,73,0.9
+69,PFN,69,0.9
+69,TANKATHON,71,0.9
+69,Drafttech,71,1
+69,CBS,80,1
+69,Charlie Campbell,47,1
+70,PFF,105,1.2
+70,NFL Draft Buzz,51,0.9
+70,PFN,57,0.9
+70,TANKATHON,72,0.9
+70,Drafttech,117,1
+70,CBS,76,1
+70,Charlie Campbell,29,1
+71,PFF,77,1.2
+71,NFL Draft Buzz,85,0.9
+71,PFN,59,0.9
+71,TANKATHON,82,0.9
+71,Drafttech,69,1
+71,CBS,102,1
+71,Charlie Campbell,34,1
+72,PFF,69,1.2
+72,NFL Draft Buzz,76,0.9
+72,PFN,68,0.9
+72,TANKATHON,81,0.9
+72,Drafttech,75,1
+72,CBS,66,1
+73,PFF,57,1.2
+73,PFN,114,0.9
+73,TANKATHON,96,0.9
+73,CBS,23,1
+74,PFF,59,1.2
+74,NFL Draft Buzz,31,0.9
+74,PFN,126,0.9
+74,TANKATHON,80,0.9
+74,Drafttech,73,1
+74,CBS,71,1
+75,PFF,75,1.2
+75,NFL Draft Buzz,100,0.9
+75,PFN,87,0.9
+75,TANKATHON,67,0.9
+75,Drafttech,67,1
+75,CBS,53,1
+76,CBS,78,1
+77,PFF,85,1.2
+77,NFL Draft Buzz,71,0.9
+77,PFN,52,0.9
+77,TANKATHON,77,0.9
+77,Drafttech,109,1
+78,PFF,100,1.2
+78,NFL Draft Buzz,65,0.9
+78,PFN,145,0.9
+78,TANKATHON,89,0.9
+78,Drafttech,98,1
+78,CBS,32,1
+78,Charlie Campbell,28,1
+79,PFF,101,1.2
+79,NFL Draft Buzz,87,0.9
+79,PFN,88,0.9
+79,TANKATHON,90,0.9
+79,Drafttech,47,1
+79,CBS,93,1
+79,Charlie Campbell,57,1
+80,PFF,83,1.2
+80,NFL Draft Buzz,43,0.9
+80,PFN,140,0.9
+80,TANKATHON,75,0.9
+80,Drafttech,65,1
+80,CBS,113,1
+80,Charlie Campbell,43,1
+81,PFF,83,1.2
+81,NFL Draft Buzz,66,0.9
+81,PFN,139,0.9
+81,TANKATHON,78,0.9
+81,Drafttech,55,1
+81,Charlie Campbell,56,1
+82,PFF,132,1.2
+82,Charlie Campbell,55,1
+83,PFF,107,1.2
+83,NFL Draft Buzz,75,0.9
+83,PFN,44,0.9
+83,TANKATHON,74,0.9
+83,Drafttech,157,1
+83,CBS,40,1
+84,PFF,73,1.2
+84,NFL Draft Buzz,78,0.9
+84,TANKATHON,103,0.9
+84,Drafttech,58,1
+84,CBS,106,1
+85,PFF,143,1.2
+85,NFL Draft Buzz,81,0.9
+85,PFN,108,0.9
+85,TANKATHON,87,0.9
+85,Drafttech,42,1
+85,CBS,105,1
+85,Charlie Campbell,24,1
+86,PFF,121,1.2
+86,NFL Draft Buzz,46,0.9
+86,TANKATHON,117,0.9
+86,Drafttech,60,1
+87,PFF,90,1.2
+87,NFL Draft Buzz,89,0.9
+87,PFN,119,0.9
+87,TANKATHON,79,0.9
+87,Drafttech,68,1
+87,Charlie Campbell,53,1
+88,CBS,86,1
+89,NFL Draft Buzz,96,0.9
+89,PFN,65,0.9
+89,TANKATHON,85,0.9
+89,Drafttech,111,1
+89,CBS,46,1
+90,PFF,148,1.2
+90,NFL Draft Buzz,120,0.9
+90,PFN,40,0.9
+90,TANKATHON,66,0.9
+90,Drafttech,45,1
+90,CBS,97,1
+91,PFF,81,1.2
+91,NFL Draft Buzz,69,0.9
+91,PFN,54,0.9
+91,TANKATHON,88,0.9
+91,Drafttech,131,1
+92,PFF,96,1.2
+92,NFL Draft Buzz,59,0.9
+92,PFN,81,0.9
+92,TANKATHON,68,0.9
+92,Drafttech,146,1
+92,CBS,74,1
+93,PFF,67,1.2
+93,NFL Draft Buzz,99,0.9
+93,PFN,129,0.9
+93,TANKATHON,50,0.9
+93,Drafttech,87,1
+93,CBS,88,1
+94,NFL Draft Buzz,74,0.9
+94,PFN,143,0.9
+94,TANKATHON,76,0.9
+94,Drafttech,96,1
+94,Charlie Campbell,48,1
+95,CBS,94,1
+96,PFF,93,1.2
+96,NFL Draft Buzz,80,0.9
+96,PFN,82,0.9
+96,TANKATHON,101,0.9
+96,Drafttech,99,1
+96,CBS,95,1
+97,PFF,116,1.2
+97,NFL Draft Buzz,83,0.9
+97,PFN,109,0.9
+97,TANKATHON,83,0.9
+97,Drafttech,62,1
+97,CBS,104,1
+98,PFF,124,1.2
+98,NFL Draft Buzz,101,0.9
+98,PFN,83,0.9
+98,TANKATHON,109,0.9
+98,Drafttech,97,1
+98,CBS,89,1
+98,Charlie Campbell,51,1
+99,PFF,99,1.2
+99,NFL Draft Buzz,93,0.9
+99,TANKATHON,106,0.9
+99,Drafttech,77,1
+100,PFF,123,1.2
+100,NFL Draft Buzz,84,0.9
+100,PFN,127,0.9
+100,TANKATHON,84,0.9
+100,Drafttech,80,1
+100,CBS,70,1
+101,PFN,92,0.9
+101,TANKATHON,93,0.9
+101,CBS,103,1
+102,PFF,89,1.2
+102,NFL Draft Buzz,86,0.9
+102,PFN,98,0.9
+102,TANKATHON,102,0.9
+102,Drafttech,127,1
+103,PFF,74,1.2
+103,NFL Draft Buzz,104,0.9
+103,PFN,112,0.9
+103,TANKATHON,95,0.9
+103,Drafttech,114,1
+104,PFN,94,0.9
+105,PFF,122,1.2
+105,NFL Draft Buzz,110,0.9
+105,PFN,165,0.9
+105,TANKATHON,98,0.9
+105,Drafttech,56,1
+105,Charlie Campbell,59,1
+106,PFF,165,1.2
+106,NFL Draft Buzz,109,0.9
+106,TANKATHON,135,0.9
+106,Drafttech,83,1
+106,CBS,90,1
+106,Charlie Campbell,52,1
+107,PFF,117,1.2
+107,NFL Draft Buzz,82,0.9
+107,Drafttech,134,1
+108,PFF,149,1.2
+108,NFL Draft Buzz,111,0.9
+108,PFN,46,0.9
+108,TANKATHON,105,0.9
+108,Drafttech,123,1
+109,CBS,108,1
+110,PFF,187,1.2
+110,NFL Draft Buzz,115,0.9
+110,PFN,147,0.9
+110,TANKATHON,99,0.9
+110,Drafttech,52,1
+110,Charlie Campbell,42,1
+111,PFF,98,1.2
+111,Drafttech,136,1
+112,TANKATHON,107,0.9
+112,CBS,99,1
+113,NFL Draft Buzz,102,0.9
+113,PFN,75,0.9
+113,TANKATHON,94,0.9
+113,Drafttech,190,1
+113,Charlie Campbell,54,1
+114,PFF,154,1.2
+114,NFL Draft Buzz,97,0.9
+114,PFN,100,0.9
+114,TANKATHON,108,0.9
+114,Drafttech,78,1
+115,PFF,142,1.2
+115,NFL Draft Buzz,126,0.9
+115,PFN,103,0.9
+115,TANKATHON,130,0.9
+115,Drafttech,102,1
+115,Charlie Campbell,45,1
+116,PFF,176,1.2
+116,PFN,97,0.9
+116,TANKATHON,124,0.9
+116,Drafttech,51,1
+116,CBS,111,1
+117,PFF,136,1.2
+117,PFN,76,0.9
+117,TANKATHON,104,0.9
+117,Drafttech,130,1
+118,PFF,179,1.2
+118,NFL Draft Buzz,119,0.9
+118,PFN,70,0.9
+118,TANKATHON,120,0.9
+118,Drafttech,93,1
+118,CBS,81,1
+119,PFF,180,1.2
+119,NFL Draft Buzz,116,0.9
+119,TANKATHON,132,0.9
+119,CBS,82,1
+119,Charlie Campbell,50,1
+120,PFF,120,1.2
+120,NFL Draft Buzz,72,0.9
+120,PFN,148,0.9
+120,TANKATHON,121,0.9
+120,Drafttech,95,1
+120,CBS,96,1
+121,PFF,167,1.2
+121,NFL Draft Buzz,137,0.9
+121,PFN,36,0.9
+121,TANKATHON,111,0.9
+121,Drafttech,106,1
+121,CBS,110,1
+122,PFF,129,1.2
+122,NFL Draft Buzz,108,0.9
+122,PFN,134,0.9
+122,TANKATHON,97,0.9
+122,Drafttech,92,1
+122,CBS,98,1
+123,PFF,126,1.2
+123,NFL Draft Buzz,105,0.9
+123,PFN,150,0.9
+123,TANKATHON,112,0.9
+123,Drafttech,108,1
+123,CBS,54,1
+124,Drafttech,116,1
+125,PFF,145,1.2
+125,NFL Draft Buzz,121,0.9
+125,PFN,67,0.9
+125,TANKATHON,115,0.9
+125,Drafttech,124,1
+126,NFL Draft Buzz,95,0.9
+126,PFN,95,0.9
+126,TANKATHON,86,0.9
+126,Drafttech,159,1
+127,PFN,106,0.9
+128,PFN,122,0.9
+128,Drafttech,100,1
+129,PFF,138,1.2
+129,NFL Draft Buzz,113,0.9
+130,PFF,199,1.2
+130,PFN,110,0.9
+130,Drafttech,133,1
+130,CBS,65,1
+131,PFN,141,0.9
+131,CBS,87,1
+132,PFF,106,1.2
+132,NFL Draft Buzz,91,0.9
+132,Drafttech,176,1
+133,PFF,119,1.2
+133,NFL Draft Buzz,124,0.9
+133,TANKATHON,125,0.9
+133,Drafttech,112,1
+134,PFF,109,1.2
+134,NFL Draft Buzz,107,0.9
+134,PFN,107,0.9
+134,TANKATHON,119,0.9
+134,Drafttech,150,1
+135,PFF,158,1.2
+135,NFL Draft Buzz,92,0.9
+135,TANKATHON,136,0.9
+135,Drafttech,104,1
+136,TANKATHON,113,0.9
+136,Drafttech,121,1
+137,PFF,134,1.2
+137,NFL Draft Buzz,98,0.9
+137,PFN,85,0.9
+137,TANKATHON,123,0.9
+137,Drafttech,166,1
+138,NFL Draft Buzz,112,0.9
+139,TANKATHON,131,0.9
+139,Drafttech,105,1
+140,PFN,133,0.9
+140,Drafttech,165,1
+140,CBS,64,1
+141,PFF,224,1.2
+141,NFL Draft Buzz,136,0.9
+141,TANKATHON,91,0.9
+141,Drafttech,89,1
+141,CBS,101,1
+142,NFL Draft Buzz,125,0.9
+142,Drafttech,115,1
+143,PFF,140,1.2
+143,NFL Draft Buzz,118,0.9
+143,TANKATHON,134,0.9
+143,Drafttech,113,1
+144,Drafttech,199,1
+144,CBS,56,1
+145,PFF,349,1.2
+145,NFL Draft Buzz,88,0.9
+145,PFN,113,0.9
+145,TANKATHON,116,0.9
+145,Drafttech,84,1
+145,CBS,41,1
+146,NFL Draft Buzz,135,0.9
+146,PFN,90,0.9
+146,Drafttech,162,1
+146,CBS,100,1
+147,PFF,173,1.2
+147,TANKATHON,133,0.9
+147,Drafttech,94,1
+148,PFF,175,1.2
+148,NFL Draft Buzz,128,0.9
+148,PFN,93,0.9
+148,TANKATHON,110,0.9
+148,Drafttech,211,1
+148,CBS,49,1
+149,PFF,189,1.2
+149,Drafttech,101,1
+150,PFF,237,1.2
+150,PFN,38,0.9
+150,TANKATHON,100,0.9
+150,Drafttech,188,1
+150,CBS,109,1
+151,PFF,200,1.2
+151,NFL Draft Buzz,131,0.9
+151,PFN,111,0.9
+151,TANKATHON,128,0.9
+151,Drafttech,70,1
+152,PFF,156,1.2
+152,NFL Draft Buzz,122,0.9
+152,Drafttech,125,1
+153,PFF,155,1.2
+153,PFN,116,0.9
+153,TANKATHON,138,0.9
+153,Drafttech,110,1
+154,PFF,157,1.2
+154,TANKATHON,129,0.9
+154,Drafttech,122,1
+155,Drafttech,133,1
+156,PFF,104,1.2
+156,NFL Draft Buzz,123,0.9
+156,PFN,124,0.9
+156,Drafttech,171,1
+157,PFF,150,1.2
+157,NFL Draft Buzz,141,0.9
+157,Drafttech,118,1
+158,PFF,135,1.2
+158,NFL Draft Buzz,106,0.9
+158,Drafttech,172,1
+159,PFF,152,1.2
+159,PFN,137,0.9
+159,Drafttech,132,1
+160,PFF,133,1.2
+160,NFL Draft Buzz,147,0.9
+161,PFF,266,1.2
+161,PFN,80,0.9
+161,TANKATHON,92,0.9
+161,Drafttech,216,1
+161,CBS,58,1
+162,PFF,300,1.2
+162,PFN,84,0.9
+162,Drafttech,140,1
+162,CBS,69,1
+163,PFF,166,1.2
+164,PFF,205,1.2
+164,NFL Draft Buzz,143,0.9
+164,Drafttech,88,1
+165,PFF,139,1.2
+165,NFL Draft Buzz,148,0.9
+165,TANKATHON,139,0.9
+165,Drafttech,128,1
+166,PFN,128,0.9
+167,NFL Draft Buzz,103,0.9
+167,PFN,149,0.9
+167,Drafttech,148,1
+168,PFF,115,1.2
+168,NFL Draft Buzz,160,0.9
+168,PFN,125,0.9
+168,Drafttech,163,1
+169,PFF,178,1.2
+169,NFL Draft Buzz,77,0.9
+169,PFN,172,0.9
+169,Drafttech,153,1
+170,PFF,153,1.2
+170,NFL Draft Buzz,117,0.9
+170,PFN,162,0.9
+170,Drafttech,147,1
+171,PFN,154,0.9
+171,Drafttech,195,1
+171,CBS,73,1
+172,PFF,194,1.2
+172,NFL Draft Buzz,127,0.9
+172,Drafttech,139,1
+173,PFF,131,1.2
+173,NFL Draft Buzz,114,0.9
+173,Drafttech,207,1
+174,PFF,177,1.2
+174,NFL Draft Buzz,168,0.9
+174,CBS,109,1
+175,PFF,214,1.2
+175,NFL Draft Buzz,162,0.9
+175,Drafttech,85,1
+176,PFN,142,0.9
+176,Drafttech,230,1
+176,CBS,57,1
+177,PFF,212,1.2
+177,NFL Draft Buzz,145,0.9
+177,Drafttech,107,1
+178,PFF,185,1.2
+178,NFL Draft Buzz,130,0.9
+178,TANKATHON,137,0.9
+179,PFF,196,1.2
+179,NFL Draft Buzz,139,0.9
+179,PFN,131,0.9
+179,Drafttech,198,1
+179,CBS,92,1
+180,PFN,121,0.9
+180,Drafttech,167,1
+181,PFF,160,1.2
+181,PFN,171,0.9
+181,TANKATHON,127,0.9
+181,Drafttech,234,1
+181,Charlie Campbell,58,1
+182,PFF,111,1.2
+182,PFN,138,0.9
+182,Drafttech,210,1
+183,PFF,328,1.2
+183,PFN,132,0.9
+183,TANKATHON,126,0.9
+183,Drafttech,149,1
+183,CBS,51,1
+184,NFL Draft Buzz,217,0.9
+184,Charlie Campbell,63,1
+185,PFF,222,1.2
+185,Drafttech,129,1
+186,PFF,359,1.2
+186,PFN,104,0.9
+186,Drafttech,143,1
+186,CBS,72,1
+187,PFF,206,1.2
+187,NFL Draft Buzz,134,0.9
+187,PFN,170,0.9
+187,Drafttech,120,1
+188,PFF,184,1.2
+188,NFL Draft Buzz,144,0.9
+188,Drafttech,160,1
+189,PFF,164,1.2
+189,Drafttech,180,1
+190,PFN,144,0.9
+191,PFF,264,1.2
+191,NFL Draft Buzz,129,0.9
+191,Drafttech,119,1
+192,PFN,135,0.9
+192,Drafttech,175,1
+193,PFF,269,1.2
+193,PFN,105,0.9
+193,Drafttech,151,1
+194,PFF,204,1.2
+194,NFL Draft Buzz,140,0.9
+194,PFN,177,0.9
+194,Drafttech,135,1
+195,PFF,263,1.2
+195,PFN,99,0.9
+195,Drafttech,168,1
+196,PFF,238,1.2
+196,PFN,115,0.9
+196,Drafttech,173,1
+197,PFF,232,1.2
+197,NFL Draft Buzz,142,0.9
+197,TANKATHON,118,0.9
+197,Drafttech,184,1
+198,PFF,198,1.2
+198,Drafttech,169,1
+199,NFL Draft Buzz,152,0.9
+200,PFF,241,1.2
+200,Drafttech,137,1
+201,PFF,174,1.2
+201,PFN,166,0.9
+201,Drafttech,178,1
+202,Drafttech,227,1
+202,CBS,112,1
+203,PFF,284,1.2
+203,Drafttech,103,1
+204,PFF,170,1.2
+204,PFN,77,0.9
+204,Drafttech,284,1
+205,PFF,188,1.2
+205,PFN,157,0.9
+205,Drafttech,182,1
+206,PFN,117,0.9
+206,Drafttech,212,1
+207,PFF,242,1.2
+207,PFN,156,0.9
+207,Drafttech,138,1
+208,NFL Draft Buzz,154,0.9
+209,NFL Draft Buzz,155,0.9
+210,PFF,221,1.2
+210,Drafttech,161,1
+211,PFF,169,1.2
+211,NFL Draft Buzz,156,0.9
+211,PFN,158,0.9
+211,Drafttech,202,1
+212,PFF,288,1.2
+212,PFN,79,0.9
+212,Drafttech,194,1
+213,PFF,209,1.2
+213,PFN,151,0.9
+213,Drafttech,181,1
+214,NFL Draft Buzz,138,0.9
+214,PFN,130,0.9
+214,TANKATHON,122,0.9
+214,Drafttech,266,1
+215,PFF,210,1.2
+216,NFL Draft Buzz,158,0.9
+217,PFF,211,1.2
+218,PFF,190,1.2
+218,NFL Draft Buzz,219,0.9
+218,Drafttech,126,1
+219,PFF,216,1.2
+219,NFL Draft Buzz,151,0.9
+219,Drafttech,184,1
+220,PFN,160,0.9
+221,PFF,253,1.2
+221,Drafttech,145,1
+222,PFF,193,1.2
+222,NFL Draft Buzz,177,0.9
+223,NFL Draft Buzz,161,0.9
+224,PFF,339,1.2
+224,TANKATHON,70,0.9
+225,PFF,273,1.2
+225,PFN,146,0.9
+225,Drafttech,152,1
+226,PFN,163,0.9
+227,PFF,218,1.2
+228,NFL Draft Buzz,164,0.9
+229,Drafttech,183,1
+230,PFF,310,1.2
+230,Drafttech,251,1
+230,Charlie Campbell,40,1
+231,NFL Draft Buzz,165,0.9
+232,PFF,146,1.2
+232,NFL Draft Buzz,149,0.9
+232,PFN,136,0.9
+232,Drafttech,295,1
+233,PFF,171,1.2
+233,NFL Draft Buzz,163,0.9
+233,PFN,153,0.9
+233,Drafttech,240,1
+234,PFF,162,1.2
+234,NFL Draft Buzz,132,0.9
+234,PFN,173,0.9
+234,Drafttech,269,1
+235,PFN,168,0.9
+236,PFF,191,1.2
+236,NFL Draft Buzz,218,0.9
+236,TANKATHON,114,0.9
+236,Drafttech,224,1
+237,PFF,225,1.2
+237,NFL Draft Buzz,170,0.9
+238,PFF,226,1.2
+239,PFF,265,1.2
+239,Drafttech,156,1
+240,PFF,256,1.2
+240,Drafttech,164,1
+241,PFF,182,1.2
+241,NFL Draft Buzz,146,0.9
+241,Drafttech,253,1
+242,PFN,175,0.9
+242,Drafttech,185,1
+243,PFF,110,1.2
+243,NFL Draft Buzz,166,0.9
+243,Drafttech,293,1
+244,PFF,249,1.2
+244,PFN,155,0.9
+245,PFF,229,1.2
+246,NFL Draft Buzz,172,0.9
+247,PFF,231,1.2
+247,NFL Draft Buzz,171,0.9
+248,PFF,220,1.2
+248,NFL Draft Buzz,169,0.9
+248,Drafttech,208,1
+249,NFL Draft Buzz,174,0.9
+249,Drafttech,193,1
+250,PFF,207,1.2
+250,Drafttech,214,1
+251,NFL Draft Buzz,175,0.9
+252,PFF,159,1.2
+252,Drafttech,257,1
+253,NFL Draft Buzz,176,0.9
+254,PFF,250,1.2
+254,NFL Draft Buzz,133,0.9
+254,Drafttech,231,1
+255,Drafttech,197,1
+256,PFN,178,0.9
+257,NFL Draft Buzz,178,0.9
+258,PFF,192,1.2
+258,Drafttech,236,1
+259,PFF,197,1.2
+259,Drafttech,232,1
+260,PFF,230,1.2
+260,Drafttech,205,1
+261,NFL Draft Buzz,179,0.9
+262,PFF,195,1.2
+262,NFL Draft Buzz,150,0.9
+262,Drafttech,270,1
+263,PFF,327,1.2
+263,NFL Draft Buzz,167,0.9
+263,PFN,169,0.9
+263,Drafttech,154,1
+264,NFL Draft Buzz,180,0.9
+265,Drafttech,200,1
+266,PFF,202,1.2
+266,NFL Draft Buzz,159,0.9
+266,PFN,180,0.9
+266,Drafttech,256,1
+267,NFL Draft Buzz,209,0.9
+267,PFN,73,0.9
+267,Drafttech,288,1
+268,NFL Draft Buzz,181,0.9
+269,NFL Draft Buzz,201,0.9
+269,Drafttech,179,1
+270,PFN,123,0.9
+270,Drafttech,268,1
+271,PFN,183,0.9
+271,Drafttech,203,1
+272,PFN,167,0.9
+272,Drafttech,221,1
+273,PFF,172,1.2
+273,Drafttech,264,1
+274,PFF,361,1.2
+274,PFN,96,0.9
+275,Drafttech,204,1
+276,PFF,245,1.2
+277,NFL Draft Buzz,184,0.9
+278,NFL Draft Buzz,227,0.9
+278,Drafttech,252,1
+278,CBS,110,1
+279,Drafttech,206,1
+280,NFL Draft Buzz,186,0.9
+281,PFF,240,1.2
+281,PFN,120,0.9
+281,Drafttech,289,1
+282,PFF,281,1.2
+282,PFN,182,0.9
+282,Drafttech,187,1
+283,NFL Draft Buzz,187,0.9
+284,PFF,255,1.2
+284,NFL Draft Buzz,183,0.9
+285,NFL Draft Buzz,188,0.9
+286,PFF,312,1.2
+286,NFL Draft Buzz,204,0.9
+286,Drafttech,141,1
+287,PFF,233,1.2
+287,NFL Draft Buzz,153,0.9
+287,Drafttech,265,1
+288,PFF,215,1.2
+288,NFL Draft Buzz,185,0.9
+288,Drafttech,245,1
+289,PFF,270,1.2
+289,Drafttech,196,1
+290,NFL Draft Buzz,190,0.9
+291,PFF,335,1.2
+291,Drafttech,144,1
+292,NFL Draft Buzz,192,0.9
+293,PFF,223,1.2
+293,NFL Draft Buzz,157,0.9
+293,Drafttech,281,1
+294,PFF,235,1.2
+294,NFL Draft Buzz,173,0.9
+294,Drafttech,254,1
+295,Drafttech,215,1
+296,PFF,264,1.2
+296,NFL Draft Buzz,216,0.9
+296,Drafttech,185,1
+297,PFF,239,1.2
+297,NFL Draft Buzz,208,0.9
+298,PFN,152,0.9
+298,Drafttech,262,1
+299,PFF,257,1.2
+299,Drafttech,217,1
+300,PFF,285,1.2
+300,NFL Draft Buzz,231,0.9
+300,PFN,159,0.9
+300,Drafttech,192,1
+301,Drafttech,216,1
+302,NFL Draft Buzz,211,0.9
+302,PFN,179,0.9
+303,NFL Draft Buzz,196,0.9
+304,Drafttech,218,1
+305,PFF,363,1.2
+305,PFN,176,0.9
+305,Drafttech,158,1
+306,NFL Draft Buzz,197,0.9
+307,PFF,289,1.2
+307,Drafttech,199,1
+308,NFL Draft Buzz,198,0.9
+309,Drafttech,220,1
+310,PFF,219,1.2
+310,Drafttech,259,1
+311,NFL Draft Buzz,199,0.9
+312,Drafttech,222,1
+313,NFL Draft Buzz,200,0.9
+314,PFF,236,1.2
+314,Drafttech,248,1
+315,PFF,268,1.2
+316,NFL Draft Buzz,202,0.9
+317,Drafttech,225,1
+318,NFL Draft Buzz,203,0.9
+319,Drafttech,226,1
+320,PFF,303,1.2
+320,NFL Draft Buzz,182,0.9
+321,PFF,319,1.2
+321,Drafttech,189,1
+322,NFL Draft Buzz,205,0.9
+323,PFF,259,1.2
+323,Drafttech,242,1
+324,NFL Draft Buzz,206,0.9
+325,PFF,338,1.2
+325,Drafttech,177,1
+326,NFL Draft Buzz,207,0.9
+327,PFF,276,1.2
+328,PFF,278,1.2
+329,NFL Draft Buzz,220,0.9
+329,Drafttech,219,1
+330,Drafttech,233,1
+331,PFF,360,1.2
+331,PFN,174,0.9
+331,Drafttech,209,1
+332,PFF,400,1.2
+332,PFN,181,0.9
+332,Drafttech,170,1
+333,NFL Draft Buzz,212,0.9
+334,PFF,283,1.2
+335,PFF,282,1.2
+335,NFL Draft Buzz,226,0.9
+335,Drafttech,223,1
+336,PFF,383,1.2
+336,Drafttech,155,1
+337,NFL Draft Buzz,214,0.9
+338,PFF,401,1.2
+338,Drafttech,142,1
+339,PFF,286,1.2
+340,PFF,267,1.2
+340,Drafttech,255,1
+341,NFL Draft Buzz,215,0.9
+342,Drafttech,239,1
+343,PFF,287,1.2
+344,PFF,397,1.2
+344,PFN,161,0.9
+344,Drafttech,213,1
+345,Drafttech,241,1
+346,PFF,292,1.2
+347,Drafttech,244,1
+348,PFF,293,1.2
+349,PFF,375,1.2
+349,PFN,165,0.9
+349,Drafttech,238,1
+350,PFF,294,1.2
+351,NFL Draft Buzz,221,0.9
+352,PFF,295,1.2
+353,NFL Draft Buzz,194,0.9
+353,Drafttech,277,1
+354,NFL Draft Buzz,222,0.9
+355,PFF,252,1.2
+355,Drafttech,285,1
+356,PFF,365,1.2
+356,Drafttech,191,1
+357,NFL Draft Buzz,223,0.9
+358,PFF,260,1.2
+358,NFL Draft Buzz,252,0.9
+359,PFF,277,1.2
+359,Drafttech,266,1
+360,NFL Draft Buzz,280,0.9
+360,Drafttech,186,1
+361,NFL Draft Buzz,224,0.9
+362,Drafttech,249,1
+363,PFF,299,1.2
+364,PFF,275,1.2
+364,NFL Draft Buzz,254,0.9
+364,Drafttech,237,1
+365,Drafttech,250,1
+366,NFL Draft Buzz,225,0.9
+367,NFL Draft Buzz,193,0.9
+367,Drafttech,286,1
+368,PFF,246,1.2
+368,Drafttech,296,1
+369,PFF,301,1.2
+370,PFF,306,1.2
+370,Drafttech,247,1
+371,PFF,302,1.2
+372,PFF,304,1.2
+373,NFL Draft Buzz,228,0.9
+374,NFL Draft Buzz,229,0.9
+375,PFF,332,1.2
+375,NFL Draft Buzz,210,0.9
+376,NFL Draft Buzz,230,0.9
+377,PFF,309,1.2
+378,NFL Draft Buzz,232,0.9
+379,PFF,412,1.2
+379,Drafttech,174,1
+380,NFL Draft Buzz,233,0.9
+381,PFF,311,1.2
+382,PFF,341,1.2
+382,Drafttech,235,1
+383,PFF,382,1.2
+383,Drafttech,201,1
+384,PFF,313,1.2
+385,NFL Draft Buzz,235,0.9
+386,NFL Draft Buzz,266,0.9
+386,Drafttech,228,1
+387,PFF,247,1.2
+387,NFL Draft Buzz,276,0.9
+387,Drafttech,274,1
+388,NFL Draft Buzz,236,0.9
+389,PFF,291,1.2
+389,Drafttech,282,1
+390,PFF,316,1.2
+391,NFL Draft Buzz,237,0.9
+392,NFL Draft Buzz,238,0.9
+393,NFL Draft Buzz,258,0.9
+393,Drafttech,243,1
+394,PFF,318,1.2
+395,NFL Draft Buzz,243,0.9
+395,Drafttech,260,1
+396,NFL Draft Buzz,239,0.9
+397,PFF,317,1.2
+397,NFL Draft Buzz,242,0.9
+398,NFL Draft Buzz,240,0.9
+399,PFF,321,1.2
+400,NFL Draft Buzz,241,0.9
+401,PFF,322,1.2
+402,PFF,323,1.2
+403,PFF,324,1.2
+404,PFF,337,1.2
+404,Drafttech,261,1
+405,NFL Draft Buzz,244,0.9
+406,NFL Draft Buzz,245,0.9
+407,NFL Draft Buzz,246,0.9
+408,PFF,396,1.2
+408,NFL Draft Buzz,195,0.9
+409,NFL Draft Buzz,247,0.9
+410,PFF,330,1.2
+411,NFL Draft Buzz,248,0.9
+412,PFF,331,1.2
+413,PFF,354,1.2
+413,Drafttech,258,1
+414,NFL Draft Buzz,249,0.9
+415,PFF,415,1.2
+415,NFL Draft Buzz,189,0.9
+416,NFL Draft Buzz,251,0.9
+417,Drafttech,279,1
+418,PFF,336,1.2
+418,Drafttech,280,1
+419,PFF,403,1.2
+419,NFL Draft Buzz,191,0.9
+419,Drafttech,294,1
+420,NFL Draft Buzz,253,0.9
+421,PFF,320,1.2
+421,Drafttech,297,1
+422,PFF,344,1.2
+422,Drafttech,278,1
+423,PFF,329,1.2
+423,Drafttech,291,1
+424,PFF,340,1.2
+425,PFF,351,1.2
+425,Drafttech,276,1
+426,PFF,342,1.2
+427,NFL Draft Buzz,257,0.9
+428,PFF,343,1.2
+429,NFL Draft Buzz,259,0.9
+430,PFF,346,1.2
+431,NFL Draft Buzz,260,0.9
+432,PFF,364,1.2
+432,Drafttech,275,1
+433,PFF,379,1.2
+433,Drafttech,263,1
+434,PFF,352,1.2
+434,NFL Draft Buzz,256,0.9
+434,Drafttech,292,1
+435,NFL Draft Buzz,261,0.9
+436,PFF,348,1.2
+437,PFF,385,1.2
+437,NFL Draft Buzz,234,0.9
+438,NFL Draft Buzz,262,0.9
+439,PFF,374,1.2
+439,Drafttech,271,1
+440,PFF,350,1.2
+441,PFF,380,1.2
+441,Drafttech,267,1
+442,NFL Draft Buzz,263,0.9
+443,NFL Draft Buzz,264,0.9
+444,PFF,353,1.2
+445,NFL Draft Buzz,265,0.9
+446,PFF,355,1.2
+447,PFF,384,1.2
+447,Drafttech,273,1
+448,NFL Draft Buzz,267,0.9
+449,PFF,305,1.2
+449,NFL Draft Buzz,307,0.9
+450,NFL Draft Buzz,268,0.9
+451,NFL Draft Buzz,269,0.9
+452,NFL Draft Buzz,270,0.9
+453,NFL Draft Buzz,271,0.9
+454,PFF,362,1.2
+455,NFL Draft Buzz,272,0.9
+456,NFL Draft Buzz,274,0.9
+457,NFL Draft Buzz,275,0.9
+458,PFF,386,1.2
+458,Drafttech,290,1
+459,PFF,367,1.2
+460,PFF,394,1.2
+460,NFL Draft Buzz,255,0.9
+461,NFL Draft Buzz,277,0.9
+462,PFF,414,1.2
+462,Drafttech,272,1
+463,NFL Draft Buzz,278,0.9
+464,PFF,371,1.2
+465,NFL Draft Buzz,279,0.9
+466,PFF,372,1.2
+467,PFF,373,1.2
+468,NFL Draft Buzz,281,0.9
+469,PFF,411,1.2
+469,Drafttech,283,1
+470,PFF,376,1.2
+471,NFL Draft Buzz,282,0.9
+472,PFF,377,1.2
+473,NFL Draft Buzz,283,0.9
+474,PFF,378,1.2
+475,PFF,413,1.2
+475,Drafttech,287,1
+476,NFL Draft Buzz,285,0.9
+477,NFL Draft Buzz,286,0.9
+478,NFL Draft Buzz,287,0.9
+479,NFL Draft Buzz,288,0.9
+480,NFL Draft Buzz,289,0.9
+481,PFF,407,1.2
+481,NFL Draft Buzz,273,0.9
+482,NFL Draft Buzz,290,0.9
+483,NFL Draft Buzz,291,0.9
+484,PFF,388,1.2
+485,NFL Draft Buzz,292,0.9
+486,PFF,390,1.2
+487,NFL Draft Buzz,293,0.9
+488,PFF,391,1.2
+489,NFL Draft Buzz,294,0.9
+490,PFF,393,1.2
+491,NFL Draft Buzz,295,0.9
+492,NFL Draft Buzz,296,0.9
+493,PFF,395,1.2
+494,NFL Draft Buzz,297,0.9
+495,NFL Draft Buzz,298,0.9
+496,PFF,398,1.2
+497,NFL Draft Buzz,299,0.9
+498,NFL Draft Buzz,300,0.9
+499,NFL Draft Buzz,301,0.9
+500,PFF,402,1.2
+501,NFL Draft Buzz,302,0.9
+502,PFF,404,1.2
+503,NFL Draft Buzz,303,0.9
+504,NFL Draft Buzz,304,0.9
+505,PFF,406,1.2
+506,NFL Draft Buzz,305,0.9
+507,NFL Draft Buzz,306,0.9
+508,PFF,408,1.2
+509,NFL Draft Buzz,308,0.9
+510,NFL Draft Buzz,309,0.9
+511,NFL Draft Buzz,310,0.9
+512,NFL Draft Buzz,311,0.9
+513,NFL Draft Buzz,311,0.9
+514,NFL Draft Buzz,312,0.9
+515,NFL Draft Buzz,313,0.9
+516,NFL Draft Buzz,314,0.9
+517,NFL Draft Buzz,315,0.9
+518,NFL Draft Buzz,316,0.9
+519,NFL Draft Buzz,317,0.9

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://api.sleeper.app https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://fantasysports.yahooapis.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
+
+    <title>Dynasty HQ - Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap"></noscript>
+    <style>
+        :root {
+            --gold: #E8B23A;
+            --dark-gold: #8A6D1E;
+            --black: #08080B;
+            --off-black: #1B1B22;
+            --charcoal: #27262E;
+            --white: #F5F2EA;
+            --silver: #BDB8AD;
+            /* Safe-area insets (iPhone notch / home indicator); 0px on desktop */
+            --sat: env(safe-area-inset-top, 0px);
+            --sar: env(safe-area-inset-right, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+            --sal: env(safe-area-inset-left, 0px);
+        }
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        font-family: 'Inter', sans-serif;
+        background: var(--black);
+        color: var(--white);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: max(2rem, var(--sat)) max(2rem, var(--sar)) max(2rem, var(--sab)) max(2rem, var(--sal));
+    }
+
+    .login-container {
+        background: linear-gradient(135deg, var(--off-black) 0%, var(--charcoal) 100%);
+        border: 3px solid var(--gold);
+        border-radius: 16px;
+        padding: 3rem 2rem;
+        max-width: 450px;
+        width: 100%;
+        box-shadow: 
+            0 0 0 1px rgba(232, 178, 58, 0.3),
+            0 8px 32px rgba(0, 0, 0, 0.8);
+    }
+
+    .logo-section {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .logo-section img {
+        width: 100px;
+        height: 100px;
+        margin-bottom: 1rem;
+        filter: drop-shadow(0 0 12px rgba(232, 178, 58, 0.5));
+    }
+
+    .login-title {
+        font-family: 'Rajdhani', sans-serif;
+        font-size: 2rem;
+        color: var(--gold);
+        text-align: center;
+        letter-spacing: 0.15em;
+        margin-bottom: 0.5rem;
+    }
+
+    .login-subtitle {
+        text-align: center;
+        font-size: 0.9rem;
+        color: var(--silver);
+        margin-bottom: 2rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--gold);
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .form-input {
+        width: 100%;
+        padding: 0.875rem 1rem;
+        background: var(--black);
+        border: 2px solid rgba(232, 178, 58, 0.3);
+        border-radius: 8px;
+        color: var(--white);
+        font-family: 'Inter', sans-serif;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .form-input:focus {
+        outline: none;
+        border-color: var(--gold);
+        box-shadow: 0 0 0 3px rgba(232, 178, 58, 0.1);
+    }
+
+    .form-input::placeholder {
+        color: rgba(255, 255, 255, 0.3);
+    }
+
+    .login-btn {
+        width: 100%;
+        padding: 1rem;
+        background: linear-gradient(135deg, var(--gold) 0%, var(--dark-gold) 100%);
+        border: none;
+        border-radius: 8px;
+        color: var(--black);
+        font-family: 'Inter', sans-serif;
+        font-size: 1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(232, 178, 58, 0.3);
+    }
+
+    .login-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(232, 178, 58, 0.5);
+    }
+
+    .login-btn:active {
+        transform: translateY(0);
+    }
+
+    .error-message {
+        background: rgba(231, 76, 60, 0.2);
+        border: 1px solid #E74C3C;
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-bottom: 1.5rem;
+        color: #E74C3C;
+        font-size: 0.85rem;
+        display: none;
+    }
+
+    .error-message.show {
+        display: block;
+    }
+
+    .helper-text {
+        text-align: center;
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.5);
+        margin-top: 1.5rem;
+        line-height: 1.5;
+    }
+
+    /* Phone tier: 16px inputs kill iOS Safari zoom-on-focus; 44px tap targets */
+    @media (max-width: 767px) {
+        body {
+            padding: max(1.25rem, var(--sat)) max(1.25rem, var(--sar)) max(1.25rem, var(--sab)) max(1.25rem, var(--sal));
+        }
+
+        .form-input {
+            font-size: 16px;
+        }
+
+        .login-btn {
+            min-height: 44px;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .login-container {
+            padding: 2rem 1.5rem;
+        }
+
+        .login-title {
+            font-size: 1.5rem;
+        }
+    }
+</style>
+
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo-section">
+            <img src="icon-192.png" alt="Dynasty HQ Logo">
+        </div>
+
+    <h1 class="login-title">Dynasty HQ</h1>
+    <p class="login-subtitle">Dynasty HQ Command Center</p>
+
+    <div id="errorMessage" class="error-message"></div>
+
+    <form id="loginForm">
+        <div class="form-group">
+            <label class="form-label" for="username">Sleeper Username</label>
+            <input 
+                type="text" 
+                id="username" 
+                class="form-input" 
+                placeholder="Enter your Sleeper username"
+                autocomplete="username"
+                required
+            >
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="password">Password</label>
+            <input 
+                type="password" 
+                id="password" 
+                class="form-input" 
+                placeholder="Create a secure password"
+                autocomplete="current-password"
+                required
+            >
+        </div>
+
+        <button type="submit" class="login-btn">Access Dynasty HQ</button>
+    </form>
+
+    <p class="helper-text">
+        First time? Enter your Sleeper username and create a password.<br>
+        Your credentials are stored securely in your browser.
+    </p>
+
+    <p style="text-align:center;margin-top:1.25rem">
+        <a href="landing.html" style="color:var(--gold);font-size:0.85rem;font-weight:600;text-decoration:none">&larr; Back to sign-in options</a>
+    </p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/shared/shared-loader.js?v=20260531sandbox2"></script>
+<script>WRShared.load('supabase-client.js');</script>
+<script>
+    const AUTH_KEY = 'od_auth_v1';
+    const SESSION_KEY = 'fw_session_v1';
+    const errorEl = document.getElementById('errorMessage');
+    const loginForm = document.getElementById('loginForm');
+
+    // A session is valid only when fw_session_v1 holds a well-formed, unexpired JWT.
+    // The app shell (components.js) enforces the same check, so login.html must mint
+    // and store that token rather than relying on od_auth_v1 presence.
+    function jwtIsUnexpired(token) {
+        try {
+            const part = String(token || '').split('.')[1];
+            if (!part) return false;
+            const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+            const padded = b64.length % 4 ? b64 + '='.repeat(4 - (b64.length % 4)) : b64;
+            const payload = JSON.parse(decodeURIComponent(atob(padded).split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('')));
+            return !payload.exp || Number(payload.exp) * 1000 > Date.now();
+        } catch (e) { return false; }
+    }
+    function storeSession(session, username) {
+        if (!session?.token) return;
+        localStorage.setItem(SESSION_KEY, JSON.stringify({
+            token: session.token,
+            expiresAt: session.expiresAt || null,
+            user: { sleeperUsername: username, isGifted: session.isGifted || false },
+        }));
+    }
+
+    // Pre-fill username from ?for= URL param (gifted dashboard links)
+    const urlParams = new URLSearchParams(window.location.search);
+    const forUsername = urlParams.get('for');
+    if (forUsername) {
+        const usernameInput = document.getElementById('username');
+        usernameInput.value = forUsername;
+        usernameInput.readOnly = true;
+        usernameInput.style.opacity = '0.7';
+    }
+
+    async function hashPassword(password) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function showError(message) {
+        errorEl.textContent = message;
+        errorEl.classList.add('show');
+        setTimeout(() => errorEl.classList.remove('show'), 5000);
+    }
+
+    // Already logged in only if we hold a valid, unexpired session token — presence
+    // of od_auth_v1 alone is no longer enough to enter the app.
+    try {
+        const existingSession = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+        if (existingSession?.token && jwtIsUnexpired(existingSession.token)) {
+            window.location.href = 'index.html';
+        }
+    } catch (e) {
+        localStorage.removeItem(SESSION_KEY);
+    }
+
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+
+        if (!username || !password) {
+            showError('Please enter both username and password');
+            return;
+        }
+
+        const loginBtn = document.querySelector('.login-btn');
+        const existingLocal = localStorage.getItem(AUTH_KEY);
+
+        if (existingLocal) {
+            // Returning user — verify locally, then refresh session token in background
+            try {
+                const auth = JSON.parse(existingLocal);
+                const inputHash = await hashPassword(password);
+                if (auth.username === username && auth.passwordHash === inputHash) {
+                    const session = await window.OD.acquireSessionToken(username, password);
+                    if (session?.token) {
+                        storeSession(session, username);
+                        window.location.href = 'index.html';
+                    } else {
+                        showError('This legacy login now requires a password-backed gifted account. Use email sign-in for Dynasty HQ accounts.');
+                    }
+                } else {
+                    showError('Incorrect username or password');
+                }
+            } catch {
+                showError('Authentication error. Please try again.');
+            }
+            return;
+        }
+
+        // No local auth — authenticate via get-session-token Edge Function.
+        // Handles password-backed gifted/legacy users only.
+        loginBtn.textContent = 'Verifying...';
+        loginBtn.disabled = true;
+        try {
+            const session = await window.OD.acquireSessionToken(username, password);
+            if (session?.token) {
+                const passwordHash = await hashPassword(password);
+                localStorage.setItem(AUTH_KEY, JSON.stringify({
+                    username,
+                    passwordHash,
+                    isGifted: session.isGifted || false,
+                    createdAt: new Date().toISOString()
+                }));
+                storeSession(session, username);
+                localStorage.setItem('od_locked_username_v2', username);
+                window.location.href = 'index.html';
+                return;
+            }
+        } catch {}
+
+        showError('This legacy login now requires a password-backed gifted account. Use email sign-in for Dynasty HQ accounts.');
+        loginBtn.textContent = 'Access Dynasty HQ';
+        loginBtn.disabled = false;
+    });
+</script>
+
+<footer style="text-align:center;padding:16px;font-size:12px;color:#666;border-top:1px solid #1a1a1a;margin-top:32px;">&copy; 2026 C2 Football LLC. All rights reserved.</footer>
+</body>
+</html>
