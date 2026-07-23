@@ -144,7 +144,7 @@
     :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
     /* ── Nav ─────────────────────────────────────────── */
-    .nav{position:sticky;top:0;z-index:40;background:rgba(10,12,16,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding-top:var(--sat)}
+    .nav{position:sticky;top:30px;z-index:40;background:rgba(10,12,16,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding-top:var(--sat)}
     .nav-in{max-width:var(--maxw);margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 24px}
     .nav-brand{display:flex;align-items:center;gap:10px}
     .nav-logo{width:30px;height:30px;border-radius:var(--radius);border:1px solid var(--border-strong)}
@@ -391,7 +391,258 @@
       .fog__blob,.fog__grain{animation:none}
       *{transition:none!important}
     }
+
+    /* ── Lenis smooth-scroll plumbing (ported) ──────── */
+    html.lenis,html.lenis body{height:auto}
+    .lenis.lenis-smooth{scroll-behavior:auto!important}
+    .lenis.lenis-stopped{overflow:hidden}
+
+    /* ── Ported vars: brochure tokens mapped onto the base palette ── */
+    :root{--forge:var(--accent);--forge-bright:var(--accent-bright);--forge-dim:var(--accent-dim);--forge-tint:var(--accent-tint);--amber:var(--warn);--pos-tint:rgba(47,191,136,.12);--neg-tint:rgba(240,73,92,.12);--fs-label:11px;--fs-micro:10px;--sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;--sp-7:48px;--sp-8:72px;--sp-9:112px;--ease:cubic-bezier(0.25,0.1,0.25,1);--t-fast:200ms var(--ease);--t:280ms var(--ease);--font-serif:Georgia,'Times New Roman',serif}
+    .gild{color:var(--accent)}
+
+    /* ── Ported: brochure "A universe built around your league." ── */
+    .universe{position:relative;overflow:hidden;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--bg-0)}
+    .universe .ember{z-index:0}
+    .universe .fog{opacity:.7}
+    .universe__grid{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.4;background-image:linear-gradient(var(--border-faint) 1px,transparent 1px),linear-gradient(90deg,var(--border-faint) 1px,transparent 1px);background-size:64px 64px;-webkit-mask-image:radial-gradient(95% 95% at 50% 42%,#000 30%,transparent 78%);mask-image:radial-gradient(95% 95% at 50% 42%,#000 30%,transparent 78%)}
+    .universe__orbits{position:absolute;inset:0;z-index:1;pointer-events:none}
+    .universe__orbits .orbit{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);border:1px solid rgba(232,178,58,.16);border-radius:50%}
+    .orbit--1{width:min(360px,74vw);height:min(360px,74vw);animation:orbitSpin 48s linear infinite}
+    .orbit--2{width:min(600px,100vw);height:min(600px,100vw);border-color:rgba(232,178,58,.11);animation:orbitSpin 82s linear infinite reverse}
+    .orbit--3{width:min(880px,132vw);height:min(880px,132vw);border-color:rgba(74,157,222,.10);animation:orbitSpin 124s linear infinite}
+    @keyframes orbitSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+    .universe__orbits .node{position:absolute;display:block;top:-4px;left:50%;width:7px;height:7px;margin-left:-4px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px rgba(232,178,58,.75)}
+    .universe__orbits .node--blue{background:var(--tactical);box-shadow:0 0 12px rgba(74,157,222,.7)}
+    .universe__orbits .node--dim{opacity:.72;width:5px;height:5px}
+    .universe__orbits .node--e{top:50%;left:100%;margin:-3px 0 0 -3px}
+    .orbit-core{position:absolute;top:50%;left:50%;width:9px;height:9px;background:var(--accent);transform:translate(-50%,-50%) rotate(45deg);box-shadow:0 0 24px rgba(232,178,58,.55)}
+    .universe__in{position:relative;z-index:3;max-width:840px;margin:0 auto;padding:118px 24px;text-align:center}
+    .universe h2{font-family:var(--font-mono);font-size:clamp(30px,4.4vw,50px);font-weight:600;line-height:1.08;letter-spacing:-.015em;color:var(--text-1);margin-bottom:18px}
+    .universe h2 .mk{color:var(--accent);text-shadow:0 0 34px rgba(232,178,58,.22)}
+    .universe__sub{font-family:var(--font-serif);font-style:italic;font-size:clamp(16px,1.6vw,20px);line-height:1.55;color:var(--text-2);max-width:56ch;margin:0 auto 30px}
+    .universe .hero-free{margin-top:16px}
+    @media(max-width:680px){.universe__in{padding:76px 16px}}
+
+    /* ── Ported: brochure value-simulator (#engine), scoped + repaletted ── */
+    #engine button{font-family:var(--font-mono)}
+    #engine .micro{font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-3)}
+    #engine .readout{margin-bottom:var(--sp-5);border:1px solid var(--border);background:var(--bg-1);display:grid;grid-template-columns:auto 1fr auto;align-items:stretch}
+    #engine .readout__tag{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);border-right:1px solid var(--border);background:var(--bg-2)}
+    #engine .readout__tag .dot{width:7px;height:7px;border-radius:50%;background:var(--pos);box-shadow:0 0 8px var(--pos)}
+    html.anim #engine .readout__tag .dot{animation:roPulse 2.2s ease-in-out infinite}
+    @keyframes roPulse{0%,100%{opacity:1}50%{opacity:.35}}
+    #engine .readout__kv{display:flex;flex-direction:column;gap:2px}
+    #engine .readout__kv b{font:600 13px var(--font-mono);color:var(--text-1)}
+    #engine .readout__kv span{font:500 var(--fs-micro) var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)}
+    #engine .readout__stream{display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-4);overflow:hidden;white-space:nowrap}
+    #engine .readout__top1{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-left:1px solid var(--border);background:var(--bg-2)}
+    #engine .readout__top1 .v{font:600 28px var(--font-mono);color:var(--accent);line-height:1}
+    #engine .panel{background:var(--bg-1);border:1px solid var(--border);padding:0}
+    #engine .panelhdr{display:flex;justify-content:space-between;align-items:center;padding:var(--sp-3);border-bottom:1px solid var(--border);border-left:3px solid var(--accent);background:var(--bg-1)}
+    #engine .panelhdr__t{font:600 14px var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-1)}
+    #engine .panelhdr__m{font:400 var(--fs-micro) var(--font-mono);color:var(--text-3)}
+    #engine .engine{display:grid;grid-template-columns:340px 1fr;gap:var(--sp-4);align-items:start}
+    #engine .cfg{padding:var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-4)}
+    #engine .cfg__group{display:flex;flex-direction:column;gap:var(--sp-2)}
+    #engine .cfg__row{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3)}
+    #engine .seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:2px;overflow:hidden}
+    #engine .seg button{background:var(--bg-inset);color:var(--text-2);border:none;padding:6px 11px;font:500 var(--fs-label) var(--font-mono);letter-spacing:.05em;text-transform:uppercase;transition:var(--t-fast)}
+    #engine .seg button + button{border-left:1px solid var(--border)}
+    #engine .seg button.on{background:var(--accent);color:var(--bg-0)}
+    #engine .seg--blue button.on{background:var(--tactical);color:var(--bg-0)}
+    #engine .seg--wild button.on{background:var(--amber);color:var(--bg-0)}
+    #engine .stepper{display:inline-flex;align-items:center;border:1px solid var(--border-strong);border-radius:2px}
+    #engine .stepper button{background:var(--bg-inset);border:none;color:var(--text-1);width:28px;height:28px;font-size:15px;line-height:1}
+    #engine .stepper button:hover{color:var(--accent)}
+    #engine .stepper b{min-width:34px;text-align:center;font:600 13px var(--font-mono);color:var(--text-1)}
+    #engine .cfg__hint{font:400 var(--fs-micro)/1.5 var(--font-sans);color:var(--text-3)}
+    #engine .divider{height:1px;background:var(--border-faint);margin:var(--sp-1) 0}
+    #engine .rgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-2)}
+    #engine .ministep{display:flex;flex-direction:column;gap:4px;align-items:center;background:var(--bg-inset);border:1px solid var(--border);padding:var(--sp-2) var(--sp-1)}
+    #engine .ministep--idp{border-color:#2c5e80}
+    #engine .ministep--idp .ml{color:var(--tactical)}
+    #engine .ministep .ml{font:500 9px var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+    #engine .ministep .mc{display:inline-flex;align-items:center;gap:2px}
+    #engine .ministep .mc button{background:transparent;border:none;color:var(--text-2);width:18px;height:18px;font-size:13px;line-height:1}
+    #engine .ministep .mc button:hover{color:var(--accent)}
+    #engine .ministep .mc b{min-width:16px;text-align:center;font:600 13px var(--font-mono);color:var(--text-1)}
+    #engine .board{min-height:560px}
+    #engine .board__tabs{display:flex;border-bottom:1px solid var(--border);flex-wrap:wrap}
+    #engine .board__tabs button{flex:1;min-width:46px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-3);padding:var(--sp-3) var(--sp-1);font:500 var(--fs-label) var(--font-mono);letter-spacing:.05em;text-transform:uppercase;transition:var(--t-fast)}
+    #engine .board__tabs button:hover{color:var(--text-1)}
+    #engine .board__tabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
+    #engine .board__colhdr{display:grid;grid-template-columns:34px 1fr 96px 120px 66px;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--border-strong);background:var(--bg-1)}
+    #engine .board__colhdr span{font:500 var(--fs-label) var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+    #engine .board__colhdr .r{text-align:right}
+    #engine .board__note{font:400 var(--fs-micro)/1.5 var(--font-mono);letter-spacing:.02em;color:var(--text-3);padding:var(--sp-3) var(--sp-4);border-top:1px solid var(--border-faint);display:flex;gap:8px;align-items:flex-start}
+    #engine .board__note::before{content:"◆";color:var(--accent-dim);font-size:9px;line-height:1.9;flex:none}
+    #engine .board__note b{color:var(--text-2);font-weight:600}
+    #engine .row{display:grid;grid-template-columns:34px 1fr 96px 120px 66px;align-items:center;gap:var(--sp-3);padding:var(--sp-3);border-bottom:1px solid var(--border-faint);transition:background var(--t-fast)}
+    #engine .row:hover{background:var(--bg-2)}
+    #engine .row__rank{font:600 13px var(--font-mono);color:var(--text-3);text-align:center}
+    #engine .row__rank b{color:var(--accent)}
+    #engine .row__name{display:flex;flex-direction:column;gap:3px;min-width:0}
+    #engine .row__name .nm{font:500 13px var(--font-mono);color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #engine .posage{display:inline-flex;align-items:center;gap:6px}
+    #engine .tag{display:inline-flex;align-items:center;font:500 var(--fs-micro) var(--font-mono);letter-spacing:.04em;text-transform:uppercase;padding:1px 5px;border:1px solid;border-radius:2px;margin:0;color:var(--text-2);border-color:var(--border-strong)}
+    #engine .tag--QB{color:var(--accent);border-color:var(--accent-dim)}
+    #engine .tag--RB{color:var(--pos);border-color:#1f5f47}
+    #engine .tag--WR{color:var(--tactical);border-color:#2c5e80}
+    #engine .tag--TE{color:var(--amber);border-color:#7a5600}
+    #engine .tag--K{color:#C9A2FF;border-color:#5a4a7a}
+    #engine .posage .age{font:400 var(--fs-micro) var(--font-mono);color:var(--text-3)}
+    #engine .row__pts{font:400 13px var(--font-mono);color:var(--text-2);text-align:right}
+    #engine .row__val{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+    #engine .row__val .v{font:600 17px var(--font-mono);color:var(--accent);line-height:1}
+    #engine .row .band{width:112px}
+    #engine .row__delta{font:500 var(--fs-label) var(--font-mono);text-align:right;color:var(--text-3)}
+    #engine .row__delta.up{color:var(--pos)}
+    #engine .row__delta.down{color:var(--neg)}
+    #engine .row__delta .d2{display:block;font-weight:400;color:var(--text-3);margin-top:2px}
+    #engine .board__empty{padding:var(--sp-8) var(--sp-4);text-align:center;color:var(--text-3);font:400 15px/1.6 var(--font-sans)}
+    #engine .vbar{width:100%;height:6px;background:var(--bg-inset);border:1px solid var(--border);border-radius:2px;overflow:hidden;margin-top:5px}
+    #engine .vbar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent-dim),var(--accent));transform-origin:left;animation:vbarGrow .5s var(--ease) both}
+    @keyframes vbarGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+    #engine .aha-cta{margin-top:var(--sp-5);padding:var(--sp-6);border:1px solid var(--border-strong);background:var(--bg-1);text-align:center;display:flex;flex-direction:column;align-items:center;gap:var(--sp-3)}
+    #engine .aha-cta__t{font:600 clamp(20px,2vw,26px) var(--font-mono);color:var(--text-1);margin:0}
+    #engine .aha-cta__s{font:400 15px/1.5 var(--font-sans);color:var(--text-2);margin:0;max-width:46ch}
+    @media(max-width:960px){#engine .engine{grid-template-columns:1fr}#engine .readout{grid-template-columns:1fr}#engine .readout__tag,#engine .readout__top1{border:none;border-bottom:1px solid var(--border)}}
+    @media(max-width:680px){#engine .panelhdr__m{display:none}#engine .board__tabs button{min-width:40px;padding:var(--sp-3) 2px}#engine .board__colhdr{display:none}#engine .row{grid-template-columns:26px 1fr 86px 52px}#engine .row__pts{display:none}}
+    @media(prefers-reduced-motion:reduce){.orbit--1,.orbit--2,.orbit--3,#engine .readout__tag .dot,#engine .vbar i{animation:none!important}}
+
+    /* ── OWNER REVISION: brochure topbar + hero ─────── */
+    /* ghost visibility: body paints over negative-z fixed layers — promote the
+       page background to html so the brandwash slots between bg and content */
+    html{background:var(--bg-0)}
+    body{background:transparent !important}
+    .brandwash{position:fixed;inset:0;z-index:-1;pointer-events:none;background:url('img/dhq-brandwash.jpg') no-repeat center 16% / min(720px,86vw) auto;opacity:.24;mix-blend-mode:screen;filter:blur(3px);-webkit-mask-image:radial-gradient(125% 105% at 50% 20%,#000 26%,transparent 74%);mask-image:radial-gradient(125% 105% at 50% 20%,#000 26%,transparent 74%)}
+    html.anim .brandwash{animation:washfloat 44s ease-in-out infinite alternate}
+    @keyframes washfloat{0%{background-position:center 15%}100%{background-position:center 20%}}
+    .topbar{position:sticky;top:30px;z-index:40;background:rgba(10,12,16,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding-top:var(--sat);transition:background 280ms var(--ease),border-color 280ms var(--ease)}
+    html.js-nav .topbar{background:transparent;backdrop-filter:blur(0px);border-bottom-color:transparent}
+    html.js-nav .topbar--frosted{background:rgba(10,12,16,.86);backdrop-filter:blur(10px);border-bottom-color:var(--border)}
+    .topbar__in{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:60px;padding:0 24px;gap:12px}
+    .brand{display:flex;align-items:center;gap:12px;font:600 15px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text-1);white-space:nowrap}
+    .brand-logo{width:30px;height:30px;border-radius:7px;object-fit:cover;flex:none;border:1px solid var(--border-strong)}
+    .brand small{color:var(--text-3);font-weight:500;letter-spacing:.14em}
+    .beta-badge{font:600 9px var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);background:var(--accent-tint);border:1px solid var(--accent-dim);border-radius:3px;padding:2px 6px;line-height:1;white-space:nowrap;flex:none}
+    .topbar__r{display:flex;align-items:center;gap:8px}
+    .btn--ghost{border-color:transparent;background:transparent;color:var(--text-1);padding:0 14px}
+    .btn--ghost:hover{border-color:transparent;color:var(--accent)}
+    .btn--lg{min-height:50px;padding:0 26px;font-size:14px}
+    .hero{border-bottom:0;display:flex;flex-direction:column}
+    .hero__in{position:relative;z-index:2;min-height:calc(100vh - 60px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:36px 24px 44px}
+    @media(max-width:960px){.hero-facer{grid-template-columns:1fr;gap:44px}.hero-facer .term{margin:0 auto}}
+    .hero-copy{max-width:880px;width:100%}
+    .eyebrow{display:inline-flex;align-items:center;justify-content:center;gap:12px;font:500 11px var(--font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:32px}
+    .eyebrow::before,.eyebrow::after{content:"";width:26px;height:1px;background:var(--accent)}
+    .hero h1{font-family:var(--font-mono);font-size:clamp(52px,7.8vw,98px);font-weight:600;line-height:1.06;letter-spacing:-.02em;margin:0 0 24px;color:var(--text-1)}
+    .hero h1 .f{color:var(--accent);display:block;text-shadow:0 0 38px rgba(232,178,58,.26)}
+    .hero h1 .f--tag{font-size:.62em;letter-spacing:0;margin-top:22px;white-space:nowrap}
+    @media(max-width:560px){.hero h1 .f--tag{white-space:normal;font-size:.56em}}
+    .hero__sub{font:400 clamp(17px,1.5vw,20px)/1.5 var(--font-sans);color:var(--text-2);max-width:52ch;margin:0 auto 32px}
+    .hero__sub b{color:var(--text-1);font-weight:500}
+    .hero__cta{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+    .hero__fine{font:400 10px var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+    /* facer split: original V6 hero layout (copy left, League Model rig right) */
+    .hero-facer-sec{position:relative;z-index:2;padding:8px 0 4px}
+    .hero-facer{position:relative;z-index:2;width:100%;max-width:var(--maxw);margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.02fr);gap:40px;align-items:center;padding:132px 24px 96px}
+    .facer-sub{font-size:16px;line-height:1.62;color:var(--text-2);max-width:520px;margin:14px 0 24px}
+    .facer-sub,.facer-copy .hero-eyebrow{text-align:left}
+    .facer-copy .hero-eyebrow{margin-bottom:14px;font-size:17px;font-weight:600;letter-spacing:.14em;display:block}
+    .facer-copy .hero-eyebrow::before{display:none}
+    .ticker{border-top:1px solid var(--border)}
+    @media(max-width:860px){.brand small{display:none}}
+    @media(max-width:680px){
+      .topbar__in{padding:0 16px;height:56px}
+      .nav-features{display:none}
+      .topbar__r .btn{padding:0 12px}
+      .hero__in{min-height:calc(100vh - 60px);padding:40px 16px 40px}
+      .hero h1{font-size:clamp(34px,9vw,46px);line-height:1.04}
+      .hero__sub{font-size:16px}
+      .eyebrow{display:block}
+      .eyebrow::before,.eyebrow::after{display:none}
+      .hero-facer{padding:0 16px 56px}
+    }
+
+    /* ── OWNER REVISION 2+3: shared terminal-rig chrome for the boxed showcases ── */
+    .rig-box{background:var(--bg-1);border:1px solid var(--border-strong);box-shadow:0 18px 60px rgba(0,0,0,.5)}
+
+    /* Owner DNA personas (#psych) */
+    .preview-tag{display:inline-flex;align-items:center;gap:6px;font:500 11px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--tactical);border:1px solid #2c5e80;border-radius:2px;padding:2px 8px;vertical-align:middle;margin-left:6px}
+    #psych .split{grid-template-columns:.85fr 1.15fr;align-items:center}
+    .dna-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border-faint)}
+    .dna-card{background:var(--bg-1);padding:13px 14px;border-left:2px solid var(--dna,var(--accent))}
+    .dna-card--wide{grid-column:1 / -1}
+    .dna-hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+    .dna-name{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--text-1)}
+    .dna-label{font-family:var(--font-mono);font-size:10px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--dna,var(--accent));white-space:nowrap}
+    .dna-card .meter i{background:var(--dna,var(--accent))}
+    @media(max-width:960px){#psych .split{grid-template-columns:1fr}}
+    @media(max-width:560px){.dna-grid{grid-template-columns:1fr}}
+
+    /* Draft room (#draft) — donor markup, repaletted + scoped */
+    #draft .draftwrap{overflow:hidden;padding:0}
+    #draft .draft-bar-r{display:flex;align-items:center;gap:8px}
+    #draft .draft-round{font-family:var(--font-mono);font-size:10px;color:var(--text-3)}
+    #draft .pill-live{font:600 9px var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--pos);border:1px solid var(--pos);border-radius:2px;padding:3px 7px}
+    #draft .pill-dyn{font:600 9px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--tactical);border:1px solid #2c5e80;border-radius:2px;padding:3px 7px}
+    #draft .tag{display:inline-flex;align-items:center;font:500 10px var(--font-mono);letter-spacing:.04em;text-transform:uppercase;padding:1px 5px;border:1px solid;border-radius:2px;margin:0;color:var(--text-2);border-color:var(--border-strong)}
+    #draft .tag--QB{color:var(--accent);border-color:var(--accent-dim)}
+    #draft .tag--RB{color:var(--pos);border-color:#1f5f47}
+    #draft .tag--WR{color:var(--tactical);border-color:#2c5e80}
+    #draft .tag--TE{color:var(--amber);border-color:#7a5600}
+    #draft .drun{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--border);background:var(--bg-inset)}
+    #draft .drun__lab{font:600 var(--fs-label) var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)}
+    #draft .drun__strip{display:flex;gap:5px;flex-wrap:wrap}
+    #draft .drun__cell{display:flex;align-items:center;gap:5px;background:var(--bg-1);border:1px solid var(--border);border-radius:4px;padding:5px 8px}
+    #draft .drun__cell i{font:600 10px var(--font-mono);font-style:normal;color:var(--text-3)}
+    #draft .drun__cell--run{border-color:var(--accent-dim);background:var(--accent-tint)}
+    #draft .drun__cell--run i{color:var(--accent-bright)}
+    #draft .drun__cell--now{border-color:var(--tactical);background:var(--tactical-tint)}
+    #draft .drun__cell--now b{font:700 10px var(--font-mono);color:var(--tactical-bright)}
+    #draft .drun__flag{font:700 9px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--bg-0);background:var(--accent);border-radius:999px;padding:5px 11px}
+    #draft .acall{display:flex;gap:var(--sp-3);padding:var(--sp-4);border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--accent-tint),transparent)}
+    #draft .aorb{position:relative;flex:none;width:40px;height:40px;border-radius:50%;background:radial-gradient(120% 120% at 30% 25%,var(--accent-bright),var(--accent-dim));display:grid;place-items:center;font:800 17px var(--font-mono);color:var(--bg-0)}
+    #draft .aorb__pulse{position:absolute;inset:-4px;border-radius:50%;border:1.5px solid var(--accent);opacity:.5}
+    html.anim #draft .aorb__pulse{animation:apulse 2.4s ease-out infinite}
+    @keyframes apulse{0%{transform:scale(1);opacity:.55}100%{transform:scale(1.4);opacity:0}}
+    #draft .acall__body{min-width:0}
+    #draft .acall__hd{font:700 var(--fs-label) var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:5px}
+    #draft .acall__hd span{color:var(--text-3);font-weight:500}
+    #draft .acall__txt{font:400 14px/1.55 var(--font-sans);color:var(--text-1);margin:0 0 var(--sp-3)}
+    #draft .acall__txt b{color:var(--accent-bright);font-weight:600}
+    #draft .acall__chips{display:flex;flex-wrap:wrap;gap:6px}
+    #draft .dchip{font:500 9px var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent-dim);border-radius:2px;padding:3px 7px}
+    #draft .draft{display:grid;grid-template-columns:1.5fr 1fr;gap:0}
+    #draft .dcol--you{border-left:1px solid var(--border);background:var(--bg-inset)}
+    #draft .dcol__h{font:600 var(--fs-label) var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--border)}
+    #draft .dpick{display:grid;grid-template-columns:48px 1fr 56px;align-items:center;gap:var(--sp-3);padding:11px var(--sp-4);border-bottom:1px solid var(--border-faint);transition:background var(--t-fast)}
+    #draft .dpick:hover{background:var(--bg-2)}
+    #draft .dpick__pk{font:600 15px var(--font-mono);color:var(--accent);line-height:1.1}
+    #draft .dpick__pk small{display:block;font:400 9px var(--font-mono);letter-spacing:.04em;color:var(--text-3);margin-top:2px}
+    #draft .dpick__m{min-width:0}
+    #draft .dpick__nm{display:flex;align-items:center;gap:6px;font:500 13px var(--font-mono);color:var(--text-1);margin-bottom:3px}
+    #draft .dpick__nm .dv{color:var(--accent)}
+    #draft .dpick__rs{font:400 12px/1.4 var(--font-serif);font-style:italic;color:var(--text-2)}
+    #draft .dpick__pb{text-align:right}
+    #draft .dpick__pb b{font:600 13px var(--font-mono);color:var(--tactical);display:block}
+    #draft .dpick__pb .pbar{height:4px;background:var(--bg-inset);border:1px solid var(--border);margin-top:4px}
+    #draft .dpick__pb .pbar i{display:block;height:100%;background:var(--accent)}
+    #draft .youbox{padding:var(--sp-4)}
+    #draft .youbox__rec{font:500 var(--fs-label) var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);margin-bottom:var(--sp-2)}
+    #draft .youbox__name{display:flex;align-items:center;gap:8px;font:600 18px var(--font-mono);color:var(--text-1);margin:var(--sp-1) 0}
+    #draft .youbox__val{font:600 34px/1 var(--font-mono);color:var(--accent);margin:var(--sp-2) 0 var(--sp-3)}
+    #draft .youbox__line{font:400 13px/1.5 var(--font-sans);color:var(--text-2);margin-bottom:var(--sp-2)}
+    #draft .youbox__line b{color:var(--neg)}
+    #draft .dchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--sp-3);padding-top:var(--sp-3);border-top:1px solid var(--border-faint)}
+    @media(max-width:940px){#draft .draft{grid-template-columns:1fr}#draft .dcol--you{border-left:none;border-top:1px solid var(--border)}}
+    @media(prefers-reduced-motion:reduce){#draft .aorb__pulse{animation:none!important}}
+
   </style>
+  <script>/* enable motion only when JS on AND user allows it (no-JS => content visible, no flash) */
+try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documentElement.classList.add('anim');}}catch(e){}</script>
 </head>
 <body>
 
@@ -401,49 +652,54 @@
     <div class="fog__blob e"></div>
   </div>
 
-  <!-- Nav -->
-  <nav class="nav">
-    <div class="nav-in">
-      <div class="nav-brand">
-        <img src="icon-192.png" alt="Dynasty HQ" class="nav-logo">
-        <span class="nav-title">DYNASTY&nbsp;HQ</span>
-      </div>
-      <div class="nav-links">
-        <button class="nav-btn" id="navSignin" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'})">Sign in</button>
-        <button class="nav-btn nav-btn-primary" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Get started</button>
-      </div>
-    </div>
-  </nav>
+  <!-- Brandwash: brochure's blurred giant-logo background (real asset img/dhq-brandwash.jpg) -->
+  <div class="brandwash" aria-hidden="true"></div>
 
-  <!-- Hero -->
-  <section class="hero">
-    <div class="hero-grid" aria-hidden="true"></div>
-    <div class="hero-edge" aria-hidden="true"></div>
-    <div class="ember" aria-hidden="true"></div>
-    <div class="fog" aria-hidden="true">
-      <svg class="fog__grain" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <filter id="fogTex" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="4" seed="7" stitchTiles="stitch"/>
-          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 -0.18"/>
-        </filter>
-        <rect width="100%" height="100%" filter="url(#fogTex)"/>
-      </svg>
-      <div class="fog__blob a"></div>
-      <div class="fog__blob b"></div>
-      <div class="fog__blob c"></div>
-      <div class="fog__blob d"></div>
-      <div class="fog__blob e"></div>
+  <!-- Topbar (ported from brochure) -->
+  <header class="topbar"><div class="topbar__in">
+    <div class="brand"><img class="brand-logo" src="icon-192.png" alt="Dynasty HQ">DYNASTY&nbsp;HQ <span class="beta-badge" title="In active development — features and data are still evolving">Beta</span> <small>// YOUR&nbsp;FRONT&nbsp;OFFICE</small></div>
+    <div class="topbar__r">
+      <button class="btn btn--ghost nav-features" onclick="document.getElementById('command').scrollIntoView({behavior:'smooth'})">Features</button>
+      <button class="btn btn--ghost nav-features" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Plans</button>
+      <button class="btn btn--ghost nav-features" onclick="document.getElementById('universe').scrollIntoView({behavior:'smooth'})">Vision</button>
+      <a class="btn btn--ghost nav-features" href="https://discord.gg/3VFRJbWVnH" target="_blank" rel="noopener">Discord</a>
+      <button class="btn btn--ghost" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'})">Sign in</button>
+      <button class="btn btn--primary" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free</button>
     </div>
-    <div class="vignette" aria-hidden="true"></div>
-    <div class="hero-scrim" aria-hidden="true"></div>
-    <div class="hero-in">
+  </div></header>
+
+  <!-- Hero (brochure title block + original V6 facer split with the League Model rig) -->
+  <section class="hero">
+    <div class="hero__in">
       <div class="hero-copy">
-        <div class="hero-eyebrow">Fantasy front office · Dynasty &amp; redraft · Free on Sleeper</div>
-        <h1>Stop juggling tabs.<br><span class="mk">This is your world.</span></h1>
-        <p class="hero-sub">Dynasty HQ brings every league you own into one command center — rosters, values, trades, drafts, and waivers in a single view, with an AI GM who knows <b>how every rival actually operates</b>. Less spreadsheet. <b>More decisions.</b></p>
+        <span class="eyebrow">Fantasy front office · Dynasty &amp; redraft · Free on Sleeper</span>
+        <h1>Dynasty HQ<span class="f f--tag">Generic Advice Stops Here!</span></h1>
+        <p class="hero__sub">Every other tool ranks players for a league that isn't yours. Dynasty HQ rebuilds every value, trade, and draft call around <b>your exact scoring and roster</b> — and reads <b>how each rival actually operates.</b></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Ticker -->
+  <div class="ticker" aria-label="Capabilities">
+    <div class="ticker-in">
+      <span><i>›</i>All your leagues, one desk</span>
+      <span><i>›</i>Owner DNA profiles</span>
+      <span><i>›</i>Trade finder + memory</span>
+      <span><i>›</i>Draft command</span>
+      <span><i>›</i>Alex, your AI GM</span>
+      <span><i>›</i>Sleeper live · MFL soon</span>
+    </div>
+  </div>
+
+  <!-- Facer split (moved below the capabilities ticker) -->
+  <section class="hero-facer-sec">
+    <div class="hero-facer">
+      <div class="facer-copy">
+        <div class="hero-eyebrow">League-specific dynasty intelligence</div>
+        <p class="facer-sub">Most tools stop at player rankings. Dynasty HQ turns your Sleeper league into the model: DHQ values, owner tendencies, draft history, trade memory, and Scout decisions in one operating system.</p>
         <div class="hero-actions">
           <button class="hero-cta" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free with Sleeper</button>
-          <button class="hero-secondary" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">See plans</button>
+          <button class="hero-secondary" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">View plans</button>
         </div>
         <p class="hero-free">Free on all your Sleeper leagues · no credit card</p>
       </div>
@@ -459,8 +715,8 @@
             <div class="panel panel--focus">
               <div class="lbl">DHQ value · your league</div>
               <span class="pname">Brock Bowers · TE</span>
-              <div class="bigval">7,040</div>
-              <span class="tag">TE PREMIUM · 12-TEAM SF</span>
+              <div class="bigval">7,941</div>
+              <span class="tag">12-TEAM SF</span>
               <div class="band"><div class="band__fill" style="left:14%;right:13%"></div><div class="band__tick" style="left:56%"></div></div>
               <div class="cmp"><span>Market consensus (KTC)</span><b>6,800</b></div>
             </div>
@@ -480,18 +736,6 @@
       </div>
     </div>
   </section>
-
-  <!-- Ticker -->
-  <div class="ticker" aria-label="Capabilities">
-    <div class="ticker-in">
-      <span><i>›</i>All your leagues, one desk</span>
-      <span><i>›</i>Owner DNA profiles</span>
-      <span><i>›</i>Trade finder + memory</span>
-      <span><i>›</i>Draft command</span>
-      <span><i>›</i>Alex, your AI GM</span>
-      <span><i>›</i>Sleeper live · MFL soon</span>
-    </div>
-  </div>
 
   <!-- Wedge -->
   <section class="section">
@@ -518,22 +762,77 @@
     </div>
   </section>
 
-  <!-- Owner DNA -->
-  <section class="section">
+  <!-- Universe (ported from brochure closing section) -->
+  <section class="universe" id="universe">
+    <div class="ember" aria-hidden="true"></div>
+    <div class="universe__grid" aria-hidden="true"></div>
+    <div class="universe__orbits" aria-hidden="true">
+      <div class="orbit orbit--1"><i class="node"></i></div>
+      <div class="orbit orbit--2"><i class="node node--blue"></i><i class="node node--dim node--e"></i></div>
+      <div class="orbit orbit--3"><i class="node node--dim"></i><i class="node node--blue node--dim node--e"></i></div>
+      <span class="orbit-core"></span>
+    </div>
+    <div class="fog" aria-hidden="true">
+      <svg class="fog__grain" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+        <filter id="fogTexC" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.017" numOctaves="4" seed="19" stitchTiles="stitch"/>
+          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 -0.2"/>
+        </filter>
+        <rect width="100%" height="100%" filter="url(#fogTexC)"/>
+      </svg>
+      <div class="fog__blob b"></div>
+      <div class="fog__blob d"></div>
+    </div>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="universe__in">
+      <h2>A universe built around <span class="mk">your league.</span></h2>
+      <p class="universe__sub">Your scoring. Your rivals. Your history. No other system cares this much about making the experience yours — and only yours.</p>
+      <button class="hero-cta" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free with Sleeper</button>
+      <p class="hero-free">Free on all your Sleeper leagues · no credit card</p>
+    </div>
+  </section>
+
+  <!-- Owner DNA · brochure personas in a terminal-rig box -->
+  <section class="section" id="psych">
     <div class="split">
       <div class="split-copy">
-        <div class="sec-kicker">See the table</div>
-        <h2>Read your rivals before they move.</h2>
-        <p>Every manager has a tell. Dynasty HQ reads their trade history and shows you who's buying, who's panicking, and the exact deal they'll say yes to.</p>
+        <div class="sec-kicker">Owner DNA · Know who you're playing <span class="preview-tag">Preview</span></div>
+        <h2>You're not playing the rankings. <span class="gild">You're playing the personas.</span></h2>
+        <p>You don't really know your leaguemates. Dynasty HQ does — it profiles every manager from how they actually play: each trade, draft pick, waiver claim, and lineup they've ever set. You get their type, their tendencies, how rattled they are right now — and exactly how to play them. The difference between making an offer and making the one they'll take.</p>
       </div>
       <div class="split-media">
-        <div class="gm">
-          <div class="gm__hdr">GM PROFILE · SEAT 04 · "THE CLOSER"</div>
-          <div class="gm__row"><span>Aggression</span><div class="meter"><i style="width:81%"></i></div><b>81</b></div>
-          <div class="gm__row"><span>Patience</span><div class="meter"><i style="width:34%"></i></div><b>34</b></div>
-          <div class="gm__row"><span>Pick value</span><div class="meter"><i style="width:31%"></i></div><b>31</b></div>
-          <div class="gm__row"><span>Loss reactivity</span><div class="meter"><i style="width:72%"></i></div><b>72</b></div>
-          <p class="gm__tell">Sells futures to win now and chases WRs after a loss. Acceptance on a win-now WR offer: 60–75%.</p>
+        <div class="rig-box">
+          <div class="term__bar">
+            <span class="term__brand">DYNASTY HQ // OWNER DNA</span>
+            <span class="plat-pill live" style="padding:3px 8px;font-size:10px">LIVE</span>
+          </div>
+          <div class="dna-grid">
+            <div class="dna-card" style="--dna:#e74c3c">
+              <div class="dna-hd"><span class="dna-name">Derek Vaughn</span><span class="dna-label">The Fleecer</span></div>
+              <div class="trait"><span>Panic</span><div class="meter"><i style="width:18%"></i></div><b>1/5</b></div>
+              <p class="tell">Hunts asymmetric value — lead with clean surplus.</p>
+            </div>
+            <div class="dna-card" style="--dna:#e67e22">
+              <div class="dna-hd"><span class="dna-name">Tony Marchetti</span><span class="dna-label">The Dominator</span></div>
+              <div class="trait"><span>Panic</span><div class="meter"><i style="width:22%"></i></div><b>1/5</b></div>
+              <p class="tell">High ego — frame it so he feels he won the deal.</p>
+            </div>
+            <div class="dna-card" style="--dna:#5dade2">
+              <div class="dna-hd"><span class="dna-name">Sam Okafor</span><span class="dna-label">The Stalwart</span></div>
+              <div class="trait"><span>Panic</span><div class="meter"><i style="width:20%"></i></div><b>1/5</b></div>
+              <p class="tell">Attached to his roster — never lowball, lead with value.</p>
+            </div>
+            <div class="dna-card" style="--dna:#2ecc71">
+              <div class="dna-hd"><span class="dna-name">Jess Whitfield</span><span class="dna-label">The Acceptor</span></div>
+              <div class="trait"><span>Panic</span><div class="meter"><i style="width:20%"></i></div><b>1/5</b></div>
+              <p class="tell">Rebuilding — offer youth and picks, buy stars cheap.</p>
+            </div>
+            <div class="dna-card dna-card--wide" style="--dna:#bb8fce">
+              <div class="dna-hd"><span class="dna-name">Ryan Kowalski</span><span class="dna-label">The Desperate</span></div>
+              <div class="trait"><span>Panic</span><div class="meter"><i style="width:80%"></i></div><b>4/5</b></div>
+              <p class="tell">Empty starter slot — overpays now. Strike before his bye.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -555,6 +854,59 @@
           <div class="frow"><span class="ts">PREPARE</span><span class="msg">Your RB room ages out in 2 seasons. Start converting depth to 2026 capital now.</span></div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Draft room (ported from brochure #draft; terminal-rig chrome) -->
+  <section class="section" id="draft">
+    <div class="sec-head">
+      <div class="sec-kicker">The draft room · War Room · Mock · Live follow</div>
+      <h2 class="sec-title">Walk in <span class="gild">knowing the room.</span></h2>
+      <p class="sec-sub">The draft is three jobs, not one. Prep your big board in the War Room — built on your values and every owner's DNA. Mock it against rivals who pick — and trade — like they actually do. Then follow it live from the most advanced command center in fantasy.</p>
+    </div>
+    <div class="rig-box draftwrap">
+      <div class="term__bar">
+        <span class="term__brand">DYNASTY HQ // DRAFT COMMAND</span>
+        <span class="draft-bar-r"><span class="pill-live">● Live</span><span class="pill-dyn">Dynasty</span><span class="draft-round">Round 1 · pick 1.09</span></span>
+      </div>
+    <div class="drun">
+      <span class="drun__lab">Board run</span>
+      <div class="drun__strip">
+        <span class="drun__cell"><i>1.04</i><span class="tag tag--WR">WR</span></span>
+        <span class="drun__cell drun__cell--run"><i>1.05</i><span class="tag tag--QB">QB</span></span>
+        <span class="drun__cell drun__cell--run"><i>1.06</i><span class="tag tag--QB">QB</span></span>
+        <span class="drun__cell drun__cell--run"><i>1.07</i><span class="tag tag--QB">QB</span></span>
+        <span class="drun__cell"><i>1.08</i><span class="tag tag--WR">WR</span></span>
+        <span class="drun__cell drun__cell--now"><i>1.09</i><b>YOU</b></span>
+      </div>
+      <span class="drun__flag">Superflex QB run · 3 straight</span>
+    </div>
+    <div class="acall">
+      <div class="aorb">A<span class="aorb__pulse"></span></div>
+      <div class="acall__body">
+        <div class="acall__hd">Alex Ingram <span>· live read</span></div>
+        <p class="acall__txt">Superflex set off a <b>QB run</b> — three straight off the board — and it slid an elite WR down to you. <b>Puka Nacua</b> is the best player left <em>and</em> the spot you're thinnest; easy call, take him. RBs run deep this class, so a startable back still slides back to your <b>2.04</b>.</p>
+        <div class="acall__chips"><span class="dchip">Best available · WR</span><span class="dchip">Your need · WR</span><span class="dchip">Value +0.4 vs ADP</span><span class="dchip">Plan · RB at 2.04</span></div>
+      </div>
+    </div>
+    <div class="draft">
+      <div class="dcol">
+        <div class="dcol__h">On the clock · predicted</div>
+        <div class="dpick"><div class="dpick__pk">1.10<small>Seat 07</small></div><div class="dpick__m"><div class="dpick__nm"><span class="tag tag--RB">RB</span>De'Von Achane <span class="dv">8,068</span></div><div class="dpick__rs">RB-needy — takes the best back left.</div></div><div class="dpick__pb"><b>79%</b><div class="pbar"><i style="width:79%"></i></div></div></div>
+        <div class="dpick"><div class="dpick__pk">1.11<small>Seat 02</small></div><div class="dpick__m"><div class="dpick__nm"><span class="tag tag--TE">TE</span>Brock Bowers <span class="dv">7,941</span></div><div class="dpick__rs">Elite TE — grabs the positional edge.</div></div><div class="dpick__pb"><b>68%</b><div class="pbar"><i style="width:68%"></i></div></div></div>
+        <div class="dpick"><div class="dpick__pk">1.12<small>Seat 11</small></div><div class="dpick__m"><div class="dpick__nm"><span class="tag tag--RB">RB</span>Jahmyr Gibbs <span class="dv">7,918</span></div><div class="dpick__rs">Wants the next back before the tier turns.</div></div><div class="dpick__pb"><b>62%</b><div class="pbar"><i style="width:62%"></i></div></div></div>
+      </div>
+      <div class="dcol dcol--you">
+        <div class="dcol__h">Your pick · 1.09</div>
+        <div class="youbox">
+          <div class="youbox__rec">Alex's pick · fit 93%</div>
+          <div class="youbox__name"><span class="tag tag--WR">WR</span>Puka Nacua</div>
+          <div class="youbox__val">8,090</div>
+          <div class="youbox__line">Best value on the board and your biggest need — the WR tier <b>thins right after him</b>.</div>
+          <div class="dchips"><span class="dchip">Top of the board</span><span class="dchip">WR1 · last of tier</span><span class="dchip">Fills your hole</span></div>
+        </div>
+      </div>
+    </div>
     </div>
   </section>
 
@@ -583,7 +935,7 @@
   </section>
 
   <!-- Command center -->
-  <section class="section">
+  <section class="section" id="command">
     <div class="sec-head">
       <div class="sec-kicker">The command center</div>
       <h2 class="sec-title">One war room. Every move.</h2>
@@ -596,6 +948,74 @@
       <div class="cc"><div class="lbl">04</div><h3>Trade memory</h3><p>Every deal and habit, remembered.</p></div>
       <div class="cc"><div class="lbl">05</div><h3>Trophy Room</h3><p>Your league's history, kept.</p></div>
       <div class="cc"><div class="lbl">06</div><h3>Team diagnosis</h3><p>Your next highest-leverage move.</p></div>
+    </div>
+  </section>
+
+  <!-- Value simulator (ported from brochure #engine) -->
+  <section class="section" id="engine">
+    <div class="sec-head">
+      <div class="sec-kicker">Built for your league</div>
+      <h2 class="sec-title">Your league, <span class="gild">your rankings.</span></h2>
+      <p class="sec-sub">DHQ reads your league type, roster, and scoring, then rebuilds every player's value around the rules you actually play. Drag a slider on the left and watch the board rerank.</p>
+    </div>
+
+    <div class="readout">
+      <div class="readout__tag"><span class="dot"></span><div class="readout__kv"><b>ENGINE LIVE</b><span id="ro-cfg">SF · FULL PPR</span></div></div>
+      <div class="readout__stream" id="ro-stream"></div>
+      <div class="readout__top1"><div class="readout__kv"><span>DHQ #1 OVERALL</span><b id="ro-name" class="mono">—</b></div><div class="v" id="ro-val">—</div></div>
+    </div>
+
+    <div class="engine">
+      <div class="panel">
+        <div class="panelhdr"><div class="panelhdr__t">League Configurator</div><div class="panelhdr__m" id="cfg-sig">12-TEAM</div></div>
+        <div class="cfg">
+        <div class="cfg__group">
+          <div class="cfg__row"><span class="lbl">League size</span>
+            <div class="stepper"><button onclick="stepTeams(-2)" aria-label="fewer teams">–</button><b id="teams-v">12</b><button onclick="stepTeams(2)" aria-label="more teams">+</button></div></div>
+          <div class="cfg__row"><span class="lbl">QB format</span>
+            <div class="seg" id="seg-sf"><button data-v="1qb">1 QB</button><button data-v="sf" class="on">Superflex</button></div></div>
+        </div>
+        <div class="cfg__group">
+          <div class="lbl">Scoring</div>
+          <div class="cfg__row"><span class="cfg__hint" style="color:var(--text-2)">Reception pts</span>
+            <div class="seg" id="seg-ppr"><button data-v="0">Std</button><button data-v="0.5">½</button><button data-v="1" class="on">Full</button></div></div>
+          <div class="cfg__row"><span class="cfg__hint" style="color:var(--text-2)">Pass TD</span>
+            <div class="seg" id="seg-patd"><button data-v="4" class="on">4 pt</button><button data-v="6">6 pt</button></div></div>
+          <div class="cfg__row"><span class="cfg__hint" style="color:var(--text-2)">TE premium</span>
+            <div class="seg" id="seg-te"><button data-v="0" class="on">Off</button><button data-v="0.5">+0.5</button></div></div>
+          <div class="cfg__row"><span class="cfg__hint" style="color:var(--text-2)">Kicker scoring</span>
+            <div class="seg seg--wild" id="seg-kick"><button data-v="off" class="on">Off</button><button data-v="std">Std</button><button data-v="wild">100/FG ⚡</button></div></div>
+          <div class="cfg__hint" id="kick-hint">Kicker scoring off. Crank it to 100/FG and watch what your settings can do.</div>
+          <div class="cfg__row"><span class="cfg__hint" style="color:var(--text-2)">IDP scoring</span>
+            <div class="seg seg--blue" id="seg-idp"><button data-v="off" class="on">Off</button><button data-v="bal">Bal</button><button data-v="big">Big-play</button></div></div>
+          <div class="cfg__hint" id="idp-hint">IDP off — defensive players hold no value. Turn it on to rate every defender.</div>
+        </div>
+        <div class="divider"></div>
+        <div class="cfg__group">
+          <div class="lbl">Roster — starters per team</div>
+          <div class="rgrid" id="rgrid"></div>
+          <div class="cfg__hint">More starters at a position = scarcer = more valuable. Drop one to zero and those players fall off your board entirely.</div>
+        </div>
+        </div>
+      </div>
+
+      <div class="panel board">
+        <div class="panelhdr"><div class="panelhdr__t">Your Board · DHQ Value</div><div class="panelhdr__m">0–10,000 SCALE · Δ vs baseline</div></div>
+        <div class="board__tabs" id="board-tabs">
+        <button data-pos="ALL" class="on">All</button><button data-pos="QB">QB</button><button data-pos="RB">RB</button>
+        <button data-pos="WR">WR</button><button data-pos="TE">TE</button><button data-pos="K">K</button><button data-pos="IDP">IDP</button>
+      </div>
+        <div class="board__colhdr"><span>#</span><span>Player</span><span class="r">Proj</span><span class="r">DHQ value</span><span class="r">Δ base</span></div>
+        <div id="board-rows"></div>
+        <div class="board__note"><span><b>Just an example.</b> A demo player set to show how the engine reacts — connect your league and your real values will be different.</span></div>
+      </div>
+    </div>
+
+    <div class="aha-cta">
+      <p class="aha-cta__t">That's your board — recomputed live on your settings.</p>
+      <p class="aha-cta__s">Connect your Sleeper league to make it real — your rosters, your matchups, your market, season over season.</p>
+      <button class="hero-cta" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free with Sleeper</button>
+      <span class="hero-free" style="margin-top:0">Free on all your Sleeper leagues · no credit card</span>
     </div>
   </section>
 
@@ -1215,5 +1635,306 @@
       </div>
     </div>
   </footer>
+
+  <!-- Motion engine: self-hosted GSAP + ScrollTrigger + Lenis (CSP 'self') -->
+  <script src="js/vendor/gsap.min.js"></script>
+  <script src="js/vendor/ScrollTrigger.min.js"></script>
+  <script src="js/vendor/lenis.min.js"></script>
+  <!-- Value simulator engine (ported from brochure) -->
+  <script>
+/* ============ DHQ ENGINE (validated, +kickers +roster) ============ */
+const Pl=(name,pos,age,tag,vr,s)=>({name,pos,age,tag,vr,hero:true,
+ paYd:s.paYd||0,paTD:s.paTD||0,paINT:s.paINT||0,ruYd:s.ruYd||0,ruTD:s.ruTD||0,
+ rec:s.rec||0,reYd:s.reYd||0,reTD:s.reTD||0,fumL:s.fumL||0,
+ tkl:s.tkl||0,ast:s.ast||0,sack:s.sack||0,iINT:s.iINT||0,ff:s.ff||0,fr:s.fr||0,iTD:s.iTD||0,pd:s.pd||0,
+ fgm:s.fgm||0,fg50:s.fg50||0,xpm:s.xpm||0});
+const HERO=[
+ Pl("Josh Allen","QB",29,"prime","low",{paYd:4200,paTD:35,paINT:8,ruYd:530,ruTD:9}),
+ Pl("Jayden Daniels","QB",25,"rising","med",{paYd:3950,paTD:28,paINT:9,ruYd:850,ruTD:6}),
+ Pl("Jalen Hurts","QB",27,"prime","low",{paYd:3700,paTD:26,paINT:8,ruYd:600,ruTD:13}),
+ Pl("Lamar Jackson","QB",29,"prime","med",{paYd:4000,paTD:33,paINT:7,ruYd:780,ruTD:5}),
+ Pl("Joe Burrow","QB",29,"prime","med",{paYd:4600,paTD:40,paINT:9,ruYd:180,ruTD:2}),
+ Pl("Patrick Mahomes","QB",30,"vet","low",{paYd:4300,paTD:30,paINT:9,ruYd:350,ruTD:3}),
+ Pl("Caleb Williams","QB",24,"rising","high",{paYd:3800,paTD:26,paINT:12,ruYd:470,ruTD:5}),
+ Pl("Drake Maye","QB",23,"rising","high",{paYd:3700,paTD:24,paINT:11,ruYd:520,ruTD:6}),
+ Pl("C.J. Stroud","QB",24,"rising","med",{paYd:4000,paTD:27,paINT:10,ruYd:220,ruTD:2}),
+ Pl("Bo Nix","QB",26,"prime","med",{paYd:3850,paTD:29,paINT:9,ruYd:430,ruTD:4}),
+ Pl("Bijan Robinson","RB",24,"rising","low",{ruYd:1450,ruTD:12,rec:60,reYd:450,reTD:3,fumL:1}),
+ Pl("Jahmyr Gibbs","RB",24,"rising","med",{ruYd:1300,ruTD:11,rec:55,reYd:420,reTD:3,fumL:1}),
+ Pl("De'Von Achane","RB",24,"rising","high",{ruYd:1050,ruTD:8,rec:78,reYd:600,reTD:4,fumL:1}),
+ Pl("Saquon Barkley","RB",29,"vet","low",{ruYd:1500,ruTD:13,rec:40,reYd:300,reTD:2,fumL:1}),
+ Pl("Ashton Jeanty","RB",22,"rookie","high",{ruYd:1200,ruTD:10,rec:42,reYd:320,reTD:2,fumL:1}),
+ Pl("Jonathan Taylor","RB",27,"prime","med",{ruYd:1350,ruTD:12,rec:35,reYd:250,reTD:1,fumL:1}),
+ Pl("Bucky Irving","RB",24,"rising","med",{ruYd:1080,ruTD:8,rec:52,reYd:420,reTD:2,fumL:1}),
+ Pl("Breece Hall","RB",25,"prime","med",{ruYd:1100,ruTD:8,rec:55,reYd:450,reTD:3,fumL:2}),
+ Pl("Kyren Williams","RB",26,"prime","med",{ruYd:1250,ruTD:12,rec:35,reYd:220,reTD:1,fumL:2}),
+ Pl("Omarion Hampton","RB",22,"rookie","high",{ruYd:1000,ruTD:7,rec:38,reYd:300,reTD:2,fumL:1}),
+ Pl("Ja'Marr Chase","WR",26,"prime","low",{rec:105,reYd:1500,reTD:12}),
+ Pl("Justin Jefferson","WR",27,"prime","low",{rec:100,reYd:1450,reTD:10}),
+ Pl("Malik Nabers","WR",23,"rising","med",{rec:98,reYd:1320,reTD:9,fumL:1}),
+ Pl("CeeDee Lamb","WR",27,"prime","low",{rec:98,reYd:1380,reTD:9}),
+ Pl("Puka Nacua","WR",25,"rising","med",{rec:100,reYd:1340,reTD:8}),
+ Pl("Amon-Ra St. Brown","WR",27,"prime","low",{rec:108,reYd:1250,reTD:8}),
+ Pl("Brian Thomas Jr.","WR",24,"rising","high",{rec:82,reYd:1300,reTD:10}),
+ Pl("Marvin Harrison Jr.","WR",24,"rising","high",{rec:85,reYd:1250,reTD:9}),
+ Pl("Jaxon Smith-Njigba","WR",24,"rising","med",{rec:92,reYd:1280,reTD:8}),
+ Pl("Nico Collins","WR",27,"prime","med",{rec:80,reYd:1200,reTD:8}),
+ Pl("Drake London","WR",25,"prime","med",{rec:95,reYd:1220,reTD:7,fumL:1}),
+ Pl("Garrett Wilson","WR",26,"prime","med",{rec:88,reYd:1150,reTD:7}),
+ Pl("Rome Odunze","WR",24,"rising","high",{rec:78,reYd:1080,reTD:7}),
+ Pl("Ladd McConkey","WR",24,"rising","med",{rec:88,reYd:1100,reTD:6,fumL:1}),
+ Pl("A.J. Brown","WR",29,"vet","low",{rec:85,reYd:1250,reTD:8}),
+ Pl("Tyreek Hill","WR",32,"aging","med",{rec:80,reYd:1050,reTD:6}),
+ Pl("Brock Bowers","TE",23,"rising","low",{rec:90,reYd:1050,reTD:8}),
+ Pl("Trey McBride","TE",26,"prime","low",{rec:95,reYd:1000,reTD:6}),
+ Pl("Sam LaPorta","TE",25,"rising","med",{rec:75,reYd:850,reTD:7}),
+ Pl("Tucker Kraft","TE",25,"rising","high",{rec:62,reYd:760,reTD:6}),
+ Pl("Travis Kelce","TE",36,"aging","low",{rec:60,reYd:650,reTD:4}),
+ Pl("Mark Andrews","TE",30,"vet","med",{rec:60,reYd:700,reTD:6}),
+ Pl("Fred Warner","LB",30,"vet","low",{tkl:112,ast:48,sack:3,iINT:1,ff:3,fr:1,pd:5}),
+ Pl("Jihaad Campbell","LB",22,"rising","med",{tkl:104,ast:42,sack:5,iINT:2,ff:2,fr:1,iTD:1,pd:6}),
+ Pl("Myles Garrett","DL",30,"vet","low",{tkl:38,ast:22,sack:14,ff:5,fr:2,pd:3}),
+ Pl("Abdul Carter","DL",22,"rising","high",{tkl:30,ast:18,sack:12,ff:4,fr:1,iTD:1,pd:2}),
+ Pl("Kyle Hamilton","DB",25,"prime","med",{tkl:74,ast:28,sack:1,iINT:5,ff:2,fr:1,iTD:1,pd:16}),
+ Pl("Brian Branch","DB",24,"rising","high",{tkl:66,ast:24,iINT:6,ff:1,iTD:1,pd:18}),
+ Pl("Brandon Aubrey","K",31,"prime","low",{fgm:35,fg50:8,xpm:42}),
+ Pl("Cameron Dicker","K",26,"rising","med",{fgm:32,fg50:6,xpm:45}),
+ Pl("Jake Bates","K",26,"prime","low",{fgm:30,fg50:5,xpm:38}),
+ Pl("Cam Little","K",23,"rookie","high",{fgm:28,fg50:7,xpm:36}),
+ Pl("Chris Boswell","K",34,"vet","low",{fgm:33,fg50:7,xpm:34}),
+ Pl("Harrison Butker","K",31,"prime","low",{fgm:31,fg50:5,xpm:44}),
+ Pl("Jake Elliott","K",31,"prime","med",{fgm:29,fg50:5,xpm:40}),
+ Pl("Younghoe Koo","K",32,"vet","med",{fgm:28,fg50:6,xpm:38}),
+ Pl("Tyler Bass","K",29,"prime","med",{fgm:30,fg50:6,xpm:42}),
+ Pl("Ka'imi Fairbairn","K",32,"vet","low",{fgm:32,fg50:5,xpm:40}),
+ Pl("Evan McPherson","K",26,"rising","med",{fgm:29,fg50:7,xpm:36}),
+ Pl("Wil Lutz","K",31,"prime","low",{fgm:30,fg50:4,xpm:41}),
+ Pl("Micah Parsons","DL",27,"prime","low",{tkl:40,ast:24,sack:13,ff:4,fr:1,pd:4}),
+ Pl("T.J. Watt","DL",31,"vet","low",{tkl:36,ast:20,sack:12,ff:5,fr:2,pd:6}),
+ Pl("Aidan Hutchinson","DL",26,"rising","med",{tkl:34,ast:22,sack:11,ff:3,fr:1,pd:3}),
+ Pl("Trey Hendrickson","DL",31,"vet","med",{tkl:30,ast:16,sack:14,ff:3,fr:1,pd:2}),
+ Pl("Roquan Smith","LB",28,"prime","low",{tkl:120,ast:50,sack:3,iINT:2,ff:2,fr:1,pd:6}),
+ Pl("Zaire Franklin","LB",29,"prime","med",{tkl:118,ast:46,sack:2,iINT:1,ff:2,fr:1,pd:5}),
+ Pl("Foyesade Oluokun","LB",30,"vet","med",{tkl:122,ast:52,sack:1,iINT:2,ff:1,fr:1,pd:7}),
+ Pl("Bobby Wagner","LB",35,"aging","low",{tkl:110,ast:44,sack:3,iINT:1,ff:2,fr:1,pd:5}),
+ Pl("Antoine Winfield Jr.","DB",27,"prime","med",{tkl:80,ast:30,sack:3,iINT:3,ff:3,fr:1,pd:12}),
+ Pl("Budda Baker","DB",30,"vet","med",{tkl:95,ast:34,sack:1,iINT:2,ff:1,fr:1,pd:8}),
+ Pl("Derwin James","DB",29,"prime","low",{tkl:88,ast:32,sack:3,iINT:2,ff:2,fr:1,pd:11}),
+ Pl("Xavier McKinney","DB",26,"rising","high",{tkl:78,ast:28,iINT:6,ff:1,fr:1,pd:15}),
+];
+function mulberry(s){return function(){s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const _r=mulberry(20260614);
+function fillers(pos,n,b){const o=[];let f=1;for(let i=0;i<n;i++){f*=0.972+_r()*0.012;const j=k=>Math.round((b[k]||0)*f);o.push({name:pos+" Depth "+(i+1),pos,age:23+Math.floor(_r()*8),tag:"prime",vr:"med",hero:false,paYd:j("paYd"),paTD:j("paTD"),paINT:0,ruYd:j("ruYd"),ruTD:j("ruTD"),rec:j("rec"),reYd:j("reYd"),reTD:j("reTD"),fumL:0,tkl:j("tkl"),ast:j("ast"),sack:j("sack"),iINT:j("iINT"),ff:j("ff"),fr:j("fr"),iTD:0,pd:j("pd"),fgm:j("fgm"),fg50:j("fg50"),xpm:j("xpm")});}return o;}
+const PLAYERS=HERO.concat(
+ fillers("QB",40,{paYd:3100,paTD:18,ruYd:220,ruTD:2}),
+ fillers("RB",64,{ruYd:620,ruTD:4,rec:30,reYd:230,reTD:1}),
+ fillers("WR",68,{rec:54,reYd:680,reTD:4}),
+ fillers("TE",40,{rec:40,reYd:420,reTD:2}),
+ fillers("LB",40,{tkl:74,ast:30,sack:2,iINT:1,ff:1,fr:1,pd:3}),
+ fillers("DL",32,{tkl:26,ast:16,sack:6,ff:2,fr:1,pd:2}),
+ fillers("DB",40,{tkl:58,ast:22,iINT:3,ff:1,pd:9}),
+ fillers("K",40,{fgm:22,fg50:3,xpm:30}));
+
+function scoringFrom(c){
+ const idp={off:{tkl:0,ast:0,sack:0,iINT:0,ff:0,fr:0,iTD:0,pd:0},
+  bal:{tkl:1,ast:.5,sack:2,iINT:3,ff:3,fr:3,iTD:6,pd:1},
+  big:{tkl:.5,ast:.25,sack:6,iINT:7,ff:5,fr:4,iTD:6,pd:2}}[c.idp];
+ const kick={off:{kFG:0,k50:0,kXP:0},std:{kFG:3,k50:2,kXP:1},wild:{kFG:100,k50:0,kXP:1}}[c.kick||'off'];
+ return{paYd:.04,paTD:c.paTD,paINT:-2,ruYd:.1,ruTD:6,reYd:.1,reTD:6,rec:c.ppr,tePrem:c.tePrem,fumL:-2,...idp,...kick};}
+function projPoints(p,s){let v=p.paYd*s.paYd+p.paTD*s.paTD+p.paINT*s.paINT+p.ruYd*s.ruYd+p.ruTD*s.ruTD+p.reYd*s.reYd+p.reTD*s.reTD+p.rec*s.rec+p.fumL*s.fumL+p.tkl*s.tkl+p.ast*s.ast+p.sack*s.sack+p.iINT*s.iINT+p.ff*s.ff+p.fr*s.fr+p.iTD*s.iTD+p.pd*s.pd+p.fgm*s.kFG+p.fg50*s.k50+p.xpm*s.kXP;if(p.pos==="TE")v+=p.rec*s.tePrem;return v;}
+function effStarters(r){const fx=r.flex||0;return{QB:(r.qb||0)+(r.sf?1:0),RB:(r.rb||0)+fx*.45,WR:(r.wr||0)+fx*.45,TE:(r.te||0)+fx*.1,K:(r.k||0),DL:r.idpOn?r.dl:0,LB:r.idpOn?r.lb:0,DB:r.idpOn?r.db:0};}
+const PEAK={QB:28,RB:25,WR:26,TE:27,K:28,DL:27,LB:27,DB:27};
+const SLOPE={QB:.03,RB:.06,WR:.04,TE:.035,K:.015,DL:.035,LB:.035,DB:.035};
+const FLOOR={QB:.7,RB:.45,WR:.55,TE:.55,K:.8,DL:.55,LB:.55,DB:.55};
+const CEIL={QB:1.3,RB:1.4,WR:1.35,TE:1.3,K:1.1,DL:1.25,LB:1.25,DB:1.25};
+/* dynasty longevity tilt: RBs carry the most career risk (discount), WR/TE hold value longest,
+   QB is deep so it sits a hair under par. Keeps elite young WRs & QBs atop an SF board instead of
+   letting full-PPR pass-catching RBs float to #1. (K/IDP default to 1 so those toggles are untouched.) */
+const POSMULT={QB:0.97,RB:0.86,WR:1.09,TE:1.05};
+function dynMult(p){return Math.max(FLOOR[p.pos],Math.min(CEIL[p.pos],1+SLOPE[p.pos]*(PEAK[p.pos]-p.age)));}
+function replacement(r,sc){const eff=effStarters(r),bp={},rp={};for(const pos of["QB","RB","WR","TE","K","DL","LB","DB"])bp[pos]=PLAYERS.filter(x=>x.pos===pos).map(p=>projPoints(p,sc)).sort((a,b)=>b-a);for(const pos in bp){if(!(eff[pos]>0)){rp[pos]=Infinity;continue;}const n=Math.max(1,Math.round(r.teams*eff[pos]));rp[pos]=bp[pos][Math.min(bp[pos].length-1,n-1)];}return rp;}
+/* dynasty youth-floor: a below-replacement young player keeps some asset value (decays with age). */
+function youthFloor(p,pts){const y=Math.max(0,(PEAK[p.pos]-p.age+4)/12);return pts*y*0.16;}
+/* per-player raw value. redraft = pure VOR; dynasty = age-curved, position-tilted, with youth floor. */
+function baseVal(p,vor,pts,mode){if(mode==='redraft')return vor;const dyn=vor*dynMult(p)*(POSMULT[p.pos]||1);return Math.max(dyn,youthFloor(p,pts)*(POSMULT[p.pos]||1));}
+/* dynamic scaling: recompute the constant each call so the top HERO player maps to 9800 — every
+   board (including 100/FG kickers) fills the full 0–10,000 range instead of tying at the cap. */
+function valuate(r,sc,mode){const rp=replacement(r,sc);
+ const raw=PLAYERS.map(p=>{const pts=projPoints(p,sc);const vor=Math.max(0,pts-rp[p.pos]);return{p,pts,vor,base:baseVal(p,vor,pts,mode)};});
+ let mx=0;for(const x of raw){if(x.p.hero&&x.base>mx)mx=x.base;}const K=9800/(mx||1);
+ return raw.map(x=>({p:x.p,pts:x.pts,vor:x.vor,dhq:Math.round(Math.min(10000,x.base*K))}));}
+const DEF_R={teams:12,qb:1,rb:2,wr:2,te:1,flex:1,k:0,sf:true,idpOn:false,dl:2,lb:3,db:3};
+const DEF_SC=scoringFrom({paTD:4,ppr:1,tePrem:0,idp:'off',kick:'off'});
+
+/* ============ STATE + RENDER ============ */
+const config={teams:12,mode:'dynasty',sf:true,ppr:1,patd:4,tePrem:0,idp:'off',kick:'off',slots:{qb:1,rb:2,wr:2,te:1,flex:1,k:0,dl:2,lb:2,db:2}};
+let posFilter='ALL',baseline={},heroSorted=[],valMap={},rankMap={};
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const sign=n=>(n>=0?'+':'')+fmt(n);
+const IDPPOS={DL:1,LB:1,DB:1};
+const pprLabel=()=>config.ppr===1?'Full PPR':config.ppr===0.5?'½ PPR':'Standard';
+const rosterFromConfig=()=>({teams:config.teams,qb:config.slots.qb,sf:config.sf,rb:config.slots.rb,wr:config.slots.wr,te:config.slots.te,flex:config.slots.flex,k:config.slots.k,idpOn:config.idp!=='off',dl:config.slots.dl,lb:config.slots.lb,db:config.slots.db});
+const scoringFromConfig=()=>scoringFrom({paTD:config.patd,ppr:config.ppr,tePrem:config.tePrem,idp:config.idp,kick:config.kick});
+
+function recompute(){
+ const valued=valuate(rosterFromConfig(),scoringFromConfig(),config.mode).filter(v=>v.p.hero);
+ heroSorted=[...valued].sort((a,b)=>b.dhq-a.dhq);
+ valMap={};rankMap={};heroSorted.forEach((v,i)=>{valMap[v.p.name]=v;rankMap[v.p.name]=i+1;});
+ renderReadout();renderBoard();
+ document.getElementById('cfg-sig').textContent=config.teams+'-TEAM · '+(config.sf?'SF':'1QB');
+ document.getElementById('ro-cfg').textContent=(config.sf?'SF':'1QB')+' · '+pprLabel().toUpperCase()+(config.tePrem?' · TE+':'')+(config.kick!=='off'?' · K':'')+(config.idp!=='off'?' · IDP':'');
+}
+function renderReadout(){
+ const t=heroSorted[0];
+ document.getElementById('ro-name').textContent=t.p.name+'  '+t.p.pos;
+ document.getElementById('ro-val').textContent=fmt(t.dhq);
+ const lead=pos=>{const v=heroSorted.find(x=>x.p.pos===pos);return v?fmt(v.dhq):'—';};
+ const kv=(s,b)=>`<div class="readout__kv"><span>${s}</span><b>${b}</b></div>`;
+ let html=kv('QB1',lead('QB'))+kv('RB1',lead('RB'))+kv('WR1',lead('WR'))+kv('TE1',lead('TE'))+kv('TEAMS',config.teams);
+ html+=config.kick!=='off'?kv('K1',lead('K')):kv('PASS TD',config.patd+'PT');
+ document.getElementById('ro-stream').innerHTML=html;
+}
+function bandHTML(v){const base={low:.05,med:.09,high:.15}[v.p.vr]+(v.p.tag==='rookie'?.04:0);const m=Math.max(4,46-base*260);return `<div class="band" title="±${Math.round(base*100)}% · ${v.p.vr} variance"><div class="band__fill" style="left:${m}%;right:${m}%"></div><div class="band__tick" style="left:50%"></div></div>`;}
+function deltaHTML(v){const b=baseline[v.p.name],rank=rankMap[v.p.name];if(!b)return `<div class="row__delta" style="color:var(--tactical)">NEW</div>`;const dR=b.rank-rank,dV=v.dhq-b.dhq;if(!dR&&!dV)return `<div class="row__delta" style="color:var(--text-disabled)">—</div>`;const cls=dR>0?'up':dR<0?'down':'',arrow=dR>0?'▲'+dR:dR<0?'▼'+(-dR):'';return `<div class="row__delta ${cls}">${arrow}<span class="d2">${dV>=0?'+':''}${fmt(dV)}</span></div>`;}
+function valBarHTML(v){const w=Math.max(4,Math.min(100,Math.round(v.dhq/100)));return `<div class="vbar"><i style="width:${w}%"></i></div>`;}
+function renderBoard(){
+ const el=document.getElementById('board-rows');let list;
+ if(posFilter==='ALL')list=heroSorted.slice(0,10);
+ else if(posFilter==='IDP'){if(config.idp==='off'){el.innerHTML=`<div class="board__empty">Defensive players hold no value with IDP scoring off.<br><span class="micro">Switch IDP to Balanced or Big-play to rate and rank them.</span></div>`;return;}list=heroSorted.filter(v=>v.p.pos in IDPPOS).slice(0,10);}
+ else if(posFilter==='K'){if(config.kick==='off'){el.innerHTML=`<div class="board__empty">Kickers hold no value with kicker scoring off.<br><span class="micro">Switch kicker scoring to Std or 100/FG to rate them — try 100/FG for a shock.</span></div>`;return;}list=heroSorted.filter(v=>v.p.pos==='K').slice(0,10);}
+ else list=heroSorted.filter(v=>v.p.pos===posFilter).slice(0,10);
+ if(!list.length){el.innerHTML=`<div class="board__empty">No qualifying players for this filter.</div>`;return;}
+ el.innerHTML=list.map(v=>{const rank=rankMap[v.p.name];return `<div class="row">
+  <div class="row__rank">${rank<=3?'<b>'+rank+'</b>':rank}</div>
+  <div class="row__name"><span class="nm">${v.p.name}</span><span class="posage"><span class="tag tag--${v.p.pos}">${v.p.pos}</span><span class="age">age ${v.p.age} · ${v.p.tag}</span></span></div>
+  <div class="row__pts">${fmt(v.pts)}</div>
+  <div class="row__val"><span class="v">${fmt(v.dhq)}</span>${valBarHTML(v)}</div>
+  ${deltaHTML(v)}</div>`;}).join('');
+}
+
+/* ============ CONTROLS ============ */
+const SLOTDEFS=[{k:'qb',l:'QB',min:0,max:2},{k:'rb',l:'RB',min:0,max:4},{k:'wr',l:'WR',min:0,max:4},{k:'te',l:'TE',min:0,max:3},{k:'flex',l:'FLEX',min:0,max:3},{k:'k',l:'K',min:0,max:3},{k:'dl',l:'DL',min:0,max:4,idp:true},{k:'lb',l:'LB',min:0,max:4,idp:true},{k:'db',l:'DB',min:0,max:4,idp:true}];
+function renderRoster(){document.getElementById('rgrid').innerHTML=SLOTDEFS.filter(d=>!d.idp||config.idp!=='off').map(d=>`<div class="ministep${d.idp?' ministep--idp':''}"><span class="ml">${d.l}</span><span class="mc"><button onclick="stepSlot('${d.k}',-1)" aria-label="less ${d.l}">–</button><b id="slot-${d.k}">${config.slots[d.k]}</b><button onclick="stepSlot('${d.k}',1)" aria-label="more ${d.l}">+</button></span></div>`).join('');}
+function setSeg(id,val){document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.dataset.v===String(val)));}
+function kickHint(){return {off:'Kicker scoring off. Crank it to 100/FG and watch what your settings can do.',std:'Standard kicker scoring — kickers sit near the bottom, where they usually belong.',wild:'100 points per field goal. Your kickers are now the most valuable assets in the league — because your settings say so.'}[config.kick];}
+function idpHint(){return {off:'IDP off — defensive players hold no value. Turn it on to rate every defender.',bal:'Balanced — tackle-weighted; linebackers climb the board.',big:'Big-play — sacks & takeaways spike; edge rushers and ball-hawks surface.'}[config.idp];}
+function updateHints(){document.getElementById('kick-hint').textContent=kickHint();document.getElementById('idp-hint').textContent=idpHint();}
+function syncControls(){document.getElementById('teams-v').textContent=config.teams;setSeg('seg-sf',config.sf?'sf':'1qb');setSeg('seg-ppr',config.ppr);setSeg('seg-patd',config.patd);setSeg('seg-te',config.tePrem);setSeg('seg-kick',config.kick);setSeg('seg-idp',config.idp);renderRoster();updateHints();}
+function wireSeg(id,fn){document.querySelectorAll('#'+id+' button').forEach(b=>b.addEventListener('click',()=>{fn(b.dataset.v);setSeg(id,b.dataset.v);updateHints();recompute();}));}
+function stepTeams(d){config.teams=Math.max(8,Math.min(16,config.teams+d));document.getElementById('teams-v').textContent=config.teams;recompute();}
+function stepSlot(k,d){const def=SLOTDEFS.find(x=>x.k===k);const nv=Math.max(def.min,Math.min(def.max,config.slots[k]+d));config.slots[k]=nv;document.getElementById('slot-'+k).textContent=nv;
+ /* rostering a kicker turns kicker scoring on (and jumps to the K tab) so kickers actually show;
+    dropping K back to 0 turns it off again. Without this the K slot looked inert. */
+ if(k==='k'){if(nv>0&&config.kick==='off'){config.kick='std';setSeg('seg-kick','std');updateHints();setBoardTab('K');}else if(nv===0&&config.kick!=='off'){config.kick='off';setSeg('seg-kick','off');updateHints();if(posFilter==='K')setBoardTab('ALL');}}
+ recompute();}
+
+function setBoardTab(pos){posFilter=pos;document.querySelectorAll('#board-tabs button').forEach(x=>x.classList.toggle('on',x.dataset.pos===pos));}
+function init(){
+ renderRoster();/* owners/examples now shown as real screenshots, not generated */
+ wireSeg('seg-sf',v=>config.sf=(v==='sf'));
+ wireSeg('seg-ppr',v=>config.ppr=parseFloat(v));
+ wireSeg('seg-patd',v=>config.patd=parseInt(v));
+ wireSeg('seg-te',v=>config.tePrem=parseFloat(v));
+ /* turning kicker scoring on ensures a K roster slot exists (and jumps to the K tab); off leaves it */
+ wireSeg('seg-kick',v=>{config.kick=v;if(v!=='off'){if(config.slots.k<1){config.slots.k=1;renderRoster();}setBoardTab('K');}else if(posFilter==='K')setBoardTab('ALL');});
+ /* enabling IDP reveals the DL/LB/DB roster steppers and auto-focuses the IDP tab so the defenders
+    you just switched on actually surface (they rank ~#38+ overall, never cracking the ALL top-10) */
+ wireSeg('seg-idp',v=>{config.idp=v;renderRoster();if(v!=='off')setBoardTab('IDP');else if(posFilter==='IDP')setBoardTab('ALL');});
+ document.querySelectorAll('#board-tabs button').forEach(b=>b.addEventListener('click',()=>{setBoardTab(b.dataset.pos);renderBoard();}));
+ recompute();
+ heroSorted.forEach((v,i)=>baseline[v.p.name]={rank:i+1,dhq:v.dhq});
+ renderBoard();/* re-render against the just-set baseline so Δ shows "—" (no movement), not "NEW", on first paint */
+}
+init();
+
+  </script>
+  <!-- Scroll-reveal motion init (gated on html.anim / prefers-reduced-motion) -->
+  <script>
+
+/* ═══ MOTION LAYER (ported polish) — Lenis smooth scroll + GSAP ScrollTrigger reveals.
+   Gated on html.anim (set only when JS runs AND the user allows motion), and every hidden
+   state is applied at runtime, so reduced-motion users always see the full page. ═══ */
+function initMotion() {
+  var html = document.documentElement;
+  if (!(window.gsap && window.ScrollTrigger && window.Lenis && html.classList.contains('anim'))) return;
+  gsap.registerPlugin(ScrollTrigger);
+
+  var lenis = new Lenis({ lerp: 0.1, duration: 1.1, smoothWheel: true, wheelMultiplier: 1, touchMultiplier: 1.5, syncTouch: false });
+  window.lenis = lenis;
+  lenis.on('scroll', ScrollTrigger.update);
+  gsap.ticker.add(function (t) { lenis.raf(t * 1000); });
+  gsap.ticker.lagSmoothing(0);
+
+  /* rewire every in-page scroll button to glide via Lenis (same destinations) */
+  document.querySelectorAll('[onclick*="scrollIntoView"]').forEach(function (btn) {
+    var oc = btn.getAttribute('onclick') || '';
+    var m = oc.match(/getElementById\((['"])([^'"]+)\1\)\.scrollIntoView/);
+    if (!m) return;
+    var id = m[2];
+    var wantsFocus = oc.indexOf("acctEmail") !== -1 && oc.indexOf('.focus') !== -1;
+    btn.removeAttribute('onclick');
+    btn.addEventListener('click', function () {
+      var t = document.getElementById(id);
+      if (!t) return;
+      lenis.scrollTo(t, { offset: -84, duration: 1.1 });
+      if (wantsFocus) setTimeout(function () {
+        var e2 = document.getElementById('acctEmail');
+        if (e2) { try { e2.focus({ preventScroll: true }); } catch (_) { e2.focus(); } }
+      }, 1150);
+    });
+  });
+
+  var once = 'play none none none';
+  function rise(targets, trigger, o) {
+    o = o || {};
+    gsap.fromTo(targets, { opacity: 0, y: o.y == null ? 24 : o.y },
+      { opacity: 1, y: 0, duration: o.d || 0.8, ease: o.e || 'power2.out', stagger: o.s || 0,
+        scrollTrigger: { trigger: trigger, start: o.start || 'top 82%', toggleActions: once } });
+  }
+
+  /* topbar: transparent over the hero, frosted once you scroll past it (donor behavior) */
+  var topbar = document.querySelector('.topbar');
+  if (topbar) {
+    html.classList.add('js-nav');
+    ScrollTrigger.create({ trigger: '.hero', start: 'bottom top+=120',
+      onEnter: function () { topbar.classList.add('topbar--frosted'); },
+      onLeaveBack: function () { topbar.classList.remove('topbar--frosted'); } });
+  }
+
+  /* hero copy rises once on load */
+  gsap.fromTo('.hero-copy', { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 1.0, ease: 'expo.out' });
+
+  /* facer split copy rises just after the title block (rig keeps its own sharpen/veil animation) */
+  gsap.fromTo('.facer-copy', { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 1.0, ease: 'expo.out', delay: 0.15 });
+
+  gsap.utils.toArray('.sec-head').forEach(function (h) { rise(h, h, { y: 22 }); });
+  rise('.wedge .vcard', '.wedge', { y: 26, s: 0.12 });
+
+  /* universe: staggered payoff + the faint grid drifts behind the words (scrubbed) */
+  rise('#universe .universe__in > *', '#universe .universe__in', { y: 26, d: 0.9, e: 'expo.out', s: 0.11, start: 'top 78%' });
+  gsap.fromTo('#universe .universe__grid', { yPercent: 5, opacity: 0.25 }, { yPercent: -5, opacity: 0.5, ease: 'none',
+    scrollTrigger: { trigger: '#universe', start: 'top bottom', end: 'bottom top', scrub: true } });
+
+  gsap.utils.toArray('.split').forEach(function (sp) { rise(sp.children, sp, { y: 24, s: 0.12 }); });
+  rise('#draft .rig-box', '#draft .rig-box', { y: 26, d: 0.85, start: 'top 82%' });
+  rise('.creed__in', '.creed', { y: 26, d: 0.9, e: 'expo.out', start: 'top 76%' });
+  rise('.cc-grid .cc', '.cc-grid', { y: 20, d: 0.6, s: 0.06 });
+
+  /* engine (interactive — reveal stable wrappers only, never the live board rows) */
+  rise('#engine .readout', '#engine .readout', { y: 20, d: 0.7, start: 'top 80%' });
+  rise('#engine .engine > .panel', '#engine .engine', { y: 28, d: 0.85, s: 0.1, start: 'top 78%' });
+  rise('#engine .aha-cta', '#engine .aha-cta', { y: 18, d: 0.7, e: 'expo.out', start: 'top 88%' });
+
+  rise('.pricing-grid .price-card', '.pricing-grid', { y: 26, d: 0.7, s: 0.1, start: 'top 80%' });
+  rise('.platform-band', '.platforms', { y: 20, d: 0.7, start: 'top 86%' });
+  rise('#auth', '#auth', { y: 22, start: 'top 84%' });
+  rise('.dhqf-grid', '.dhqf', { y: 16, d: 0.7, start: 'top 92%' });
+
+  ScrollTrigger.refresh();
+  window.addEventListener('load', function () { ScrollTrigger.refresh(); });
+}
+if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', initMotion); else initMotion();
+
+  </script>
 </body>
 </html>
