@@ -1511,6 +1511,11 @@
         const displayName = sleeperUser
             ? (customDisplayName || sleeperUser.display_name || sleeperUser.username || sleeperUsername).toUpperCase()
             : (customDisplayName || 'COMMANDER').toUpperCase();
+        // Phone header brand suffix — real subscription drives PRO vs SCOUT (a
+        // free/scout account shows SCOUT; paid/trial shows PRO).
+        const hubTier = (typeof getUserTier === 'function' ? getUserTier() : 'free');
+        const hubIsPaid = ['pro', 'warroom', 'war_room', 'commissioner', 'trial'].includes(String(hubTier).toLowerCase());
+        const hubTierWord = hubIsPaid ? 'PRO' : 'SCOUT';
 
         const RECONAI_BASE = 'https://skjjcruz.github.io/ReconAI-sandbox-dev/';
         function reconUrl(leagueId) {
@@ -1926,6 +1931,11 @@
                     (3) Touch bumps are hit-area only (CTAs, MFL franchise/cancel rows);
                     ≥768 is untouched. --sa* vars resolve to 0 off-notch. */}
                 <style>{`
+                    /* Base (desktop/iPad): the phone-only tier suffix and bottom action
+                       bar stay hidden; the header keeps its two-line brand and the
+                       BILLING / DISCORD / gear controls. */
+                    .hub-tier-suffix { display: none; }
+                    .hub-bottombar { display: none; }
                     @media (max-width: 767px) {
                         .header { padding: calc(0.6rem + var(--sat, 0px)) calc(1rem + var(--sar, 0px)) 0.6rem calc(1rem + var(--sal, 0px)); }
                         .hub-platform-grid { grid-template-columns: 1fr !important; padding-left: calc(12px + var(--sal, 0px)) !important; padding-right: calc(12px + var(--sar, 0px)) !important; }
@@ -1933,6 +1943,32 @@
                         .empire-hero { padding: 12px !important; margin-bottom: 10px !important; }
                         .dhq-champ-banners { display: none !important; }
                         .hub-cta, .hub-platform-grid button { min-height: 44px; }
+
+                        /* Brand on ONE line: "DYNASTY HQ PRO/SCOUT". Drop the owner-name
+                           subtitle line and show the tier suffix inline. */
+                        .header .header-subtitle { display: none !important; }
+                        .hub-tier-suffix { display: inline !important; }
+
+                        /* Move BILLING / DISCORD / SETTINGS out of the header into a fixed
+                           bottom action bar (safe-area aware). */
+                        .hub-header-ctrls { display: none !important; }
+                        .header .settings-icon { display: none !important; }
+                        .hub-bottombar {
+                            display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 400;
+                            background: rgba(8,8,11,0.96); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+                            border-top: 1px solid var(--acc-line2, rgba(212,175,55,0.3));
+                            padding: 8px calc(8px + var(--sar, 0px)) calc(8px + var(--sab, 0px)) calc(8px + var(--sal, 0px));
+                            justify-content: space-around; align-items: stretch; gap: 6px;
+                        }
+                        .hub-bb-item {
+                            flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+                            background: none; border: none; cursor: pointer; text-decoration: none;
+                            color: var(--silver); font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase;
+                            min-height: 50px; padding: 4px; border-radius: 10px; -webkit-tap-highlight-color: transparent;
+                        }
+                        .hub-bb-item:active { background: var(--ov-1, rgba(255,255,255,0.03)); }
+                        /* keep the fixed bar from covering the last tile / Add-a-league */
+                        .app-container { padding-bottom: calc(78px + var(--sab, 0px)) !important; }
                     }
                 `}</style>
                 {/* ── Header ── */}
@@ -1942,12 +1978,13 @@
                         style={{ cursor: 'pointer' }}>
                         <img src={iconSrc} alt="Logo" style={{ width:'44px',height:'44px',borderRadius:'10px',boxShadow:'0 2px 12px var(--acc-line2, rgba(212,175,55,.3))' }} />
                         <div className="header-text">
-                            <h1 className="owner-name wr-wordmark" style={{ fontSize:'1.1rem',letterSpacing:'.06em' }}>DYNASTY HQ</h1>
+                            <h1 className="owner-name wr-wordmark" style={{ fontSize:'1.1rem',letterSpacing:'.06em' }}>DYNASTY HQ<span className="hub-tier-suffix" style={{ color:'var(--gold)' }}> {hubTierWord}</span></h1>
                             <div className="header-subtitle">{String(displayName)}</div>
                         </div>
                     </div>
-                    {/* Calm control row — sits left of the absolutely-positioned gear (44px + gutter) */}
-                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '52px' }}>
+                    {/* Calm control row — sits left of the absolutely-positioned gear (44px + gutter).
+                        On phone this row + the gear move to a fixed bottom bar (see hub-bottombar). */}
+                    <div className="hub-header-ctrls" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '52px' }}>
                         <button onClick={() => { window.location.href = 'upgrade.html'; }} style={hubCtrlStyle}>BILLING</button>
                         {WR_DISCORD_URL && (
                             <a href={WR_DISCORD_URL} target="_blank" rel="noopener" style={hubCtrlStyle}>DISCORD</a>
@@ -1958,6 +1995,26 @@
                         <path d="M12 1v6m0 6v6m-5.2-7.8l-4.3-4.2m12.9 0l4.3 4.2M1 12h6m6 0h6m-7.8 5.2l-4.2 4.3m0-12.9l4.2 4.3" stroke="var(--gold)"/>
                     </svg>
                 </header>
+
+                {/* ── Phone-only bottom action bar — BILLING / DISCORD / SETTINGS ──
+                    Hidden ≥768 (desktop/iPad keep these in the header). Fixed to the
+                    bottom, safe-area aware. Same handlers as the header controls. */}
+                <nav className="hub-bottombar" aria-label="Account actions">
+                    <button className="hub-bb-item" onClick={() => { window.location.href = 'upgrade.html'; }}>
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--gold)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                        <span>Billing</span>
+                    </button>
+                    {WR_DISCORD_URL && (
+                        <a className="hub-bb-item" href={WR_DISCORD_URL} target="_blank" rel="noopener">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--gold)"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4c1.8.5 2.6 1.1 3.5 1.9a16.2 16.2 0 0 0-13.4 0c.9-.8 1.9-1.5 3.5-1.9L8.6 3a19.8 19.8 0 0 0-4.9 1.4A20.3 20.3 0 0 0 .4 18.1a19.9 19.9 0 0 0 6 3l.5-.7a12.3 12.3 0 0 1-2.4-1.2l.6-.4a14.2 14.2 0 0 0 12.2 0l.6.4c-.8.5-1.6.9-2.4 1.2l.5.7a19.9 19.9 0 0 0 6-3A20.3 20.3 0 0 0 20.3 4.4zM8.7 15.3c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>
+                            <span>Discord</span>
+                        </a>
+                    )}
+                    <button className="hub-bb-item" onClick={() => setShowOwnerSettings(true)}>
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--gold)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        <span>Settings</span>
+                    </button>
+                </nav>
 
                 {/* Session/resume affordance now lives inside the Add-a-league modal;
                     the picker surfaces the last league inline via its LAST badge. */}
