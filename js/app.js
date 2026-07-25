@@ -428,7 +428,7 @@
             <header className="dhq-masthead">
                 <style>{`
                     .dhq-masthead { display: flex; align-items: center; gap: 20px; padding: 16px 16px 18px; border-bottom: 1px solid var(--acc-line2, rgba(212,175,55,0.3)); }
-                    .dhq-mh-crest { width: 86px; height: 86px; flex-shrink: 0; border-radius: 20px; border: 1.5px solid var(--gold); overflow: hidden; box-shadow: 0 0 26px rgba(212,175,55,0.20); }
+                    .dhq-mh-crest { width: 72px; height: 72px; flex-shrink: 0; border-radius: 16px; border: 1.5px solid var(--gold); overflow: hidden; box-shadow: 0 0 16px rgba(212,175,55,0.14); }
                     .dhq-mh-actions { display: flex; align-items: center; gap: 9px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
                     .dhq-mh-gear:hover { transform: rotate(15deg); }
                     .dhq-mh-sq:hover { border-color: var(--gold) !important; box-shadow: 0 0 14px rgba(212,175,55,0.22); }
@@ -450,9 +450,9 @@
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', letterSpacing: '0.28em', color: 'var(--silver)', opacity: 0.8, textTransform: 'uppercase' }}>
                         Dynasty HQ <b style={{ color: 'var(--gold)', fontWeight: 700 }}>· {isPaid ? 'PRO' : 'SCOUT'}</b>
                     </div>
-                    <h1 className="dhq-mh-clubname" style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 'clamp(1.7rem, 4.2vw, 2.7rem)', letterSpacing: '0.06em', color: 'var(--gold)', lineHeight: 1.04, textTransform: 'uppercase', margin: '2px 0 0', textShadow: '0 0 32px rgba(212,175,55,0.25)' }}>{clubName}</h1>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
-                        <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: 'italic', fontSize: '0.92rem', color: 'var(--silver)' }}>
+                    <h1 className="dhq-mh-clubname" style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 'clamp(1.35rem, 2.8vw, 1.9rem)', letterSpacing: '0.03em', color: 'var(--gold)', lineHeight: 1.14, textTransform: 'uppercase', margin: '4px 0 0', textShadow: 'none' }}>{clubName}</h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: 'italic', fontSize: '0.88rem', color: 'var(--silver)' }}>
                             &ldquo;{mottoText || 'Add your motto'}&rdquo;
                             <span style={{ fontStyle: 'normal', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', letterSpacing: '0.12em', opacity: 0.7, marginLeft: '8px' }}>— {(mottoAttr || 'YOU').toUpperCase()}</span>
                         </span>
@@ -473,7 +473,7 @@
                                 style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', letterSpacing: '0.1em', color: 'var(--gold)', border: '1px solid var(--gold)', borderRadius: '7px', padding: '6px 12px', background: 'none', cursor: 'pointer' }}>DONE</button>
                         </div>
                     )}
-                    <div style={{ marginTop: '9px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.64rem', letterSpacing: '0.1em', color: 'var(--silver)' }}>
+                    <div style={{ marginTop: '11px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.64rem', letterSpacing: '0.1em', color: 'var(--silver)' }}>
                         <OwnerAvatarBadge club={club} size={22} />
                         <span style={metaSpan}>EST <b style={{ color: 'var(--gold)', fontWeight: 700 }}>{estYear}</b></span>
                         <span style={metaSpan}><b style={{ color: 'var(--gold)', fontWeight: 700 }}>{leagueCount}</b> FRANCHISE{leagueCount === 1 ? '' : 'S'}</span>
