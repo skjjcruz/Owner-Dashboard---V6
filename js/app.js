@@ -829,6 +829,17 @@
         const [hubSort, setHubSort] = useState('recent');
         // Lifted tab state for browser history navigation
         const [activeTab, setActiveTab] = useState('dashboard');
+        // Re-render when the server tier resolves (it lands a beat after mount),
+        // so the phone header brand shows the correct DYNASTY HQ PRO/SCOUT rather
+        // than being stuck on the pre-resolution 'free' snapshot. Mirrors the
+        // FranchisePicker's own dhq:tier-resolved subscription.
+        const [, setHubTierEpoch] = useState(0);
+        useEffect(() => {
+            const bump = () => setHubTierEpoch(n => n + 1);
+            if (window.App && window.App._userTierResolved) bump();
+            window.addEventListener('dhq:tier-resolved', bump);
+            return () => window.removeEventListener('dhq:tier-resolved', bump);
+        }, []);
         const isNavigatingRef = React.useRef(false);
         const initialRouteAppliedRef = React.useRef(false);
         // When the hub's league cards (records/rosters) last finished loading —
