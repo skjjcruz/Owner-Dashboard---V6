@@ -450,8 +450,9 @@
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', letterSpacing: '0.28em', color: 'var(--silver)', opacity: 0.8, textTransform: 'uppercase' }}>
                         Dynasty HQ <b style={{ color: 'var(--gold)', fontWeight: 700 }}>· {isPaid ? 'PRO' : 'SCOUT'}</b>
                     </div>
-                    <h1 className="dhq-mh-clubname" style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 'clamp(1.15rem, 2.3vw, 1.6rem)', letterSpacing: '0.03em', color: 'var(--gold)', lineHeight: 1.16, textTransform: 'uppercase', margin: '4px 0 0', textShadow: 'none' }}>{clubName}</h1>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    <h1 className="dhq-mh-clubname" style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 'clamp(1.15rem, 2.3vw, 1.6rem)', letterSpacing: '0.03em', color: 'var(--gold)', lineHeight: 1.16, textTransform: 'uppercase', margin: '0', textShadow: 'none' }}>{clubName}</h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: 'italic', fontSize: '0.88rem', color: 'var(--silver)' }}>
                             &ldquo;{mottoText || 'Add your motto'}&rdquo;
                             <span style={{ fontStyle: 'normal', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', letterSpacing: '0.12em', opacity: 0.7, marginLeft: '8px' }}>— {(mottoAttr || 'YOU').toUpperCase()}</span>
@@ -460,6 +461,7 @@
                             style={{ width: '24px', height: '24px', borderRadius: '6px', border: '1px solid transparent', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
                             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--gold)" strokeWidth="2"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
                         </button>
+                    </div>
                     </div>
                     {editingMotto && (
                         <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
