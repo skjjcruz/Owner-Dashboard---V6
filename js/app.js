@@ -436,16 +436,11 @@
                     .dhq-mh-pencil { opacity: 0.45; transition: all .14s; }
                     .dhq-mh-pencil:hover { opacity: 1; border-color: var(--acc-line2, rgba(212,175,55,0.3)) !important; }
                     @media (max-width: 767px) {
-                        /* Phone: compact masthead so the league tiles surface near the top
-                           of the page instead of being pushed below a tall banner. The club
-                           name is dialed down from the desktop hero size so it no longer
-                           dominates, and the Discord / X / gear cluster is dropped here —
-                           those actions already live in the page header on phone (DISCORD +
-                           the settings gear), so repeating them is just excess vertical space. */
-                        .dhq-masthead { flex-wrap: wrap; gap: 12px; padding: 12px 12px 14px; }
-                        .dhq-mh-crest { width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 0 14px rgba(212,175,55,0.16); }
-                        .dhq-mh-clubname { font-size: 1.3rem !important; letter-spacing: 0.03em !important; text-shadow: none !important; }
-                        .dhq-mh-actions { display: none !important; }
+                        /* Phone: hide the entire club-identity masthead. The page header
+                           already carries the brand, owner name, DISCORD and the settings
+                           gear, so on phone we drop straight to the league tiles. Desktop
+                           and iPad keep the full masthead. */
+                        .dhq-masthead { display: none !important; }
                     }
                 `}</style>
                 <div className="dhq-mh-crest">
@@ -512,7 +507,7 @@
         const [club, setClub] = useOwnerClub();
         if (!club.showTitles || !titles || !titles.length) return null;
         return (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '12px 16px 0', flexWrap: 'wrap' }}>
+            <div className="dhq-champ-banners" style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '12px 16px 0', flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', letterSpacing: '0.2em', color: 'var(--silver)', opacity: 0.7, marginRight: '4px', textTransform: 'uppercase' }}>Titles</span>
                 {titles.map((t, i) => (
                     <span key={t.year + '-' + t.league + '-' + i}
@@ -1936,6 +1931,7 @@
                         .hub-platform-grid { grid-template-columns: 1fr !important; padding-left: calc(12px + var(--sal, 0px)) !important; padding-right: calc(12px + var(--sar, 0px)) !important; }
                         .hub-franchise-picker { padding-left: calc(12px + var(--sal, 0px)) !important; padding-right: calc(12px + var(--sar, 0px)) !important; }
                         .empire-hero { padding: 12px !important; margin-bottom: 10px !important; }
+                        .dhq-champ-banners { display: none !important; }
                         .hub-cta, .hub-platform-grid button { min-height: 44px; }
                     }
                 `}</style>
