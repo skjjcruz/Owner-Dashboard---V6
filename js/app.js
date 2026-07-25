@@ -480,6 +480,13 @@
                         <span style={metaSpan}>EST <b style={{ color: 'var(--gold)', fontWeight: 700 }}>{estYear}</b></span>
                         <span style={metaSpan}><b style={{ color: 'var(--gold)', fontWeight: 700 }}>{leagueCount}</b> FRANCHISE{leagueCount === 1 ? '' : 'S'}</span>
                         {username && <span style={metaSpan}>SLEEPER <b style={{ color: 'var(--gold)', fontWeight: 700 }}>@{String(username).toUpperCase()}</b></span>}
+                        {!club.showTitles && (
+                            <button onClick={() => setClub({ showTitles: true })} title="Show your championship titles"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontFamily: 'var(--font-mono)', fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--gold)', background: 'none', border: '1px solid var(--acc-line1, rgba(212,175,55,0.3))', borderRadius: '5px', padding: '2px 7px', cursor: 'pointer', lineHeight: 1 }}>
+                                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="var(--gold)" strokeWidth="2"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a1 1 0 0 0-1 1c0 2.5 1.5 4 4 4M17 6h3a1 1 0 0 1 1 1c0 2.5-1.5 4-4 4"/></svg>
+                                Show League Trophies
+                            </button>
+                        )}
                     </div>
                 </div>
                 <div className="dhq-mh-actions">
