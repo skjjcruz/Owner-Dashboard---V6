@@ -435,10 +435,17 @@
                     .dhq-discord-pill:hover { box-shadow: 0 0 20px rgba(212,175,55,0.5); transform: translateY(-1px); }
                     .dhq-mh-pencil { opacity: 0.45; transition: all .14s; }
                     .dhq-mh-pencil:hover { opacity: 1; border-color: var(--acc-line2, rgba(212,175,55,0.3)) !important; }
-                    @media (max-width: 700px) {
-                        .dhq-masthead { flex-wrap: wrap; gap: 14px; }
-                        .dhq-mh-crest { width: 64px; height: 64px; }
-                        .dhq-mh-actions { width: 100%; justify-content: flex-start; }
+                    @media (max-width: 767px) {
+                        /* Phone: compact masthead so the league tiles surface near the top
+                           of the page instead of being pushed below a tall banner. The club
+                           name is dialed down from the desktop hero size so it no longer
+                           dominates, and the Discord / X / gear cluster is dropped here —
+                           those actions already live in the page header on phone (DISCORD +
+                           the settings gear), so repeating them is just excess vertical space. */
+                        .dhq-masthead { flex-wrap: wrap; gap: 12px; padding: 12px 12px 14px; }
+                        .dhq-mh-crest { width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 0 14px rgba(212,175,55,0.16); }
+                        .dhq-mh-clubname { font-size: 1.3rem !important; letter-spacing: 0.03em !important; text-shadow: none !important; }
+                        .dhq-mh-actions { display: none !important; }
                     }
                 `}</style>
                 <div className="dhq-mh-crest">
@@ -448,7 +455,7 @@
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', letterSpacing: '0.28em', color: 'var(--silver)', opacity: 0.8, textTransform: 'uppercase' }}>
                         Dynasty HQ <b style={{ color: 'var(--gold)', fontWeight: 700 }}>· {isPaid ? 'PRO' : 'SCOUT'}</b>
                     </div>
-                    <h1 style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 'clamp(1.7rem, 4.2vw, 2.7rem)', letterSpacing: '0.06em', color: 'var(--gold)', lineHeight: 1.04, textTransform: 'uppercase', margin: '2px 0 0', textShadow: '0 0 32px rgba(212,175,55,0.25)' }}>{clubName}</h1>
+                    <h1 className="dhq-mh-clubname" style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 'clamp(1.7rem, 4.2vw, 2.7rem)', letterSpacing: '0.06em', color: 'var(--gold)', lineHeight: 1.04, textTransform: 'uppercase', margin: '2px 0 0', textShadow: '0 0 32px rgba(212,175,55,0.25)' }}>{clubName}</h1>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
                         <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: 'italic', fontSize: '0.92rem', color: 'var(--silver)' }}>
                             &ldquo;{mottoText || 'Add your motto'}&rdquo;
@@ -1928,6 +1935,7 @@
                         .header { padding: calc(0.6rem + var(--sat, 0px)) calc(1rem + var(--sar, 0px)) 0.6rem calc(1rem + var(--sal, 0px)); }
                         .hub-platform-grid { grid-template-columns: 1fr !important; padding-left: calc(12px + var(--sal, 0px)) !important; padding-right: calc(12px + var(--sar, 0px)) !important; }
                         .hub-franchise-picker { padding-left: calc(12px + var(--sal, 0px)) !important; padding-right: calc(12px + var(--sar, 0px)) !important; }
+                        .empire-hero { padding: 12px !important; margin-bottom: 10px !important; }
                         .hub-cta, .hub-platform-grid button { min-height: 44px; }
                     }
                 `}</style>
