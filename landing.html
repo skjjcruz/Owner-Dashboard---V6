@@ -1087,6 +1087,19 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
     </div>
   </section>
 
+  <!-- ─────────────────────────────────────────────────────────────────
+       PHONE-ONLY SIGN-UP HEADER (≤767px only). display:none by default so
+       desktop / iPad ≥768px never render it. Shown only inside the phone
+       media query further below, sitting directly above the SAME #auth
+       section (same inputs, buttons and handlers) which becomes a
+       native-app-style DHQ dark/gold sign-up screen on phones.
+       ───────────────────────────────────────────────────────────────── -->
+  <header class="phone-auth-head">
+    <img class="phone-auth-crest" src="img/dhq-crest.jpg" alt="Dynasty HQ">
+    <div class="phone-auth-wordmark">DYNASTY HQ</div>
+    <p class="phone-auth-tag">Your fantasy front office.</p>
+  </header>
+
   <!-- Join -->
   <section class="auth" id="auth">
     <img src="icon-192.png" alt="Dynasty HQ" style="display:block;width:56px;height:56px;border-radius:14px;margin:0 auto 16px;box-shadow:0 4px 20px rgba(212,175,55,.2)">
@@ -1132,6 +1145,96 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
     .auth-or::before,.auth-or::after{content:'';flex:1;height:1px;background:var(--border)}
     .auth-linkbtn{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;text-decoration:underline;font-family:inherit}
     .auth-linkbtn:hover{color:var(--accent)}
+  </style>
+
+  <style>
+  /* ═══════════════════════════════════════════════════════════════════════
+     PHONE SIGN-UP SCREEN — fully ADDITIVE and scoped to @media(max-width:767px).
+     Nothing in this block applies at ≥768px, and the only new element
+     (.phone-auth-head) is display:none by default, so DESKTOP / iPad render
+     byte-identically to before. On phones the marketing brochure is hidden and
+     the EXISTING #auth section (same #acctEmail/#acctPassword/#btnGoogle/
+     #btnApple/#btnJoin/#toggleMode/#forgotBtn wired to the existing handlers)
+     is re-themed + recentred as a native-app DHQ dark/gold sign-up.
+     ═══════════════════════════════════════════════════════════════════════ */
+  .phone-auth-head{display:none}   /* hidden by default; shown only on phone below */
+
+  @media(max-width:767px){
+    /* 1 ─ Hide the ENTIRE marketing brochure + ambient/motion layers.
+       .section covers the wedge, #psych, #draft, #command, #engine and
+       #pricing (all class="section"); the rest are named explicitly. #auth
+       is NOT class="section", so it survives. */
+    .ambient,.brandwash,.topbar,.hero,.ticker,.hero-facer-sec,
+    .section,.universe,.creed,.platforms,.dhqf{display:none!important}
+
+    /* 2 ─ App-shell background (DHQ dark), native scroll, safe-area aware.
+       Overflow-safe vertical centring via auto margins (justify-content:center
+       would clip the top when the card + keyboard exceed the viewport). */
+    html,body{background:#08080B}
+    body{
+      min-height:100dvh;
+      display:flex;flex-direction:column;align-items:center;
+      padding:calc(env(safe-area-inset-top,0px) + 24px) 20px
+              calc(env(safe-area-inset-bottom,0px) + 24px);
+    }
+
+    /* 3 ─ Phone-only header: crest + wordmark + one tagline */
+    .phone-auth-head{display:block;text-align:center;width:100%;max-width:400px;margin:auto auto 22px}
+    .phone-auth-crest{
+      width:64px;height:64px;border-radius:16px;object-fit:cover;display:block;margin:0 auto 14px;
+      border:1px solid rgba(212,175,55,.35);box-shadow:0 6px 26px rgba(212,175,55,.18);
+    }
+    .phone-auth-wordmark{
+      font-family:'Rajdhani',sans-serif;font-weight:700;font-size:30px;letter-spacing:.14em;color:#D4AF37;line-height:1;
+    }
+    .phone-auth-tag{font-family:'DM Sans',sans-serif;font-size:14px;color:#9AA0AA;margin-top:8px}
+
+    /* 4 ─ Re-present #auth as the full-width app sign-up card */
+    .auth{
+      width:100%;max-width:400px;margin:0 auto auto;
+      padding:22px 18px 24px;
+      background:#121217;border:1px solid rgba(212,175,55,.2);border-radius:14px;
+      box-shadow:0 10px 40px rgba(0,0,0,.5);
+    }
+    .auth>img{display:none}                                   /* logo redundant with the phone header */
+    .auth-title{
+      font-family:'Rajdhani',sans-serif;font-weight:700;font-size:22px;letter-spacing:.02em;
+      text-transform:none;color:#F5F0E6;margin-bottom:6px;
+    }
+    #authSub{font-family:'DM Sans',sans-serif;color:#9AA0AA!important;font-size:13px!important;margin:0 0 18px!important}
+
+    /* 5 ─ OAuth buttons — Google white / Apple black */
+    .auth-google{font-family:'DM Sans',sans-serif;border-radius:10px;min-height:48px;background:#fff;color:#1f2328;border:1px solid rgba(255,255,255,.14)}
+    .auth-apple{font-family:'DM Sans',sans-serif;border-radius:10px;min-height:48px;background:#000;color:#fff;border:1px solid #000}
+    .auth-or{color:#6B7280}
+    .auth-or::before,.auth-or::after{background:rgba(255,255,255,.1)}
+
+    /* 6 ─ Email inputs — 16px font prevents iOS zoom-on-focus, gold focus ring */
+    .auth-input{
+      font-family:'DM Sans',sans-serif;font-size:16px;min-height:auto;padding:14px;
+      background:#141414;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#F5F0E6;margin-bottom:12px;
+    }
+    .auth-input::placeholder{color:#6B7280}
+    .auth-input:focus{border-color:#D4AF37}
+
+    /* 7 ─ Primary submit ("Create account →" / "Sign in →") — solid gold, black text */
+    .auth-submit{
+      font-family:'DM Sans',sans-serif;font-weight:700;font-size:16px;letter-spacing:0;
+      min-height:48px;border-radius:10px;background:#D4AF37;color:#000;border:1px solid #D4AF37;margin-top:4px;
+    }
+    .auth-submit:hover{background:#E5C24A;border-color:#E5C24A}
+
+    /* 8 ─ Toggle (signup/signin) + forgot-password links */
+    .auth-linkbtn{font-family:'DM Sans',sans-serif;color:#9AA0AA;text-decoration:none}
+    .auth-linkbtn:hover{color:#D4AF37}
+    #sleeperHint,.auth p{font-family:'DM Sans',sans-serif}
+
+    /* 9 ─ NO bottom app-tab nav here on purpose: this is a pre-login sign-up
+       screen with nothing to navigate. The real bottom nav lives post-login in
+       index.html (untouched). If a phone tab bar were ever wanted here it would
+       mount as a position:fixed;bottom:0 element with
+       padding-bottom:env(safe-area-inset-bottom,0px). */
+  }
   </style>
 
 
@@ -1858,6 +1961,13 @@ init();
 function initMotion() {
   var html = document.documentElement;
   if (!(window.gsap && window.ScrollTrigger && window.Lenis && html.classList.contains('anim'))) return;
+  // Phone guard: at ≤767px the marketing brochure is hidden and the page is a
+  // single native-scroll sign-up screen — so run NO Lenis smooth-scroll and NO
+  // GSAP reveals (a reveal would otherwise leave #auth stuck at opacity:0). This
+  // returns before the Lenis init below. Bound to innerWidth<768 (not
+  // pointer:coarse) to match the ≤767px CSS boundary exactly and keep the full
+  // motion layer on desktop AND iPad ≥768px (iPad has a coarse pointer).
+  if (window.innerWidth < 768) return;
   gsap.registerPlugin(ScrollTrigger);
 
   var lenis = new Lenis({ lerp: 0.1, duration: 1.1, smoothWheel: true, wheelMultiplier: 1, touchMultiplier: 1.5, syncTouch: false });
