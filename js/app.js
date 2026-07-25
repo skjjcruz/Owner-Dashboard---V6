@@ -829,17 +829,6 @@
         const [hubSort, setHubSort] = useState('recent');
         // Lifted tab state for browser history navigation
         const [activeTab, setActiveTab] = useState('dashboard');
-        // Re-render when the server tier resolves (it lands a beat after mount),
-        // so the phone header brand shows the correct DYNASTY HQ PRO/SCOUT rather
-        // than being stuck on the pre-resolution 'free' snapshot. Mirrors the
-        // FranchisePicker's own dhq:tier-resolved subscription.
-        const [, setHubTierEpoch] = useState(0);
-        useEffect(() => {
-            const bump = () => setHubTierEpoch(n => n + 1);
-            if (window.App && window.App._userTierResolved) bump();
-            window.addEventListener('dhq:tier-resolved', bump);
-            return () => window.removeEventListener('dhq:tier-resolved', bump);
-        }, []);
         const isNavigatingRef = React.useRef(false);
         const initialRouteAppliedRef = React.useRef(false);
         // When the hub's league cards (records/rosters) last finished loading —
@@ -1522,11 +1511,6 @@
         const displayName = sleeperUser
             ? (customDisplayName || sleeperUser.display_name || sleeperUser.username || sleeperUsername).toUpperCase()
             : (customDisplayName || 'COMMANDER').toUpperCase();
-        // Phone header brand suffix — real subscription drives PRO vs SCOUT (a
-        // free/scout account shows SCOUT; paid/trial shows PRO).
-        const hubTier = (typeof getUserTier === 'function' ? getUserTier() : 'free');
-        const hubIsPaid = ['pro', 'warroom', 'war_room', 'commissioner', 'trial'].includes(String(hubTier).toLowerCase());
-        const hubTierWord = hubIsPaid ? 'PRO' : 'SCOUT';
 
         const RECONAI_BASE = 'https://skjjcruz.github.io/ReconAI-sandbox-dev/';
         function reconUrl(leagueId) {
@@ -1942,10 +1926,10 @@
                     (3) Touch bumps are hit-area only (CTAs, MFL franchise/cancel rows);
                     ≥768 is untouched. --sa* vars resolve to 0 off-notch. */}
                 <style>{`
-                    /* Base (desktop/iPad): the phone-only tier suffix and bottom action
-                       bar stay hidden; the header keeps its two-line brand and the
-                       BILLING / DISCORD / gear controls. */
-                    .hub-tier-suffix { display: none; }
+                    /* Base (desktop/iPad): the phone-only bottom action bar stays hidden;
+                       the header keeps its two-line brand and the BILLING / DISCORD / gear
+                       controls. The shared "· PRO/SCOUT" wordmark badge (pro-gate.js) is
+                       untouched here. */
                     .hub-bottombar { display: none; }
                     @media (max-width: 767px) {
                         .header { padding: calc(0.6rem + var(--sat, 0px)) calc(1rem + var(--sar, 0px)) 0.6rem calc(1rem + var(--sal, 0px)); }
@@ -1955,10 +1939,15 @@
                         .dhq-champ-banners { display: none !important; }
                         .hub-cta, .hub-platform-grid button { min-height: 44px; }
 
-                        /* Brand on ONE line: "DYNASTY HQ PRO/SCOUT". Drop the owner-name
-                           subtitle line and show the tier suffix inline. */
+                        /* Brand on ONE line. Drop the owner-name subtitle so only the
+                           wordmark + its single tier badge remain. The badge itself is the
+                           shared pro-gate.js "· PRO/SCOUT" suffix (tier-reactive, no flash);
+                           here we just swap the middot for a dash on the hub header, keyed
+                           on the same body.is-pro / body.is-scout-free classes pro-gate sets.
+                           Shared CSS is left untouched — this only overrides the hub header. */
                         .header .header-subtitle { display: none !important; }
-                        .hub-tier-suffix { display: inline !important; }
+                        body.is-pro .header .wr-wordmark::after { content: " - PRO" !important; }
+                        body.is-scout-free .header .wr-wordmark::after { content: " - SCOUT" !important; }
 
                         /* Move BILLING / DISCORD / SETTINGS out of the header into a fixed
                            bottom action bar (safe-area aware). */
@@ -1989,7 +1978,7 @@
                         style={{ cursor: 'pointer' }}>
                         <img src={iconSrc} alt="Logo" style={{ width:'44px',height:'44px',borderRadius:'10px',boxShadow:'0 2px 12px var(--acc-line2, rgba(212,175,55,.3))' }} />
                         <div className="header-text">
-                            <h1 className="owner-name wr-wordmark" style={{ fontSize:'1.1rem',letterSpacing:'.06em' }}>DYNASTY HQ<span className="hub-tier-suffix" style={{ color:'var(--gold)' }}> - {hubTierWord}</span></h1>
+                            <h1 className="owner-name wr-wordmark" style={{ fontSize:'1.1rem',letterSpacing:'.06em' }}>DYNASTY HQ</h1>
                             <div className="header-subtitle">{String(displayName)}</div>
                         </div>
                     </div>
