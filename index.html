@@ -1359,7 +1359,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
     .tc-dhq-show-more:hover { border-color: rgba(212,175,55,0.5); background: rgba(212,175,55,0.06); }
     .tc-dhq-deal-stage { min-height: 0; }
     .tc-dhq-deal-stage .tc-dhq-panel-head { margin-bottom: 12px; }
-    .tc-dhq-deal-stage-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 10px; align-items: start; }
+    .tc-dhq-deal-stage-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 10px; align-items: start; max-height: 70vh; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
     .tc-dhq-package-note { border: 1px solid rgba(212,175,55,0.16); background: rgba(212,175,55,0.06); border-radius: 8px; padding: 12px; color: var(--silver); font-size: 0.8rem; line-height: 1.45; }
     .tc-dhq-package-note b { display: block; color: var(--gold); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
     .tc-dhq-dossier-body { display: flex; flex-direction: column; gap: 10px; }

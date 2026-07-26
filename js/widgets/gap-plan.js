@@ -177,9 +177,9 @@
             );
         }
 
-        // ── MD / LG: gap list ──
-        if (size === 'md' || size === 'lg') {
-            const rows = size === 'md' ? gaps.slice(0, 4) : gaps.slice(0, 7);
+        // ── MD / LG / NARROW: gap list (narrow = skinny column, all rows) ──
+        if (size === 'md' || size === 'lg' || size === 'narrow') {
+            const rows = size === 'md' ? gaps.slice(0, 4) : size === 'narrow' ? gaps : gaps.slice(0, 7);
             return (
                 <div style={{ ...cardStyle, padding: 'var(--card-pad, 12px 14px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     {header({ large: size === 'lg' })}
@@ -207,7 +207,7 @@
                             <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: colors.textFaint, fontFamily: fonts.ui, opacity: 0.7 }}>+{gaps.length - rows.length} more positions</div>
                         )}
                     </div>
-                    {size === 'md' && (
+                    {(size === 'md' || size === 'narrow') && (
                         <div style={{ flexShrink: 0, fontSize: 'var(--text-micro, 0.6875rem)', color: colors.textFaint, fontFamily: fonts.ui, opacity: 0.65, marginTop: '4px' }}>count = starter-quality players · vs elite tier teams</div>
                     )}
                     {/* LG: concrete sources for the top gap */}

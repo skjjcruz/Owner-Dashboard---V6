@@ -92,10 +92,12 @@ const WIDGET_MODULES = {
     'gap-plan': {
         label: 'Gap Plan',
         icon: '🧩',
+        // 'narrow' (1 col × 4 rows) lists every position gap in a skinny
+        // side column, mirroring power-rankings' narrow tier.
         description: 'Positional gaps in player counts vs elite tier teams',
         accent: () => T().color?.('negative') || 'var(--k-e74c3c, #e74c3c)',
         metrics: [],
-        sizes: ['sm', 'md', 'lg'],
+        sizes: ['sm', 'narrow', 'md', 'lg'],
         clickTarget: { sm: 'myteam' },
         pro: true, proFeature: 'analytics_depth', formatFlag: null,
     },
