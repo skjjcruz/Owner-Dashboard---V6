@@ -2,6 +2,12 @@
 // core.js — Tier system, access control, fetch helpers
 // Must load FIRST — all other modules depend on these.
 // ══════════════════════════════════════════════════════════════════
+
+// Owner ruling 2026-07-26: the conversational "Ask Alex" chat is retired on
+// the web app. One-shot AI surfaces (insight cards, draft ask-window, trade
+// second opinion, briefings) stay. Every chat entry point gates on this —
+// flip to true to bring the chat back everywhere at once.
+window.WR_ALEX_CHAT = false;
 //
 // ── WINDOW GLOBAL CONTRACT ────────────────────────────────────────
 // Cross-module communication goes through window.*. All contracts

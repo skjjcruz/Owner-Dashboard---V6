@@ -447,13 +447,13 @@
                     precedent): never scrolls with the strip. Free tier sees
                     it too — the 1/day quota is enforced in the send path,
                     not here. */}
-                <button type="button" className="wr-dock-ask" onClick={onAskAlex}
+                {window.WR_ALEX_CHAT !== false && <button type="button" className="wr-dock-ask" onClick={onAskAlex}
                     aria-label="Ask Alex — open chat">
                     {window.AlexAvatar
                         ? <span aria-hidden="true" style={{ display: 'inline-flex' }}><window.AlexAvatar size={20} /></span>
                         : <span className="wr-dock-ask-glyph" aria-hidden="true">{'✦'}</span>}
                     <span aria-hidden="true">Alex</span>
-                </button>
+                </button>}
             </nav>
         );
     }
@@ -1525,7 +1525,13 @@
                 default: return { value: '\u2014', sub: '', color: 'var(--silver)' };
             }
         }
-        const [reconPanelOpen, setReconPanelOpen] = useState(false);
+        // Ask Alex chat retirement (core.js WR_ALEX_CHAT): the derived value
+        // pins closed and the setter no-ops, so every legacy opener — FAB,
+        // dock item, wr:ask-alex seam, Cmd+K, welcome — is inert at once.
+        const [reconPanelOpenRaw, setReconPanelOpenRaw] = useState(false);
+        const alexChatRetired = window.WR_ALEX_CHAT === false;
+        const reconPanelOpen = alexChatRetired ? false : reconPanelOpenRaw;
+        const setReconPanelOpen = alexChatRetired ? (() => {}) : setReconPanelOpenRaw;
         const [reconExpanded, setReconExpanded] = useState(false);
         // PhoneDock "Ask Alex" bar: after the sheet opens, best-effort focus
         // of the chat composer input (ref attached below). iOS may keep the
@@ -1732,6 +1738,7 @@
 
         // First-time welcome — auto-open chat with Alex's intro
         useEffect(() => {
+          if (alexChatRetired) return; // chat retired — no welcome takeover
           if (!myRoster?.players?.length || !currentLeague?.league_id) return;
           const welcomeKey = LEAGUE_WR_KEYS.WELCOMED(currentLeague.league_id);
           if (LeagueStorage.get(welcomeKey)) return;
@@ -4478,7 +4485,7 @@
                 desktop ONLY: on phone the PhoneDock's pinned Ask Alex item
                 is the entry point (same open path), so the FAB never
                 renders there. */}
-            {!alexPhone && <button className="wr-alex-fab" onClick={() => { setReconPanelOpen(!reconPanelOpen); setWelcomeMode(false); }} style={{
+            {!alexPhone && !alexChatRetired && <button className="wr-alex-fab" onClick={() => { setReconPanelOpen(!reconPanelOpen); setWelcomeMode(false); }} style={{
               position: 'fixed', bottom: '24px', right: '24px',
               width: '52px', height: '52px', borderRadius: '14px',
               background: reconPanelOpen ? 'var(--acc-fill3, rgba(212,175,55,0.15))' : 'transparent',
