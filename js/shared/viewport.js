@@ -30,6 +30,15 @@
 
     var coarseMq = typeof root.matchMedia === 'function' ? root.matchMedia('(pointer: coarse)') : null;
 
+    // Tier media queries — the same 767/1023 breakpoints the stylesheet uses.
+    // Deriving isPhone/isTablet from matchMedia (not a raw innerWidth compare)
+    // makes JS structurally unable to disagree with CSS: a stale or zero
+    // innerWidth at script-parse time can no longer route a 1366pt iPad to
+    // the phone build while the stylesheet paints desktop (the half-screen
+    // WKWebView bug, owner report 2026-07-26).
+    var phoneMq = typeof root.matchMedia === 'function' ? root.matchMedia('(max-width: 767px)') : null;
+    var tabletMq = typeof root.matchMedia === 'function' ? root.matchMedia('(min-width: 768px) and (max-width: 1023px)') : null;
+
     function readKeyboard() {
         var vv = root.visualViewport;
         if (!vv) return { kbOpen: false, kbHeight: 0 };
@@ -45,15 +54,26 @@
         return { kbOpen: open, kbHeight: open ? Math.round(gap) : 0 };
     }
 
-    function buildSnapshot() {
+    function readLayoutWidth() {
+        // WKWebView can hand back 0/undefined innerWidth before first layout.
+        // Fall back through progressively more stable sources and refuse to
+        // classify absurd widths — a wrong read here used to stick for the
+        // whole session (nothing re-read it unless the frame later changed).
         var w = root.innerWidth;
+        if (!w || w < 320) w = (root.document && root.document.documentElement && root.document.documentElement.clientWidth) || 0;
+        if (!w || w < 320) w = (root.screen && root.screen.width) || 0;
+        return (!w || w < 320) ? 1024 : w;
+    }
+
+    function buildSnapshot() {
+        var w = readLayoutWidth();
         var kb = readKeyboard();
         return {
             width: w,
             height: root.innerHeight,
-            isPhone: w < 768,
-            isTablet: w >= 768 && w < 1024,
-            isDesktop: w >= 1024,
+            isPhone: phoneMq ? phoneMq.matches : w < 768,
+            isTablet: tabletMq ? tabletMq.matches : (w >= 768 && w < 1024),
+            isDesktop: (phoneMq && tabletMq) ? !(phoneMq.matches || tabletMq.matches) : w >= 1024,
             isCoarse: !!(coarseMq && coarseMq.matches),
             kbOpen: kb.kbOpen,
             kbHeight: kb.kbHeight,
@@ -68,6 +88,7 @@
 
     function sameSnapshot(a, b) {
         return a.width === b.width && a.height === b.height &&
+            a.isPhone === b.isPhone && a.isTablet === b.isTablet &&
             a.isCoarse === b.isCoarse &&
             a.kbOpen === b.kbOpen && a.kbHeight === b.kbHeight;
     }
@@ -101,6 +122,22 @@
         // exposes addListener only.
         if (typeof coarseMq.addEventListener === 'function') coarseMq.addEventListener('change', scheduleRefresh);
         else if (typeof coarseMq.addListener === 'function') coarseMq.addListener(scheduleRefresh);
+    }
+    [phoneMq, tabletMq].forEach(function (mq) {
+        if (!mq) return;
+        if (typeof mq.addEventListener === 'function') mq.addEventListener('change', scheduleRefresh);
+        else if (typeof mq.addListener === 'function') mq.addListener(scheduleRefresh);
+    });
+
+    // Post-layout self-heal: the boot snapshot is computed at script-parse
+    // time, before first layout. Re-read once the document actually has
+    // geometry, after full load, on every bfcache restore, and one frame
+    // after first paint — so a bad boot read can never own the session.
+    root.addEventListener('DOMContentLoaded', scheduleRefresh);
+    root.addEventListener('load', scheduleRefresh);
+    root.addEventListener('pageshow', scheduleRefresh);
+    if (typeof root.requestAnimationFrame === 'function') {
+        root.requestAnimationFrame(function () { refresh(); });
     }
 
     function subscribe(fn) {
