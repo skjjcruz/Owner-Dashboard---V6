@@ -1,0 +1,47 @@
+name: Dependabot auto-merge
+
+# Daily sweep that merges Dependabot's SAFE updates on its own:
+#   - PR authored by Dependabot, touching only package.json / package-lock.json
+#   - every CI check green (a PR with no checks is skipped, never merged)
+#   - not a major version bump (title version compare)
+# Anything outside those bounds stays open for a human. Merges use the
+# workflow token, which cannot trigger deploys — fine here, because
+# dev-dependency bumps don't change the shipped artifacts; the weekly
+# Security re-scan still validates main on its own schedule.
+on:
+  schedule:
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge green, package-only, non-major Dependabot PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr list --repo "$REPO" --author "app/dependabot" --state open \
+            --json number,title,files,statusCheckRollup > prs.json
+          python3 - <<'PY'
+          import json, os, re, subprocess
+
+          for pr in json.load(open('prs.json')):
+              n = pr['number']
+              files = [f.get('path', '') for f in (pr.get('files') or [])]
+              if not files or any(not re.fullmatch(r'(.*/)?package(-lock)?\.json', p) for p in files):
+                  print(f'skip #{n}: touches files beyond package manifests'); continue
+              checks = pr.get('statusCheckRollup') or []
+              if not checks or any((c.get('conclusion') or '') not in ('SUCCESS', 'NEUTRAL', 'SKIPPED') for c in checks):
+                  print(f'skip #{n}: checks missing or not green'); continue
+              m = re.search(r'from (\d+)[.\w-]* to (\d+)', pr.get('title', ''))
+              if not m or m.group(1) != m.group(2):
+                  print(f'skip #{n}: major or unparseable bump'); continue
+              print(f'merge #{n}: {pr["title"]}')
+              subprocess.run(['gh', 'pr', 'merge', str(n), '--repo', os.environ['REPO'], '--merge'], check=False)
+          PY
