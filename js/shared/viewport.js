@@ -140,37 +140,6 @@
         root.requestAnimationFrame(function () { refresh(); });
     }
 
-<<<<<<< Updated upstream
-    // WKWebView cold-boot zoom rescue (owner report 2026-07-28, iPad shell
-    // fresh install): WebKit can resolve the page's fit scale before the
-    // viewport meta applies and then keep painting at ~0.5× — the app lands
-    // in the left half of the screen at half size while the canvas
-    // background fills the rest ("half screen"). Rotating the device fixed
-    // it because rotation re-runs viewport resolution; do the same
-    // programmatically. A visual scale below 1 is unreachable by pinch on a
-    // correctly-fitted page (min user zoom == fit == 1), so scale < 0.95
-    // with no pinch in flight can only be the broken boot state.
-    // Re-asserting the meta's content forces WebKit to re-resolve at 1.
-    var scaleRescues = 0;
-    function rescueScale() {
-        var vv = root.visualViewport;
-        var doc = root.document;
-        if (!vv || !doc || scaleRescues >= 5) return;
-        if (!(vv.scale > 0) || vv.scale >= 0.95) return;
-        var meta = doc.querySelector && doc.querySelector('meta[name="viewport"]');
-        if (!meta) return;
-        scaleRescues++;
-        var content = meta.getAttribute('content') || 'width=device-width, initial-scale=1.0';
-        if (content.indexOf('minimum-scale') === -1) content += ', minimum-scale=1.0';
-        meta.setAttribute('content', content);
-        scheduleRefresh();
-    }
-    root.addEventListener('load', rescueScale);
-    root.addEventListener('pageshow', rescueScale);
-    // The broken scale can settle after load (frame/scene animation) —
-    // sweep a few times early in the session, then stand down.
-    [500, 1500, 3000, 6000].forEach(function (ms) { setTimeout(rescueScale, ms); });
-=======
     // WKWebView cold-boot rescue (owner reports 2026-07-28 and 2026-07-30,
     // iPad shell): a cold launch can leave the page mis-fitted two ways —
     //   (a) painted at ~0.5× visual scale (page correct, zoomed out), or
@@ -218,7 +187,6 @@
     // The broken state can settle after load (frame/scene animation) —
     // sweep a few times early in the session, then stand down.
     [500, 1500, 3000, 6000].forEach(function (ms) { setTimeout(nudgeViewport, ms); });
->>>>>>> Stashed changes
 
     function subscribe(fn) {
         listeners.push(fn);
