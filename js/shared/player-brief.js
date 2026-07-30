@@ -43,6 +43,47 @@
     // Team display: Sleeper stores the abbreviation; a null team is a free agent.
     function teamPhrase(team) { return team ? String(team) : null; }
 
+    // ── Opportunity watch: absences in the player's position room ────
+    // Sleeper's injury_status vocabulary → sentence-ready labels.
+    var ROOM_LABELS = {
+        'questionable': 'questionable', 'doubtful': 'doubtful', 'out': 'out',
+        'ir': 'on injured reserve', 'pup': 'on the PUP list', 'sus': 'suspended',
+        'cov': 'on the COVID list', 'dnr': 'did not report', 'na': 'inactive',
+    };
+    // roomWatch(pid, playersData, normPosFn) → { team, pos, players, total } | null
+    // Same-team, same-normalized-position teammates carrying an absence flag,
+    // nearest depth slot first. Pure read over data the app already holds —
+    // current by construction, same freshness as the roster sync.
+    function roomWatch(pid, playersData, normPosFn) {
+        try {
+            if (!pid || !playersData) return null;
+            var me = playersData[pid];
+            if (!me || !me.team || !me.position) return null;
+            var norm = typeof normPosFn === 'function' ? normPosFn : function (x) { return x; };
+            var myPos = norm(me.position) || me.position;
+            var hurt = [];
+            for (var id in playersData) {
+                if (id === String(pid)) continue;
+                var t = playersData[id];
+                if (!t || t.team !== me.team) continue;
+                if ((norm(t.position) || t.position) !== myPos) continue;
+                var label = ROOM_LABELS[t.injury_status ? String(t.injury_status).toLowerCase() : ''];
+                if (!label) continue;
+                var nm = t.full_name || ((t.first_name || '') + ' ' + (t.last_name || '')).trim();
+                if (!nm) continue;
+                hurt.push({ name: nm, label: label, slot: num(t.depth_chart_order) != null ? num(t.depth_chart_order) : 99 });
+            }
+            if (!hurt.length) return null;
+            hurt.sort(function (a, b) { return a.slot - b.slot; });
+            return {
+                team: String(me.team),
+                pos: String(myPos).toUpperCase(),
+                players: hurt.slice(0, 3),
+                total: hurt.length,
+            };
+        } catch (_) { return null; }
+    }
+
     // ── compose(input) → { text, sentences } ────────────────────────
     // input (all optional except it should carry what it has):
     //   player     — Sleeper player record (full_name, team, position, age,
@@ -124,6 +165,25 @@
             if (note) s3 += ' — ' + note.replace(/\.$/, '');
             else if (prac) s3 += ', ' + prac.toLowerCase() + ' in practice';
             sentences.push(s3 + '.');
+        }
+
+        // ── S3b · Opportunity watch (absences around him) ────────────
+        // "Talent meets opportunity" (owner ask 2026-07-30): when
+        // same-position teammates are hurt or absent and he isn't, the
+        // brief says so — the journalism layer can't (it only carries
+        // stories written about HIM), but the roster data already knows.
+        // Skipped when he's flagged himself: S3 owns that story, and an
+        // opportunity pitch under his own injury line would read wrong.
+        var room = (!inj && input.pid && input.playersData)
+            ? roomWatch(input.pid, input.playersData, input.normPos)
+            : null;
+        if (room) {
+            var rn = room.players.map(function (x) { return x.name + ' (' + x.label + ')'; });
+            var rlist = rn.length === 1 ? rn[0] : rn.slice(0, -1).join(', ') + ' and ' + rn[rn.length - 1];
+            sentences.push('Opportunity watch: ' + rlist + (rn.length === 1 ? ' is' : ' are') +
+                ' compromised in the ' + room.team + ' ' + room.pos + ' room' +
+                (room.total > room.players.length ? ' (plus ' + (room.total - room.players.length) + ' more)' : '') +
+                ' — snaps are there to be won.');
         }
 
         // ── S4 · Market value ────────────────────────────────────────
@@ -242,6 +302,6 @@
         } catch (_) { return null; }
     }
 
-    var api = { compose: compose, posRank: posRank };
+    var api = { compose: compose, posRank: posRank, roomWatch: roomWatch };
     if (typeof window !== 'undefined') window.WR.PlayerBrief = api;
 })();

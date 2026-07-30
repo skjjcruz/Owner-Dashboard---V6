@@ -84,6 +84,7 @@
                 } catch (_) { act = null; }
                 var out = PB.compose({
                     player: p, pos: nPos, dhq: dhq, meta: meta,
+                    pid: pid, playersData: playersData, normPos: norm,
                     ppg: props.ppg != null ? props.ppg : undefined,
                     posRank: pr && pr.rank, posTotal: pr && pr.total,
                     phaseLabel: phaseLabel, peakYrs: peakYrs,
