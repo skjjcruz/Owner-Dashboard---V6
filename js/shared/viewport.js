@@ -140,6 +140,7 @@
         root.requestAnimationFrame(function () { refresh(); });
     }
 
+<<<<<<< Updated upstream
     // WKWebView cold-boot zoom rescue (owner report 2026-07-28, iPad shell
     // fresh install): WebKit can resolve the page's fit scale before the
     // viewport meta applies and then keep painting at ~0.5× — the app lands
@@ -169,6 +170,55 @@
     // The broken scale can settle after load (frame/scene animation) —
     // sweep a few times early in the session, then stand down.
     [500, 1500, 3000, 6000].forEach(function (ms) { setTimeout(rescueScale, ms); });
+=======
+    // WKWebView cold-boot rescue (owner reports 2026-07-28 and 2026-07-30,
+    // iPad shell): a cold launch can leave the page mis-fitted two ways —
+    //   (a) painted at ~0.5× visual scale (page correct, zoomed out), or
+    //   (b) laid out against a HALF-WIDTH viewport at normal scale (the
+    //       shell's frame settled after WebKit resolved the viewport), which
+    //       routes an iPad to the phone tier squeezed into the left half.
+    // Rotating the device fixed both because rotation re-runs WebKit's
+    // viewport resolution against the real frame. Do the same
+    // programmatically: TOGGLE the viewport meta's arguments (append
+    // maximum-scale for one frame, then restore). Re-resolution only
+    // happens when the arguments actually change — re-asserting the same
+    // string (the previous fix) is a no-op, which is why variant (b)
+    // survived it. Re-resolving against the CURRENT frame is idempotent:
+    // on a healthy boot, or in a genuine Split View window, the computed
+    // viewport is unchanged and nothing moves.
+    var nudges = 0;
+    function nudgeViewport() {
+        var doc = root.document;
+        var vv = root.visualViewport;
+        if (!doc || nudges >= 6) return;
+        // Never fight a deliberate pinch-zoom-in.
+        if (vv && (vv.scale || 1) > 1.05) return;
+        var zoomedOut = vv && vv.scale > 0 && vv.scale < 0.95;               // variant (a)
+        var sw = (root.screen && root.screen.width) || 0;
+        var sh = (root.screen && root.screen.height) || 0;
+        var w = root.innerWidth || 0;
+        // Window narrower than BOTH screen edges: either the half-width boot
+        // bug or a real Split View window — the nudge is correct for the
+        // first and a no-op for the second.                                  // variant (b)
+        var suspectWidth = sw > 0 && sh > 0 && w > 0 &&
+            (w + 40 < Math.max(sw, sh)) && (w + 40 < Math.min(sw, sh));
+        if (!zoomedOut && !suspectWidth) return;
+        var meta = doc.querySelector && doc.querySelector('meta[name="viewport"]');
+        if (!meta) return;
+        nudges++;
+        var content = meta.getAttribute('content') || 'width=device-width, initial-scale=1.0, minimum-scale=1.0';
+        meta.setAttribute('content', content + ', maximum-scale=1.0');
+        var restore = function () { meta.setAttribute('content', content); scheduleRefresh(); };
+        if (typeof root.requestAnimationFrame === 'function') root.requestAnimationFrame(restore);
+        else setTimeout(restore, 50);
+        if (root.wrLog) root.wrLog('viewport.nudge', { zoomedOut: zoomedOut, width: w, screen: sw + 'x' + sh });
+    }
+    root.addEventListener('load', nudgeViewport);
+    root.addEventListener('pageshow', nudgeViewport);
+    // The broken state can settle after load (frame/scene animation) —
+    // sweep a few times early in the session, then stand down.
+    [500, 1500, 3000, 6000].forEach(function (ms) { setTimeout(nudgeViewport, ms); });
+>>>>>>> Stashed changes
 
     function subscribe(fn) {
         listeners.push(fn);
