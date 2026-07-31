@@ -1166,11 +1166,22 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
        layouts and now render BELOW the sign-up card (flex `order` below), so
        the phone gets the full pitch instead of a bare form (owner ask
        2026-07-31: phone should feel like the iPad/desktop, sign-up first). */
-    .ambient,.brandwash,.topbar,.hero,.ticker,.hero-facer-sec{display:none!important}
+    .ambient,.brandwash,.topbar,.ticker,.hero-facer-sec{display:none!important}
     .universe__orbits,.universe__grid{display:none!important} /* heavy motion — text stays */
 
-    /* Sign-up first: header then card, then the brochure in source order. */
-    .phone-auth-head{order:-2}
+    /* Desktop facer, phone-fitted (owner ask 2026-07-31 round 2): the REAL
+       hero — eyebrow, Dynasty HQ, "Generic Advice Stops Here!", sub-pitch —
+       opens the page, compacted so the sign-up card sits one thumb-flick
+       below instead of a full screen down. The plain crest header it
+       replaces is retired below. */
+    .hero{order:-2;width:100%}
+    .hero__in{min-height:0;padding:14px 4px 6px}
+    .hero .eyebrow{margin-bottom:18px}
+    .hero h1{margin-bottom:8px}
+    .hero-tag{white-space:normal;font-size:clamp(19px,5.4vw,24px);margin-top:12px}
+    .hero__sub{font-size:15px;line-height:1.55;margin:16px auto 4px}
+
+    /* Sign-up right under the facer, then the brochure in source order. */
     .auth{order:-1}
     .section,.universe,.creed,.platforms,.dhqf{width:100%;order:0}
     .section{padding-left:16px;padding-right:16px}
@@ -1193,8 +1204,9 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
               calc(env(safe-area-inset-bottom,0px) + 24px);
     }
 
-    /* 3 ─ Phone-only header: crest + wordmark + one tagline */
-    .phone-auth-head{display:block;text-align:center;width:100%;max-width:400px;margin:10px auto 22px}
+    /* 3 ─ Phone-only header: retired in favor of the real hero above; kept
+       in markup for a one-line revert. */
+    .phone-auth-head{display:none;text-align:center;width:100%;max-width:400px;margin:10px auto 22px}
     .phone-auth-crest{
       width:64px;height:64px;border-radius:16px;object-fit:cover;display:block;margin:0 auto 14px;
       border:1px solid rgba(212,175,55,.35);box-shadow:0 6px 26px rgba(212,175,55,.18);
