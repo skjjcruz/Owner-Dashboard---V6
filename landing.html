@@ -1193,6 +1193,17 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
     .section,.universe,.creed,.platforms,.dhqf{width:100%}
     .section{padding-left:16px;padding-right:16px}
 
+    /* Clean wraps (owner ask round 4): no lone word dangling at the left
+       edge of a second line. Headlines split evenly across lines
+       (balance); body copy pulls a companion word down so a last line
+       never strands alone (pretty). Older Safari ignores both — no harm. */
+    h1,h2,h3,.hero-tag,.eyebrow,.sec-title,.sec-kicker,.hero-eyebrow,.auth-title,.term__brand{text-wrap:balance}
+    p,.hero__sub,.facer-sub,.sec-sub,.hero-free,#authSub{text-wrap:pretty}
+    /* Facer copy sits alone above the rig on phones — center it like the
+       hero instead of desktop's beside-the-rig left alignment. */
+    .facer-copy,.facer-sub,.facer-copy .hero-eyebrow,.hero-free{text-align:center}
+    .facer-sub{margin-left:auto;margin-right:auto}
+
     /* 2 ─ App-shell background (DHQ dark), native scroll, safe-area aware.
        Overflow-safe vertical centring via auto margins (justify-content:center
        would clip the top when the card + keyboard exceed the viewport). */
