@@ -1174,9 +1174,19 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
        LEAGUE MODEL terminal rig, then the full brochure, sign-up card at
        the bottom exactly like desktop. Every "Start free" CTA already
        scrolls to #auth, so conversion stays one tap away throughout. */
-    .hero{width:100%}
+    .hero{width:100%;position:relative}
     .hero__in{min-height:0;padding:14px 4px 6px}
-    .hero .eyebrow{margin-bottom:18px}
+    /* Small DHQ crests flanking the top corners (owner ask round 5); the
+       eyebrow gets side padding so its first line clears them. */
+    .hero::before,.hero::after{
+      content:'';position:absolute;top:12px;width:34px;height:34px;
+      background:url('img/dhq-crest.jpg') center/cover no-repeat;
+      border-radius:9px;border:1px solid rgba(212,175,55,.35);
+      box-shadow:0 4px 16px rgba(212,175,55,.18);
+    }
+    .hero::before{left:10px}
+    .hero::after{right:10px}
+    .hero .eyebrow{margin-bottom:18px;padding:0 48px}
     .hero h1{margin-bottom:8px}
     .hero-tag{white-space:normal;font-size:clamp(19px,5.4vw,24px);margin-top:12px}
     .hero__sub{font-size:15px;line-height:1.55;margin:16px auto 4px}
