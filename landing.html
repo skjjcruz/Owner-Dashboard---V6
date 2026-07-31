@@ -1160,12 +1160,27 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
   .phone-auth-head{display:none}   /* hidden by default; shown only on phone below */
 
   @media(max-width:767px){
-    /* 1 ─ Hide the ENTIRE marketing brochure + ambient/motion layers.
-       .section covers the wedge, #psych, #draft, #command, #engine and
-       #pricing (all class="section"); the rest are named explicitly. #auth
-       is NOT class="section", so it survives. */
-    .ambient,.brandwash,.topbar,.hero,.ticker,.hero-facer-sec,
-    .section,.universe,.creed,.platforms,.dhqf{display:none!important}
+    /* 1 ─ Hide only the ambient/motion layers and the desktop-shaped hero.
+       The brochure sections (wedge, #psych, #draft, #command, #engine,
+       #pricing, creed, platforms, dhqf) STAY — they carry their own ≤680px
+       layouts and now render BELOW the sign-up card (flex `order` below), so
+       the phone gets the full pitch instead of a bare form (owner ask
+       2026-07-31: phone should feel like the iPad/desktop, sign-up first). */
+    .ambient,.brandwash,.topbar,.hero,.ticker,.hero-facer-sec{display:none!important}
+    .universe__orbits,.universe__grid{display:none!important} /* heavy motion — text stays */
+
+    /* Sign-up first: header then card, then the brochure in source order. */
+    .phone-auth-head{order:-2}
+    .auth{order:-1}
+    .section,.universe,.creed,.platforms,.dhqf{width:100%;order:0}
+    .section{padding-left:16px;padding-right:16px}
+
+    /* A quiet invitation under the card so the brochure gets discovered. */
+    .auth::after{
+      content:'⌄  keep scrolling — see the engine';
+      display:block;text-align:center;margin-top:16px;
+      font-family:'DM Sans',sans-serif;font-size:12px;letter-spacing:.06em;color:#6B7280;
+    }
 
     /* 2 ─ App-shell background (DHQ dark), native scroll, safe-area aware.
        Overflow-safe vertical centring via auto margins (justify-content:center
@@ -1179,7 +1194,7 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
     }
 
     /* 3 ─ Phone-only header: crest + wordmark + one tagline */
-    .phone-auth-head{display:block;text-align:center;width:100%;max-width:400px;margin:auto auto 22px}
+    .phone-auth-head{display:block;text-align:center;width:100%;max-width:400px;margin:10px auto 22px}
     .phone-auth-crest{
       width:64px;height:64px;border-radius:16px;object-fit:cover;display:block;margin:0 auto 14px;
       border:1px solid rgba(212,175,55,.35);box-shadow:0 6px 26px rgba(212,175,55,.18);
@@ -1191,7 +1206,7 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
 
     /* 4 ─ Re-present #auth as the full-width app sign-up card */
     .auth{
-      width:100%;max-width:400px;margin:0 auto auto;
+      width:100%;max-width:400px;margin:0 auto 40px;
       padding:22px 18px 24px;
       background:#121217;border:1px solid rgba(212,175,55,.2);border-radius:14px;
       box-shadow:0 10px 40px rgba(0,0,0,.5);
