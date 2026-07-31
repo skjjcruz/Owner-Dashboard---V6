@@ -861,7 +861,7 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
   <!-- Draft room (ported from brochure #draft; terminal-rig chrome) -->
   <section class="section" id="draft">
     <div class="sec-head">
-      <div class="sec-kicker">The draft room · War Room · Mock · Live follow</div>
+      <div class="sec-kicker">The Draft War Room · Mock · Live Follow</div>
       <h2 class="sec-title">Walk in <span class="gild">knowing the room.</span></h2>
       <p class="sec-sub">The draft is three jobs, not one. Prep your big board in the War Room — built on your values and every owner's DNA. Mock it against rivals who pick — and trade — like they actually do. Then follow it live from the most advanced command center in fantasy.</p>
     </div>
@@ -1192,6 +1192,9 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
     /* Section titles sized so each sentence holds one line — "You don't
        need more data." must not fold (owner ask). */
     .sec-title{font-size:20px}
+    /* Kickers tightened so "The Draft War Room · Mock · Live Follow"
+       holds a single line (owner ask). */
+    .sec-kicker{font-size:10px;letter-spacing:.1em}
 
     /* Trade-card rows (owner ask, IMG_2044): on phone the label wraps and
        the raw/psych + value columns float mid-air beside it. Give the
