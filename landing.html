@@ -1196,6 +1196,30 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
        holds a single line (owner ask). */
     .sec-kicker{font-size:10px;letter-spacing:.1em}
 
+    /* Command-center board (owner ask, IMG_2048 "sexy this up"): the plain
+       full-width rows become a two-up deck of gold-trimmed cards — number
+       chips, a soft gold sheen across each card's top edge, rounded
+       corners. Phone-scoped; desktop keeps its 3-across flat grid. */
+    .cc-grid{grid-template-columns:1fr 1fr;gap:10px;background:transparent;border:0}
+    .cc{
+      position:relative;overflow:hidden;border-radius:12px;
+      border:1px solid rgba(212,175,55,.22);
+      background:linear-gradient(165deg,rgba(212,175,55,.08),rgba(255,255,255,.015) 58%);
+      padding:15px 13px 14px;
+    }
+    .cc::after{
+      content:'';position:absolute;top:0;left:0;right:0;height:2px;
+      background:linear-gradient(90deg,transparent,rgba(212,175,55,.6),transparent);
+    }
+    .cc .lbl{
+      display:inline-flex;align-items:center;justify-content:center;
+      min-width:26px;height:26px;padding:0 7px;margin-bottom:10px;
+      border:1px solid rgba(212,175,55,.42);border-radius:8px;
+      background:rgba(212,175,55,.1);color:#D4AF37;font-weight:600;
+    }
+    .cc h3{font-size:14px}
+    .cc p{font-size:12px;line-height:1.5}
+
     /* Trade-card rows (owner ask, IMG_2044): on phone the label wraps and
        the raw/psych + value columns float mid-air beside it. Give the
        label its own full line, with the tag left and the value right on a
