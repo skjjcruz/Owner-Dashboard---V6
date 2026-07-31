@@ -672,7 +672,7 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
   <section class="hero">
     <div class="hero__in">
       <div class="hero-copy">
-        <span class="eyebrow">Fantasy front office · Dynasty &amp; redraft · Free on Sleeper</span>
+        <span class="eyebrow">Fantasy front office<span class="eyebrow-tail"> · Dynasty &amp; redraft · Free on Sleeper</span></span>
         <h1>Dynasty HQ</h1>
         <div class="hero-tag">Generic Advice Stops Here!</div>
         <p class="hero__sub">Every other tool ranks players for a league that isn't yours. Dynasty HQ rebuilds every value, trade, and draft call around <b>your exact scoring and roster</b> — and reads <b>how each rival actually operates.</b></p>
@@ -1187,6 +1187,16 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
     .hero::before{left:10px}
     .hero::after{right:10px}
     .hero .eyebrow{margin-bottom:18px;padding:0 48px}
+    .eyebrow-tail{display:none} /* phone keeps just FANTASY FRONT OFFICE */
+
+    /* Trade-card rows (owner ask, IMG_2044): on phone the label wraps and
+       the raw/psych + value columns float mid-air beside it. Give the
+       label its own full line, with the tag left and the value right on a
+       clean second line. */
+    .vline{grid-template-columns:auto 1fr auto;grid-template-areas:'who who who' 'mkt . yrs';row-gap:5px}
+    .vline .who{grid-area:who}
+    .vline .mkt{grid-area:mkt;text-align:left;min-width:0}
+    .vline .yrs{grid-area:yrs}
     .hero h1{margin-bottom:8px}
     .hero-tag{white-space:normal;font-size:clamp(19px,5.4vw,24px);margin-top:12px}
     .hero__sub{font-size:15px;line-height:1.55;margin:16px auto 4px}
