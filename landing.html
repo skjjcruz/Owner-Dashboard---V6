@@ -1166,32 +1166,32 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
        layouts and now render BELOW the sign-up card (flex `order` below), so
        the phone gets the full pitch instead of a bare form (owner ask
        2026-07-31: phone should feel like the iPad/desktop, sign-up first). */
-    .ambient,.brandwash,.topbar,.ticker,.hero-facer-sec{display:none!important}
+    .ambient,.brandwash,.topbar,.ticker{display:none!important}
     .universe__orbits,.universe__grid{display:none!important} /* heavy motion — text stays */
 
-    /* Desktop facer, phone-fitted (owner ask 2026-07-31 round 2): the REAL
-       hero — eyebrow, Dynasty HQ, "Generic Advice Stops Here!", sub-pitch —
-       opens the page, compacted so the sign-up card sits one thumb-flick
-       below instead of a full screen down. The plain crest header it
-       replaces is retired below. */
-    .hero{order:-2;width:100%}
+    /* Desktop facer, phone-fitted (owner ask 2026-07-31 round 3): pure
+       website order — hero ("Generic Advice Stops Here!"), then the
+       LEAGUE MODEL terminal rig, then the full brochure, sign-up card at
+       the bottom exactly like desktop. Every "Start free" CTA already
+       scrolls to #auth, so conversion stays one tap away throughout. */
+    .hero{width:100%}
     .hero__in{min-height:0;padding:14px 4px 6px}
     .hero .eyebrow{margin-bottom:18px}
     .hero h1{margin-bottom:8px}
     .hero-tag{white-space:normal;font-size:clamp(19px,5.4vw,24px);margin-top:12px}
     .hero__sub{font-size:15px;line-height:1.55;margin:16px auto 4px}
 
-    /* Sign-up right under the facer, then the brochure in source order. */
-    .auth{order:-1}
-    .section,.universe,.creed,.platforms,.dhqf{width:100%;order:0}
-    .section{padding-left:16px;padding-right:16px}
+    /* The rig section (Bowers TE panel + Owner DNA + Alex feed). The sheet's
+       own ≤960 single-column rule is dead code — the desktop 2-col
+       grid-template comes later in source and overrides it — so re-assert
+       the stack here: copy first, rig card under it, full width. */
+    .hero-facer-sec{width:100%}
+    .hero-facer{grid-template-columns:1fr;gap:36px;padding-top:22px}
+    .hero-facer .term{margin:0 auto}
+    .facer-copy .hero-eyebrow{font-size:15px}
 
-    /* A quiet invitation under the card so the brochure gets discovered. */
-    .auth::after{
-      content:'⌄  keep scrolling — see the engine';
-      display:block;text-align:center;margin-top:16px;
-      font-family:'DM Sans',sans-serif;font-size:12px;letter-spacing:.06em;color:#6B7280;
-    }
+    .section,.universe,.creed,.platforms,.dhqf{width:100%}
+    .section{padding-left:16px;padding-right:16px}
 
     /* 2 ─ App-shell background (DHQ dark), native scroll, safe-area aware.
        Overflow-safe vertical centring via auto margins (justify-content:center
