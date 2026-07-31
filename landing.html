@@ -1778,6 +1778,16 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
          bottom of the footer as one horizontally scrollable pill row
          instead of a tall vertical list. Phone only. */
       .dhqf-socials{display:none} /* tiny Discord/X squares — the big Community buttons remain */
+      /* Square up the brand block (owner ask, IMG_2051): crest + wordmark
+         centered as an emblem, tagline centered beneath, wordmark's line
+         box tightened so the caps sit on the crest's optical center. */
+      .dhqf-brand{justify-content:center}
+      .dhqf-brand .dhqf-bn{line-height:1;transform:translateY(1px)}
+      .dhqf-tag{text-align:center;margin-left:auto;margin-right:auto}
+      .dhqf-h{text-align:center}
+      .dhqf-appstore{margin:0 auto}
+      .dhqf-soon{margin-left:auto;margin-right:auto}
+      .dhqf-links{justify-content:safe center}
       .dhqf-grid>div{min-width:0} /* grid items must shrink, not stretch the column */
       .dhqf-grid>div:nth-child(3){order:5}
       .dhqf-grid>div:nth-child(3) .dhqf-h{display:none}
