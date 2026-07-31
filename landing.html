@@ -1773,6 +1773,19 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
     .dhqf-base{border-top:1px solid var(--dhqf-line1);padding:16px 0 26px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-family:var(--dhqf-fm);font-size:.64rem;letter-spacing:.1em;color:var(--dhqf-silver);opacity:.7}
     @media (max-width:900px){.dhqf-grid{grid-template-columns:1fr 1fr}}
     @media (max-width:540px){.dhqf-grid{grid-template-columns:1fr}}
+    @media (max-width:767px){
+      /* Owner ask (IMG_2049): the Company/admin links move to the very
+         bottom of the footer as one horizontally scrollable pill row
+         instead of a tall vertical list. Phone only. */
+      .dhqf-grid>div{min-width:0} /* grid items must shrink, not stretch the column */
+      .dhqf-grid>div:nth-child(3){order:5}
+      .dhqf-grid>div:nth-child(3) .dhqf-h{display:none}
+      .dhqf-links{flex-direction:row;overflow-x:auto;gap:8px;padding:2px 0 6px;
+        -webkit-overflow-scrolling:touch;scrollbar-width:none}
+      .dhqf-links::-webkit-scrollbar{display:none}
+      .dhqf-links a{flex:none;white-space:nowrap;border:1px solid var(--dhqf-line2);
+        border-radius:999px;padding:8px 14px;font-size:.78rem;background:var(--dhqf-ov1)}
+    }
   </style>
   <footer class="dhqf">
     <div class="dhqf-in">
