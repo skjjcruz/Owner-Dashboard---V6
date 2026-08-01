@@ -291,10 +291,10 @@
                 {_pro && !showPsychTax && (
                     <button type="button" onClick={revealPsychTax}
                         title="Show the Owner DNA tax table for this trade"
-                        style={{ alignSelf:'flex-start', background:'none', border:'none', cursor:'pointer', padding:'0.15rem 0', fontSize:'0.72rem', color:'var(--silver)', opacity:0.55, textTransform:'uppercase', letterSpacing:'0.06em' }}
-                        onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--gold)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.opacity = '0.55'; e.currentTarget.style.color = 'var(--silver)'; }}>
-                        Show trade psychology ▸
+                        style={{ alignSelf:'flex-start', display:'inline-flex', alignItems:'center', gap:'0.4rem', background:'var(--acc-fill3, rgba(212,175,55,0.08))', border:'1px solid var(--acc-line2, rgba(212,175,55,0.35))', borderRadius:'8px', cursor:'pointer', padding:'0.4rem 0.8rem', fontSize:'0.72rem', fontWeight:700, color:'var(--gold, #d4af37)', textTransform:'uppercase', letterSpacing:'0.06em', transition:'all .14s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--acc-fill2, rgba(212,175,55,0.16))'; e.currentTarget.style.boxShadow = '0 0 12px rgba(212,175,55,0.18)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'var(--acc-fill3, rgba(212,175,55,0.08))'; e.currentTarget.style.boxShadow = 'none'; }}>
+                        🧠 Show trade psychology ▸
                     </button>
                 )}
                 {_pro && showPsychTax && <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
@@ -302,7 +302,7 @@
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem', marginBottom:'0.35rem' }}>
                         <span style={{ fontSize:'0.72rem', color:'var(--silver)', opacity:0.65, textTransform:'uppercase', letterSpacing:'0.06em' }}>Psychological Tax Breakdown {React.createElement(Tip, null, 'Each owner\'s DNA type creates percentage-point acceptance modifiers beyond pure value. Taxes reduce likelihood, bonuses increase it. Factors: endowment effect, panic premium, status tax, loss aversion, rebuilding discount, need fulfillment, window alignment, and posture.')}</span>
                         <button type="button" onClick={hidePsychTax}
-                            title="Hide psychological tax — re-enable in Owner Settings"
+                            title="Hide psychological tax — bring it back with the gold Show Trade Psychology button, or in Owner Settings"
                             aria-label="Hide the psychological tax breakdown"
                             style={{ width:'22px', height:'22px', borderRadius:'6px', border:'1px solid transparent', background:'none', color:'var(--silver)', opacity:0.4, cursor:'pointer', fontSize:'0.8rem', lineHeight:1, padding:0, flexShrink:0, transition:'all .14s' }}
                             onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.borderColor = 'var(--acc-line2, rgba(212,175,55,0.3))'; }}
