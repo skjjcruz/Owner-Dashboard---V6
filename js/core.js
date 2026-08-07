@@ -286,10 +286,27 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
     // ─────────────────────────────────────────────────────────────────────────
     const SLEEPER_BASE_URL = 'https://api.sleeper.app/v1';
 
+    // Resilient fetch: a hung Sleeper request must never freeze a surface on
+    // "Loading…" forever (2026-08-06 season-rollover incident). Each attempt is
+    // aborted after 25s, and network-level failures (timeout, dropped socket)
+    // get ONE retry after a 2s pause. HTTP error statuses (4xx/5xx) still throw
+    // immediately — those are real answers, not a stalled pipe.
     async function fetchJSON(url) {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        for (let attempt = 0; ; attempt++) {
+            const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            const timer = ctl ? setTimeout(() => ctl.abort(), 25000) : null;
+            try {
+                const response = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (err) {
+                const httpError = err && /^HTTP \d+$/.test(err.message || '');
+                if (httpError || attempt >= 1) throw err;
+                await new Promise(r => setTimeout(r, 2000));
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+        }
     }
 
     async function fetchSleeperUser(username) {
