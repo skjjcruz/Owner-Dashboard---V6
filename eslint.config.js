@@ -74,6 +74,7 @@ module.exports = [
         window: "readonly",
         document: "readonly",
         console: "readonly",
+        AbortController: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
         setInterval: "readonly",
