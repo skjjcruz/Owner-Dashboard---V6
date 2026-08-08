@@ -1364,8 +1364,21 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
         return 'sess_' + Date.now().toString(36);
       }
     }
+    // iOS/iPadOS browsers all carry a Safari/ UA token; the app shell's bare
+    // WKWebView does not (iPads report "Macintosh" for desktop pages).
+    function detectSurface() {
+      try {
+        const ua = navigator.userAgent || '';
+        const apple = /iPhone|iPad|iPod|Macintosh/.test(ua);
+        return apple && /AppleWebKit/.test(ua) && !/Safari\//.test(ua) ? 'ios_app' : 'web';
+      } catch { return 'web'; }
+    }
     function safeLandingMeta(meta) {
-      const out = { route: window.location.pathname || '/landing.html' };
+      const out = {
+        route: window.location.pathname || '/landing.html',
+        surface: detectSurface(),
+        host: window.location.hostname || null,
+      };
       Object.entries(meta || {}).forEach(([key, value]) => {
         if (/email|password|token|secret|message|content|body/i.test(key)) return;
         if (value == null) return;

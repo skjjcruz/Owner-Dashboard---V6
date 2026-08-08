@@ -129,6 +129,68 @@
     const WARROOM_URL = 'index.html';
     const SCOUT_URL = 'https://skjjcruz.github.io/ReconAI-sandbox-dev/';
 
+    // ── Lightweight analytics (mirrors the landing.html tracker) ─────────
+    // Records who connects a league platform so Mission Control can see the
+    // step-2 funnel. Sleeper usernames are public identifiers; nothing
+    // sensitive is recorded.
+    const TRACK_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co/rest/v1/analytics_events';
+    const TRACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4c2hpcXl4aGhpZnZ0ZnFhd2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTExMzAsImV4cCI6MjA4ODI4NzEzMH0.zJi9W986ZLaANiZN6pt6ReFwaQU6yPeidsERIWo2ibI';
+    function trackSessionId() {
+      // Same key as landing.html so landing → connect stitches into one session.
+      const KEY = 'fw_landing_analytics_session_v1';
+      try {
+        let sid = sessionStorage.getItem(KEY);
+        if (!sid) {
+          sid = 'sess_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+          sessionStorage.setItem(KEY, sid);
+        }
+        return sid;
+      } catch { return 'sess_' + Date.now().toString(36); }
+    }
+    // iOS/iPadOS browsers all carry a Safari/ UA token; the app shell's bare
+    // WKWebView does not (iPads report "Macintosh" for desktop pages).
+    function detectSurface() {
+      try {
+        const ua = navigator.userAgent || '';
+        const apple = /iPhone|iPad|iPod|Macintosh/.test(ua);
+        return apple && /AppleWebKit/.test(ua) && !/Safari\//.test(ua) ? 'ios_app' : 'web';
+      } catch { return 'web'; }
+    }
+    function trackConnectEvent(eventName, username, metadata) {
+      try {
+        fetch(TRACK_URL, {
+          method: 'POST',
+          headers: { apikey: TRACK_KEY, Authorization: 'Bearer ' + TRACK_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify([{
+            event_id: 'evt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10),
+            username: username || null,
+            league_id: null,
+            session_id: trackSessionId(),
+            platform: 'warroom',
+            module: 'connect',
+            widget: null,
+            event_name: eventName,
+            event_ts: new Date().toISOString(),
+            entity_type: null,
+            entity_id: null,
+            metadata: {
+              route: '/connect-sleeper.html',
+              guest: false,
+              surface: detectSurface(),
+              host: location.hostname || null,
+              ...(metadata || {}),
+            },
+          }]),
+          keepalive: true, // survives the redirect into the app on entered_app
+        }).catch(() => {});
+      } catch (e) {}
+    }
+    trackConnectEvent('connect_viewed', null, {
+      referrerHost: (function () {
+        try { return document.referrer ? new URL(document.referrer).hostname : null; } catch { return null; }
+      })(),
+    });
+
     const linked = { sleeper: false, mfl: false };
 
     function destForUser() {
@@ -208,6 +270,7 @@
         localStorage.setItem('od_locked_username_v2', uname);
         patchProfile({ sleeperUsername: uname, sleeperUserId: user.user_id });
         input.disabled = true;
+        trackConnectEvent('sleeper_connected', uname, { sleeperUsername: uname });
         markLinked('sleeper', '@' + uname);
       } catch (err) {
         showAlert('error', 'Network error: ' + (err?.message || String(err)));
@@ -235,6 +298,7 @@
         localStorage.setItem('mfl_league_id', leagueId);
         localStorage.setItem('mfl_year', year);
         idInput.disabled = true; yearInput.disabled = true;
+        trackConnectEvent('mfl_connected', null, { mflLeagueId: leagueId });
         markLinked('mfl', leagueName);
       } catch (err) {
         showAlert('error', "We couldn't reach MyFantasyLeague. If your league is private, open it in your browser once, then try again — or add it later from inside the app.");
@@ -248,6 +312,9 @@
       if (linked.sleeper) platforms.push('sleeper');
       if (linked.mfl) platforms.push('mfl');
       patchProfile({ platforms, onboardingComplete: true });
+      let connectedName = null;
+      try { connectedName = (JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}).username || null; } catch (e) {}
+      trackConnectEvent('entered_app', connectedName, { platforms: platforms.join('+') });
       showAlert('success', 'You’re in! Loading Dynasty HQ…');
       setTimeout(() => { window.location.href = destForUser(); }, 700);
     }
