@@ -101,9 +101,18 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
     // Replace the body here to route to an error reporting service in the future.
     function wrLog(context, err) {
         if (typeof console !== 'undefined') console.warn('[WarRoom]', context, err);
+        // Non-string labels/payloads must not collapse to "[object Object]"
+        // in the admin error table — JSON beats Object#toString here.
+        var safeStr = function (v) {
+            if (v == null) return '';
+            if (typeof v === 'string') return v;
+            if (v instanceof Error) return v.message || v.name || 'Error';
+            try { return JSON.stringify(v).slice(0, 140); } catch (jsonErr) { return Object.prototype.toString.call(v); }
+        };
+        var label = safeStr(context) || 'unknown';
         window.DHQBugCapture?.captureError?.(
-            err instanceof Error ? err : new Error(String(err || context || 'War Room log')),
-            { source: 'wrLog', context: String(context || 'unknown') }
+            err instanceof Error ? err : new Error(safeStr(err) || label),
+            { source: 'wrLog', context: label }
         );
     }
     window.wrLog = wrLog; // expose for cross-module access
