@@ -1640,7 +1640,7 @@ try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches){document.documen
             return;
           }
         }
-        trackLandingEvent('oauth_succeeded', { provider: 'google' });
+        trackLandingEvent('oauth_succeeded', { provider: 'google', isNew: !!(appSession && appSession.isNew === true) });
         // First-ever sign-in (fw-oauth-sync just created the account): route
         // to the connect-your-leagues page instead of straight in.
         if (appSession && appSession.isNew === true) {
