@@ -720,6 +720,26 @@ function MyTeamTab({
     try { const lid = currentLeague?.id || currentLeague?.league_id || ''; return JSON.parse(localStorage.getItem('dhq_roster_verdict_v1:' + lid) || '{}') || {}; } catch (e) { return {}; }
   });
   const [tagEditPid, setTagEditPid] = React.useState(null); // which player's verdict picker is open
+  // Cloud sync (owner report 2026-08-13): the app's WKWebView and Safari
+  // keep separate localStorage, so a verdict set on one surface was
+  // invisible on the other. Pull the cloud copy on league open (newest
+  // wins) and push on every change via OD.saveLeagueDoc.
+  React.useEffect(() => {
+    const lid = currentLeague?.id || currentLeague?.league_id || '';
+    if (!lid || !window.OD?.loadLeagueDoc) return;
+    let alive = true;
+    window.OD.loadLeagueDoc(lid, 'verdicts').then((doc) => {
+      if (!alive || !doc) return;
+      const cloud = { ...doc };
+      delete cloud.ts;
+      setVerdictOverrides((prev) => {
+        const merged = { ...prev, ...cloud };
+        try { localStorage.setItem('dhq_roster_verdict_v1:' + lid, JSON.stringify(merged)); } catch (e) {}
+        return merged;
+      });
+    }).catch((e) => window.wrLog?.('verdicts.cloudLoad', e));
+    return () => { alive = false; };
+  }, [currentLeague?.id || currentLeague?.league_id]);
   const setPlayerVerdict = (pid, v) => {
     // Sync the shared player-tag store for the 4 tag-values (else clear it).
     try {
@@ -734,6 +754,7 @@ function MyTeamTab({
       const next = { ...prev };
       if (v) next[pid] = v; else delete next[pid];
       try { const lid = currentLeague?.id || currentLeague?.league_id || ''; localStorage.setItem('dhq_roster_verdict_v1:' + lid, JSON.stringify(next)); } catch (e) {}
+      try { const lid = currentLeague?.id || currentLeague?.league_id || ''; window.OD?.saveLeagueDoc?.(lid, 'verdicts', next); } catch (e) {}
       return next;
     });
     try { setTimeRecomputeTs(Date.now()); } catch (e) {}

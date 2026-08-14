@@ -41,6 +41,23 @@
     }
     function saveSnapshot(leagueId, snap) {
         try { localStorage.setItem(SNAP_KEY + (leagueId || '_'), JSON.stringify(snap)); } catch (_) { /* storage full/blocked — non-fatal */ }
+        // Cloud copy (owner report 2026-08-13): the app's WKWebView and
+        // Safari keep separate localStorage, so each surface acknowledged
+        // changes on its own — one said "you slipped", the other "no change".
+        // One shared baseline ends the split-brain. Fire-and-forget.
+        try { window.OD?.saveLeagueDoc?.(leagueId || '_', 'briefsnap', snap); } catch (_) { /* non-fatal */ }
+    }
+    // Pull the cloud baseline once per league view; when it's newer than this
+    // device's copy, adopt it and let the caller re-diff.
+    function adoptCloudSnapshot(leagueId, onAdopted) {
+        if (!window.OD?.loadLeagueDoc) return;
+        window.OD.loadLeagueDoc(leagueId || '_', 'briefsnap').then(function (doc) {
+            if (!doc) return;
+            var local = loadSnapshot(leagueId);
+            if (local && JSON.stringify(local) === JSON.stringify(doc)) return;
+            try { localStorage.setItem(SNAP_KEY + (leagueId || '_'), JSON.stringify(doc)); } catch (_) {}
+            if (typeof onAdopted === 'function') onAdopted();
+        }).catch(function (e) { window.wrLog?.('briefPulse.cloudLoad', e); });
     }
 
     // The minimal snapshot we diff on, distilled from a Situation Room state.
@@ -397,6 +414,15 @@
             } catch (_) { active = false; }
         }
 
+        // Adopt the shared cloud baseline once per league view — a newer
+        // baseline from the other surface replaces this device's copy and the
+        // bump re-renders so the diff above re-reads it.
+        var setCloudTick = React.useState(0)[1];
+        React.useEffect(function () {
+            if (!leagueId) return;
+            adoptCloudSnapshot(leagueId, function () { setCloudTick(function (t) { return t + 1; }); });
+        }, [leagueId]);
+
         // Hooks are always called (stable order): line text starts at the
         // deterministic floor, then an effect may upgrade it via AI.
         var ref = React.useState(change.material ? change.line : null);
@@ -443,7 +469,7 @@
                 },
             },
                 h('span', { 'aria-hidden': 'true', style: { opacity: 0.85, flex: '0 0 auto' } }, '📰'),
-                h('span', { style: { flex: 1 } }, 'No change in your roster strength over the last 24 hours.'),
+                h('span', { style: { flex: 1 } }, 'No change in your roster strength since your last check-in.'),
             );
         }
 
