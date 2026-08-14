@@ -515,6 +515,19 @@
             return () => window.removeEventListener('dhq:tier-resolved', bump);
         }, []);
 
+        // The power-pin cloud sync (team-assess) adopts the shared daily
+        // snapshot asynchronously after first paint. Without this listener the
+        // adopted numbers sat in the engine while every widget kept showing the
+        // pre-adoption compute — rank, health score, and tier could disagree
+        // across surfaces (and even across widgets on one page) until a manual
+        // tab switch (owner report 2026-08-14). One tick re-renders them all.
+        useEffect(() => {
+            if (!window.DhqEvents || typeof window.DhqEvents.on !== 'function') return undefined;
+            const onPinAdopted = () => setTimeRecomputeTs(Date.now());
+            const unsub = window.DhqEvents.on('assess:pin-adopted', onPinAdopted);
+            return () => { try { unsub(); } catch (e) { /* bus gone on teardown */ } };
+        }, []);
+
         useEffect(() => {
             const leagueId = currentLeague?.league_id || currentLeague?.id;
             if (!leagueId) return;
