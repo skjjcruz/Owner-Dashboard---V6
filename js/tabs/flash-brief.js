@@ -61,7 +61,17 @@ const BRIEF_VOICE = {
     waiver: (name, pos, dhq) => "I've been watching the wire — " + name + " is sitting out there unclaimed.",
     trade: (count) => "I've mapped out the owners in your league. A few look ripe for a deal.",
     draft: (days, date) => "Draft is " + days + " day" + (days !== 1 ? 's' : '') + " out. Time to sharpen your board.",
-    rank: (rank, tier) => "You're #" + rank + " in the league pecking order right now.",
+    rank: (rank, tier) => {
+        // "as of <time>" — the rank is a daily-pinned snapshot shared across
+        // surfaces (team-assess powerpin); an aged number should say so
+        // instead of arguing with a fresher screen (owner report 2026-08-13).
+        let asOf = '';
+        try {
+            const ts = window.App?.powerPinTs?.();
+            if (ts) asOf = ' (as of ' + new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ')';
+        } catch (e) { /* stamp is decoration only */ }
+        return "You're #" + rank + " in the league pecking order right now" + asOf + ".";
+    },
 };
 
 // ══════════════════════════════════════════════════════════════════
