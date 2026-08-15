@@ -818,7 +818,11 @@
                     ? window.App.getRedraftAdp(String(p.pid)) : null;
                 return g && g.adp > 0 ? g.adp : 100000;
             };
-            const kdOrder = (x, y) => (kdAdp(x) - kdAdp(y)) || ((x.searchRank || 9999999) - (y.searchRank || 9999999));
+            // Engine kicker/defense scores (App.LI.playerScores — the same
+            // database the Analytics table shows) outrank everything when
+            // loaded; market ADP then popularity break baseline ties for
+            // pools built before the league engine finishes loading.
+            const kdOrder = (x, y) => ((y.dhq || 0) - (x.dhq || 0)) || (kdAdp(x) - kdAdp(y)) || ((x.searchRank || 9999999) - (y.searchRank || 9999999));
             // Defenses: the 32 team units, complete by definition.
             pool.filter(p => p.pos === 'DEF' && !inCut.has(String(p.pid))).sort(kdOrder).forEach(addRow);
             // Kickers: the depth-chart starter for every team; free agents skip.
