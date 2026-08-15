@@ -97,6 +97,7 @@
         // recognises the data as already-current and skips re-writing it — no echo,
         // no stale-order clobber.
         const boardSyncSigRef = useRef('');
+        const cloudBoardPushRef = useRef(null); // debounce timer for the cloud board publish
         const [draftedPids, setDraftedPids] = useState(new Set());
         // Players already taken in the live draft. Seeded from the persisted
         // live-sync state so a freshly opened Draft tab strikes them through
@@ -980,17 +981,28 @@
             const sig = boardSyncSig(payload);
             if (sig === boardSyncSigRef.current) return;
             boardSyncSigRef.current = sig;
-            DraftStorage.set(boardStorageKey,
-                {
-                    ...payload,
-                    lineage: {
-                        source: 'wr_bigboard',
-                        seededFrom: myBoardOrder.length ? null : 'ai',
-                        aiGeneratedAt: new Date().toISOString(),
-                        userLastEditedAt: new Date().toISOString(),
-                    },
-                    updatedAt: new Date().toISOString(),
-                });
+            const stored = {
+                ...payload,
+                lineage: {
+                    source: 'wr_bigboard',
+                    seededFrom: myBoardOrder.length ? null : 'ai',
+                    aiGeneratedAt: new Date().toISOString(),
+                    userLastEditedAt: new Date().toISOString(),
+                },
+                updatedAt: new Date().toISOString(),
+            };
+            DraftStorage.set(boardStorageKey, stored);
+            // Publish to the cloud (debounced — drag reorders land in bursts) so
+            // the app, website, and phone all serve this same board.
+            try {
+                if (cloudBoardPushRef.current) clearTimeout(cloudBoardPushRef.current);
+                cloudBoardPushRef.current = setTimeout(() => {
+                    try {
+                        const lid = currentLeague?.league_id || currentLeague?.id || leagueKey;
+                        if (lid) window.OD?.saveLeagueDoc?.(lid, 'bigboard', { key: boardStorageKey, data: stored });
+                    } catch (e) { /* cloud unavailable — local board still serves */ }
+                }, 1200);
+            } catch (e) { /* never let sync break the save */ }
         }, [boardTags, boardNotes, draftedPids, aiRecommendedOrder, myBoardOrder, boardMode, boardStorageKey]);
 
         // Re-hydrate from the shared Big Board store when the live draft room (or
@@ -1041,6 +1053,64 @@
             window.addEventListener('wr:live-draft-picks', onLivePicks);
             return () => window.removeEventListener('wr:live-draft-picks', onLivePicks);
         }, [leagueKey]);
+
+        // Direct Sleeper pick feed — the strike-throughs above only flow while
+        // the Command Center's live-sync runs on THIS device; a user parked on
+        // the Big Board during a live draft (no Follow Live Draft open) saw no
+        // cross-offs at all (owner report 2026-08-14). While the league's draft
+        // status is 'drafting', poll the public picks endpoint every 10s and
+        // strike players out directly — works on every surface, no Command
+        // Center required. Read-only; merges with (never replaces) the
+        // event-driven set.
+        const [sleeperLivePids, setSleeperLivePids] = useState(null);
+        useEffect(() => {
+            const did = draftInfo?.draft_id;
+            if (!did || String(did).startsWith('mfl_') || liveDraftStatus !== 'drafting') { setSleeperLivePids(null); return undefined; }
+            let cancelled = false, timer = null;
+            const pull = async () => {
+                try {
+                    const picks = window.Sleeper?.fetchDraftPicks
+                        ? await window.Sleeper.fetchDraftPicks(did)
+                        : await (await fetch('https://api.sleeper.app/v1/draft/' + did + '/picks')).json();
+                    if (cancelled) return;
+                    const s = new Set((Array.isArray(picks) ? picks : []).map(p => String(p?.player_id || '')).filter(Boolean));
+                    setSleeperLivePids(prev => (prev && prev.size === s.size) ? prev : s);
+                } catch (e) { /* transient — next tick retries */ }
+                if (!cancelled) timer = setTimeout(pull, 10000);
+            };
+            pull();
+            return () => { cancelled = true; if (timer) clearTimeout(timer); };
+        }, [draftInfo?.draft_id, liveDraftStatus]);
+
+        // Cloud-shared User Board — the board lived only in this device's
+        // localStorage, so a board built on the website never appeared in the
+        // native app or on the phone (owner request 2026-08-14). Adopt the
+        // newest cloud copy on mount / when returning to the tab; the auto-save
+        // below publishes edits back. Same league-doc channel as verdicts and
+        // the power pin: signed-in surfaces share, newest wins.
+        useEffect(() => {
+            let cancelled = false;
+            const adopt = () => {
+                try {
+                    const lid = currentLeague?.league_id || currentLeague?.id || leagueKey;
+                    if (!lid || !window.OD || !window.OD.loadLeagueDoc) return;
+                    window.OD.loadLeagueDoc(lid, 'bigboard').then(doc => {
+                        if (cancelled || !doc || doc.key !== boardStorageKey || !doc.data) return;
+                        const local = DraftStorage.get(boardStorageKey, null);
+                        const localTs = Date.parse(local?.updatedAt || 0) || 0;
+                        if ((doc.ts || 0) <= localTs + 500) return; // local copy is current or newer
+                        if (boardSyncSig(doc.data) === boardSyncSigRef.current) return;
+                        boardSyncSigRef.current = boardSyncSig(doc.data);
+                        DraftStorage.set(boardStorageKey, doc.data);
+                        setBoardData(doc.data);
+                    }).catch(() => { /* offline — device copy still serves */ });
+                } catch (e) { /* sync must never break the board */ }
+            };
+            adopt();
+            const onVisible = () => { if (document.visibilityState === 'visible') adopt(); };
+            document.addEventListener('visibilitychange', onVisible);
+            return () => { cancelled = true; document.removeEventListener('visibilitychange', onVisible); };
+        }, [boardStorageKey]);
 
         const draftProjectionMeta = useMemo(() => {
             const rosters = currentLeague?.rosters || window.S?.rosters || [];
@@ -3482,7 +3552,8 @@
                                 // linked to a Sleeper player.
                                 const isDrafted = draftedPids.has(r.pid)
                                     || liveDrafted.has(r.pid) || liveDrafted.has(String(r.pid))
-                                    || (r.csv?.pid != null && liveDrafted.has(String(r.csv.pid)));
+                                    || (r.csv?.pid != null && liveDrafted.has(String(r.csv.pid)))
+                                    || !!(sleeperLivePids && (sleeperLivePids.has(String(r.pid)) || (r.csv?.pid != null && sleeperLivePids.has(String(r.csv.pid)))));
                                 const tag = boardTags[r.pid];
                                 const note = boardNotes[r.pid] || '';
                                 const isExp = expandedDraftPid === r.pid;
@@ -3728,7 +3799,7 @@
                             return window.DraftCC?.state?.loadFromLocal?.(lid, 'live-sync')?.draftedPids || null;
                         } catch (e) { return null; }
                     })();
-                    const isRowDrafted = (r) => draftedPids.has(r.pid) || !!(liveDraftedMap && liveDraftedMap[r.pid]);
+                    const isRowDrafted = (r) => draftedPids.has(r.pid) || !!(liveDraftedMap && liveDraftedMap[r.pid]) || !!(sleeperLivePids && sleeperLivePids.has(String(r.pid)));
                     const boardQuery = boardSearch.trim().toLowerCase();
                     let visibleBoardPlayers = allBoardPlayers;
                     if (hideDrafted) visibleBoardPlayers = visibleBoardPlayers.filter(r => !isRowDrafted(r));
