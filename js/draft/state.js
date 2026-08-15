@@ -582,10 +582,27 @@
         return opts.fallback || 'startup';
     }
 
+    // Grading replacement level for K/DEF picks (expectedDHQ only — NOT a
+    // pool value). Calibrated to the engine's real kicker range (~90-370 on
+    // the owner's league, 2026-08-15): a mid-pool starter grades ~1.0, elite
+    // legs grade as surplus, JAG legs as mild reaches. DEF sits on the same
+    // provisional scale until engine DEF data says otherwise.
     function redraftPositionBaseline(pos, variant) {
         if (variant !== 'redraft' && variant !== 'best_ball') return 0;
-        if (pos === 'DEF') return 760;
-        if (pos === 'K') return 520;
+        if (pos === 'DEF') return 250;
+        if (pos === 'K') return 230;
+        return 0;
+    }
+    // Pool fallback for a K/DEF the engine hasn't scored yet. MUST stay
+    // BELOW the engine's real scoring range (~90+): the old 520/760
+    // placeholders outranked genuine engine scores, so placeholder-valued
+    // retired legs led the board and the pick deck (owner report
+    // 2026-08-15). Low floors also park unscored K/DEF at the bottom of the
+    // board — where those positions actually get drafted.
+    function redraftPoolFloor(pos, variant) {
+        if (variant !== 'redraft' && variant !== 'best_ball') return 0;
+        if (pos === 'DEF') return 70;
+        if (pos === 'K') return 60;
         return 0;
     }
 
@@ -770,7 +787,7 @@
                 const resolved = getDHQ(pid, p, name);
                 const yearsExpRaw = p.years_exp ?? p.yearsExp;
                 const yearsExp = Number.isFinite(Number(yearsExpRaw)) ? Number(yearsExpRaw) : null;
-                const fallbackValue = redraftPositionBaseline(pos, variant);
+                const fallbackValue = redraftPoolFloor(pos, variant);
                 const dhq = resolved.value || fallbackValue;
                 return {
                     pid,
@@ -795,6 +812,24 @@
             })
             .filter(p => p.dhq > 0)
             .sort((a, b) => b.dhq - a.dhq);
+        // Kicker universe = each NFL team's depth-chart starter, nothing else
+        // (owner ruling 2026-08-15). Retired/FA legs and backups leave the
+        // pool ENTIRELY — engine-scored or not — so they can never appear on
+        // a board or in the pick deck. Depth 1 wins each team; search_rank
+        // popularity settles camp battles.
+        if (VALID.has('K')) {
+            const kStarterByTeam = {};
+            pool.forEach(p => {
+                if (p.pos !== 'K' || !p.team || p.team === 'FA') return;
+                const cur = kStarterByTeam[p.team];
+                const better = !cur
+                    || (p.depthOrder || 99) < (cur.depthOrder || 99)
+                    || ((p.depthOrder || 99) === (cur.depthOrder || 99) && (p.searchRank || 9999999) < (cur.searchRank || 9999999));
+                if (better) kStarterByTeam[p.team] = p;
+            });
+            const kStarters = new Set(Object.values(kStarterByTeam).map(p => String(p.pid)));
+            pool = pool.filter(p => p.pos !== 'K' || kStarters.has(String(p.pid)));
+        }
         // Position floor: K/DEF values sit far below the offense curve, so a
         // straight top-N value cut produced a board with no kickers or
         // defenses (owner report 2026-08-15). Keep the value cut, then
