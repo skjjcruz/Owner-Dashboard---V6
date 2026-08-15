@@ -788,6 +788,7 @@
                     val: dhq,
                     source: resolved.value ? resolved.source : (fallbackValue ? 'redraft-position-baseline' : resolved.source),
                     csv: null,
+                    searchRank: Number(p.search_rank) || 9999999,
                     photoUrl: 'https://sleepercdn.com/content/nfl/players/thumb/' + pid + '.jpg',
                 };
             })
@@ -802,10 +803,24 @@
         {
             const cut = pool.slice(0, maxSize);
             const inCut = new Set(cut.map(p => String(p.pid)));
+            // K/DEF all share a flat baseline value, so "top by value" is a
+            // coin flip among ~80 tied rows. Rank them by real-world signals
+            // instead: market ADP when the cached map has it (people draft
+            // actual kickers), then team-attached over free agents, then
+            // Sleeper's search_rank (popularity — real starters rank low,
+            // camp bodies effectively unranked).
+            const kdRank = (p) => {
+                const adp = (typeof window !== 'undefined' && window.App && typeof window.App.getRedraftAdp === 'function')
+                    ? window.App.getRedraftAdp(String(p.pid)) : null;
+                return adp && adp.adp > 0 ? adp.adp : 100000;
+            };
             ['K', 'DEF'].forEach(fpos => {
                 const have = cut.filter(p => p.pos === fpos).length;
                 if (have >= 14) return;
                 pool.filter(p => p.pos === fpos && !inCut.has(String(p.pid)))
+                    .sort((x, y) => (kdRank(x) - kdRank(y))
+                        || (((y.team && y.team !== 'FA') ? 1 : 0) - ((x.team && x.team !== 'FA') ? 1 : 0))
+                        || ((x.searchRank || 9999999) - (y.searchRank || 9999999)))
                     .slice(0, 14 - have)
                     .forEach(p => { cut.push(p); inCut.add(String(p.pid)); });
             });
