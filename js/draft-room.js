@@ -1096,6 +1096,7 @@
             return () => { cancelled = true; if (timer) clearTimeout(timer); };
         }, [draftInfo?.draft_id, liveDraftStatus]);
 
+
         // Cloud-shared User Board — the board lived only in this device's
         // localStorage, so a board built on the website never appeared in the
         // native app or on the phone (owner request 2026-08-14). Adopt the
@@ -1615,6 +1616,19 @@
         // Lifted from the Big Board so both the board and the Flash Brief scouting
         // drawer can compute the same value rank + tier + scouting bits per player.
         const isSeasonalDraftCtx = !isRookieDraft;
+
+        // Real market ADP (lab port 2026-08-15): adp-market.js fetches once and
+        // caches ~18h; bump a tick when the map lands after this board's first
+        // paint so the "Mkt ADP" column fills in without a manual refresh.
+        // Redraft-only — the module has no dynasty/rookie signal to offer.
+        const [, bumpAdpTick] = useState(0);
+        useEffect(() => {
+            if (!isSeasonalDraftCtx) return undefined;
+            try { if (typeof window.App?.fetchRedraftAdp === 'function') window.App.fetchRedraftAdp(); } catch (e) { /* column just stays dashed */ }
+            const onAdpLoaded = () => bumpAdpTick(t => t + 1);
+            window.addEventListener('wr:adp-loaded', onAdpLoaded);
+            return () => window.removeEventListener('wr:adp-loaded', onAdpLoaded);
+        }, [isSeasonalDraftCtx]);
         const hasDraftCapital = useCallback((cs = {}) => Number(cs.draftRound) > 0 || Number(cs.draftPick) > 0, []);
         // True once this class's NFL draft is in (any prospect carries a round/pick). Post-draft,
         // a prospect with no capital went undrafted, so "Capital TBD" is reclassified as UDFA.
@@ -3498,7 +3512,7 @@
                         // above, so this re-renders the instant a pick lands in the live draft.
                         const liveDrafted = liveDraftedPids;
                         const boardGridCols = isSeasonalDraft
-                            ? '58px minmax(220px, 1.25fr) 96px 88px 68px 72px 64px minmax(156px, 0.95fr) 92px'
+                            ? '58px minmax(220px, 1.25fr) 96px 88px 68px 66px 72px 64px minmax(156px, 0.95fr) 92px'
                             : '58px minmax(205px, 1.15fr) minmax(128px, 0.82fr) 88px 64px 58px 82px 64px 58px minmax(156px, 0.95fr) 92px';
                         const boardHeaderCell = (label, key, extra = {}) => (
                             <div onClick={key ? () => toggleSort(key) : undefined} style={{ ...sortHdr, ...extra }}>
@@ -3551,6 +3565,9 @@
                                 {boardHeaderCell(isSeasonalDraft ? 'NFL Team' : 'College', isSeasonalDraft ? 'team' : 'school', { padding: '0 8px' })}
                                 {boardHeaderCell(valueShortLabel, 'dhq', { padding: '0 8px' })}
                                 {boardHeaderCell('Rank', 'rank', { padding: '0 8px' })}
+                                {/* Real market ADP (lab port) — display-only "market says" column,
+                                    redraft boards only; no real dynasty/rookie ADP source exists. */}
+                                {isSeasonalDraft && boardHeaderCell('Mkt ADP', null, { padding: '0 8px' })}
                                 {boardHeaderCell('Tier', 'tier', { padding: '0 8px' })}
                                 {showDraftCapitalColumn && boardHeaderCell('Draft', 'draft', { padding: '0 8px' })}
                                 {showDraftCapitalColumn && boardHeaderCell('Team', 'team', { padding: '0 8px' })}
@@ -3683,6 +3700,10 @@
                                         {snapshotCell(isSeasonalDraft ? (team || 'FA') : (college || 'School TBD'), isSeasonalDraft && team ? 'var(--good)' : 'var(--silver)')}
                                         {snapshotCell(r.dhq > 0 ? r.dhq.toLocaleString() : '-', dhqC)}
                                         {snapshotCell(rankStr)}
+                                        {isSeasonalDraft && (() => {
+                                            const adp = typeof window.App?.getRedraftAdp === 'function' ? window.App.getRedraftAdp(String(r.pid)) : null;
+                                            return snapshotCell(adp && typeof adp.adp === 'number' ? adp.adp.toFixed(1) : '-', 'var(--silver)');
+                                        })()}
                                         {snapshotCell(tierStr)}
                                         {showDraftCapitalColumn && snapshotCell(draftStr || 'Capital TBD', draftCol)}
                                         {showDraftCapitalColumn && snapshotCell(team || 'TBD', team ? 'var(--good)' : 'var(--silver)')}
