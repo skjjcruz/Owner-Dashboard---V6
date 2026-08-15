@@ -354,7 +354,7 @@
                 if (sortKey === 'rank') return dir * (((a._board && a._board.dhqRank) || 9999) - (((b._board && b._board.dhqRank) || 9999)));
                 return dir * ((b.dhq || 0) - (a.dhq || 0));
             });
-            return sorted.slice(0, 100);
+            return sorted.slice(0, 300); // mirror the Draft tab feeder depth
         }, [decoratedPool, posFilter, search, sortKey, sortDir, hideDrafted]);
 
         // Ask Alex about the board: opens recon chat pre-loaded with the

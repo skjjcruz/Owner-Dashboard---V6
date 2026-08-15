@@ -762,7 +762,7 @@
             ? window.getLeaguePositions({ asSet: true })
             : new Set(['QB','RB','WR','TE','K','DEF']);
         const src = playersData || window.S?.players || {};
-        const pool = Object.entries(src)
+        let pool = Object.entries(src)
             .filter(([, p]) => VALID.has(normPos(p.position)) && p.status !== 'Inactive' && (p.first_name || p.full_name))
             .map(([pid, p]) => {
                 const name = p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim();
@@ -792,8 +792,25 @@
                 };
             })
             .filter(p => p.dhq > 0)
-            .sort((a, b) => b.dhq - a.dhq)
-            .slice(0, maxSize);
+            .sort((a, b) => b.dhq - a.dhq);
+        // Position floor: K/DEF values sit far below the offense curve, so a
+        // straight top-N value cut produced a board with no kickers or
+        // defenses (owner report 2026-08-15). Keep the value cut, then
+        // guarantee the top squads/legs a seat — mirrors the Draft tab
+        // feeder's position coverage. VALID above already scoped positions
+        // to what this league rosters.
+        {
+            const cut = pool.slice(0, maxSize);
+            const inCut = new Set(cut.map(p => String(p.pid)));
+            ['K', 'DEF'].forEach(fpos => {
+                const have = cut.filter(p => p.pos === fpos).length;
+                if (have >= 14) return;
+                pool.filter(p => p.pos === fpos && !inCut.has(String(p.pid)))
+                    .slice(0, 14 - have)
+                    .forEach(p => { cut.push(p); inCut.add(String(p.pid)); });
+            });
+            pool = cut;
+        }
 
         // Synthetic consensusRank for reach/steal detection in startup mode —
         // index in the DHQ-sorted pool is the "consensus" rank order.
