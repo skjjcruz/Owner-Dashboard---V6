@@ -58,7 +58,7 @@
         const _phoneKitReady = !!(window.WR && window.WR.HeroCard && window.WR.AssetRow && window.WR.CardList && window.WR.FilterPill && window.WR.FilterSheet);
         const _phone = !!_vp.isPhone && _phoneKitReady;
         const [draftSort, setDraftSort] = useState({ key: 'dhq', dir: -1 });
-        const [draftView, setDraftView] = useState('command'); // 'command' | 'board' | 'mock' | 'live'
+        const [draftView, setDraftView] = useState('board'); // 'command' | 'board' | 'mock' | 'live' — Big Board is the front door (owner ruling 2026-08-15); live-draft auto-open below still outranks it
         const [draftInfo, setDraftInfo] = useState(null);
         const draftVariant = useMemo(() => {
             try {
