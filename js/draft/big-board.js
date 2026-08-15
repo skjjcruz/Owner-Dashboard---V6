@@ -228,6 +228,19 @@
         // For free, treat the Pro-only 'ai' lane as unknown — a persisted
         // activeLane:'ai' must clamp to 'dhq', never auto-open the optimizer lane.
         const activeLane = ((pro || boardLane !== 'ai') && (boardLane === 'my' || lanes[boardLane])) ? boardLane : 'dhq';
+        // Real market ADP (mirrors the Draft tab feeder): redraft drafts only —
+        // no real dynasty/rookie ADP source exists. adp-market.js caches ~18h
+        // and fires wr:adp-loaded when the map lands after first paint.
+        const showAdpCol = state.variant === 'redraft' || state.draftContext?.draftType === 'redraft' || state.draftContext?.leagueFormat?.draftType === 'redraft';
+        const [, bumpAdpTick] = React.useState(0);
+        React.useEffect(() => {
+            if (!showAdpCol) return undefined;
+            try { window.App?.fetchRedraftAdp?.(); } catch (e) { /* column dashes */ }
+            const onAdp = () => bumpAdpTick(t => t + 1);
+            window.addEventListener('wr:adp-loaded', onAdp);
+            return () => window.removeEventListener('wr:adp-loaded', onAdp);
+        }, [showAdpCol]);
+        const adpOf = (pl) => { const g = window.App?.getRedraftAdp?.(String(idOf(pl))); return g && typeof g.adp === 'number' ? g.adp : null; };
         const activeLaneData = lanes[activeLane] || lanes.dhq || { order: [] };
         const activeRanks = React.useMemo(() => rankMap(activeLaneData.order || []), [activeLaneData]);
         const dhqRanks = React.useMemo(() => rankMap(lanes.dhq?.order || []), [lanes.dhq]);
@@ -337,6 +350,7 @@
                 if (sortKey === 'age') return dir * ((ageOf(a) || 99) - (ageOf(b) || 99));
                 if (sortKey === 'team') { const x = nflTeamOf(a) || '', y = nflTeamOf(b) || ''; if (!x !== !y) return x ? -1 : 1; return dir * x.localeCompare(y); }
                 if (sortKey === 'college') { const x = collegeOf(a) || '', y = collegeOf(b) || ''; if (!x !== !y) return x ? -1 : 1; return dir * x.localeCompare(y); }
+                if (sortKey === 'adp') { const x = adpOf(a) ?? 9999, y = adpOf(b) ?? 9999; return dir * (x - y); }
                 return dir * ((b.dhq || 0) - (a.dhq || 0));
             });
             return sorted.slice(0, 100);
@@ -819,7 +833,7 @@
 
                 <div style={{
                     display: 'grid',
-                    gridTemplateColumns: (activeLane === 'my' ? '38px' : '22px') + ' minmax(0,1.3fr) 40px minmax(0,0.95fr) 30px 48px 44px',
+                    gridTemplateColumns: (activeLane === 'my' ? '38px' : '22px') + ' minmax(0,1.3fr) 44px 34px 48px' + (showAdpCol ? ' 46px' : '') + ' 44px',
                     gap: '5px',
                     alignItems: 'center',
                     padding: '0 3px 4px 5px',
@@ -829,9 +843,9 @@
                     {colHeader('board', '#', 'right')}
                     {colHeader('name', 'Player', 'left')}
                     {colHeader('team', 'Team', 'left')}
-                    {colHeader('college', 'College', 'left')}
                     {colHeader('pos', 'Pos', 'center')}
                     {colHeader('dhq', 'DHQ', 'right')}
+                    {showAdpCol && colHeader('adp', 'ADP', 'right')}
                     {(isUserTurn || state.overrideMode || state.mode === 'manual') && <span />}
                 </div>
 
@@ -877,7 +891,7 @@
                                 }}
                                 style={{
                                     display: 'grid',
-                                    gridTemplateColumns: (activeLane === 'my' ? '38px' : '22px') + ' minmax(0,1.3fr) 40px minmax(0,0.95fr) 30px 48px 44px',
+                                    gridTemplateColumns: (activeLane === 'my' ? '38px' : '22px') + ' minmax(0,1.3fr) 44px 34px 48px' + (showAdpCol ? ' 46px' : '') + ' 44px',
                                     gap: '5px',
                                     alignItems: 'center',
                                     padding: '3px 3px 3px 0',
@@ -928,9 +942,9 @@
                                     )}
                                 </div>
                                 <span title={nflTeam} style={{ color: 'var(--silver)', opacity: 0.78, fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: FONT_MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nflTeam || '—'}</span>
-                                <span title={college} style={{ color: 'var(--silver)', opacity: 0.7, fontSize: 'var(--text-micro, 0.6875rem)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{college || '—'}</span>
                                 <span style={{ fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, padding: '1px 5px', borderRadius: '3px', background: wrAlpha(posColor, '22'), color: posColor, textAlign: 'center', fontFamily: FONT_UI }}>{normEdPos(p.pos)}</span>
                                 <span style={{ color: col, fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, fontFamily: FONT_MONO, textAlign: 'right' }}>{fmt(p.dhq)}</span>
+                                {showAdpCol && <span style={{ color: 'var(--silver)', opacity: 0.85, fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: FONT_MONO, textAlign: 'right' }}>{(() => { const av = adpOf(p); return av != null ? av.toFixed(1) : '—'; })()}</span>}
                                 {(isUserTurn || state.overrideMode || state.mode === 'manual') && (
                                     <button
                                         onClick={e => { e.stopPropagation(); onDraft(p); }}
