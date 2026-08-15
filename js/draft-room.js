@@ -43,7 +43,11 @@
         const isPro = typeof window.wrIsPro !== 'function' || window.wrIsPro();
         const resolvedLeagueSkin = leagueSkin || window.App?.LeagueSkin?.getCurrent?.() || null;
         const skinFeatures = resolvedLeagueSkin?.features || {};
-        const valueShortLabel = resolvedLeagueSkin?.vocabulary?.valueShortLabel || 'DHQ';
+        // Owner ruling 2026-08-15: the draft room always speaks DHQ — even in
+        // redraft leagues where the league skin's vocabulary says 'ROS'. The
+        // number shown IS the DHQ value either way; the ROS label read as a
+        // different stat and confused the board.
+        const valueShortLabel = 'DHQ';
         const _draftCapitalLabel = skinFeatures.showFuturePicks === false ? 'draft capital' : 'future capital';
         const leagueKey = currentLeague?.league_id || currentLeague?.id || '';
         const leagueSeason = parseInt(currentLeague.season || new Date().getFullYear());
@@ -3273,6 +3277,7 @@
                                                         {[
                                                             [valueShortLabel, r.dhq > 0 ? r.dhq.toLocaleString() : '-'],
                                                             ['Rank', rankStr],
+                                                            ...(isSeasonalDraftCtx ? [['Mkt ADP', (() => { const g = window.App?.getRedraftAdp?.(String(r.pid)); return g && typeof g.adp === 'number' && g.adp > 0 ? g.adp.toFixed(1) : '—'; })()]] : []),
                                                             ['Tier', tierStr],
                                                             ['Draft', draftStr],
                                                             ['Team', team || 'TBD'],
@@ -3747,6 +3752,7 @@
                                                         {[
                                                             [valueShortLabel, r.dhq > 0 ? r.dhq.toLocaleString() : '-'],
                                                             ['Rank', rankStr],
+                                                            ...(isSeasonalDraft ? [['Mkt ADP', (() => { const g = window.App?.getRedraftAdp?.(String(r.pid)); return g && typeof g.adp === 'number' && g.adp > 0 ? g.adp.toFixed(1) : '—'; })()]] : []),
                                                             ['Tier', tierStr],
                                                             ...(showDraftCapitalColumn ? [['Draft', draftStr || 'Capital TBD']] : []),
                                                             ['Team', team || 'TBD'],
