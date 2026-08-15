@@ -3512,7 +3512,7 @@
                         // above, so this re-renders the instant a pick lands in the live draft.
                         const liveDrafted = liveDraftedPids;
                         const boardGridCols = isSeasonalDraft
-                            ? '58px minmax(220px, 1.25fr) 96px 88px 68px 66px 72px 64px minmax(156px, 0.95fr) 92px'
+                            ? '58px minmax(220px, 1.25fr) 96px 88px 68px 84px 72px 64px minmax(156px, 0.95fr) 92px'
                             : '58px minmax(205px, 1.15fr) minmax(128px, 0.82fr) 88px 64px 58px 82px 64px 58px minmax(156px, 0.95fr) 92px';
                         const boardHeaderCell = (label, key, extra = {}) => (
                             <div onClick={key ? () => toggleSort(key) : undefined} style={{ ...sortHdr, ...extra }}>
@@ -3567,7 +3567,7 @@
                                 {boardHeaderCell('Rank', 'rank', { padding: '0 8px' })}
                                 {/* Real market ADP (lab port) — display-only "market says" column,
                                     redraft boards only; no real dynasty/rookie ADP source exists. */}
-                                {isSeasonalDraft && boardHeaderCell('Mkt ADP', null, { padding: '0 8px' })}
+                                {isSeasonalDraft && boardHeaderCell('Mkt ADP', null, { padding: '0 8px', whiteSpace: 'nowrap' })}
                                 {boardHeaderCell('Tier', 'tier', { padding: '0 8px' })}
                                 {showDraftCapitalColumn && boardHeaderCell('Draft', 'draft', { padding: '0 8px' })}
                                 {showDraftCapitalColumn && boardHeaderCell('Team', 'team', { padding: '0 8px' })}
