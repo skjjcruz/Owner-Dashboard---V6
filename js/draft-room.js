@@ -3389,10 +3389,10 @@
                         if (boardRoundFilter === 'UDFA') return isTrueUdfa(cs);
                         return String(cs.draftRound) === boardRoundFilter;
                     });
-                    if (boardSort.key) {
-                        dhqBoardPlayers.sort((a, b) => {
+                    // Shared column comparator — used by the research-board view sort
+                    // below AND by the User Board's bake-this-order reorder (toggleSort).
+                    const boardCompare = (k, dir) => (a, b) => {
                             let va, vb;
-                            const k = boardSort.key;
                             if (k === 'dhq') { va = a.dhq; vb = b.dhq; }
                             else if (k === 'name') { va = (a.p.full_name || '').toLowerCase(); vb = (b.p.full_name || '').toLowerCase(); }
                             else if (k === 'pos') { va = normPos(a.p.position) || ''; vb = normPos(b.p.position) || ''; }
@@ -3409,9 +3409,11 @@
                             else if (k === 'speed')  { va = parseFloat(a.csv?.speed) || 99; vb = parseFloat(b.csv?.speed) || 99; }
                             else if (k === 'adp')    { const ga = window.App?.getRedraftAdp?.(String(a.pid)); const gb = window.App?.getRedraftAdp?.(String(b.pid)); va = (ga && ga.adp > 0) ? ga.adp : 9999; vb = (gb && gb.adp > 0) ? gb.adp : 9999; }
                             else { va = 0; vb = 0; }
-                            if (typeof va === 'string') return va < vb ? -boardSort.dir : va > vb ? boardSort.dir : 0;
-                            return ((va || 0) - (vb || 0)) * boardSort.dir;
-                        });
+                            if (typeof va === 'string') return va < vb ? -dir : va > vb ? dir : 0;
+                            return ((va || 0) - (vb || 0)) * dir;
+                    };
+                    if (boardSort.key) {
+                        dhqBoardPlayers.sort(boardCompare(boardSort.key, boardSort.dir));
                     }
 
                     const aiSeedOrder = aiRecommendedOrder.length ? aiRecommendedOrder : draftPoolRows.map(r => r.pid);
@@ -3504,7 +3506,25 @@
 
                     // Compact board renderer (used for both sides)
                     const sortArrow = (key) => boardSort.key === key ? (boardSort.dir === -1 ? ' \u25BC' : ' \u25B2') : '';
-                    const toggleSort = (key) => setBoardSort(prev => prev.key === key ? { ...prev, dir: prev.dir * -1 } : { key, dir: ['name','school','team','rank','tier','draft','speed','age','adp'].includes(key) ? 1 : -1 });
+                    const SORT_ASC_KEYS = ['name','school','team','rank','tier','draft','speed','age','adp'];
+                    const toggleSort = (key) => {
+                        if (boardMode === 'my') {
+                            // User Board: sorting IS a reorder. Bake the column order into
+                            // the board itself (saved + cloud-synced like any edit) behind a
+                            // confirm so a stray header tap can never silently destroy a
+                            // hand-built order. Drag keeps working on the result.
+                            if (!key) return;
+                            const ok = window.confirm("Rearrange your User Board into this column's order? Your current custom order will be replaced (you can still drag players afterward).");
+                            if (!ok) return;
+                            const dir = SORT_ASC_KEYS.includes(key) ? 1 : -1;
+                            const sorted = [...myBoardPlayers].sort(boardCompare(key, dir)).map(r => r.pid);
+                            const inSorted = new Set(sorted.map(String));
+                            const rest = (myOrder || []).filter(pid => !inSorted.has(String(pid)));
+                            setMyBoardOrder([...sorted, ...rest]);
+                            return;
+                        }
+                        setBoardSort(prev => prev.key === key ? { ...prev, dir: prev.dir * -1 } : { key, dir: SORT_ASC_KEYS.includes(key) ? 1 : -1 });
+                    };
                     const sortHdr = { cursor: 'pointer', userSelect: 'none' };
                     const renderCompactBoard = (players, isDhq) => {
                         // Auto cross-off players already taken in the live draft (parallel to
