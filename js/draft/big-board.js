@@ -679,6 +679,7 @@
                                             </span>
                                         ),
                                         accent: b.tag === 'must' || b.tag === 'target' ? 'gold' : b.tag === 'avoid' ? 'risk' : undefined,
+                                        struck: !!p._drafted,
                                         onClick: () => onOpenModal(p),
                                     })}
                                     </div>

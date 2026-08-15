@@ -3987,6 +3987,7 @@
                                         ? <span style={{ fontFamily: MONO, fontSize: MICRO, fontWeight: 700, padding: '3px 8px', borderRadius: '5px', border: '1px solid ' + tagDef.color, color: tagDef.color, whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{tagDef.label}</span>
                                         : null,
                                 accent: tag === 'must' || tag === 'target' ? 'gold' : tag === 'avoid' ? 'risk' : undefined,
+                                struck: isDrafted,
                                 expanded: isExp,
                                 onClick: toggle,
                             }, isExp ? phDossier(r) : null);

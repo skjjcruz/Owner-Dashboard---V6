@@ -572,7 +572,10 @@
     //              the same card (row tap is the only toggle; children
     //              clicks don't re-toggle).
     //   ...rest  — forwarded to the card root (data-* hooks etc.).
-    function AssetRow({ pos, name, tag, slots, verdict, onClick, expanded, children, accent, ...rest }) {
+    // `struck` lines through the name — the phone-card analog of the desktop
+    // tables' drafted strikethrough, so a picked player reads as gone on
+    // every tier (owner ask 2026-08-15).
+    function AssetRow({ pos, name, tag, slots, verdict, onClick, expanded, children, accent, struck, ...rest }) {
         const tint = POS_TINTS[String(pos || '').toUpperCase()] || { bg: 'var(--ov-4, rgba(255,255,255,0.06))', fg: 'var(--silver, #BDB8AD)' };
         const borderColor = accent === 'gold' ? 'rgba(212,175,55,0.4)'
             : accent === 'risk' ? 'rgba(240,165,0,0.4)'
@@ -608,7 +611,7 @@
                     }
                 }, pos),
                 h('div', { style: { flex: 1, minWidth: 0 } },
-                    h('div', { style: { fontFamily: 'var(--font-body, "DM Sans", sans-serif)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--white)', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, name),
+                    h('div', { style: { fontFamily: 'var(--font-body, "DM Sans", sans-serif)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--white)', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: struck ? 'line-through' : 'none' } }, name),
                     tag != null && h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 500, color: 'var(--text-muted, #8B8B96)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' } }, tag)
                 ),
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 } },
