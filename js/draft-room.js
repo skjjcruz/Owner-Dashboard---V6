@@ -3873,9 +3873,10 @@
                     // stays byte-identical. Same state, same setters everywhere:
                     // boardMode/setBoardMode, boardSearch, boardPosFilter, team/round
                     // filters, hideDrafted (wr_bb_hide_drafted), boardTags/boardNotes,
-                    // expandedDraftPid. The USER BOARD lane keeps the shipped
-                    // renderCompactBoard table so the custom-board ▲/▼ reorder path
-                    // (handleBoardMove + the ≤767 .wr-brd-move-btn bump) ships as-is.
+                    // expandedDraftPid. The MY DRAFT BOARD lane rides the same
+                    // AssetRow cards as every lane, with a per-row drag grip for
+                    // reorder (owner ask 2026-08-15 — the compact-table ▲/▼
+                    // fallback read as huge buttons on phone and is gone here).
                     if (_phone) {
                         const MONO = 'var(--font-mono, "JetBrains Mono", monospace)';
                         const MICRO = 'var(--text-micro, 0.6875rem)';
@@ -3965,25 +3966,40 @@
                                 if (next) window.OD?.trackDraftPlayerExpanded?.(r.pid, { platform: 'warroom', module: 'draft', leagueId: window.S?.currentLeagueId || null, metadata: { boardMode, source: 'draft_board' } });
                                 return next;
                             });
+                            // My-lane rows carry a 44px drag grip (owner ask 2026-08-15:
+                            // the ▲/▼ compact-table fallback read as "huge buttons" on
+                            // phone — the pointer-based grip is the one reorder path now,
+                            // same as the live room's my lane).
+                            const gp = boardMode === 'my' && window.WR && window.WR.dragReorderGrip
+                                ? window.WR.dragReorderGrip({ key: r.pid, onDrop: handleGripDrop }) : null;
+                            const rowEl = React.createElement(window.WR.AssetRow, {
+                                pos,
+                                name: pName(r.p),
+                                tag: ['#' + (idx + 1), isSeasonalDraft ? (team || 'FA') : (college || 'School TBD'), showDraftCapitalColumn && draftStr ? draftStr : null].filter(Boolean).join(' · '),
+                                slots: [
+                                    { label: valueShortLabel, value: r.dhq > 0 ? r.dhq.toLocaleString() : '—' },
+                                    ...(isSeasonalDraft ? [(() => { const g = window.App?.getRedraftAdp?.(String(r.pid)); return { label: 'ADP', value: g && typeof g.adp === 'number' && g.adp > 0 ? g.adp.toFixed(1) : '—', tone: 'mute' }; })()] : []),
+                                    { label: 'Rank', value: rankStr, tone: 'mute' },
+                                ],
+                                verdict: isDrafted
+                                    ? <span style={{ fontFamily: MONO, fontSize: MICRO, fontWeight: 700, padding: '3px 8px', borderRadius: '5px', border: '1px solid var(--bad)', color: 'var(--bad)', whiteSpace: 'nowrap' }}>GONE</span>
+                                    : tagDef
+                                        ? <span style={{ fontFamily: MONO, fontSize: MICRO, fontWeight: 700, padding: '3px 8px', borderRadius: '5px', border: '1px solid ' + tagDef.color, color: tagDef.color, whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{tagDef.label}</span>
+                                        : null,
+                                accent: tag === 'must' || tag === 'target' ? 'gold' : tag === 'avoid' ? 'risk' : undefined,
+                                expanded: isExp,
+                                onClick: toggle,
+                            }, isExp ? phDossier(r) : null);
                             return (
-                                <div key={r.pid} style={isDrafted ? { opacity: 0.45 } : undefined}>
-                                    {React.createElement(window.WR.AssetRow, {
-                                        pos,
-                                        name: pName(r.p),
-                                        tag: ['#' + (idx + 1), isSeasonalDraft ? (team || 'FA') : (college || 'School TBD'), showDraftCapitalColumn && draftStr ? draftStr : null].filter(Boolean).join(' · '),
-                                        slots: [
-                                            { label: valueShortLabel, value: r.dhq > 0 ? r.dhq.toLocaleString() : '—' },
-                                            { label: 'Rank', value: rankStr, tone: 'mute' },
-                                        ],
-                                        verdict: isDrafted
-                                            ? <span style={{ fontFamily: MONO, fontSize: MICRO, fontWeight: 700, padding: '3px 8px', borderRadius: '5px', border: '1px solid var(--bad)', color: 'var(--bad)', whiteSpace: 'nowrap' }}>GONE</span>
-                                            : tagDef
-                                                ? <span style={{ fontFamily: MONO, fontSize: MICRO, fontWeight: 700, padding: '3px 8px', borderRadius: '5px', border: '1px solid ' + tagDef.color, color: tagDef.color, whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{tagDef.label}</span>
-                                                : null,
-                                        accent: tag === 'must' || tag === 'target' ? 'gold' : tag === 'avoid' ? 'risk' : undefined,
-                                        expanded: isExp,
-                                        onClick: toggle,
-                                    }, isExp ? phDossier(r) : null)}
+                                <div key={r.pid} data-reorder-key={r.pid} style={isDrafted ? { opacity: 0.45 } : undefined}>
+                                    {gp ? (
+                                        <div style={{ display: 'grid', gridTemplateColumns: '40px minmax(0,1fr)', gap: 6, alignItems: 'stretch' }}>
+                                            <button type="button" className="wr-drag-grip" title="Hold and drag to reorder" aria-label={'Drag ' + pName(r.p) + ' to reorder'}
+                                                {...gp}
+                                                style={{ ...gp.style, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '44px', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: 6, background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', fontSize: '0.85rem', lineHeight: 1, padding: 0 }}>≡</button>
+                                            <div style={{ minWidth: 0 }}>{rowEl}</div>
+                                        </div>
+                                    ) : rowEl}
                                 </div>
                             );
                         };
@@ -4061,12 +4077,14 @@
                                     {React.createElement(window.WR.FilterPill, { label: 'Hide drafted', value: hideDrafted ? 'ON' : null, onClick: toggleHideDrafted })}
                                 </div>
                                 {phBoardPanelEl}
-                                {boardMode === 'my' ? (
-                                    <React.Fragment>
-                                        <div style={{ color: 'var(--gold)', opacity: 0.72, fontSize: MICRO, fontFamily: MONO }}>{'↕'} Tap ▲ / ▼ in the # column to reorder your board</div>
-                                        {renderCompactBoard(visibleBoardPlayers, false)}
-                                    </React.Fragment>
-                                ) : phGroups.length ? (
+                                {/* My lane rides the same AssetRow cards as every other
+                                    lane (owner ask 2026-08-15) — the old compact-table
+                                    detour existed only for the ▲/▼ reorder fallback,
+                                    which the per-row drag grip replaces. */}
+                                {boardMode === 'my' && (
+                                    <div style={{ color: 'var(--gold)', opacity: 0.72, fontSize: MICRO, fontFamily: MONO }}>{'↕'} Hold ≡ and drag to reorder your board</div>
+                                )}
+                                {phGroups.length ? (
                                     React.createElement(window.WR.CardList, {
                                         groups: phGroups.map(g => ({ label: g.key, sub: g.rows.length + (g.rows.length === 1 ? ' player' : ' players'), rows: g.rows })),
                                     })
