@@ -31,7 +31,7 @@
     const LANE_LABELS = {
         dhq: { label: 'DHQ Board', short: 'DHQ', sub: 'canonical value' },
         ai:  { label: 'AI Recommended', short: 'AI', sub: 'GM strategy' },
-        my:  { label: 'My Board', short: 'MY', sub: 'front-office prep' },
+        my:  { label: 'My Draft Board', short: 'MY DRAFT BOARD', sub: 'front-office prep' },
     };
 
     const TAG_META = {

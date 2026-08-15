@@ -3837,7 +3837,7 @@
                         { k: 'dhq', label: 'Default Board', sub: valueShortLabel + ' value rank', detail: 'Canonical value order from the value engine.' },
                         // Strategy-fit re-rank lane is an optimizer output → Pro-only lane.
                         ...(isPro ? [{ k: 'ai', label: 'AI Recommended', sub: 'GM strategy fit', detail: 'Re-ranked for your strategy, roster pressure, and league format.' }] : []),
-                        { k: 'my', label: 'User Board', sub: 'editable front office board', detail: myBoardOrder.length ? 'Manual order with your notes, tags, and draft prep.' : (isPro ? 'Starts from AI Recommended, then becomes yours when edited.' : 'Starts from the value order, then becomes yours when edited.') },
+                        { k: 'my', label: 'My Draft Board', sub: 'editable front office board', detail: myBoardOrder.length ? 'Manual order with your notes, tags, and draft prep.' : (isPro ? 'Starts from AI Recommended, then becomes yours when edited.' : 'Starts from the value order, then becomes yours when edited.') },
                     ];
                     const activeBoardInfo = boardModeOptions.find(opt => opt.k === boardMode) || boardModeOptions[0];
                     const allBoardPlayers = boardMode === 'my' ? myBoardPlayers : boardMode === 'ai' ? aiBoardPlayers : dhqBoardPlayers;
@@ -4196,7 +4196,7 @@
                         <div style={{ marginBottom: '14px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 8, color: 'var(--silver)', opacity: 0.65, fontSize: 'var(--text-micro, 0.6875rem)' }}>
                                 <span>{activeBoardInfo.label} - {visibleBoardPlayers.length} visible players</span>
-                                <span>{boardMode === 'my' ? 'Hold ≡ (or drag a row) to reorder - click a player for notes' : 'Switch to User Board to edit rank order'}</span>
+                                <span>{boardMode === 'my' ? 'Hold ≡ (or drag a row) to reorder - click a player for notes' : 'Switch to My Draft Board to edit rank order'}</span>
                             </div>
                             {renderCompactBoard(visibleBoardPlayers, boardMode !== 'my')}
                         </div>
@@ -4216,7 +4216,7 @@
                             return (
                                 <div onClick={() => setPendingBoardSort(null)} style={{ position: 'fixed', inset: 0, zIndex: 95000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(6,8,12,0.72)', backdropFilter: 'blur(3px)', padding: '24px' }}>
                                     <div onClick={e => e.stopPropagation()} style={{ width: 'min(30rem, 100%)', background: 'linear-gradient(180deg, var(--bg-secondary, #14161c) 0%, var(--black, #0b0d12) 100%)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.35))', borderRadius: 14, boxShadow: '0 18px 60px rgba(0,0,0,0.6)', padding: '22px 22px 18px', fontFamily: 'var(--font-body)' }}>
-                                        <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>User Board</div>
+                                        <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>My Draft Board</div>
                                         <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--white)', marginBottom: 8 }}>Rearrange your board by {label}?</div>
                                         <div style={{ fontSize: '0.85rem', lineHeight: 1.55, color: 'var(--silver)', marginBottom: 18 }}>Your current custom order will be replaced with the {label} order. You can still drag players to fine-tune afterward — and this syncs to your other devices like any edit.</div>
                                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
