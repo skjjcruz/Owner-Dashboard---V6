@@ -3523,7 +3523,7 @@
                             <span style={{ display: 'inline-flex', alignItems: 'center', minHeight: 16, padding: '0 5px', borderRadius: 4, background: bg || 'var(--ov-3, rgba(255,255,255,0.045))', color: color || 'var(--silver)', fontSize: 'var(--text-micro)', fontFamily: 'var(--font-body)', fontWeight: 800, whiteSpace: 'nowrap' }}>{label}</span>
                         );
                         const snapshotCell = (value, color, extra = {}) => (
-                            <div style={{ padding: '4px 7px', minWidth: 0, ...extra }}>
+                            <div style={{ padding: '4px 7px', minWidth: 0, textAlign: 'center', ...extra }}>
                                 <strong style={{ display: 'block', color: color || 'var(--white)', fontFamily: 'var(--font-body)', fontSize: '0.72rem', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value || '-'}</strong>
                             </div>
                         );
@@ -3562,17 +3562,17 @@
                             <div style={{ display: 'grid', gridTemplateColumns: boardGridCols, minHeight: '34px', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', borderBottom: '2px solid var(--acc-line1, rgba(212,175,55,0.2))', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, color: 'var(--gold)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', alignItems: 'center', position: 'sticky', top: 0, zIndex: 1 }}>
                                 <div style={{ textAlign: 'center' }}>#</div>
                                 {boardHeaderCell('Player', 'name', { padding: '0 8px' })}
-                                {boardHeaderCell(isSeasonalDraft ? 'NFL Team' : 'College', isSeasonalDraft ? 'team' : 'school', { padding: '0 8px' })}
-                                {boardHeaderCell(valueShortLabel, 'dhq', { padding: '0 8px' })}
-                                {boardHeaderCell('Rank', 'rank', { padding: '0 8px' })}
+                                {boardHeaderCell(isSeasonalDraft ? 'NFL Team' : 'College', isSeasonalDraft ? 'team' : 'school', { padding: '0 8px', textAlign: 'center' })}
+                                {boardHeaderCell(valueShortLabel, 'dhq', { padding: '0 8px', textAlign: 'center' })}
+                                {boardHeaderCell('Rank', 'rank', { padding: '0 8px', textAlign: 'center' })}
                                 {/* Real market ADP (lab port) — display-only "market says" column,
                                     redraft boards only; no real dynasty/rookie ADP source exists. */}
-                                {isSeasonalDraft && boardHeaderCell('Mkt ADP', null, { padding: '0 8px', whiteSpace: 'nowrap' })}
-                                {boardHeaderCell('Tier', 'tier', { padding: '0 8px' })}
-                                {showDraftCapitalColumn && boardHeaderCell('Draft', 'draft', { padding: '0 8px' })}
-                                {showDraftCapitalColumn && boardHeaderCell('Team', 'team', { padding: '0 8px' })}
-                                {boardHeaderCell('Age', 'age', { padding: '0 8px' })}
-                                {boardHeaderCell('Profile', 'size', { padding: '0 8px' })}
+                                {isSeasonalDraft && boardHeaderCell('Mkt ADP', null, { padding: '0 8px', whiteSpace: 'nowrap', textAlign: 'center' })}
+                                {boardHeaderCell('Tier', 'tier', { padding: '0 8px', textAlign: 'center' })}
+                                {showDraftCapitalColumn && boardHeaderCell('Draft', 'draft', { padding: '0 8px', textAlign: 'center' })}
+                                {showDraftCapitalColumn && boardHeaderCell('Team', 'team', { padding: '0 8px', textAlign: 'center' })}
+                                {boardHeaderCell('Age', 'age', { padding: '0 8px', textAlign: 'center' })}
+                                {boardHeaderCell('Profile', 'size', { padding: '0 8px', textAlign: 'center' })}
                                 <div style={{ textAlign: 'center' }}>{isDhq ? 'Open' : 'Board'}</div>
                             </div>
                             {players.map((r, idx) => {
