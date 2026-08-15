@@ -789,6 +789,7 @@
                     source: resolved.value ? resolved.source : (fallbackValue ? 'redraft-position-baseline' : resolved.source),
                     csv: null,
                     searchRank: Number(p.search_rank) || 9999999,
+                    depthOrder: Number(p.depth_chart_order) || 99,
                     photoUrl: 'https://sleepercdn.com/content/nfl/players/thumb/' + pid + '.jpg',
                 };
             })
@@ -803,27 +804,24 @@
         {
             const cut = pool.slice(0, maxSize);
             const inCut = new Set(cut.map(p => String(p.pid)));
-            // K/DEF all share a flat baseline value, so "top by value" is a
-            // coin flip among ~80 tied rows. Rank them by real-world signals
-            // instead: market ADP when the cached map has it (people draft
-            // actual kickers), then team-attached over free agents, then
-            // Sleeper's search_rank (popularity — real starters rank low,
-            // camp bodies effectively unranked).
-            const kdRank = (p) => {
-                const adp = (typeof window !== 'undefined' && window.App && typeof window.App.getRedraftAdp === 'function')
-                    ? window.App.getRedraftAdp(String(p.pid)) : null;
-                return adp && adp.adp > 0 ? adp.adp : 100000;
-            };
-            ['K', 'DEF'].forEach(fpos => {
-                const have = cut.filter(p => p.pos === fpos).length;
-                if (have >= 14) return;
-                pool.filter(p => p.pos === fpos && !inCut.has(String(p.pid)))
-                    .sort((x, y) => (kdRank(x) - kdRank(y))
-                        || (((y.team && y.team !== 'FA') ? 1 : 0) - ((x.team && x.team !== 'FA') ? 1 : 0))
-                        || ((x.searchRank || 9999999) - (y.searchRank || 9999999)))
-                    .slice(0, 14 - have)
-                    .forEach(p => { cut.push(p); inCut.add(String(p.pid)); });
+            // K/DEF all share a flat baseline value, so a value cut can't rank
+            // them. The real universe is one starter per NFL team (owner
+            // ruling 2026-08-15): all 32 team defenses, and each team's
+            // starting kicker read off Sleeper's depth chart (depth 1, with
+            // search_rank popularity as the camp-battle tiebreak).
+            const addRow = (p) => { cut.push(p); inCut.add(String(p.pid)); };
+            // Defenses: the 32 team units, complete by definition.
+            pool.filter(p => p.pos === 'DEF' && !inCut.has(String(p.pid))).forEach(addRow);
+            // Kickers: the depth-chart starter for every team; free agents skip.
+            const kByTeam = {};
+            pool.filter(p => p.pos === 'K' && p.team && p.team !== 'FA').forEach(p => {
+                const cur = kByTeam[p.team];
+                const better = !cur
+                    || (p.depthOrder || 99) < (cur.depthOrder || 99)
+                    || ((p.depthOrder || 99) === (cur.depthOrder || 99) && (p.searchRank || 9999999) < (cur.searchRank || 9999999));
+                if (better) kByTeam[p.team] = p;
             });
+            Object.values(kByTeam).forEach(p => { if (!inCut.has(String(p.pid))) addRow(p); });
             pool = cut;
         }
 
