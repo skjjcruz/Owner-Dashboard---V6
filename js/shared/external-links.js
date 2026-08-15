@@ -1,55 +1,37 @@
 // ══════════════════════════════════════════════════════════════════
-// External-link guard for the native iOS shell (owner report 2026-08-14).
+// External-link escape hatch — every surface, no detection (owner
+// directive 2026-08-14 after two failed shell-detection attempts).
 //
-// The App Store shell is a bare WKWebView: no tabs, no back button, no
-// swipe-back, and no UIDelegate — so a target="_blank" (rel=noopener)
-// anchor navigates the ONE webview to the external site and the user is
-// stranded there until they force-quit the app. This module makes leaving
-// the app impossible from a link:
+// History: the App Store shell is a bare WKWebView (no tabs, no back
+// button, no UIDelegate) whose customUserAgent mimics iPhone Safari. A
+// target="_blank" rel="noopener" anchor navigates that one webview to
+// the external site with no way back. Guard v1 keyed off the UA (fooled
+// by the spoof), v2 keyed off window.ApplePaySession (Apple Pay exists
+// in WKWebView since iOS 13, so that can be fooled too). Detection is a
+// losing game — v3 removes it entirely:
 //
-//   • Global capture-phase click listener — catches every current AND
-//     future external anchor, on every tab, no per-button wiring.
-//   • Frameable hosts (checked 2026-08-14: fantasypros.com, sleeper.com
-//     send no X-Frame-Options) open in a full-screen in-app overlay with
-//     a "Back to Dynasty HQ" bar.
-//   • Frame-refusing hosts (pro-football-reference / sports-reference /
-//     youtube all send X-Frame-Options: SAMEORIGIN) get an in-app panel
-//     with a copy-the-link option instead — never a dead webview.
-//   • Browser surfaces are untouched: target=_blank already opens a real
-//     new tab there. Guard activates only when detectSurface() says
-//     'ios_app'.
-//   • Future shells that implement a proper UIDelegate should append
-//     "DHQShell/<ver>" to the custom user agent; the guard steps aside so
-//     _blank links open Safari natively.
+//   RULE: clicking an external link NEVER navigates this page. Every
+//   surface gets the same in-app overlay with a "Back to Dynasty HQ"
+//   bar. There is no code path that leaves the app, so there is
+//   nothing to detect and nothing to fool.
+//
+//   • Frameable hosts (verified 2026-08-14: fantasypros.com and
+//     sleeper.com send no X-Frame-Options) render inside the overlay.
+//   • Frame-refusing hosts (pro-football-reference, sports-reference,
+//     youtube — all send X-Frame-Options: SAMEORIGIN) get a panel with
+//     "Open in browser tab" (window.open: real tab in browsers, silent
+//     no-op in the shell, which has no UIDelegate to service it) and
+//     "Copy link" fallbacks.
+//   • A future shell that services _blank natively should append
+//     "DHQShell/<ver>" to its user agent; the guard steps aside there.
 // ══════════════════════════════════════════════════════════════════
 (function () {
     'use strict';
 
-    function isNativeShell() {
-        try {
-            var ua = navigator.userAgent || '';
-            if (/DHQShell\//.test(ua)) return false; // v1.4+ shell opens Safari itself
-            // Known non-Safari engines/browsers — never shell-guard these.
-            if (/(Chrome|CriOS|Chromium|EdgiOS|Edg\/|OPR|OPiOS|Firefox|FxiOS|SamsungBrowser)/.test(ua)) return false;
-            if (!(/iPhone|iPad|iPod|Macintosh/.test(ua) && /AppleWebKit/.test(ua))) return false;
-            // Bare WKWebView: Apple WebKit with no Safari token.
-            if (!/Safari\//.test(ua)) return true;
-            // The SHIPPED shell (v1.3) spoofs an iPhone-Safari user agent via
-            // customUserAgent, so the UA alone looks exactly like Safari and the
-            // first release of this guard stood down inside the app — the owner
-            // got stranded on pro-football-reference all over again
-            // (2026-08-14, second report). Fingerprint that survives the
-            // costume: real iOS Safari always exposes window.ApplePaySession;
-            // a WKWebView never does. iOS-only — desktop-class UAs (Macintosh,
-            // incl. iPad desktop mode) stay untouched.
-            if (/iPhone|iPad|iPod/.test(ua) && typeof window.ApplePaySession === 'undefined') return true;
-            return false;
-        } catch (e) { return false; }
-    }
+    if (/DHQShell\//.test(navigator.userAgent || '')) return; // v1.4+ shell opens Safari natively
 
-    // Hosts verified to allow being shown inside another page (no
-    // X-Frame-Options / frame-ancestors). Everything NOT listed gets the
-    // copy-link panel — safe default for unknown future links.
+    // Hosts verified to allow rendering inside another page. Everything
+    // else gets the button panel — the safe default for future links.
     var FRAMEABLE_HOSTS = /(^|\.)fantasypros\.com$|(^|\.)sleeper\.com$/i;
 
     var overlay = null;
@@ -90,20 +72,37 @@
         ov.appendChild(frame);
     }
 
-    function openCopyPanel(url, host) {
+    function openButtonPanel(url, host) {
         var ov = buildOverlay(host);
         var panel = document.createElement('div');
         panel.style.cssText = 'flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;';
         var title = document.createElement('div');
-        title.textContent = host + " won't display inside the app";
+        title.textContent = host + " won't display inside Dynasty HQ";
         title.style.cssText = 'font-weight:800;font-size:1.05rem;color:var(--text-primary,#e6edf3);';
         var sub = document.createElement('div');
-        sub.textContent = 'That site blocks in-app viewing. Copy the link below and paste it into Safari to see it there.';
+        sub.textContent = 'That site blocks embedded viewing. Open it in a separate browser tab, or copy the link to use anywhere.';
         sub.style.cssText = 'max-width:34rem;font-size:0.9rem;line-height:1.5;color:var(--silver,#9aa4af);';
+        var openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.textContent = 'Open in browser tab';
+        openBtn.style.cssText = 'padding:12px 18px;font-weight:800;font-size:0.95rem;color:#0d1117;background:var(--gold,#d4af37);border:0;border-radius:8px;cursor:pointer;min-width:15rem;';
+        openBtn.addEventListener('click', function () {
+            // Browsers: real new tab (user-gesture click, so not popup-blocked).
+            // The v1.3 shell has no UIDelegate, so window.open is a silent
+            // no-op there — the user keeps the Back bar either way.
+            var w = null;
+            try { w = window.open(url, '_blank'); } catch (e) { /* fall through */ }
+            if (!w) {
+                openBtn.textContent = "Couldn't open a tab here — use Copy link";
+                openBtn.style.background = 'var(--bg-secondary,#161b22)';
+                openBtn.style.color = 'var(--silver,#9aa4af)';
+                openBtn.style.border = '1px solid var(--border,rgba(255,255,255,0.2))';
+            }
+        });
         var copy = document.createElement('button');
         copy.type = 'button';
-        copy.textContent = 'Copy link for Safari';
-        copy.style.cssText = 'padding:12px 18px;font-weight:800;font-size:0.95rem;color:#0d1117;background:var(--gold,#d4af37);border:0;border-radius:8px;cursor:pointer;';
+        copy.textContent = 'Copy link';
+        copy.style.cssText = 'padding:12px 18px;font-weight:800;font-size:0.95rem;color:var(--gold,#d4af37);background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.35);border-radius:8px;cursor:pointer;min-width:15rem;';
         copy.addEventListener('click', function () {
             var done = function () { copy.textContent = 'Copied ✓'; };
             try {
@@ -113,13 +112,13 @@
         });
         panel.appendChild(title);
         panel.appendChild(sub);
+        panel.appendChild(openBtn);
         panel.appendChild(copy);
         ov.appendChild(panel);
     }
 
     function onDocumentClick(ev) {
         try {
-            if (!isNativeShell()) return;
             var node = ev.target;
             while (node && node !== document && !(node.tagName === 'A' && node.href)) node = node.parentNode;
             if (!node || node === document) return;
@@ -132,7 +131,7 @@
             ev.stopPropagation();
             var bareHost = host.replace(/^www\./i, '');
             if (FRAMEABLE_HOSTS.test(host)) openFramed(href, bareHost);
-            else openCopyPanel(href, bareHost);
+            else openButtonPanel(href, bareHost);
         } catch (e) { /* guard must never break normal clicks */ }
     }
 
