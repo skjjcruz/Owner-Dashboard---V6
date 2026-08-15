@@ -652,16 +652,25 @@
                                 <div key={p.pid} data-reorder-key={idOf(p)} style={p._drafted ? { opacity: 0.45 } : undefined}>
                                     <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
                                     {phGp && (
+                                        // Slim 22px rail mirroring the Draft tab feeder (owner ask
+                                        // 2026-08-15); the coarse-pointer ::after halo keeps the
+                                        // real hit area at 44×44 regardless of painted width.
                                         <button type="button" className="wr-drag-grip" aria-label={'Drag ' + (p.name || 'player') + ' to reorder'}
                                             {...phGp}
-                                            style={{ ...phGp.style, width: '30px', minHeight: '44px', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: '6px', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', fontSize: '0.9rem', lineHeight: 1, position: 'relative' }}>≡</button>
+                                            style={{ ...phGp.style, width: '22px', minHeight: '44px', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: '6px', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', fontSize: '0.72rem', lineHeight: 1, position: 'relative' }}>≡</button>
                                     )}
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                     {React.createElement(AssetRowC, {
                                         pos: normEdPos(p.pos),
                                         name: p.name,
                                         tag: ['#' + rowRank, nflTeam || college || null, b.tier ? 'T' + b.tier : null, p._copies > 1 && p._copiesTaken > 0 ? p._copiesTaken + '/' + p._copies + ' taken' : null].filter(Boolean).join(' · '),
-                                        slots: [{ label: 'DHQ', value: fmt(p.dhq) }],
+                                        // Mirrors the Draft tab feeder's bar: DHQ · ADP (market,
+                                        // seasonal only) · Rank (owner ask 2026-08-15).
+                                        slots: [
+                                            { label: 'DHQ', value: fmt(p.dhq) },
+                                            ...(showAdpCol ? [(() => { const a = adpOf(p); return { label: 'ADP', value: a && a > 0 ? a.toFixed(1) : '—', tone: 'mute' }; })()] : []),
+                                            { label: 'Rank', value: b.dhqRank ? '#' + b.dhqRank : '—', tone: 'mute' },
+                                        ],
                                         verdict: (
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                                                 {tag && <span style={{ color: tag.color, fontSize: MICRO, fontWeight: 800, fontFamily: FONT_UI, border: '1px solid ' + wrAlpha(tag.color, '55'), background: wrAlpha(tag.color, '18'), borderRadius: '3px', padding: '2px 5px', whiteSpace: 'nowrap' }}>{tag.label}</span>}
