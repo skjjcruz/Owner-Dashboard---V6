@@ -63,7 +63,7 @@
         }
     }
 
-    function _cacheKey(year) { return 'wr_adp_market_' + year; }
+    function _cacheKey(year) { return 'wr_adp_market_v2_' + year; } // v2: map now includes K/DEF
 
     function _readCache(year) {
         try {
