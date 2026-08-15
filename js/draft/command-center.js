@@ -242,6 +242,40 @@
         };
     }
 
+    // Seasonal saves (redraft/best_ball/startup) bake their player pool at
+    // creation, so pool-builder fixes never reach an already-saved room —
+    // owner report 2026-08-15: a mock kept its retired-kicker pool after the
+    // starter-only kicker rebuild shipped, while the Draft tab's feeder
+    // (which rebuilds every load) showed the fixed list. Rebuild the pool
+    // with the CURRENT builder on every resume — minus players already
+    // drafted — so the live room always mirrors the feeder. The size guard
+    // protects saved pools from an engine that hasn't scored yet (a cold
+    // load would otherwise swap a full board for a near-empty one).
+    function refreshSeasonalPoolFromEngine(saved, stateFns, playersData) {
+        const seasonal = saved && (saved.variant === 'redraft' || saved.variant === 'best_ball' || saved.variant === 'startup');
+        if (!seasonal || saved.phase === 'complete' || !stateFns?.buildPool) return saved;
+        let freshPool = null;
+        try {
+            const totalPicks = Number(saved.rounds || 0) * Number(saved.leagueSize || 0);
+            freshPool = stateFns.buildPool({
+                variant: saved.variant,
+                playersData,
+                maxSize: saved.variant === 'redraft' ? Math.max(300, totalPicks + 80) : 200,
+            });
+        } catch (e) {}
+        const savedSize = (saved.originalPool && saved.originalPool.length) || (saved.pool && saved.pool.length) || 0;
+        if (!freshPool || freshPool.length < 100 || freshPool.length < savedSize * 0.5) return saved;
+        const drafted = {};
+        (saved.picks || []).forEach(p => { if (p?.pid) drafted[p.pid] = (drafted[p.pid] || 0) + 1; });
+        const copies = Math.max(1, Number(saved.playerCopies) || 1);
+        if (window.wrLog) window.wrLog('cc.seasonalPoolRefresh', { variant: saved.variant, size: freshPool.length, picks: (saved.picks || []).length });
+        return {
+            ...saved,
+            pool: freshPool.filter(p => p?.pid != null && (drafted[p.pid] || 0) < copies),
+            originalPool: freshPool.slice(),
+        };
+    }
+
     function DraftCommandCenter({ playersData, myRoster, currentLeague, draftRounds: propRounds, forcedMode, autoStartLiveToken }) {
         const stateFns = window.DraftCC.state;
 
@@ -519,6 +553,7 @@
                 let saved = stateFns.loadFromLocal(currentLeague?.league_id || currentLeague?.id, forcedMode);
                 if (saved && saved.phase !== 'setup') {
                     saved = refreshRookieValuesFromEngine(saved, stateFns, playersData);
+                    saved = refreshSeasonalPoolFromEngine(saved, stateFns, playersData);
                     // Recompose personas — we strip them on save, so rehydrate from the live DNA map
                     const leagueId = currentLeague?.league_id || currentLeague?.id || '';
                     let draftDnaMap = {};
