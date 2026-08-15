@@ -1908,8 +1908,13 @@
         }, [state.userRosterId]);
 
         // ── Render ───────────────────────────────────────────────────
-        // Mobile redirect
-        if (viewport === 'mobile') {
+        // Mobile redirect — MobileFeed only owns the live drafting experience.
+        // Once the draft is complete, fall through to CommandCenterGrid below:
+        // that's the only component that builds/archives the recap (which also
+        // backs Draft History) and shows the post-draft review modal. MobileFeed
+        // never had that logic, so a draft finished/opened on a phone silently
+        // never got reviewed or archived.
+        if (viewport === 'mobile' && state.phase !== 'complete') {
             // Phone gets the REAL mock setup (owner ask — mobile must be able to
             // mock draft): SetupScreen's CSS already stacks 1-col at small widths,
             // so pool type / rounds / league size / slot / order / CPU speed and

@@ -2779,6 +2779,14 @@ WRShared.preloadMany(WR_SHARED_FILES);
         /* Keep long-form body copy from dipping below comfortable. */
         body { font-size: 14px; }
 
+        /* Token floors: the root shrink above drags rem-based type tokens
+           ~16% under their declared sizes, pushing --text-micro to ~9.3px —
+           below the 11px dense-data floor this file's own dock/seg comments
+           document. Pin the small tokens in px on phone so every consumer
+           (dock chips, seg tabs, stat labels) lands back on the floor;
+           title/heading/hero keep the shrink — they have headroom. */
+        :root { --text-micro: 11px; --text-label: 12px; --text-body: 14px; }
+
         /* Frame density: reclaim desktop-sized gutters. */
         .wr-content-frame { padding: 8px 8px 32px; }
         .header { padding: 0.5rem 0.75rem; }

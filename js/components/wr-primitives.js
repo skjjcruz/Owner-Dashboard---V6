@@ -618,10 +618,13 @@
                         h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: s.strong ? 700 : 500, color: s.strong ? 'var(--gold)' : 'var(--text-muted, #55555f)', textTransform: 'uppercase', letterSpacing: '0.02em' } }, s.label),
                         h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: s.strong ? '0.98rem' : '0.8rem', fontWeight: s.strong ? 700 : 600, color: s.strong ? 'var(--gold)' : toneColor(s.tone) } }, s.value != null && s.value !== '' ? s.value : '—')
                     )),
-                    // Verdict clamp (owner iPhone pass 2026-07-12): an unclamped
-                    // chip here squeezed the name column to ~2 chars on 375px
-                    // rows with three slots — cap and ellipsize.
-                    verdict ? h('div', { style: { maxWidth: '92px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 } }, verdict) : null,
+                    // Verdict clamp (owner iPhone pass 2026-07-12, widened 2026-08-09):
+                    // an unclamped chip here squeezed the name column to ~2 chars on
+                    // 375px rows with three slots — cap and ellipsize. 92px cut off
+                    // two-word verdicts mid-word ("Build Around" → "BUILD AROUN…");
+                    // 108px is still well short of the original bug's threshold but
+                    // fits the longest current verdict label in full.
+                    verdict ? h('div', { style: { maxWidth: '108px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 } }, verdict) : null,
                     h('span', { 'aria-hidden': 'true', style: { color: 'var(--text-muted, #55555f)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: '0.9rem', fontWeight: 600, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' } }, '›')
                 )
             ),
