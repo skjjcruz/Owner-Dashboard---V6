@@ -604,7 +604,7 @@
                         ))}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '7px', minHeight: 18 }}>
-                        <span style={{ flex: 1, minWidth: 0, color: 'var(--silver)', opacity: 0.62, fontSize: MICRO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeLane === 'my' ? 'Hold ≡ and drag to reorder — or tap ▲ / ▼' : laneCopy}</span>
+                        <span style={{ flex: 1, minWidth: 0, color: 'var(--silver)', opacity: 0.62, fontSize: MICRO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeLane === 'my' ? 'Order set on the Draft tab\u2019s My Draft Board — edits there sync here' : laneCopy}</span>
                         {pro && activeLane === 'my' && boardContext?.canSeedMyBoardFromAi && (
                             <button onClick={onSeedMyBoardFromAi} style={{ padding: '6px 10px', minHeight: '36px', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', borderRadius: '4px', cursor: 'pointer', fontSize: MICRO, fontFamily: FONT_UI, fontWeight: 700, flexShrink: 0 }}>SEED</button>
                         )}
@@ -655,12 +655,6 @@
                                     })}
                                     </div>
                                     </div>
-                                    {showTouchMove && (
-                                        <div style={{ display: 'flex', gap: 6, padding: '3px 2px 2px', justifyContent: 'flex-end' }}>
-                                            <button type="button" aria-label={'Move ' + (p.name || 'player') + ' up'} onClick={e => { e.stopPropagation(); onMovePlayer(p, -1); }} style={moveBtnCss}>▲</button>
-                                            <button type="button" aria-label={'Move ' + (p.name || 'player') + ' down'} onClick={e => { e.stopPropagation(); onMovePlayer(p, 1); }} style={moveBtnCss}>▼</button>
-                                        </div>
-                                    )}
                                 </div>
                             );
                         })}
@@ -887,7 +881,7 @@
                                     gap: '5px',
                                     alignItems: 'center',
                                     padding: '3px 3px 3px 0',
-                                    borderBottom: showTouchMove ? 'none' : '1px solid var(--ov-3, rgba(255,255,255,0.035))',
+                                    borderBottom: '1px solid var(--ov-3, rgba(255,255,255,0.035))',
                                     borderLeft: b.tier ? '2px solid ' + tCol : '2px solid transparent',
                                     paddingLeft: '5px',
                                     cursor: activeLane === 'my' && !p._drafted ? 'grab' : 'pointer',
@@ -961,28 +955,6 @@
                                     >{state.mode === 'live-sync' && state.overrideMode ? 'APPLY' : state.mode === 'manual' ? 'PICK' : (state.overrideMode ? 'FORCE' : 'DRAFT')}</button>
                                 )}
                             </div>
-                            {showTouchMove && (
-                                <div style={{
-                                    display: 'flex',
-                                    gap: 6,
-                                    padding: '2px 4px 5px',
-                                    justifyContent: 'flex-end',
-                                    borderBottom: '1px solid var(--ov-3, rgba(255,255,255,0.035))',
-                                }}>
-                                    <button
-                                        type="button"
-                                        aria-label={'Move ' + (p.name || 'player') + ' up'}
-                                        onClick={e => { e.stopPropagation(); onMovePlayer(p, -1); }}
-                                        style={moveBtnCss}
-                                    >▲</button>
-                                    <button
-                                        type="button"
-                                        aria-label={'Move ' + (p.name || 'player') + ' down'}
-                                        onClick={e => { e.stopPropagation(); onMovePlayer(p, 1); }}
-                                        style={moveBtnCss}
-                                    >▼</button>
-                                </div>
-                            )}
                             </React.Fragment>
                         );
                     })}
