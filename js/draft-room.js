@@ -3407,6 +3407,7 @@
                             else if (k === 'size')   { va = parseSizeIn(a.csv?.size) || (a.p?.height || 0); vb = parseSizeIn(b.csv?.size) || (b.p?.height || 0); }
                             else if (k === 'weight') { va = parseFloat(a.csv?.weight) || parseFloat(a.p?.weight) || 0; vb = parseFloat(b.csv?.weight) || parseFloat(b.p?.weight) || 0; }
                             else if (k === 'speed')  { va = parseFloat(a.csv?.speed) || 99; vb = parseFloat(b.csv?.speed) || 99; }
+                            else if (k === 'adp')    { const ga = window.App?.getRedraftAdp?.(String(a.pid)); const gb = window.App?.getRedraftAdp?.(String(b.pid)); va = (ga && ga.adp > 0) ? ga.adp : 9999; vb = (gb && gb.adp > 0) ? gb.adp : 9999; }
                             else { va = 0; vb = 0; }
                             if (typeof va === 'string') return va < vb ? -boardSort.dir : va > vb ? boardSort.dir : 0;
                             return ((va || 0) - (vb || 0)) * boardSort.dir;
@@ -3503,7 +3504,7 @@
 
                     // Compact board renderer (used for both sides)
                     const sortArrow = (key) => boardSort.key === key ? (boardSort.dir === -1 ? ' \u25BC' : ' \u25B2') : '';
-                    const toggleSort = (key) => setBoardSort(prev => prev.key === key ? { ...prev, dir: prev.dir * -1 } : { key, dir: ['name','school','team','rank','tier','draft','speed','age'].includes(key) ? 1 : -1 });
+                    const toggleSort = (key) => setBoardSort(prev => prev.key === key ? { ...prev, dir: prev.dir * -1 } : { key, dir: ['name','school','team','rank','tier','draft','speed','age','adp'].includes(key) ? 1 : -1 });
                     const sortHdr = { cursor: 'pointer', userSelect: 'none' };
                     const renderCompactBoard = (players, isDhq) => {
                         // Auto cross-off players already taken in the live draft (parallel to
@@ -3567,7 +3568,7 @@
                                 {boardHeaderCell('Rank', 'rank', { padding: '0 8px', textAlign: 'center' })}
                                 {/* Real market ADP (lab port) — display-only "market says" column,
                                     redraft boards only; no real dynasty/rookie ADP source exists. */}
-                                {isSeasonalDraft && boardHeaderCell('Mkt ADP', null, { padding: '0 8px', whiteSpace: 'nowrap', textAlign: 'center' })}
+                                {isSeasonalDraft && boardHeaderCell('Mkt ADP', 'adp', { padding: '0 8px', whiteSpace: 'nowrap', textAlign: 'center' })}
                                 {boardHeaderCell('Tier', 'tier', { padding: '0 8px', textAlign: 'center' })}
                                 {showDraftCapitalColumn && boardHeaderCell('Draft', 'draft', { padding: '0 8px', textAlign: 'center' })}
                                 {showDraftCapitalColumn && boardHeaderCell('Team', 'team', { padding: '0 8px', textAlign: 'center' })}
