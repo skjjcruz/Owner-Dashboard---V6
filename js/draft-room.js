@@ -97,6 +97,7 @@
         // recognises the data as already-current and skips re-writing it — no echo,
         // no stale-order clobber.
         const boardSyncSigRef = useRef('');
+        const boardHydratedRef = useRef(false); // saved board applied — gates the auto-save
         const cloudBoardPushRef = useRef(null); // debounce timer for the cloud board publish
         const [draftedPids, setDraftedPids] = useState(new Set());
         // Players already taken in the live draft. Seeded from the persisted
@@ -826,6 +827,13 @@
                 if (boardData.myOrder) setMyBoardOrder(boardData.myOrder);
                 if (['dhq', 'ai', 'my'].includes(boardData.activeLane || boardData.boardMode)) setBoardMode(boardData.activeLane || boardData.boardMode);
             }
+            // Only after the saved board is applied may the auto-save run. The
+            // mount render's empty defaults used to slip through it first,
+            // refreshing updatedAt (and, once cloud sync landed, publishing)
+            // on every OPEN — so each device stamped its own copy freshest and
+            // newest-wins adoption never fired; the app and website boards
+            // could never converge (owner report 2026-08-14).
+            boardHydratedRef.current = true;
         }, [boardData]);
 
         // Fetch draft info from Sleeper — the tab orbits the league's draft of
@@ -978,8 +986,14 @@
             // last value we persisted or absorbed from the live draft room. This is
             // what stops a hydration from the shared store echoing straight back out
             // (and overwriting a fresher live edit with our now-stale in-memory copy).
+            if (!boardHydratedRef.current) return; // pre-hydration defaults must never persist
             const sig = boardSyncSig(payload);
             if (sig === boardSyncSigRef.current) return;
+            // Identical to what's already on disk = a re-open, not an edit.
+            // Adopt the signature and stop — rewriting would refresh updatedAt
+            // and make this device claim the freshest board without any change.
+            const onDisk = DraftStorage.get(boardStorageKey, null);
+            if (onDisk && boardSyncSig(onDisk) === sig) { boardSyncSigRef.current = sig; return; }
             boardSyncSigRef.current = sig;
             const stored = {
                 ...payload,
