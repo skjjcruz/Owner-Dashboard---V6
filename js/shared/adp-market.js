@@ -141,8 +141,73 @@
         return rows ? [rows] : [];
     }
 
+    async function _fetchMflDirectory(year) {
+        // MFL's player directory (id -> "Last, First"/position/team) — the
+        // K/DEF join needs it because FantasyCalc's bridge is offense-only,
+        // so kickers and defenses could never resolve a sleeperId through it
+        // (owner report 2026-08-15: the K column showed camp legs).
+        const url = 'https://api.myfantasyleague.com/' + year + '/export?TYPE=players&JSON=1';
+        let data = null;
+        const proxyBase = root.OD?.SUPABASE_URL || root.App?.SUPABASE_URL || null;
+        const anonKey = root.OD?.SUPABASE_ANON || root.App?.SUPABASE_ANON || null;
+        if (proxyBase && anonKey) {
+            const token = root.OD?.getSessionToken?.() || null;
+            const r = await fetch(proxyBase + '/functions/v1/mfl-proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (token || anonKey), 'apikey': anonKey },
+                body: JSON.stringify({ url }),
+            });
+            if (!r || !r.ok) return {};
+            data = await r.json();
+        } else {
+            const r = await fetch(url);
+            if (!r || !r.ok) return {};
+            data = await r.json();
+        }
+        const rows = data && data.players && data.players.player;
+        const arr = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+        const byId = {};
+        arr.forEach(row => { if (row && row.id) byId[String(row.id)] = row; });
+        return byId;
+    }
+
+    const MFL_TEAM_FIX = { NEP: 'NE', GBP: 'GB', KCC: 'KC', NOS: 'NO', SFO: 'SF', TBB: 'TB', LVR: 'LV', JAC: 'JAX' };
+    function _normName(x) { return String(x || '').toLowerCase().replace(/[^a-z]/g, ''); }
+    // Join K/DEF ADP rows to Sleeper ids by name+team / team. Needs the
+    // Sleeper player DB (window.S.players), which loads after this module —
+    // callers retry until it lands. Returns true once the join ran.
+    function _enrichKD(map, adpRows, dirById) {
+        const src = root.S && root.S.players;
+        if (!src || !Object.keys(src).length) return false;
+        const kIndex = {};
+        Object.keys(src).forEach(sid => {
+            const d = src[sid] || {};
+            if (d.position === 'K') kIndex[_normName(d.last_name) + _normName(d.first_name) + '|' + (d.team || '')] = sid;
+        });
+        (adpRows || []).forEach(row => {
+            const m = dirById[String(row && row.id)];
+            if (!m) return;
+            const pos = m.position;
+            if (pos !== 'PK' && pos !== 'Def' && pos !== 'TMDF') return;
+            if (Number(row.draftsSelectedIn) < 3) return; // single-draft flukes
+            const team = MFL_TEAM_FIX[m.team] || m.team || '';
+            let sid = null;
+            if (pos === 'PK') {
+                const parts = String(m.name || '').split(', ');
+                sid = kIndex[_normName(parts[0]) + _normName(parts[1]) + '|' + team] || null;
+            } else if (src[team] && src[team].position === 'DEF') {
+                sid = team; // Sleeper keys team defenses by team code
+            }
+            const adpVal = Number(row.averagePick);
+            if (sid && adpVal > 0 && !map[sid]) {
+                map[sid] = { adp: adpVal, rank: Number(row.rank) || null, draftsSelectedIn: Number(row.draftsSelectedIn) || null };
+            }
+        });
+        return true;
+    }
+
     async function _buildAdpMap(year) {
-        const [bridge, adpRows] = await Promise.all([_buildMflToSleeperBridge(), _fetchMflAdp(year)]);
+        const [bridge, adpRows, dirById] = await Promise.all([_buildMflToSleeperBridge(), _fetchMflAdp(year), _fetchMflDirectory(year)]);
         const map = {};
         adpRows.forEach(row => {
             const mflId = row && row.id;
@@ -156,7 +221,29 @@
                 draftsSelectedIn: Number(row.draftsSelectedIn) || null,
             };
         });
+        // K/DEF join — immediately when the Sleeper DB is up, else retried by
+        // the caller via _retryEnrichKD once it loads.
+        if (!_enrichKD(map, adpRows, dirById)) {
+            _pendingKD = { adpRows, dirById };
+        }
         return map;
+    }
+
+    let _pendingKD = null;
+    let _kdTimer = null;
+    function _retryEnrichKD(year) {
+        if (!_pendingKD || _kdTimer) return;
+        let tries = 0;
+        _kdTimer = setInterval(() => {
+            tries += 1;
+            if (!_pendingKD || tries > 20) { clearInterval(_kdTimer); _kdTimer = null; return; }
+            if (_map && _enrichKD(_map, _pendingKD.adpRows, _pendingKD.dirById)) {
+                _pendingKD = null;
+                clearInterval(_kdTimer); _kdTimer = null;
+                _writeCache(year, _map);
+                try { root.dispatchEvent(new CustomEvent('wr:adp-loaded', { detail: { year, cached: false, kd: true } })); } catch (e) { /* headless */ }
+            }
+        }, 3000);
     }
 
     async function fetchRedraftAdp() {
@@ -186,6 +273,7 @@
                 _year = year;
                 _writeCache(year, map);
                 try { root.dispatchEvent(new CustomEvent('wr:adp-loaded', { detail: { year, cached: false } })); } catch (e) { /* headless */ }
+                _retryEnrichKD(year);
                 return map;
             })
             .catch(() => {

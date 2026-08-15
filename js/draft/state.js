@@ -810,8 +810,17 @@
             // starting kicker read off Sleeper's depth chart (depth 1, with
             // search_rank popularity as the camp-battle tiebreak).
             const addRow = (p) => { cut.push(p); inCut.add(String(p.pid)); };
+            // Order floor rows by market ADP when the cached map has it, so
+            // the board lists the kickers/defenses people actually draft
+            // first; popularity (search_rank) breaks the rest.
+            const kdAdp = (p) => {
+                const g = (typeof window !== 'undefined' && window.App && typeof window.App.getRedraftAdp === 'function')
+                    ? window.App.getRedraftAdp(String(p.pid)) : null;
+                return g && g.adp > 0 ? g.adp : 100000;
+            };
+            const kdOrder = (x, y) => (kdAdp(x) - kdAdp(y)) || ((x.searchRank || 9999999) - (y.searchRank || 9999999));
             // Defenses: the 32 team units, complete by definition.
-            pool.filter(p => p.pos === 'DEF' && !inCut.has(String(p.pid))).forEach(addRow);
+            pool.filter(p => p.pos === 'DEF' && !inCut.has(String(p.pid))).sort(kdOrder).forEach(addRow);
             // Kickers: the depth-chart starter for every team; free agents skip.
             const kByTeam = {};
             pool.filter(p => p.pos === 'K' && p.team && p.team !== 'FA').forEach(p => {
@@ -821,7 +830,7 @@
                     || ((p.depthOrder || 99) === (cur.depthOrder || 99) && (p.searchRank || 9999999) < (cur.searchRank || 9999999));
                 if (better) kByTeam[p.team] = p;
             });
-            Object.values(kByTeam).forEach(p => { if (!inCut.has(String(p.pid))) addRow(p); });
+            Object.values(kByTeam).sort(kdOrder).forEach(p => { if (!inCut.has(String(p.pid))) addRow(p); });
             pool = cut;
         }
 
