@@ -27,12 +27,23 @@
 
     function isNativeShell() {
         try {
-            if (/DHQShell\//.test(navigator.userAgent)) return false; // v1.4+ shell opens Safari itself
-            var surface = window.OD && typeof window.OD.detectSurface === 'function' ? window.OD.detectSurface() : null;
-            if (surface) return surface === 'ios_app';
-            // Fallback mirror of detectSurface: Apple WebKit with no Safari token = bare WKWebView.
             var ua = navigator.userAgent || '';
-            return /iPhone|iPad|iPod|Macintosh/.test(ua) && /AppleWebKit/.test(ua) && !/Safari\//.test(ua);
+            if (/DHQShell\//.test(ua)) return false; // v1.4+ shell opens Safari itself
+            // Known non-Safari engines/browsers — never shell-guard these.
+            if (/(Chrome|CriOS|Chromium|EdgiOS|Edg\/|OPR|OPiOS|Firefox|FxiOS|SamsungBrowser)/.test(ua)) return false;
+            if (!(/iPhone|iPad|iPod|Macintosh/.test(ua) && /AppleWebKit/.test(ua))) return false;
+            // Bare WKWebView: Apple WebKit with no Safari token.
+            if (!/Safari\//.test(ua)) return true;
+            // The SHIPPED shell (v1.3) spoofs an iPhone-Safari user agent via
+            // customUserAgent, so the UA alone looks exactly like Safari and the
+            // first release of this guard stood down inside the app — the owner
+            // got stranded on pro-football-reference all over again
+            // (2026-08-14, second report). Fingerprint that survives the
+            // costume: real iOS Safari always exposes window.ApplePaySession;
+            // a WKWebView never does. iOS-only — desktop-class UAs (Macintosh,
+            // incl. iPad desktop mode) stay untouched.
+            if (/iPhone|iPad|iPod/.test(ua) && typeof window.ApplePaySession === 'undefined') return true;
+            return false;
         } catch (e) { return false; }
     }
 
