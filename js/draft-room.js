@@ -121,6 +121,7 @@
         const [boardTeamFilter, setBoardTeamFilter] = useState(''); // '' | NFL team abbr
         const [boardRoundFilter, setBoardRoundFilter] = useState(''); // '' | '1'..'7' | 'UDFA'
         const [boardSort, setBoardSort] = useState({ key: 'dhq', dir: -1 }); // sortable columns
+        const [pendingBoardSort, setPendingBoardSort] = useState(null); // User Board "bake this order" confirm dialog
         // Hide-drafted toggle for the standalone Big Board. Shares the SAME WrStorage key as
         // the Command Center BigBoardPanel (js/draft/big-board.js) so the two boards stay in
         // sync. Default OFF (preserves the always-show + dim/strike behavior).
@@ -3514,13 +3515,7 @@
                             // confirm so a stray header tap can never silently destroy a
                             // hand-built order. Drag keeps working on the result.
                             if (!key) return;
-                            const ok = window.confirm("Rearrange your User Board into this column's order? Your current custom order will be replaced (you can still drag players afterward).");
-                            if (!ok) return;
-                            const dir = SORT_ASC_KEYS.includes(key) ? 1 : -1;
-                            const sorted = [...myBoardPlayers].sort(boardCompare(key, dir)).map(r => r.pid);
-                            const inSorted = new Set(sorted.map(String));
-                            const rest = (myOrder || []).filter(pid => !inSorted.has(String(pid)));
-                            setMyBoardOrder([...sorted, ...rest]);
+                            setPendingBoardSort(key); // styled DHQ dialog below confirms + applies
                             return;
                         }
                         setBoardSort(prev => prev.key === key ? { ...prev, dir: prev.dir * -1 } : { key, dir: SORT_ASC_KEYS.includes(key) ? 1 : -1 });
@@ -4205,6 +4200,33 @@
                             </div>
                             {renderCompactBoard(visibleBoardPlayers, boardMode !== 'my')}
                         </div>
+
+                        {pendingBoardSort && (() => {
+                            const SORT_LABELS = { name: 'Player Name', school: isSeasonalDraft ? 'NFL Team' : 'College', team: 'NFL Team', dhq: valueShortLabel, rank: 'Rank', adp: 'Mkt ADP', tier: 'Tier', draft: 'Draft Capital', age: 'Age', size: 'Profile', speed: 'Speed', weight: 'Weight', pos: 'Position' };
+                            const label = SORT_LABELS[pendingBoardSort] || 'this column';
+                            const applyPendingSort = () => {
+                                const key = pendingBoardSort;
+                                const dir = SORT_ASC_KEYS.includes(key) ? 1 : -1;
+                                const sorted = [...myBoardPlayers].sort(boardCompare(key, dir)).map(r => r.pid);
+                                const inSorted = new Set(sorted.map(String));
+                                const rest = (myOrder || []).filter(pid => !inSorted.has(String(pid)));
+                                setMyBoardOrder([...sorted, ...rest]);
+                                setPendingBoardSort(null);
+                            };
+                            return (
+                                <div onClick={() => setPendingBoardSort(null)} style={{ position: 'fixed', inset: 0, zIndex: 95000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(6,8,12,0.72)', backdropFilter: 'blur(3px)', padding: '24px' }}>
+                                    <div onClick={e => e.stopPropagation()} style={{ width: 'min(30rem, 100%)', background: 'linear-gradient(180deg, var(--bg-secondary, #14161c) 0%, var(--black, #0b0d12) 100%)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.35))', borderRadius: 14, boxShadow: '0 18px 60px rgba(0,0,0,0.6)', padding: '22px 22px 18px', fontFamily: 'var(--font-body)' }}>
+                                        <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>User Board</div>
+                                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--white)', marginBottom: 8 }}>Rearrange your board by {label}?</div>
+                                        <div style={{ fontSize: '0.85rem', lineHeight: 1.55, color: 'var(--silver)', marginBottom: 18 }}>Your current custom order will be replaced with the {label} order. You can still drag players to fine-tune afterward — and this syncs to your other devices like any edit.</div>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                                            <button type="button" onClick={() => setPendingBoardSort(null)} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--ov-6, rgba(255,255,255,0.14))', background: 'transparent', color: 'var(--silver)', fontFamily: 'var(--font-body)', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>Cancel</button>
+                                            <button type="button" onClick={applyPendingSort} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid var(--acc-line1, rgba(212,175,55,0.5))', background: 'var(--gold, #d4af37)', color: '#0b0d12', fontFamily: 'var(--font-body)', fontWeight: 900, fontSize: '0.85rem', cursor: 'pointer' }}>Rearrange Board</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                     </div>
                     );
