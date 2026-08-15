@@ -71,7 +71,8 @@
             if (!raw) return null;
             const cached = JSON.parse(raw);
             if (Date.now() - (cached._ts || 0) >= CACHE_TTL_MS) return null;
-            return cached.map || null;
+            if (!cached.map || !Object.keys(cached.map).length) return null; // never serve a cached empty map
+            return cached.map;
         } catch (e) {
             return null;
         }
@@ -108,9 +109,33 @@
 
     async function _fetchMflAdp(year) {
         const url = 'https://api.myfantasyleague.com/' + year + '/export?TYPE=adp&JSON=1';
-        const r = await fetch(url);
-        if (!r || !r.ok) return [];
-        const data = await r.json();
+        // MFL pins its CORS header to its own www hosts (live-checked
+        // 2026-08-15), so a direct browser fetch from our origin dies
+        // silently. Route through the same mfl-proxy Edge Function the MFL
+        // league importer uses (reconai-shared/mfl-api.js), resolved at call
+        // time because this module loads before the supabase client. Direct
+        // fetch stays as the fallback for same-origin/dev contexts.
+        let data = null;
+        const proxyBase = root.OD?.SUPABASE_URL || root.App?.SUPABASE_URL || null;
+        const anonKey = root.OD?.SUPABASE_ANON || root.App?.SUPABASE_ANON || null;
+        if (proxyBase && anonKey) {
+            const token = root.OD?.getSessionToken?.() || null;
+            const r = await fetch(proxyBase + '/functions/v1/mfl-proxy', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (token || anonKey),
+                    'apikey': anonKey,
+                },
+                body: JSON.stringify({ url }),
+            });
+            if (!r || !r.ok) return [];
+            data = await r.json();
+        } else {
+            const r = await fetch(url);
+            if (!r || !r.ok) return [];
+            data = await r.json();
+        }
         const rows = data && data.adp && data.adp.player;
         if (Array.isArray(rows)) return rows;
         return rows ? [rows] : [];
@@ -151,6 +176,12 @@
         _year = year;
         _fetching = _buildAdpMap(year)
             .then(map => {
+                // An empty map is a transient failure, not an answer — leave
+                // _map unset so the next fetchRedraftAdp call retries instead
+                // of pinning dashes for the whole session (the module loads
+                // before the supabase client, so the eager warm-up can miss
+                // the proxy and come back empty).
+                if (!map || !Object.keys(map).length) return _map || {};
                 _map = map;
                 _year = year;
                 _writeCache(year, map);
