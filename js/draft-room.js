@@ -3993,10 +3993,14 @@
                             return (
                                 <div key={r.pid} data-reorder-key={r.pid} style={isDrafted ? { opacity: 0.45 } : undefined}>
                                     {gp ? (
-                                        <div style={{ display: 'grid', gridTemplateColumns: '40px minmax(0,1fr)', gap: 6, alignItems: 'stretch' }}>
+                                        // Slim 22px grip rail (owner ask 2026-08-15 — 40px read
+                                        // as wasted space). Tappability survives the diet: the
+                                        // coarse-pointer .wr-drag-grip::after halo is a fixed
+                                        // 44×44 centered hit area regardless of visual width.
+                                        <div style={{ display: 'grid', gridTemplateColumns: '22px minmax(0,1fr)', gap: 5, alignItems: 'stretch' }}>
                                             <button type="button" className="wr-drag-grip" title="Hold and drag to reorder" aria-label={'Drag ' + pName(r.p) + ' to reorder'}
                                                 {...gp}
-                                                style={{ ...gp.style, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '44px', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: 6, background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', fontSize: '0.85rem', lineHeight: 1, padding: 0 }}>≡</button>
+                                                style={{ ...gp.style, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '44px', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: 6, background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', fontSize: '0.72rem', lineHeight: 1, padding: 0 }}>≡</button>
                                             <div style={{ minWidth: 0 }}>{rowEl}</div>
                                         </div>
                                     ) : rowEl}
@@ -4071,7 +4075,11 @@
                                     <span style={{ color: 'var(--silver)', opacity: 0.6, fontSize: MICRO, fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeBoardInfo.label} · {visibleBoardPlayers.length} players</span>
                                 </div>
                                 <div className="wr-hscroll" style={{ display: 'flex', gap: '6px', overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}>
-                                    {React.createElement(window.WR.FilterPill, { label: 'Lane', value: activeBoardInfo.label, onClick: () => setPhBoardPanel(p => p === 'lane' ? null : 'lane') })}
+                                    {/* Board-picker pill shows the active board's name alone —
+                                        the 'Lane' prefix read as jargon (owner ask 2026-08-15).
+                                        Rides label (unclamped) rather than value (96px clamp
+                                        would ellipsize 'My Draft Board'). */}
+                                    {React.createElement(window.WR.FilterPill, { label: activeBoardInfo.label, value: null, onClick: () => setPhBoardPanel(p => p === 'lane' ? null : 'lane') })}
                                     {React.createElement(window.WR.FilterPill, { label: 'Pos', value: boardPosFilter || 'ALL', onClick: () => setPhBoardPanel(p => p === 'pos' ? null : 'pos') })}
                                     {React.createElement(window.WR.FilterPill, { label: 'Filters', value: [boardTeamFilter, boardRoundFilter && ('R' + boardRoundFilter).replace('RUDFA', 'UDFA'), boardSearch && '"' + boardSearch + '"'].filter(Boolean).join(' · ') || null, onClick: () => setPhBoardPanel(p => p === 'filters' ? null : 'filters') })}
                                     {React.createElement(window.WR.FilterPill, { label: 'Hide drafted', value: hideDrafted ? 'ON' : null, onClick: toggleHideDrafted })}
