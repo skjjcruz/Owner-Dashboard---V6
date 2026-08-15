@@ -528,9 +528,9 @@
         // terminal-styled buttons — 1px gold border, near-zero radius, mono
         // micro-caps — rendered as a control row under the player row.
         const moveBtnCss = {
-            flex: '1 1 0',
-            maxWidth: 132,
-            minHeight: 44,
+            flex: '0 0 auto',
+            width: 56,
+            minHeight: 30,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -656,9 +656,9 @@
                                     </div>
                                     </div>
                                     {showTouchMove && (
-                                        <div style={{ display: 'flex', gap: 6, padding: '5px 2px 2px' }}>
-                                            <button type="button" aria-label={'Move ' + (p.name || 'player') + ' up'} onClick={e => { e.stopPropagation(); onMovePlayer(p, -1); }} style={moveBtnCss}>▲ Up</button>
-                                            <button type="button" aria-label={'Move ' + (p.name || 'player') + ' down'} onClick={e => { e.stopPropagation(); onMovePlayer(p, 1); }} style={moveBtnCss}>▼ Down</button>
+                                        <div style={{ display: 'flex', gap: 6, padding: '3px 2px 2px', justifyContent: 'flex-end' }}>
+                                            <button type="button" aria-label={'Move ' + (p.name || 'player') + ' up'} onClick={e => { e.stopPropagation(); onMovePlayer(p, -1); }} style={moveBtnCss}>▲</button>
+                                            <button type="button" aria-label={'Move ' + (p.name || 'player') + ' down'} onClick={e => { e.stopPropagation(); onMovePlayer(p, 1); }} style={moveBtnCss}>▼</button>
                                         </div>
                                     )}
                                 </div>
@@ -965,7 +965,8 @@
                                 <div style={{
                                     display: 'flex',
                                     gap: 6,
-                                    padding: '4px 4px 8px 27px',
+                                    padding: '2px 4px 5px',
+                                    justifyContent: 'flex-end',
                                     borderBottom: '1px solid var(--ov-3, rgba(255,255,255,0.035))',
                                 }}>
                                     <button
@@ -973,13 +974,13 @@
                                         aria-label={'Move ' + (p.name || 'player') + ' up'}
                                         onClick={e => { e.stopPropagation(); onMovePlayer(p, -1); }}
                                         style={moveBtnCss}
-                                    >▲ Up</button>
+                                    >▲</button>
                                     <button
                                         type="button"
                                         aria-label={'Move ' + (p.name || 'player') + ' down'}
                                         onClick={e => { e.stopPropagation(); onMovePlayer(p, 1); }}
                                         style={moveBtnCss}
-                                    >▼ Down</button>
+                                    >▼</button>
                                 </div>
                             )}
                             </React.Fragment>
