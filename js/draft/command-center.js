@@ -3673,11 +3673,28 @@
                                     {sl.player ? <span style={{ fontFamily: FONT_MONO, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)' }}>{fmt(sl.player.dhq)}</span> : null}
                                 </div>
                             ))}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 2px 0', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.75 }}>
-                                <span>BN {Math.min(lineupSlots.bench.length, lineupSlots.benchCount)}/{lineupSlots.benchCount} filled</span>
-                                {lineupSlots.irCount ? <span>{'\u00B7'} IR {lineupSlots.irCount}</span> : null}
-                                {lineupSlots.taxiCount ? <span>{'\u00B7'} Taxi {lineupSlots.taxiCount}</span> : null}
-                            </div>
+                            {lineupSlots.benchCount > 0 && (
+                                <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '8px 0 4px' }}>Bench</div>
+                            )}
+                            {Array.from({ length: lineupSlots.benchCount }, (_, bi) => {
+                                const row = lineupSlots.bench[bi] || null;
+                                return (
+                                    <div key={'bn' + bi} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '3px 2px', borderBottom: '1px solid var(--ov-3, rgba(255,255,255,0.035))' }}>
+                                        <span style={{ width: 36, textAlign: 'center', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, padding: '2px 0', borderRadius: 4, background: 'var(--ov-3, rgba(255,255,255,0.045))', color: 'var(--silver)', flexShrink: 0 }}>BN</span>
+                                        {row
+                                            ? <span style={{ flex: 1, minWidth: 0, fontSize: '0.72rem', color: 'var(--white)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortName(row.name)}{row.isPick ? <span style={{ color: 'var(--k-2ecc71, #2ecc71)', marginLeft: 5, fontSize: 'var(--text-micro, 0.6875rem)' }}>{row.source}</span> : null}</span>
+                                            : <span style={{ flex: 1, fontSize: '0.72rem', color: 'var(--silver)', opacity: 0.4 }}>Empty</span>}
+                                        {row ? <span style={{ fontFamily: FONT_MONO, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)' }}>{fmt(row.dhq)}</span> : null}
+                                    </div>
+                                );
+                            })}
+                            {(lineupSlots.irCount > 0 || lineupSlots.taxiCount > 0 || lineupSlots.bench.length > lineupSlots.benchCount) && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 2px 0', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.75 }}>
+                                    {lineupSlots.irCount ? <span>IR {lineupSlots.irCount}</span> : null}
+                                    {lineupSlots.taxiCount ? <span>{lineupSlots.irCount ? '\u00B7 ' : ''}Taxi {lineupSlots.taxiCount}</span> : null}
+                                    {lineupSlots.bench.length > lineupSlots.benchCount ? <span>{'\u00B7'} +{lineupSlots.bench.length - lineupSlots.benchCount} overflow</span> : null}
+                                </div>
+                            )}
                         </div>
                     )}
                     <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>Build By Position</div>
