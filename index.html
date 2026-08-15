@@ -63,6 +63,8 @@
     <script src="js/shared/shared-loader.js?v=20260705fdn1"></script>
     <!-- Season-rollover cache hygiene — must run early, before any surface reads caches. -->
     <script src="js/shared/season-guard.js?v=20260807sg1"></script>
+    <!-- Native-shell external-link guard: outside links must never strand the WKWebView. -->
+    <script src="js/shared/external-links.js?v=20260814ext1"></script>
     <script>
 window.DYNASTY_HQ_APP = 'warroom';
 // Sandbox = the WarRoom-sandbox deploy (c2-football.github.io/WarRoom-sandbox/),
