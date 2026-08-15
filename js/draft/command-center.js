@@ -268,11 +268,25 @@
         const drafted = {};
         (saved.picks || []).forEach(p => { if (p?.pid) drafted[p.pid] = (drafted[p.pid] || 0) + 1; });
         const copies = Math.max(1, Number(saved.playerCopies) || 1);
-        if (window.wrLog) window.wrLog('cc.seasonalPoolRefresh', { variant: saved.variant, size: freshPool.length, picks: (saved.picks || []).length });
+        // Drafted names NEVER leave the board — they show struck through
+        // (big-board re-adds them from originalPool). Carry over the old row
+        // for any drafted player the fresh builder no longer includes (junk
+        // pick from a pre-fix pool, or a player who fell below the rebuilt
+        // cut) so his lined-through row survives the rebuild.
+        const freshIds = new Set(freshPool.map(p => String(p?.pid)));
+        const oldRows = new Map();
+        [...(saved.originalPool || []), ...(saved.pool || [])].forEach(p => {
+            if (p?.pid != null && !oldRows.has(String(p.pid))) oldRows.set(String(p.pid), p);
+        });
+        const carryover = Object.keys(drafted)
+            .filter(pid => !freshIds.has(String(pid)) && oldRows.has(String(pid)))
+            .map(pid => oldRows.get(String(pid)));
+        const fullPool = freshPool.concat(carryover);
+        if (window.wrLog) window.wrLog('cc.seasonalPoolRefresh', { variant: saved.variant, size: freshPool.length, picks: (saved.picks || []).length, carryover: carryover.length });
         return {
             ...saved,
-            pool: freshPool.filter(p => p?.pid != null && (drafted[p.pid] || 0) < copies),
-            originalPool: freshPool.slice(),
+            pool: fullPool.filter(p => p?.pid != null && (drafted[p.pid] || 0) < copies),
+            originalPool: fullPool.slice(),
         };
     }
 
