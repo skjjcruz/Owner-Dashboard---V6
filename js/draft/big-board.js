@@ -351,6 +351,7 @@
                 if (sortKey === 'team') { const x = nflTeamOf(a) || '', y = nflTeamOf(b) || ''; if (!x !== !y) return x ? -1 : 1; return dir * x.localeCompare(y); }
                 if (sortKey === 'college') { const x = collegeOf(a) || '', y = collegeOf(b) || ''; if (!x !== !y) return x ? -1 : 1; return dir * x.localeCompare(y); }
                 if (sortKey === 'adp') { const x = adpOf(a) ?? 9999, y = adpOf(b) ?? 9999; return dir * (x - y); }
+                if (sortKey === 'rank') return dir * (((a._board && a._board.dhqRank) || 9999) - (((b._board && b._board.dhqRank) || 9999)));
                 return dir * ((b.dhq || 0) - (a.dhq || 0));
             });
             return sorted.slice(0, 100);
@@ -833,7 +834,7 @@
 
                 <div style={{
                     display: 'grid',
-                    gridTemplateColumns: (activeLane === 'my' ? '38px' : '22px') + ' minmax(0,1.3fr) 44px 34px 48px' + (showAdpCol ? ' 46px' : '') + ' 44px',
+                    gridTemplateColumns: (activeLane === 'my' ? '38px' : '22px') + ' minmax(0,1.3fr) 44px 34px 48px 42px' + (showAdpCol ? ' 46px' : '') + ' 44px',
                     gap: '5px',
                     alignItems: 'center',
                     padding: '0 3px 4px 5px',
@@ -845,6 +846,7 @@
                     {colHeader('team', 'Team', 'left')}
                     {colHeader('pos', 'Pos', 'center')}
                     {colHeader('dhq', 'DHQ', 'right')}
+                    {colHeader('rank', 'Rank', 'right')}
                     {showAdpCol && colHeader('adp', 'ADP', 'right')}
                     {(isUserTurn || state.overrideMode || state.mode === 'manual') && <span />}
                 </div>
@@ -891,7 +893,7 @@
                                 }}
                                 style={{
                                     display: 'grid',
-                                    gridTemplateColumns: (activeLane === 'my' ? '38px' : '22px') + ' minmax(0,1.3fr) 44px 34px 48px' + (showAdpCol ? ' 46px' : '') + ' 44px',
+                                    gridTemplateColumns: (activeLane === 'my' ? '38px' : '22px') + ' minmax(0,1.3fr) 44px 34px 48px 42px' + (showAdpCol ? ' 46px' : '') + ' 44px',
                                     gap: '5px',
                                     alignItems: 'center',
                                     padding: '3px 3px 3px 0',
@@ -944,6 +946,7 @@
                                 <span title={nflTeam} style={{ color: 'var(--silver)', opacity: 0.78, fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: FONT_MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nflTeam || '—'}</span>
                                 <span style={{ fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, padding: '1px 5px', borderRadius: '3px', background: wrAlpha(posColor, '22'), color: posColor, textAlign: 'center', fontFamily: FONT_UI }}>{normEdPos(p.pos)}</span>
                                 <span style={{ color: col, fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, fontFamily: FONT_MONO, textAlign: 'right' }}>{fmt(p.dhq)}</span>
+                                <span style={{ color: 'var(--silver)', opacity: 0.85, fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: FONT_MONO, textAlign: 'right' }}>{b.dhqRank ? '#' + b.dhqRank : '—'}</span>
                                 {showAdpCol && <span style={{ color: 'var(--silver)', opacity: 0.85, fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: FONT_MONO, textAlign: 'right' }}>{(() => { const av = adpOf(p); return av != null ? av.toFixed(1) : '—'; })()}</span>}
                                 {(isUserTurn || state.overrideMode || state.mode === 'manual') && (
                                     <button
