@@ -367,7 +367,11 @@
 
         const availablePositions = React.useMemo(() => {
             const set = new Set();
-            (state.pool || []).slice(0, 120).forEach(p => { if (p.pos) set.add(normEdPos(p.pos)); });
+            (state.pool || []).forEach(p => { if (p.pos) set.add(normEdPos(p.pos)); });
+            // League-declared positions always get a chip (K / D-ST when the
+            // league rosters them), even when a stale saved pool predates the
+            // K/DEF position floor in buildPool.
+            (typeof window.getLeaguePositions === 'function' ? window.getLeaguePositions() : []).forEach(pos => set.add(pos));
             const priority = { QB: 1, RB: 2, WR: 3, TE: 4, DL: 5, LB: 6, DB: 7, K: 8 };
             const base = Array.from(set).sort((a, b) => (priority[a] || 99) - (priority[b] || 99));
             // League-derived flex groups (FLEX/SFLEX/IDP FLEX…) join the chip

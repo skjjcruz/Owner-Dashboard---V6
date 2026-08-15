@@ -3587,6 +3587,47 @@
             return m;
         }, [rosterRows]);
 
+        // Lineup slots (owner ask 2026-08-15, modeled on Sleeper's team view):
+        // the league's actual starting slots plus bench/IR/taxi counts,
+        // filling as picks land so open QB/RB/BN requirements stay visible.
+        const lineupSlots = React.useMemo(() => {
+            const league = window.S?.leagues?.find(l => l.league_id === window.S?.currentLeagueId) || window.S?.league || {};
+            const rp = (league.roster_positions || []).map(x => String(x || '').toUpperCase());
+            if (!rp.length) return null;
+            const DEFS = {
+                QB: { label: 'QB', elig: ['QB'] }, RB: { label: 'RB', elig: ['RB'] },
+                WR: { label: 'WR', elig: ['WR'] }, TE: { label: 'TE', elig: ['TE'] },
+                K: { label: 'K', elig: ['K'] }, DEF: { label: 'D/ST', elig: ['DEF'] },
+                DL: { label: 'DL', elig: ['DL'] }, LB: { label: 'LB', elig: ['LB'] }, DB: { label: 'DB', elig: ['DB'] },
+                FLEX: { label: 'FLX', elig: ['RB', 'WR', 'TE'] },
+                SUPER_FLEX: { label: 'SFLX', elig: ['QB', 'RB', 'WR', 'TE'] },
+                REC_FLEX: { label: 'WRT', elig: ['WR', 'TE'] },
+                WRRB_FLEX: { label: 'W/R', elig: ['RB', 'WR'] },
+                IDP_FLEX: { label: 'IDP', elig: ['DL', 'LB', 'DB'] },
+            };
+            const starters = [];
+            let benchCount = 0, irCount = 0, taxiCount = 0;
+            rp.forEach(raw => {
+                if (raw === 'BN') { benchCount++; return; }
+                if (raw === 'IR') { irCount++; return; }
+                if (raw === 'TAXI') { taxiCount++; return; }
+                const def = DEFS[raw] || { label: raw, elig: [raw] };
+                starters.push({ label: def.label, elig: def.elig, badge: def.elig[0], player: null });
+            });
+            const sorted = [...rosterRows].sort((a, b) => (b.dhq || 0) - (a.dhq || 0));
+            const taken = new Set();
+            // Exact-position slots claim players first, then flex slots — both
+            // best-value-first, mirroring how an owner actually fills a lineup.
+            [starters.filter(sl => sl.elig.length === 1), starters.filter(sl => sl.elig.length > 1)].forEach(group => {
+                group.forEach(sl => {
+                    const row = sorted.find(r => !taken.has(r) && sl.elig.includes(r.pos));
+                    if (row) { sl.player = row; taken.add(row); }
+                });
+            });
+            const bench = sorted.filter(r => !taken.has(r));
+            return { starters, benchCount, irCount, taxiCount, bench };
+        }, [rosterRows]);
+
         const totalDhq = rosterRows.reduce((sum, r) => sum + (r.dhq || 0), 0);
         const pickDhq = myPicks.reduce((sum, p) => sum + (p.dhq || 0), 0);
         const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'].filter(pos => grouped[pos]?.length)
@@ -3620,6 +3661,25 @@
                 </div>
 
                 <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', paddingRight: '3px' }}>
+                    {lineupSlots && (
+                        <div style={{ marginBottom: '10px' }}>
+                            <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>Lineup</div>
+                            {lineupSlots.starters.map((sl, i) => (
+                                <div key={'slot' + i} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '3px 2px', borderBottom: '1px solid var(--ov-3, rgba(255,255,255,0.035))' }}>
+                                    <span style={{ width: 36, textAlign: 'center', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, padding: '2px 0', borderRadius: 4, background: (posColors[sl.badge] || 'var(--k-666666, #666666)') + '22', color: posColors[sl.badge] || 'var(--silver)', flexShrink: 0 }}>{sl.label}</span>
+                                    {sl.player
+                                        ? <span style={{ flex: 1, minWidth: 0, fontSize: '0.72rem', color: 'var(--white)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortName(sl.player.name)}{sl.player.isPick ? <span style={{ color: 'var(--k-2ecc71, #2ecc71)', marginLeft: 5, fontSize: 'var(--text-micro, 0.6875rem)' }}>{sl.player.source}</span> : null}</span>
+                                        : <span style={{ flex: 1, fontSize: '0.72rem', color: 'var(--silver)', opacity: 0.4 }}>Empty</span>}
+                                    {sl.player ? <span style={{ fontFamily: FONT_MONO, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)' }}>{fmt(sl.player.dhq)}</span> : null}
+                                </div>
+                            ))}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 2px 0', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.75 }}>
+                                <span>BN {Math.min(lineupSlots.bench.length, lineupSlots.benchCount)}/{lineupSlots.benchCount} filled</span>
+                                {lineupSlots.irCount ? <span>{'\u00B7'} IR {lineupSlots.irCount}</span> : null}
+                                {lineupSlots.taxiCount ? <span>{'\u00B7'} Taxi {lineupSlots.taxiCount}</span> : null}
+                            </div>
+                        </div>
+                    )}
                     <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>Build By Position</div>
                     {positions.length === 0 && (
                         <div style={{ padding: '12px', textAlign: 'center', color: 'var(--silver)', opacity: 0.45, fontSize: '0.7rem' }}>Your mock picks will appear here.</div>
