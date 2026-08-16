@@ -62,7 +62,7 @@ jobs:
           # Every path below is verified to exist — a missing one fails the
           # build instead of silently shipping a broken artifact.
           for p in \
-            index.html landing.html landing-editor.html login.html upgrade.html \
+            index.html landing.html landing-new.html landing-editor.html login.html upgrade.html \
             connect-sleeper.html draft-warroom.html free-agency.html trade-calculator.html \
             gift.html ai-setup.html reset-password.html admin.html our-vision.html \
             img \
