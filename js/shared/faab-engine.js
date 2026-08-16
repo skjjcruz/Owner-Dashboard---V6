@@ -123,7 +123,11 @@
         // imported platform value — some leagues/platforms don't expose the
         // real waiver_budget_min reliably.
         const override = Number(opts && opts.minBidOverride);
-        const minBid = override > 0 ? Math.max(1, Math.round(override)) : Math.max(1, Number(st.waiver_budget_min) || 1);
+        // Sleeper's real field is waiver_bid_min (verified live 2026-08-16:
+        // owner's league floors bids at $13 there); waiver_budget_min is the
+        // import naming other platforms use. Read both — the $1 floor only
+        // applies when neither is set.
+        const minBid = override > 0 ? Math.max(1, Math.round(override)) : Math.max(1, Number(st.waiver_bid_min ?? st.waiver_budget_min) || 1);
 
         const rosters = league.rosters || [];
         const mine = rosters.find(r => String(r.roster_id) === myId);

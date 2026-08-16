@@ -62,6 +62,15 @@ test('faab: ladder win probabilities are monotonic and rivals respect budgets', 
   assert.strictEqual(thin.need, 'HIGH', 'team 3 (one healthy RB, two RB slots) reads HIGH need');
 });
 
+test('faab: Sleeper waiver_bid_min floors every number (owner league: $13 minimum)', () => {
+  const lg = faabLeague();
+  lg.settings.waiver_bid_min = 13;   // Sleeper's real field name — NOT waiver_budget_min
+  const a = Faab.analyze({ league: lg, myRosterId: 1, txns: [bidTxn(2, 10, 3)], playersData: faabPlayers, targetPos: 'RB', targetStrength: 0.6 });
+  assert.strictEqual(a.minBid, 13, 'league minimum read from waiver_bid_min');
+  assert.ok(a.rec.bid >= 13, 'recommendation never dips under the league minimum');
+  assert.ok(a.ladder.every(l => l.bid >= 13), 'every ladder rung is a legal bid');
+});
+
 test('faab: failed claims count as bid evidence', () => {
   const txns = [];
   for (let w = 1; w <= 5; w++) { txns.push(bidTxn(2, 10, w), bidTxn(3, 12, w), bidTxn(4, 30, w, true)); }

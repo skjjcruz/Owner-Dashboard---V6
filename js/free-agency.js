@@ -248,7 +248,7 @@
         const spent = myRoster?.settings?.waiver_budget_used || 0;
         const remaining = Math.max(0, budget - spent);
         const hasFAAB = budget > 0;
-        const faabMinBid = currentLeague?.settings?.waiver_budget_min ?? 0;
+        const faabMinBid = currentLeague?.settings?.waiver_bid_min ?? currentLeague?.settings?.waiver_budget_min ?? 0; // Sleeper's real field is waiver_bid_min (owner league floors at $13)
         const teamTier = assess?.tier || '';
         const teamWindow = assess?.window || '';
         // GM Strategy outranks the roster grade for FA posture: a committed plan
@@ -1099,7 +1099,7 @@
         const spent = myRoster?.settings?.waiver_budget_used || 0;
         const remaining = Math.max(0, budget - spent);
         const hasFAAB = budget > 0;
-        const faabMinBid = currentLeague?.settings?.waiver_budget_min ?? 0;
+        const faabMinBid = currentLeague?.settings?.waiver_bid_min ?? currentLeague?.settings?.waiver_budget_min ?? 0; // Sleeper's real field is waiver_bid_min (owner league floors at $13)
 
         // ── League format detection (for scarcity multipliers) ──
         const rosterPositions = currentLeague?.roster_positions || [];
@@ -2068,6 +2068,12 @@
                     <div className="fa-page wr-fade-in">
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {_faHeroEl}
+                            {/* FAAB Command on phone (owner ask 2026-08-16) — same
+                                card, right under the hero; Pro-gated like desktop. */}
+                            {isPro && priorityAdds.length > 0 && (
+                                <FaabCommandCard league={currentLeague} myRoster={myRoster} playersData={playersData}
+                                    targets={priorityAdds.slice(0, 3).map(x => ({ pid: x.pid, name: x.name, pos: x.pos, dhq: x.dhq }))} />
+                            )}
                             {!isPro && renderActionHqTeaser()}
                             {renderCrazePanel()}
                             {_faPillsEl}
