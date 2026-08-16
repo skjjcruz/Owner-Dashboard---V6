@@ -282,7 +282,6 @@
             .filter(pid => !freshIds.has(String(pid)) && oldRows.has(String(pid)))
             .map(pid => oldRows.get(String(pid)));
         const fullPool = freshPool.concat(carryover);
-        if (window.wrLog) window.wrLog('cc.seasonalPoolRefresh', { variant: saved.variant, size: freshPool.length, picks: (saved.picks || []).length, carryover: carryover.length });
         return {
             ...saved,
             pool: fullPool.filter(p => p?.pid != null && (drafted[p.pid] || 0) < copies),
