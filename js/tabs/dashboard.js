@@ -498,10 +498,11 @@ function DashboardWidgetPicker({ onAdd, onClose, editWidget }) {
                     .wr-picker-metric-chip{ min-height:44px; }
                 }`}</style>
 
-            {/* .wr-widget-picker-panel/-body: phone tier (index.html ≤767 CSS) makes
-                the step body scrollable — 18 modules at 2 columns (~345px panel)
-                overflow the overflow:hidden panel and are unreachable otherwise.
-                No visual change ≥768 (classes unstyled there). */}
+            {/* Picker body scrolls on EVERY tier (owner report 2026-08-16: the
+                19th widget pushed the list past the 90vh overflow:hidden panel on
+                iPad, with no way to reach it — the phone ≤767 CSS had the only
+                scroll path). Inline overflowY:auto + minHeight:0 on the flex body
+                covers desktop/iPad; the phone CSS remains a harmless double-up. */}
             <div className="wr-widget-picker-panel" style={{
                 background: 'var(--k-0d0d0d, #0d0d0d)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))',
                 borderRadius: '20px', width: 'min(600px, 92vw)', maxHeight: '90vh',
@@ -531,7 +532,7 @@ function DashboardWidgetPicker({ onAdd, onClose, editWidget }) {
 
                 {/* Step 1: Module grid — 3×2 compact, no scroll */}
                 {step === 'module' && (
-                    <div className="wr-widget-picker-body" style={{ padding: '16px 20px' }}>
+                    <div className="wr-widget-picker-body" style={{ padding: '16px 20px', overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' }}>
                             {Object.entries(WIDGET_MODULES).map(([key, m]) => (
                                 <button key={key}
@@ -561,7 +562,7 @@ function DashboardWidgetPicker({ onAdd, onClose, editWidget }) {
 
                 {/* Step 2: Size picker — compact, no scroll */}
                 {step === 'size' && mod && (
-                    <div className="wr-widget-picker-body" style={{ padding: '16px 20px' }}>
+                    <div className="wr-widget-picker-body" style={{ padding: '16px 20px', overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
                         {/* Module info — compact */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', padding: '10px 14px', background: 'var(--ov-2, rgba(255,255,255,0.03))', borderRadius: '8px' }}>
                             <span style={{ fontSize: '1.4rem' }}>{mod.icon}</span>
