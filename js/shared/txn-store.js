@@ -56,12 +56,28 @@
             fetches.push(Promise.resolve(window.fetchTransactions(lid, w)).catch(() => []));
         }
         const results = await Promise.all(fetches);
-        const txns = results.flat().filter(t => t && t.type && t.status !== 'failed');
+        const all = results.flat().filter(t => t && t.type);
+        const txns = all.filter(t => t.status !== 'failed');
+        // Failed WAIVER claims are kept separately: a losing FAAB bid is real
+        // willingness-to-pay evidence (the FAAB engine's best input), but every
+        // existing reader of `txns` assumes completed transactions only — so
+        // the main array's contract is unchanged.
+        const failedWaivers = all.filter(t => t.status === 'failed' && t.type === 'waiver' && Number(t.settings && t.settings.waiver_bid) > 0);
         if (st) {
-            try { st.set(key, { ts: Date.now(), season, txns }); }
+            try { st.set(key, { ts: Date.now(), season, txns, failedWaivers }); }
             catch (e) { if (window.dhqLog) window.dhqLog('txns.cache', e); }
         }
         return txns;
+    }
+
+    // Failed FAAB claims (losing bids) for a league — [] until a post-change
+    // fetch repopulates the cache (old cache entries predate the field; the
+    // 6h TTL heals them without a version bump).
+    function getFailedWaivers(lid, season) {
+        const st = store(); if (!st || !lid) return [];
+        season = season || ctx().season;
+        const c = st.get(KEY(lid, season), null);
+        return (c && Array.isArray(c.failedWaivers)) ? c.failedWaivers : [];
     }
 
     // Background-populate every given league's cache (yields between leagues so a heavy
@@ -85,5 +101,5 @@
             .slice(0, limit || 10);
     }
 
-    window.WrTxns = { fetchLeagueTxns, hydrateLeagues, getCached, recentTrades };
+    window.WrTxns = { fetchLeagueTxns, hydrateLeagues, getCached, getFailedWaivers, recentTrades };
 })();
