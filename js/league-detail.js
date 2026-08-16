@@ -1987,7 +1987,13 @@
                     fetchAllPlayers().catch(() => ({})),
                     fetchJSON(`${SLEEPER_BASE_URL}/state/nfl`).catch(() => ({})),
                 ]);
-                const currentWeek = nflState?.display_week || nflState?.week || (currentLeague.settings?.leg || 1);
+                // Fantasy week, not the raw NFL clock: preseason state counts
+                // EXHIBITION weeks (season_type 'pre', week 2 in mid-August) and
+                // painted "Week 2" across Game Day while every league was
+                // preparing for Week 1 (owner report 2026-08-16).
+                const currentWeek = window.App?.WeeklyProj?.fantasyWeek
+                    ? window.App.WeeklyProj.fantasyWeek(nflState, currentLeague.settings)
+                    : (nflState?.display_week || nflState?.week || (currentLeague.settings?.leg || 1));
 
                 // Hydrate the league through the provider — single call
                 // that replaces the old per-platform fetch pipelines.
@@ -2018,7 +2024,9 @@
                             fetchJSON(`${SLEEPER_BASE_URL}/state/nfl`).catch(() => ({})),  // always fresh — week-rollover source
                         ]);
                         const bgNfl = (bgStateRaw && Object.keys(bgStateRaw).length) ? bgStateRaw : (window.S?.nflState || nflState);
-                        const bgWeek = bgNfl?.display_week || bgNfl?.week || window.S?.currentWeek || currentWeek;
+                        const bgWeek = (bgNfl && window.App?.WeeklyProj?.fantasyWeek)
+                            ? window.App.WeeklyProj.fantasyWeek(bgNfl, currentLeague.settings)
+                            : (bgNfl?.display_week || bgNfl?.week || window.S?.currentWeek || currentWeek);
                         const bgHydrated = await provider.hydrate(currentLeague, {
                             sleeperPlayers: bgPlayers,
                             currentWeek: bgWeek,

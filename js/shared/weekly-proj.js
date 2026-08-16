@@ -73,10 +73,24 @@
         return Math.max(0.82, Math.min(1.18, mult));
     }
 
+    // Fantasy week — clamps Sleeper's NFL clock to the REGULAR-season count.
+    // In August the state reads season_type 'pre' with `week` counting
+    // EXHIBITION games, which surfaced as "Week 2 · Game Day Central" while
+    // every league was actually preparing for Week 1 (owner report
+    // 2026-08-16). Until the regular season kicks off, the fantasy week is 1;
+    // regular/post keep the live number so late-season surfaces never rewind.
+    function fantasyWeek(nflState, leagueSettings) {
+        const st = nflState || (root.S || {}).nflState || {};
+        const type = String(st.season_type || '');
+        if (type && type !== 'regular' && type !== 'post') return 1;
+        const w = Number(st.display_week || st.week || (leagueSettings && leagueSettings.leg) || 0);
+        return w > 0 ? w : 1;
+    }
+
     function currentWeek() {
         const s = root.S || {};
-        const w = Number(s.currentWeek || s.nflState?.display_week || s.nflState?.week || 0);
-        return w > 0 ? w : 1;
+        const w = Number(s.currentWeek || 0);
+        return w > 0 ? w : fantasyWeek(s.nflState);
     }
 
     // Weekly actuals are stored league-scored as weeklyPlayerPoints[week][pid].
@@ -279,7 +293,7 @@
     }
 
     App.WeeklyProj = App.WeeklyProj || {
-        setContext, setProjections, projLine, currentWeek, recentPPG, weeklyHistory, formStats, buildBaseline,
+        setContext, setProjections, projLine, currentWeek, fantasyWeek, recentPPG, weeklyHistory, formStats, buildBaseline,
         projectPlayer, projectRoster, optimalForRoster,
         objectiveForMode, modeFor,
         _ctx,
