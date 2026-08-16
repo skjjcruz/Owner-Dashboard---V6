@@ -2893,6 +2893,10 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script src="js/shared/sleeper-proj.js?v=20260717proj1"></script>
 <script src="js/shared/nfl-context.js?v=20260616wx1"></script>
 <script src="js/shared/matchup.js?v=20260701gdc1"></script>
+<!-- Season Odds engines (lab port 2026-08-16): plain Node-testable scripts —
+     the luck ledger feeds the playoff Monte Carlo, so luck loads first. -->
+<script src="js/shared/luck-engine.js?v=20260816so1"></script>
+<script src="js/shared/playoff-odds.js?v=20260816so1"></script>
 <script src="js/utils/schedule-engine.js?v=20260702bye1"></script>
 <script src="js/utils/gamelog-engine.js?v=20260702scout1"></script>
 <script src="js/shared/draft-gameplan.js?v=20260616ros1"></script>
@@ -2942,7 +2946,10 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20260722psych2"></script>
 <script type="text/babel" src="js/post-draft.js?v=20260609postdraft1"></script>
 <script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260613strip1"></script>
-<script type="text/babel" data-wr-defer="lineup" src="js/tabs/lineup.js?v=20260702bye1"></script>
+<!-- Season Odds panel loads with Game Day (owner ruling 2026-07-30) — must
+     precede lineup.js in the group so window.WrSeasonOdds exists on first render. -->
+<script type="text/babel" data-wr-defer="lineup" src="js/components/season-odds-panel.js?v=20260816so1"></script>
+<script type="text/babel" data-wr-defer="lineup" src="js/tabs/lineup.js?v=20260816so1"></script>
 <!-- 4b. Draft Command Center modules — group "draft" (~28 scripts, ~1.26MB),
      loaded on first Draft-tab open. -->
 <script type="text/babel" data-wr-defer="draft" src="js/draft/styles.js?v=20260427font1"></script>

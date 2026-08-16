@@ -43,6 +43,15 @@ function LineupTab({
     const [applyOpen, setApplyOpen] = React.useState(false);      // phone-only: WR.ActionBar apply/push sheet (inert off-phone)
     const [phoneView, setPhoneView] = React.useState('week');     // phone Game Day: 'week' (matchup + lineup) | 'season' (outlook + schedule)
     const [appliedMoves, setAppliedMoves] = React.useState(null); // phone: swap list shown after Apply Optimal ({sl,cur,opt,gain}[])
+    // Game Day view (owner ruling 2026-07-30: Season Odds belongs here, not in
+    // Analytics). Phone: This Week | Season | Odds. Desktop already shows the
+    // season rail alongside the lineup, so it only needs This Week | Odds.
+    const [gdView, setGdView] = React.useState('week');           // 'week' | 'odds' (desktop) — phone adds 'season' via phoneView
+    // Projected record from the Season Odds simulation, when it has run. The
+    // rail prefers this over schedule-engine's per-week sum so Game Day never
+    // prints two different projected records on one screen.
+    const [simSummary, setSimSummary] = React.useState(null);
+    const onSimSummary = React.useCallback(s => setSimSummary(s), []);
 
     const GOLD = 'var(--gold, #d4af37)', SILVER = 'var(--silver, #9aa0a6)', TEXT = 'var(--text, #e8e8ea)';
     const GREEN = 'var(--k-2ecc71, #2ecc71)', RED = 'var(--k-e74c3c, #e74c3c)', AMBER = 'var(--k-f0a500, #f0a500)';
@@ -621,8 +630,15 @@ function LineupTab({
                     ) : d && d.summary ? (
                         <React.Fragment>
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '8px' }}>
-                                <span style={{ fontSize: '1.5rem', fontWeight: 800, color: GOLD, fontVariantNumeric: 'tabular-nums' }}>{d.summary.projRecord}</span>
+                                {/* Prefer the Season Odds simulation's projected record when it
+                                    has run: schedule-engine sums per-week win probabilities while
+                                    the sim models real scoring distributions and seeding, and two
+                                    different projected records on one screen reads as a bug. */}
+                                <span style={{ fontSize: '1.5rem', fontWeight: 800, color: GOLD, fontVariantNumeric: 'tabular-nums' }}>
+                                    {simSummary ? simSummary.projWins + '-' + simSummary.projLosses : d.summary.projRecord}
+                                </span>
                                 <span style={{ fontSize: fz('0.64rem'), color: SILVER }}>proj record</span>
+                                {simSummary ? <span style={{ fontSize: fz('0.64rem'), color: GOLD, fontWeight: 700 }}>· {simSummary.playoffPct}% playoffs</span> : null}
                             </div>
                             <div style={{ display: 'flex', gap: '16px', marginTop: '9px' }}>
                                 <div><div style={{ fontSize: fz('0.6rem'), color: SILVER, letterSpacing: '0.04em' }}>NOW</div><div style={{ fontWeight: 700, color: TEXT }}>{d.summary.record}</div></div>
@@ -819,9 +835,16 @@ function LineupTab({
                 <div className="wr-seg">
                     <button className={phoneView === 'week' ? 'is-on' : ''} onClick={() => setPhoneView('week')}>This Week</button>
                     <button className={phoneView === 'season' ? 'is-on' : ''} onClick={() => setPhoneView('season')}>Season</button>
+                    <button className={phoneView === 'odds' ? 'is-on' : ''} onClick={() => setPhoneView('odds')}>Odds</button>
                 </div>
 
-                {phoneView === 'week' ? (<React.Fragment>
+                {phoneView === 'odds' ? (
+                    window.WrSeasonOdds
+                        ? <window.WrSeasonOdds active currentLeague={currentLeague} myRoster={myRoster}
+                            playersData={playersData} statsData={statsData} stats2025Data={stats2025Data}
+                            leagueSkin={leagueSkin} pro={pro} onSummary={onSimSummary} />
+                        : null
+                ) : phoneView === 'week' ? (<React.Fragment>
                 {/* Matchup + breakdown LEAD the week view (owner ask). Free
                     keeps the raw you-vs-their-current totals; win%, margin,
                     their-ideal and the breakdown stay Pro (existing gates). */}
@@ -954,8 +977,36 @@ function LineupTab({
         );
     }
 
+    // Desktop This Week ⇄ Odds toggle. Desktop already shows the season rail
+    // beside the lineup, so it needs no separate "Season" view — only a way
+    // to reach the odds. Rendered in both desktop branches below.
+    const gdSeg = (
+        <div style={{ display: 'inline-flex', border: `1px solid ${LINE}`, borderRadius: '6px', overflow: 'hidden', marginBottom: '14px' }}>
+            {[['week', 'This Week'], ['odds', 'Season Odds']].map(([k, label]) => (
+                <button key={k} onClick={() => setGdView(k)}
+                    style={{ padding: '7px 15px', cursor: 'pointer', border: 'none', background: gdView === k ? 'var(--acc-fill2, rgba(212,175,55,0.12))' : 'transparent', color: gdView === k ? GOLD : SILVER, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: 'var(--font-mono, monospace)' }}>
+                    {label}
+                </button>
+            ))}
+        </div>
+    );
+
+    if (gdView === 'odds') {
+        return (
+            <div style={{ maxWidth: '1240px', margin: '0 auto', padding: '20px 16px 60px' }}>
+                {gdSeg}
+                {window.WrSeasonOdds
+                    ? <window.WrSeasonOdds active currentLeague={currentLeague} myRoster={myRoster}
+                        playersData={playersData} statsData={statsData} stats2025Data={stats2025Data}
+                        leagueSkin={leagueSkin} pro={pro} onSummary={onSimSummary} />
+                    : <div style={{ color: SILVER, fontSize: '0.8rem' }}>Season odds module not loaded.</div>}
+            </div>
+        );
+    }
+
     return (
         <div style={{ maxWidth: '1240px', margin: '0 auto', padding: '20px 16px 60px' }}>
+            {gdSeg}
             {/* Alex's game-day note removed from the top of DESKTOP Game Day per
                 owner request (#229, 2026-07-17). The PHONE layout keeps its note
                 card + Ask Alex crossover (owner ask 2026-07-13) above. */}
