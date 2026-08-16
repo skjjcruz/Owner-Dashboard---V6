@@ -1564,6 +1564,35 @@ WRShared.preloadMany(WR_SHARED_FILES);
 	    /* Market Leverage consolidation (owner ask 2026-07-12): one-line FAAB card,
 	       competitor chips, threats merged into the gap matrix (grade is the 1-char
 	       letter in the 20px track — the word label rides title=, no more overlap). */
+	    /* FAAB Command — nested card inside Priority Moves (js/free-agency.js
+	       FaabCommandCard). Was ad-hoc inline styles; now a shared class so it
+	       reads as the same "sub-panel" language as the rest of the HQ. */
+	    .fa-hq-command { background: var(--black); border: 1px solid rgba(212,175,55,0.25); border-radius: 9px; padding: 12px 13px; margin-bottom: 10px; }
+	    .fa-hq-command-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+	    .fa-hq-command-head b { color: var(--gold); font-weight: 800; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; }
+	    .fa-hq-command-head span { color: var(--silver); opacity: 0.68; font-size: 0.68rem; font-family: 'JetBrains Mono', monospace; }
+	    .fa-hq-command-head span.is-warn { color: var(--warn); opacity: 1; }
+	    .fa-hq-command-picks { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+	    .fa-hq-command-picks button { padding: 3px 8px; border-radius: 5px; cursor: pointer; font-size: 0.68rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: var(--silver); }
+	    .fa-hq-command-picks button.is-active { background: rgba(212,175,55,0.14); border-color: var(--gold); color: var(--gold); }
+	    .fa-hq-command-hero { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+	    .fa-hq-command-hero strong { font-family: 'JetBrains Mono', monospace; font-size: 1.6rem; font-weight: 700; color: var(--gold); }
+	    .fa-hq-command-hero span { font-size: 0.75rem; color: var(--silver); }
+	    .fa-hq-command-pace { font-size: 0.68rem; line-height: 1.55; margin-bottom: 8px; color: var(--silver); }
+	    .fa-hq-command-pace.is-warn { color: var(--warn); }
+	    .fa-hq-command-note { font-size: 0.68rem; line-height: 1.5; color: var(--silver); }
+	    .fa-hq-ladder-row { display: grid; grid-template-columns: 44px 1fr 40px; gap: 10px; align-items: center; padding: 3px 0; }
+	    .fa-hq-ladder-row b { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 500; color: var(--white); }
+	    .fa-hq-ladder-row.is-rec b { font-weight: 700; color: var(--gold); }
+	    .fa-hq-ladder-track { height: 6px; background: #0C0E13; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+	    .fa-hq-ladder-fill { display: block; height: 100%; background: var(--info); }
+	    .fa-hq-ladder-row.is-rec .fa-hq-ladder-fill { background: var(--gold); }
+	    .fa-hq-ladder-pct { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-align: right; color: var(--silver); }
+	    .fa-hq-rivals-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--silver); opacity: 0.62; font-weight: 700; margin: 10px 0 4px; }
+	    .fa-hq-rival-row { display: grid; grid-template-columns: minmax(0,1.4fr) 52px 46px 56px; gap: 8px; padding: 3px 0; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; }
+	    .fa-hq-rival-row span:first-child { font-family: var(--font-body); font-weight: 600; color: var(--white); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	    .fa-hq-rival-row span { text-align: right; color: var(--silver); }
+	    .fa-hq-command-foot { margin-top: 8px; font-size: 0.68rem; line-height: 1.5; color: var(--silver); opacity: 0.85; }
 	    .fa-hq-faab-card { position: relative; overflow: hidden; padding: 8px 10px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.025); border-radius: 8px; margin-bottom: 8px; }
 	    .fa-hq-faab-card strong { font-family: 'JetBrains Mono', monospace; font-size: 1.02rem; }
 	    .fa-hq-faab-card span { color: var(--silver); opacity: 0.68; font-size: 0.7rem; }
@@ -2897,6 +2926,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      the luck ledger feeds the playoff Monte Carlo, so luck loads first. -->
 <script src="js/shared/luck-engine.js?v=20260816so1"></script>
 <script src="js/shared/playoff-odds.js?v=20260816so1"></script>
+<script src="js/shared/faab-engine.js?v=20260816fc1"></script>
 <script src="js/utils/schedule-engine.js?v=20260702bye1"></script>
 <script src="js/utils/gamelog-engine.js?v=20260702scout1"></script>
 <script src="js/shared/draft-gameplan.js?v=20260616ros1"></script>

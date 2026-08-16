@@ -573,6 +573,128 @@
     window.App.buildUdfaCrazeBoard = buildUdfaCrazeBoard;
     window.App.observeUdfaCrazeFlip = observeUdfaCrazeFlip;
     window.App.blendFaabWithHistory = blendFaabWithHistory;
+
+    // ── FaabCommandCard — league-aware bid plan (lab port 2026-08-16) ──
+    // Deterministic: the league's own bid history (winning AND losing
+    // claims via WrTxns.getFailedWaivers) is the model. Engine:
+    // js/shared/faab-engine.js (App.Faab). The ChopOdds horizon read is
+    // optional-chained — no chopped modules exist here, so the engine's
+    // documented no-op path applies and the cap stays at SPEND_CAP.
+    function FaabCommandCard({ league, myRoster, playersData, targets }) {
+        const [pick, setPick] = useState(0);
+        const [plan, setPlan] = useState(null);   // null | {loading} | {a} | {err}
+        // Fall back to the top target if the board shifted under a stale index
+        // (a new week's Priority Moves can be shorter than the old selection).
+        const target = (targets || [])[pick] || (targets || [])[0] || null;
+        const lid = league?.league_id || league?.id || '';
+        useEffect(() => {
+            if (!target || !window.App?.Faab || !window.WrTxns) { setPlan(null); return; }
+            let alive = true;
+            setPlan({ loading: true });
+            (async () => {
+                try {
+                    const txns = await window.WrTxns.fetchLeagueTxns(lid);
+                    const failed = window.WrTxns.getFailedWaivers(lid);
+                    // GM Strategy's minimum-bid override wins over the imported
+                    // platform setting (some leagues/platforms don't expose it
+                    // reliably) — same precedence as the recommendation panels.
+                    const gmEff = window.WR?.GmMode?.effects?.(lid) || {};
+                    const a = window.App.Faab.analyze({
+                        league, myRosterId: myRoster?.roster_id,
+                        txns: (txns || []).concat(failed || []),
+                        playersData,
+                        minBidOverride: gmEff.faabMinBid || undefined,
+                        targetPid: target.pid, targetPos: target.pos,
+                        // Strength: DHQ vs an elite-FA benchmark (6000 ≈ a league-winning add).
+                        targetStrength: Math.max(0.15, Math.min(1, (Number(target.dhq) || 0) / 6000)),
+                        // CHOPPED: bid against how long you expect to be ALIVE,
+                        // not the calendar. Unspent budget is wasted budget.
+                        horizonWeeks: window.App?.ChopOdds?.horizonFor?.(lid, null) || null,
+                    });
+                    if (alive) setPlan(a ? { a } : null);
+                } catch (e) { if (alive) setPlan({ err: true }); }
+            })();
+            return () => { alive = false; };
+        }, [lid, target?.pid]);
+        if (!target || (plan && plan.err)) return null;
+        if (plan && plan.loading) {
+            return <div style={{ padding: '10px 12px', marginBottom: '10px', border: '1px solid var(--ov-5, rgba(255,255,255,0.08))', borderRadius: '8px', fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', fontFamily: 'var(--font-mono)' }}>Reading this league’s bid history…</div>;
+        }
+        const a = plan && plan.a;
+        if (!a) return null;    // pre-effect, non-FAAB league, or engine absent
+        const needColor = n => n === 'HIGH' ? 'var(--warn)' : n === 'MED' ? 'var(--silver)' : 'var(--text-muted)';
+        const engaged = a.rivals.filter(r => r.engaged);
+        return (
+            <div className="fa-hq-command">
+                <div className="fa-hq-command-head">
+                    <b>FAAB Command</b>
+                    <span>${a.myLeft} of ${a.budget} left</span>
+                    {a.coldStart ? <span title="Fewer than 15 logged bids this season — showing league-size defaults, not per-rival reads" className="is-warn">league-median mode · {a.sampleSize} bids logged</span> : <span>{a.sampleSize} bids of evidence</span>}
+                </div>
+                {targets.length > 1 ? (
+                    <div className="fa-hq-command-picks">
+                        {targets.map((t, i) => (
+                            <button key={t.pid} className={i === pick ? 'is-active' : ''} onClick={() => setPick(i)}>{t.name}</button>
+                        ))}
+                    </div>
+                ) : null}
+                <div className="fa-hq-command-hero">
+                    <strong>${a.rec.bid}</strong>
+                    <span>
+                        {engaged.length
+                            ? Math.round(a.rec.winPct * 100) + '% to win' + (a.rec.capped ? ' — capped by your remaining budget' : '') + ' · ' + engaged.length + ' rival' + (engaged.length === 1 ? '' : 's') + ' in the market'
+                            : 'uncontested — no rival needs him'}
+                    </span>
+                </div>
+                {/* CHOPPED pacing: budget you never spend is budget you lose.
+                    In a real 18-team chopped league the three teams that spent
+                    nothing went out weeks 1-3, while the champion finished with
+                    $565 left. */}
+                {a.pacing ? (
+                    <div className={'fa-hq-command-pace' + (a.pacing.verdict === 'hoarding' ? ' is-warn' : '')}>
+                        {a.pacing.verdict === 'hoarding'
+                            ? <span><b style={{ color: 'var(--warn)' }}>You are hoarding.</b> ~{a.pacing.horizonWeeks} weeks left at your survival odds, and at your current ${a.pacing.myPacePerWeek}/wk pace you would be chopped holding <b>${a.pacing.projectedUnspent.toLocaleString()}</b>. You can afford ${a.pacing.affordPerWeek}/wk.</span>
+                            : a.pacing.verdict === 'slightly-under'
+                            ? <span>~{a.pacing.horizonWeeks} weeks left · spending ${a.pacing.myPacePerWeek}/wk of the ${a.pacing.affordPerWeek}/wk you can afford — about ${a.pacing.projectedUnspent.toLocaleString()} would go unspent.</span>
+                            : <span>~{a.pacing.horizonWeeks} weeks left · on pace at ${a.pacing.myPacePerWeek}/wk against ${a.pacing.affordPerWeek}/wk affordable.</span>}
+                    </div>
+                ) : null}
+                {/* With nobody contesting him, every rung prices at the same
+                    capped 97% and the ladder reads as broken. Say the true
+                    thing instead: the minimum bid is enough. */}
+                {!engaged.length ? (
+                    <div className="fa-hq-command-note">
+                        No rival has both a need at {target.pos || 'this position'} and the budget to chase him — the league minimum (${a.minBid}) should land him. Spend the difference on someone contested.
+                    </div>
+                ) : a.ladder.map(l => (
+                    <div key={l.bid} className={'fa-hq-ladder-row' + (l.bid === a.rec.bid ? ' is-rec' : '')}>
+                        <b>${l.bid}</b>
+                        <div className="fa-hq-ladder-track"><i className="fa-hq-ladder-fill" style={{ width: Math.round(l.winPct * 100) + '%' }} /></div>
+                        <span className="fa-hq-ladder-pct">{Math.round(l.winPct * 100)}%</span>
+                    </div>
+                ))}
+                {!a.coldStart && engaged.length ? (
+                    <div>
+                        <div className="fa-hq-rivals-label">Who else wants him</div>
+                        {engaged.slice(0, 4).map(r => (
+                            <div key={r.rosterId} className="fa-hq-rival-row">
+                                <span>{r.name}</span>
+                                <span>${r.faabLeft}</span>
+                                <span style={{ color: needColor(r.need), fontWeight: 700 }}>{r.need}</span>
+                                <span>est ${r.estBid}</span>
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
+                <div className="fa-hq-command-foot">
+                    {a.coldStart
+                        ? 'Rival bid reads unlock as this league logs claims — recommendations use league-size medians until then.'
+                        : 'League median comparable: $' + a.medianBid + ' · you’ve spent ' + a.mySpentPct + '% vs a ' + a.leagueSpentPct + '% league average.'}
+                </div>
+            </div>
+        );
+    }
+
     window.App.getFreeAgencyBriefTarget = function getFreeAgencyBriefTarget(args) {
         return buildFreeAgencyActionBoard(args).priorityAdds[0] || null;
     };
@@ -1216,7 +1338,10 @@
                     badge: fit.short,
                 })
                 : null;
-            return { ...x, pos, ppg, faab, fit, fitScore: fit.score, peakYrs: win.peakYrs, valueYrs: win.valueYrs, windowLabel: win.label, windowShort: win.short, windowColor: win.color, formatReasons, playerContext, intelligence, why };
+            // name: was missing here — unlike the buildFreeAgencyActionBoard
+            // sibling — and FAAB Command's target-picker buttons read x.name
+            // directly (lab fix 02a4369: they rendered blank without it).
+            return { ...x, name: playerName(x.p, x.pid), pos, ppg, faab, fit, fitScore: fit.score, peakYrs: win.peakYrs, valueYrs: win.valueYrs, windowLabel: win.label, windowShort: win.short, windowColor: win.color, formatReasons, playerContext, intelligence, why };
         }
 
         const faabMarketRows = (currentLeague.rosters || []).map(r => {
@@ -1355,6 +1480,12 @@
                                 <span>Priority Moves</span>
                                 <em>{topAdds.length} add targets · {swapRows.length} swaps</em>
                             </div>
+                            {/* FAAB Command — league-aware bid plan for the top targets
+                                (deterministic; the league's own bid history is the model). */}
+                            {isPro && topAdds.length > 0 && (
+                                <FaabCommandCard league={currentLeague} myRoster={myRoster} playersData={playersData}
+                                    targets={topAdds.slice(0, 3).map(x => ({ pid: x.pid, name: x.name, pos: x.pos, dhq: x.dhq }))} />
+                            )}
                             {/* Add targets | swaps ride side by side when the panel is
                                 wide (owner ask 2026-07-12 — stacked full-width cards
                                 left half the panel empty); auto-stacks below ~640px. */}
