@@ -146,6 +146,18 @@ const WIDGET_MODULES = {
         clickTarget: { sm: 'trades', md: 'trades' },
         pro: true, proFeature: 'faab_intelligence', formatFlag: null,
     },
+    // FAAB Command (lab port 2026-08-16): the FA tab's league-aware bid plan,
+    // auto-picking the top wire target so it works without opening FA first.
+    'faab-command': {
+        label: 'FAAB Command',
+        icon: '💰',
+        description: 'League-aware bid plan for the top add on the wire',
+        accent: () => T().color?.('gold') || 'var(--gold, #d4af37)',
+        metrics: [],
+        sizes: ['sm', 'md', 'lg'],
+        clickTarget: { sm: 'fa', md: 'fa', lg: 'fa' },
+        pro: true, proFeature: 'faab_intelligence', formatFlag: null,
+    },
     'draft-capital': {
         label: 'Draft Capital',
         icon: '🎯',
@@ -1777,6 +1789,12 @@ function DashboardPanel({
             return React.createElement(MRW, {
                 size, myRoster, rankedTeams, sleeperUserId, currentLeague,
                 playersData, setActiveTab, navigateWidget,
+            });
+        }
+        // FAAB Command -> FaabCommandWidget (js/widgets/faab-command.js)
+        if (moduleKey === 'faab-command' && typeof window.FaabCommandWidget === 'function') {
+            return React.createElement(window.FaabCommandWidget, {
+                size, myRoster, currentLeague, playersData, setActiveTab, navigateWidget,
             });
         }
         // Draft Capital → DraftCapitalWidget (js/widgets/draft-capital.js)
