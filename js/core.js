@@ -179,6 +179,10 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
         if (sharedTier === 'paid') {
             const productTier = window.App?._productTier;
             if (['commissioner', 'pro', 'warroom', 'scout'].includes(productTier)) return productTier;
+            // FREE FOR THE 2026 SEASON (owner ruling 2026-08-17): the season-wide
+            // unlock must land at FULL Pro — the generic minimum-paid fallback
+            // below would hand out Scout and leave the front office locked.
+            if (window.DHQ_FREE_SEASON?.active?.()) return 'pro';
             // Dev mode returns 'paid' from shared — give full local access
             if (new URLSearchParams(window.location.search).has('dev') || ['localhost', '127.0.0.1'].includes(window.location.hostname)) return 'pro';
             return 'scout'; // paid but unrecognized profile tier → minimum paid level
