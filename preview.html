@@ -826,7 +826,7 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
 
 <!-- PRICING (pulled up to follow the live engine — free-first on-ramp) -->
 <section class="section" id="pricing"><div class="wrap">
-  <div class="intro reveal"><span class="intro__eye">Start free</span><h2>Free to start. <span class="gild">Yours to conquer.</span></h2><p>Connect your leagues free — no credit card. Go Pro for the full front office, monthly or annual (save ~17%). And what's next is already taking shape in DHQ Labs.</p></div>
+  <div class="intro reveal"><span class="intro__eye">Start free</span><h2>Free to start. <span class="gild">Yours to conquer.</span></h2><p>Connect your leagues free — no credit card. And for the 2026 season, Pro — the full front office — is free for everyone. What's next is already taking shape in DHQ Labs.</p></div>
   <div class="tiers reveal">
     <div class="tier">
       <div class="tier__name">Scout</div><div class="tier__price"><span class="price-amt">$0</span></div><div class="tier__note">Free forever</div>
@@ -835,14 +835,10 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
     </div>
     <div class="tier tier--feat" id="tier-dhq">
       <div class="tier__name" style="color:var(--forge)">Dynasty HQ Pro</div>
-      <div class="billseg" role="group" aria-label="Billing period">
-        <button type="button" class="billseg__b on" data-bill="mo">Monthly</button>
-        <button type="button" class="billseg__b" data-bill="yr">Annual <span class="billseg__save">SAVE 17%</span></button>
-      </div>
-      <div class="tier__price"><span class="price-amt">$9.99</span><span class="price-per">/mo</span></div>
-      <div class="tier__note tier__save" hidden>Billed $99.99/yr · ≈ $8.33/mo · save ~17%</div>
+      <div class="tier__price"><span class="price-amt" style="text-decoration:line-through;text-decoration-thickness:3px;text-decoration-color:var(--forge);color:var(--text-3)">$9.99</span><span class="price-per" style="text-decoration:line-through;text-decoration-color:var(--forge);color:var(--text-3)">/mo</span>&nbsp;&nbsp;<span class="price-amt" style="color:var(--forge)">Free</span></div>
+      <div class="tier__note" style="color:var(--forge);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Free for the 2026 season</div>
       <ul><li>The full Dynasty HQ experience</li><li>DHQ Engine, Owner DNA, Follow-live draft</li><li>Deep GM-strategy customization</li><li>Alex Ingram, your AI GM.</li></ul>
-      <button class="btn btn--primary" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Go Pro</button>
+      <button class="btn btn--primary" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Claim the season</button>
     </div>
     <div class="tier">
       <div class="tier__name">DHQ Labs</div><div class="tier__price"><span class="price-amt">Soon</span></div><div class="tier__note" style="color:var(--tactical)">In development</div>
