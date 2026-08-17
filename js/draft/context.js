@@ -161,6 +161,47 @@
         return idKey(data.leagueId || data.currentLeague?.league_id || data.currentLeague?.id || data.state?.leagueId || window.S?.leagues?.[0]?.league_id || '');
     }
 
+    // How much of a snapshot is the USER'S hand: manual order, tags, notes,
+    // tiers. Used by the recovery sweep to pick the richest surviving copy.
+    function boardUserWeight(b) {
+        if (!b || typeof b !== 'object') return 0;
+        return ((b.myOrder && b.myOrder.length) || 0) * 2
+            + Object.keys(b.tags || {}).length
+            + Object.keys(b.notes || {}).length
+            + Object.keys(b.tiers || {}).length;
+    }
+
+    // RECOVERY SWEEP (owner report 2026-08-17, board lost twice): the board is
+    // filed under wr_bigboard_<league>_<variant>, but the Draft-tab feeder and
+    // the live room can DETECT DIFFERENT VARIANTS for a league whose format
+    // doesn't map cleanly (the owner's chopped league read as type "3" until
+    // the chopped port, then "chopped" — neither maps to a draft variant, so
+    // each surface fell to its own fallback drawer). When the active drawer
+    // holds no hand-built board, adopt the richest snapshot from ANY drawer
+    // for this league and re-file it here so the heal is permanent.
+    function recoverRichestBoard(leagueId, merged) {
+        try {
+            if (boardUserWeight(merged) > 0) return merged;
+            const store = window.App?.WrStorage;
+            if (!store?.get || typeof localStorage === 'undefined') return merged;
+            const prefix = `wr_bigboard_${leagueId}`;
+            let best = null, bestWeight = 0, bestKey = '';
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (!key || key.indexOf(prefix) !== 0) continue;
+                const candidate = store.get(key, null);
+                const weight = boardUserWeight(candidate);
+                if (weight > bestWeight) { best = candidate; bestWeight = weight; bestKey = key; }
+            }
+            if (!best) return merged;
+            if (window.wrLog) window.wrLog('draftContext.boardRecovered', { from: bestKey, weight: bestWeight });
+            return mergeBoardData(merged, best);
+        } catch (e) {
+            if (window.wrLog) window.wrLog('draftContext.recoverBoard', e);
+            return merged;
+        }
+    }
+
     function loadStoredBoard(leagueId, draftType, explicitBoardData) {
         const fallback = explicitBoardData || null;
         try {
@@ -171,7 +212,14 @@
             const typedKey = boardStorageKey(leagueId, draftType);
             const legacy = store.get(legacyKey, fallback || {}) || {};
             const typed = typedKey !== legacyKey ? (store.get(typedKey, {}) || {}) : {};
-            return mergeBoardData(mergeBoardData(fallback || {}, legacy), typed);
+            const merged = mergeBoardData(mergeBoardData(fallback || {}, legacy), typed);
+            const recovered = recoverRichestBoard(leagueId, merged);
+            // Permanent heal: an adopted board is re-filed under the ACTIVE key
+            // so both surfaces converge on it from now on.
+            if (recovered !== merged && boardUserWeight(recovered) > 0 && store.set) {
+                store.set(typedKey, recovered);
+            }
+            return recovered;
         } catch (e) {
             if (window.wrLog) window.wrLog('draftContext.loadStoredBoard', e);
             return fallback || {};
