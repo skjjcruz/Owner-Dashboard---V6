@@ -815,10 +815,16 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
             : null);
         const skinRosterCopy = leagueSkin?.copy?.rosterData || {};
         const isPreDraftRosterEmpty = !!(leagueSkin?.state?.isPreDraftRosterEmpty && leaguePlayerCount === 0);
+        // CHOPPED: an eliminated roster is empty because the format released
+        // it to waivers — correct data, not a sync failure. Telling the owner
+        // to "re-sync the platform" the week they get chopped is the app
+        // misreading its own league.
+        const choppedOut = !!(window.App?.Chopped?.isChopped?.(league) && window.App.Chopped.isEliminated(roster));
         let reason = '';
 
         if (!roster) reason = 'missing-roster';
         else if (!Array.isArray(rosters) || !rosters.length) reason = 'missing-league-rosters';
+        else if (choppedOut) reason = 'chopped-out';
         else if (leaguePlayerCount === 0) reason = isPreDraftRosterEmpty ? 'pre-draft-rosters-empty' : 'league-rosters-empty';
         else if (rosterIds.length === 0) reason = 'my-roster-empty';
         else if (rosterIds.length < minUsableRoster) reason = 'my-roster-partial';
@@ -830,10 +836,12 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
             'league-rosters-empty': 'League rosters loaded with zero player IDs.',
             'my-roster-empty': 'Your roster loaded with zero player IDs.',
             'my-roster-partial': 'Your roster looks partially loaded.',
+            'chopped-out': 'You were chopped — your roster went back to the waiver pool.',
         };
         const defaultDetail = 'Refresh league data or re-sync the platform before acting on roster, trade, waiver, draft, or analytics recommendations.';
         const details = {
             'pre-draft-rosters-empty': skinRosterCopy.emptyRosterDetail || 'Roster-dependent recommendations stay paused until the draft, but draft prep can continue.',
+            'chopped-out': 'Nothing to re-sync — this is the format working as designed. League-wide views stay available.',
         };
 
         return {

@@ -839,7 +839,10 @@ function LineupTab({
                 </div>
 
                 {phoneView === 'odds' ? (
-                    window.WrSeasonOdds
+                    // No bracket in a chopped league — survival IS the odds view.
+                    leagueSkin?.features?.showPlayoffOdds === false
+                        ? (window.WrChopBlock ? <window.WrChopBlock active currentLeague={currentLeague} myRoster={myRoster} /> : null)
+                    : window.WrSeasonOdds
                         ? <window.WrSeasonOdds active currentLeague={currentLeague} myRoster={myRoster}
                             playersData={playersData} statsData={statsData} stats2025Data={stats2025Data}
                             leagueSkin={leagueSkin} pro={pro} onSummary={onSimSummary} />
@@ -995,7 +998,11 @@ function LineupTab({
         return (
             <div style={{ maxWidth: '1240px', margin: '0 auto', padding: '20px 16px 60px' }}>
                 {gdSeg}
-                {window.WrSeasonOdds
+                {leagueSkin?.features?.showPlayoffOdds === false
+                    ? (window.WrChopBlock
+                        ? <window.WrChopBlock active currentLeague={currentLeague} myRoster={myRoster} />
+                        : <div style={{ color: SILVER, fontSize: '0.8rem' }}>Chopping Block module not loaded.</div>)
+                    : window.WrSeasonOdds
                     ? <window.WrSeasonOdds active currentLeague={currentLeague} myRoster={myRoster}
                         playersData={playersData} statsData={statsData} stats2025Data={stats2025Data}
                         leagueSkin={leagueSkin} pro={pro} onSummary={onSimSummary} />

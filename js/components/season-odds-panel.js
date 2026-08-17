@@ -20,8 +20,6 @@
 // records on one screen is the trust bug the July text-accuracy sweep chased.
 //
 // Engines: App.Luck (luck-engine.js), App.PlayoffOdds (playoff-odds.js).
-// Lab's chopped-league branches (features.showPlayoffOdds) are stripped —
-// this repo has no chopped format; every league here has a bracket.
 // ══════════════════════════════════════════════════════════════════
 function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData, stats2025Data, leagueSkin, pro, onSummary }) {
     const GOLD = 'var(--gold, #d4af37)', SILVER = 'var(--silver, #9aa0a6)', TEXT = 'var(--text, #e8e8ea)';
@@ -40,7 +38,13 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
     const runRef = React.useRef({ key: null });
     React.useEffect(() => { runRef.current.key = null; setSo({ status: 'idle' }); }, [leagueId]);
 
+    // Formats with no playoffs (CHOPPED) get no bracket. Simulating one would
+    // invent a 6-team field, seed it off 0-0 records, and hand back a title
+    // percentage for a league that never crowns anyone that way.
+    const noPlayoffs = leagueSkin?.features?.showPlayoffOdds === false;
+
     React.useEffect(() => {
+        if (noPlayoffs) return;
         if (!active || so.status !== 'idle') return;
         if (runRef.current.key === leagueId) return;   // already ran for this league
         const Luck = window.App?.Luck, PO = window.App?.PlayoffOdds, WP = window.App?.WeeklyProj;
@@ -126,6 +130,16 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
         </div>
     );
 
+    if (noPlayoffs) {
+        return (
+            <Section title="Season Odds" meta="not applicable in this format">
+                <div style={{ color: SILVER, fontSize: '0.78rem', lineHeight: 1.6 }}>
+                    This league has no playoff bracket — every week the lowest scorer is chopped and the last team standing wins.
+                    Playoff, bye and title odds would be invented here, so they are not shown. Survival odds are the number that matters in this format.
+                </div>
+            </Section>
+        );
+    }
     if (!pro) {
         return window.WrGatedMoreRow
             ? <window.WrGatedMoreRow title="Season odds" sub="Playoff, bye and title odds from 10,000 simulations, this-week leverage, playoff-weeks strength of schedule, and the luck ledger" feature={(window.FEATURES && window.FEATURES.STARTSIT_DEPTH) || 'startsit_depth'} />

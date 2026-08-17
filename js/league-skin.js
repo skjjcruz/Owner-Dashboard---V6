@@ -11,6 +11,13 @@
         0: 'redraft',
         1: 'keeper',
         2: 'dynasty',
+        // Sleeper's native CHOPPED (last-man-standing / guillotine) format.
+        // Undocumented in their public API notes; verified against a live
+        // league carrying settings.last_chopped_leg and per-roster
+        // settings.eliminated. Before this it fell through as the literal
+        // string "3" and rendered as the league-type label.
+        3: 'chopped',
+        guillotine: 'chopped',
         re_draft: 'redraft',
         season_long: 'redraft',
         bestball: 'best_ball',
@@ -31,6 +38,7 @@
         keeper: { label: 'Keeper', short: 'KP', color: 'var(--k-7c6bf8, #7c6bf8)', family: 'hybrid' },
         dynasty: { label: 'Dynasty', short: 'DY', color: 'var(--k-d4af37, #d4af37)', family: 'long_term' },
         best_ball: { label: 'Best Ball', short: 'BB', color: 'var(--k-3498db, #3498db)', family: 'seasonal' },
+        chopped: { label: 'Chopped', short: 'CHOP', color: 'var(--k-e74c3c, #e74c3c)', family: 'survival' },
         dfs: { label: 'DFS', short: 'DFS', color: 'var(--k-3498db, #3498db)', family: 'daily' },
         unknown: { label: 'League Type Unknown', short: '?', color: 'var(--k-c7cdd7, #c7cdd7)', family: 'unknown' },
     };
@@ -53,6 +61,12 @@
             accent: 'var(--k-d4af37, #d4af37)',
             surface: 'var(--k-121217, #121217)',
         },
+        chopped: {
+            id: 'chopped-survival',
+            className: 'wr-league-skin-chopped',
+            accent: 'var(--k-e74c3c, #e74c3c)',
+            surface: 'var(--k-1d1315, #1d1315)',
+        },
         keeper: {
             id: 'keeper-hybrid',
             className: 'wr-league-skin-keeper',
@@ -73,6 +87,7 @@
         redraft: ['draft_prep', 'balanced', 'aggressive_waivers', 'streaming', 'win_now', 'custom'],
         best_ball: ['draft_prep', 'upside', 'balanced', 'custom'],
         dfs: ['balanced', 'contrarian', 'cash', 'custom'],
+        chopped: ['survive', 'draft_prep', 'aggressive_waivers', 'streaming', 'custom'],
         unknown: ['balanced', 'custom'],
     };
 
@@ -248,7 +263,13 @@
         const hasTaxi = positions.includes('TAXI') || Number(settings.taxi_slots || league?.taxi_slots || 0) > 0;
         const hasIDP = !!profile?.scoring?.idp || Number(profile?.roster?.idpSlots || 0) > 0 || positions.some(pos => IDP_SLOTS.has(pos));
         const maxKeepers = Number(settings.max_keepers || settings.keeper_count || league?.metadata?.keeper_count || 0);
-        const seasonal = type === 'redraft' || type === 'best_ball' || type === 'dfs';
+        // Chopped is a SEASONAL format (one-year rosters, ROS values, waivers
+        // are the whole game) — it must ride the seasonal branch or it lands
+        // in the third bucket nobody wrote and silently loses start/sit, the
+        // waiver planner and rest-of-season value: exactly the features it
+        // needs most.
+        const chopped = type === 'chopped';
+        const seasonal = type === 'redraft' || type === 'best_ball' || type === 'dfs' || chopped;
         const longTerm = type === 'dynasty' || type === 'keeper';
         const preDraft = phase === 'pre_draft' || phase === 'drafting';
         // Redraft-era features hide only in DYNASTY leagues (owner directive
@@ -258,8 +279,11 @@
         return {
             showTaxi: hasTaxi,
             showIDP: hasIDP,
-            showKeepers: type === 'keeper' || maxKeepers > 0,
-            showKeeperControls: type === 'keeper' || maxKeepers > 0,
+            // Chopped rosters are released to waivers on elimination — there is
+            // nothing to keep. Live leagues carry a vestigial max_keepers from
+            // being cloned, so the count alone can't be trusted here.
+            showKeepers: !chopped && (type === 'keeper' || maxKeepers > 0),
+            showKeeperControls: !chopped && (type === 'keeper' || maxKeepers > 0),
             showFuturePicks: longTerm,
             showDynastyValue: type === 'dynasty',
             showAgeCurve: longTerm,
@@ -282,17 +306,30 @@
             showWaiverPlanner: seasonal || type === 'keeper',
             showRestOfSeasonValue: seasonal || type === 'keeper',
             hasRosteredPlayers: rosterPlayerCount(rosters) > 0,
+            // ── Structural suppressors ───────────────────────────────
+            // These four had no flag at all before Chopped: the Trade Center
+            // nav item and the Season Odds panel were unconditional, so a
+            // format with no trading, no matchups and no playoffs still
+            // rendered all three (and printed 0-0 records for everybody).
+            // Default TRUE so every existing format is untouched.
+            showTrades: !chopped && Number(settings.disable_trades || 0) !== 1,
+            showMatchup: !chopped,
+            showStandings: !chopped,
+            showPlayoffOdds: !chopped && Number(settings.playoff_teams || 0) !== 0,
+            // Chopped-only: the elimination ladder replaces standings.
+            showElimination: chopped,
         };
     }
 
     function buildVocabulary(type, phase) {
-        const seasonal = type === 'redraft' || type === 'best_ball' || type === 'dfs';
+        const chopped = type === 'chopped';
+        const seasonal = type === 'redraft' || type === 'best_ball' || type === 'dfs' || chopped;
         const keeper = type === 'keeper';
         const valueLabel = type === 'dynasty'
             ? 'DHQ Dynasty Value'
             : keeper
                 ? 'Keeper-Adjusted Value'
-                : type === 'redraft'
+                : (type === 'redraft' || chopped)
                     ? 'Rest-of-Season Value'
                     : seasonal
                         ? 'Format Value'
@@ -302,11 +339,14 @@
             teamLabel: seasonal ? 'Team' : 'Roster',
             assetLabel: type === 'dynasty' ? 'Asset' : 'Player',
             valueLabel,
-            valueShortLabel: type === 'dynasty' ? 'DHQ' : type === 'redraft' ? 'ROS' : 'Value',
+            valueShortLabel: type === 'dynasty' ? 'DHQ' : (type === 'redraft' || chopped) ? 'ROS' : 'Value',
             pickLabel: seasonal ? 'Draft Pick' : 'Future Pick',
-            marketLabel: seasonal ? 'Rest-of-Season Market' : 'Trade Market',
-            rosterEmptyLabel: phase === 'pre_draft' ? 'Roster Not Drafted Yet' : 'Roster Data Pending',
-            strategyLabel: seasonal ? 'Team Plan' : 'GM Mode',
+            // No trading in chopped — the "market" is the waiver pool the
+            // chopped rosters are dumped into.
+            marketLabel: chopped ? 'Waiver Pool' : seasonal ? 'Rest-of-Season Market' : 'Trade Market',
+            rosterEmptyLabel: chopped ? 'Chopped — roster released to waivers'
+                : phase === 'pre_draft' ? 'Roster Not Drafted Yet' : 'Roster Data Pending',
+            strategyLabel: chopped ? 'Survival Plan' : seasonal ? 'Team Plan' : 'GM Mode',
         };
     }
 

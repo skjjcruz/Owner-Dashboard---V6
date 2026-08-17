@@ -344,7 +344,7 @@
     };
     // showGameDay = the FINAL leagueSkin.features.showGameDay flag
     // (callers apply the same `?? phase === 'in_season'` fallback in one place).
-    function buildLeagueNavItems(showGameDay) {
+    function buildLeagueNavItems(showGameDay, showTrades) {
         return [
             { section: 'FRONT OFFICE' },
             { label: 'Home', tab: 'dashboard', iconKey: 'home' },
@@ -353,7 +353,9 @@
             ...(showGameDay ? [{ label: 'Game Day', tab: 'lineup', iconKey: 'gameday' }] : []),
             { label: 'Compare', tab: 'compare', iconKey: 'compare' },
             { section: 'LEAGUE' },
-            { label: 'Trade Center', tab: 'trades', iconKey: 'trade' },
+            // Hidden where the format forbids trading (chopped, or trades
+            // disabled in settings) — an unusable tab is worse than no tab.
+            ...(showTrades === false ? [] : [{ label: 'Trade Center', tab: 'trades', iconKey: 'trade' }]),
             { label: 'Free Agency', tab: 'fa', iconKey: 'fa' },
             { label: 'Draft', tab: 'draft', iconKey: 'draft' },
             { label: 'Analytics', tab: 'analytics', iconKey: 'analytics' },
@@ -3254,7 +3256,10 @@
         // buildLeagueNavItems). The sidebar maps this array below and the
         // SAME array instance feeds the PhoneDock strip at the bottom of
         // this render, so the two surfaces can never drift.
-        const navItems = buildLeagueNavItems(leagueSkin?.features?.showGameDay ?? (leagueSkin?.phase === 'in_season'));
+        const navItems = buildLeagueNavItems(
+            leagueSkin?.features?.showGameDay ?? (leagueSkin?.phase === 'in_season'),
+            leagueSkin?.features?.showTrades
+        );
 
         const _seasonCtxValue = { ...seasonCtxData, leagueSkin, selectPlayer };
         const leagueSkinClassName = leagueSkin?.theme?.className || (leagueSkin?.type ? 'wr-league-skin-' + leagueSkin.type : 'wr-league-skin-default');

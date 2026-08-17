@@ -763,6 +763,13 @@ function DashboardPanel({
     timeRecomputeTs,
 }) {
     const resolvedLeagueSkin = leagueSkin || window.App?.LeagueSkin?.getCurrent?.() || null;
+    // CHOPPED leagues: survival is the headline number, so it leads BOTH
+    // layouts. Defined above the phone/desktop split because the phone branch
+    // early-returns below — and Game Day (the other natural home) is hidden
+    // pre-draft, exactly when the block is most interesting.
+    const chopBlockEl = (resolvedLeagueSkin?.features?.showElimination && window.WrChopBlock)
+        ? <div style={{ padding: '14px 16px 0' }}><window.WrChopBlock active currentLeague={currentLeague} myRoster={myRoster} /></div>
+        : null;
     const valueShortLabel = resolvedLeagueSkin?.vocabulary?.valueShortLabel || 'DHQ';
     const [pickerOpen, setPickerOpen] = React.useState(false);
     const [reorderOpen, setReorderOpen] = React.useState(false); // phone widget-reorder sheet
@@ -2013,6 +2020,7 @@ function DashboardPanel({
 
         return (
             <React.Fragment>
+                {chopBlockEl}
                 {/* Phone "Yours to customize" hint banner removed (owner ask
                     2026-07-12) — the ⋯ / Reorder / + Add Widget affordances are
                     self-evident. Desktop banner (showHint, further down) is
@@ -2131,6 +2139,7 @@ function DashboardPanel({
     // ══════════════════════════════════════════════════════════════
     return (
         <React.Fragment>
+            {chopBlockEl}
             {/* First-visit hint */}
             {showHint && (
                 <div style={{

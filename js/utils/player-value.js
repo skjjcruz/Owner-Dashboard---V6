@@ -341,7 +341,10 @@ window.App.PlayerValue = (function () {
     }
     function _isRedraft(skin) {
         const s = skin || window.App?.LeagueSkin?.getCurrent?.() || null;
-        return !!s && s.type === 'redraft';
+        // CHOPPED counts as redraft here: it is a one-season format, so value is
+        // rest-of-season, never dynasty. (The survival-weighted horizon below
+        // shortens it further — season-end is already vastly closer than dynasty.)
+        return !!s && (s.type === 'redraft' || s.type === 'chopped');
     }
 
     // Healthy, neutral-matchup per-week median for a player, league-scored.
@@ -388,7 +391,16 @@ window.App.PlayerValue = (function () {
         if (!playerScores) return null; // DHQ is the scale anchor — need it loaded
         const scoring = ctx.scoring || league.scoring_settings || {};
         const pws = Number(league.settings?.playoff_week_start) || 15;
-        const remainingWeeks = Math.max(0, (pws - 1) - week);
+        const calendarWeeks = Math.max(0, (pws - 1) - week);
+        // CHOPPED: the calendar is a lie. What a player is worth to you is
+        // capped by how many more weeks you can expect to be ALIVE, so the
+        // horizon is the survival expectation when we have one. Rank-neutral
+        // as a uniform multiplier — its real bite is the BYE deduction below:
+        // losing one week out of an expected three is a third of your season.
+        const survival = ctx.horizonWeeks != null
+            ? Number(ctx.horizonWeeks)
+            : (window.App?.ChopOdds?.horizonFor?.(leagueId, null));
+        const remainingWeeks = (survival > 0 && survival < calendarWeeks) ? survival : calendarWeeks;
         if (remainingWeeks <= 0) { _ros = null; return null; } // season over → DHQ
 
         const projWeek = week + 1;
@@ -436,8 +448,10 @@ window.App.PlayerValue = (function () {
             if (perWk <= 0 || !pos) { points[pid] = 0; values[pid] = 0; continue; }
             const player = ctx.playersData?.[pid];
             const bye = player ? Number(player.bye_week) : 0;
-            const byeInWindow = bye > week && bye < pws;
-            const effWeeks = remainingWeeks - (byeInWindow ? 1 : 0);
+            // The bye only costs you if it lands inside the weeks you expect to
+            // PLAY — under a survival horizon that window is shorter than the season.
+            const byeInWindow = bye > week && bye <= Math.min(pws - 1, week + remainingWeeks);
+            const effWeeks = Math.max(0, remainingWeeks - (byeInWindow ? 1 : 0));
             points[pid] = Math.max(0, Math.round(perWk * effWeeks * 10) / 10); // raw projected ROS pts (display)
             const repl = replacementPerWk[pos] || 0;
             const lineupVal = perWk * ROS_GROSS_WT + Math.max(0, perWk - repl) * ROS_VOR_WT; // scarcity-weighted per-week value
