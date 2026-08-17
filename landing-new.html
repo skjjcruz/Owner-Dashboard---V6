@@ -28,6 +28,12 @@
         } catch (e) {}
       }
       try {
+        // ── PREVIEW ONLY — REMOVE AT SWAP ─────────────────────────────
+        // While this page lives at landing-new.html for owner review, always
+        // show it: no signed-in redirect, no query param needed. The full
+        // gate below must be re-armed when this file becomes landing.html.
+        reveal(); return;
+        // ──────────────────────────────────────────────────────────────
         var q = new URLSearchParams(window.location.search);
         // Session handoff from the marketing site (dhqfootball.com): it signs the
         // user in on its own origin, then sends them here with the app session in
