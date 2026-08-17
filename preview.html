@@ -1154,6 +1154,25 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
        section (same inputs, buttons and handlers) which becomes a
        native-app-style DHQ dark/gold sign-up screen on phones.
        ───────────────────────────────────────────────────────────────── -->
+  <style>
+    /* Transplanted-auth support styles: the #auth organ came from the old
+       landing page whose main stylesheet held these rules — without them the
+       card sprawls full-width and the phone-only header leaks onto desktop. */
+    :root{--accent:var(--forge);--accent-bright:var(--forge-bright);--radius:10px;--muted:var(--text-3);--silver:var(--text-2)}
+    .phone-auth-head{display:none}
+    .auth{max-width:430px;margin:0 auto;padding:84px 24px 96px}
+    .auth-title{text-align:center;font-family:var(--font-mono);font-size:18px;font-weight:600;letter-spacing:.04em;margin-bottom:22px;color:var(--text-1)}
+    .auth-input{width:100%;min-height:46px;padding:0 14px;font-size:14px;font-family:var(--font-mono);background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);margin-bottom:10px;outline:none;box-sizing:border-box;transition:border-color 90ms ease}
+    .auth-input:focus{border-color:var(--accent)}
+    .auth-input::placeholder{color:var(--text-3)}
+    .auth-submit{width:100%;min-height:48px;font-family:var(--font-mono);font-size:14px;font-weight:600;letter-spacing:.03em;border-radius:var(--radius);border:1px solid var(--accent);background:var(--accent);color:var(--bg-0);margin-top:4px;cursor:pointer;transition:background 90ms ease}
+    .auth-submit:hover{background:var(--accent-bright);border-color:var(--accent-bright)}
+    .alert{font-size:13px;padding:10px 14px;border-radius:var(--radius);margin-bottom:12px;display:none;font-family:var(--font-mono)}
+    .alert.show{display:block}
+    .alert-error{background:rgba(240,73,92,.08);color:var(--neg);border:1px solid rgba(240,73,92,.3)}
+    .alert-success{background:rgba(47,191,136,.08);color:var(--pos);border:1px solid rgba(47,191,136,.3)}
+    @media (max-width:767px){.auth{padding:64px 16px 64px}.auth-input{font-size:16px}}
+  </style>
   <header class="phone-auth-head">
     <img class="phone-auth-crest" src="img/dhq-crest.jpg" alt="Dynasty HQ">
     <div class="phone-auth-wordmark">DYNASTY HQ</div>
