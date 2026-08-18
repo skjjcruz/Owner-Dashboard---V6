@@ -758,6 +758,40 @@
     // time), all feedback is direct DOM mutation restored on end, so it works
     // identically for mouse, touch, and pencil without re-render churn.
     let _dragSes = null;
+    function _dragUnmark(s) {
+        if (!s.marked) return;
+        try {
+            s.marked.style.boxShadow = s.markedShadow;
+            s.marked.style.marginTop = s.markedMT;
+            s.marked.style.marginBottom = s.markedMB;
+        } catch (e) { /* row unmounted */ }
+        s.marked = null;
+    }
+    // Mark a drop target by opening a row-height SLOT next to it (iOS-style,
+    // owner call 2026-08-18): the players part so the landing spot is an
+    // open gap and the row being displaced is visibly pushed aside — an
+    // inset line alone hides under the drag ghost. Gold line kept on the
+    // slot's edge.
+    function _dragMark(s, el, after) {
+        if (s.marked === el && s.after === after) { s.targetKey = el.getAttribute('data-reorder-key'); return; }
+        _dragUnmark(s);
+        s.markedShadow = el.style.boxShadow || '';
+        s.markedMT = el.style.marginTop || '';
+        s.markedMB = el.style.marginBottom || '';
+        el.style.boxShadow = after ? 'inset 0 -2px 0 0 var(--gold, #d4af37)' : 'inset 0 2px 0 0 var(--gold, #d4af37)';
+        if (after) el.style.marginBottom = s.rowH + 'px'; else el.style.marginTop = s.rowH + 'px';
+        s.marked = el;
+        s.targetKey = el.getAttribute('data-reorder-key');
+        s.after = after;
+    }
+    function _nextKeyedRow(from, dir) {
+        let el = dir > 0 ? from.nextElementSibling : from.previousElementSibling;
+        while (el) {
+            if (el.hasAttribute && el.hasAttribute('data-reorder-key')) return el;
+            el = dir > 0 ? el.nextElementSibling : el.previousElementSibling;
+        }
+        return null;
+    }
     function _dragCleanup() {
         const s = _dragSes;
         if (!s) return;
@@ -765,38 +799,36 @@
         if (s.raf) cancelAnimationFrame(s.raf);
         try { if (s.ghost && s.ghost.parentNode) s.ghost.parentNode.removeChild(s.ghost); } catch (e) { /* detached */ }
         try { if (s.collapsed) s.row.style.cssText = s.rowCss; else s.row.style.opacity = s.rowOpacity; } catch (e) { /* row unmounted */ }
-        try { if (s.marked) s.marked.style.boxShadow = s.markedShadow; } catch (e) { /* row unmounted */ }
+        _dragUnmark(s);
     }
     function _dragRetarget(s) {
         const el = document.elementFromPoint(s.lastX, s.lastY);
         const row = el && el.closest ? el.closest('[data-reorder-key]') : null;
-        let targetKey = null, after = false, targetEl = null;
-        if (row && row !== s.row) {
-            targetKey = row.getAttribute('data-reorder-key');
-            const r = row.getBoundingClientRect();
-            // Drops TAKE the target's spot — the occupant shifts DOWN (owner
-            // call 2026-08-18). The source row collapses once the drag is
-            // real, so the row under the pointer is exactly where the drop
-            // lands, dragging up AND down. The below-target insert survives
-            // only on the list's LAST row (skipping the hidden source), so a
-            // player can still be sent to the very bottom.
-            const rows = (row.parentElement || document).querySelectorAll('[data-reorder-key]');
-            let lastRow = null;
-            for (let i = rows.length - 1; i >= 0; i--) { if (rows[i] !== s.row) { lastRow = rows[i]; break; } }
-            after = row === lastRow && s.lastY > r.top + r.height / 2;
-            targetEl = row;
+        if (!row || row === s.row) {
+            // Over the open slot itself, a round divider, or the folded
+            // source row: hold the current target (the slot would otherwise
+            // snap shut and reopen under the pointer). Only leaving the
+            // list's bounds clears it, so dropping outside stays a no-op.
+            if (s.marked) {
+                const host = s.marked.parentElement;
+                const hr = host ? host.getBoundingClientRect() : null;
+                const inside = hr && s.lastX >= hr.left && s.lastX <= hr.right && s.lastY >= hr.top - 8 && s.lastY <= hr.bottom + 8;
+                if (!inside) { _dragUnmark(s); s.targetKey = null; s.after = false; }
+            }
+            return;
         }
-        if (s.marked && (s.marked !== targetEl || s.after !== after)) {
-            try { s.marked.style.boxShadow = s.markedShadow; } catch (e) { /* row unmounted */ }
-            s.marked = null;
-        }
-        if (targetEl && (s.marked !== targetEl || s.after !== after)) {
-            s.markedShadow = targetEl.style.boxShadow || '';
-            targetEl.style.boxShadow = after ? 'inset 0 -2px 0 0 var(--gold, #d4af37)' : 'inset 0 2px 0 0 var(--gold, #d4af37)';
-            s.marked = targetEl;
-        }
-        s.targetKey = targetKey;
-        s.after = after;
+        // Drops TAKE the target's spot — the occupant shifts DOWN (owner
+        // call 2026-08-18). The source row folds shut once the drag is
+        // real, so the open slot is exactly where the drop lands, dragging
+        // up AND down. The below-target insert survives only on the list's
+        // LAST row (skipping the folded source), so a player can still be
+        // sent to the very bottom.
+        const r = row.getBoundingClientRect();
+        const rows = (row.parentElement || document).querySelectorAll('[data-reorder-key]');
+        let lastRow = null;
+        for (let i = rows.length - 1; i >= 0; i--) { if (rows[i] !== s.row) { lastRow = rows[i]; break; } }
+        const after = row === lastRow && s.lastY > r.top + r.height / 2;
+        _dragMark(s, row, after);
     }
     function dragReorderGrip(opts) {
         const key = opts && opts.key;
@@ -830,7 +862,7 @@
                     lastX: e.clientX, lastY: e.clientY,
                     scroller: scroller === document.body ? null : scroller,
                     rowOpacity: row.style.opacity || '',
-                    rowCss: row.style.cssText, collapsed: false,
+                    rowCss: row.style.cssText, collapsed: false, rowH: rect.height,
                     marked: null, markedShadow: '', targetKey: null, after: false,
                     scrollVel: 0, raf: 0,
                 };
@@ -861,6 +893,14 @@
                     if (dx * dx + dy * dy > 36) {
                         s.row.style.cssText += ';height:0;min-height:0;max-height:0;padding-top:0;padding-bottom:0;border:none;margin:0;overflow:hidden;opacity:0;';
                         s.collapsed = true;
+                        // Open the slot right where the player left, in the
+                        // same frame as the fold — the list doesn't move at
+                        // drag start, the slot then travels with the pointer.
+                        if (!s.marked) {
+                            const nxt = _nextKeyedRow(s.row, 1);
+                            if (nxt) _dragMark(s, nxt, false);
+                            else { const prv = _nextKeyedRow(s.row, -1); if (prv) _dragMark(s, prv, true); }
+                        }
                     }
                 }
                 s.ghost.style.transform = 'translate(' + (e.clientX - s.startX) + 'px,' + (e.clientY - s.startY) + 'px)';

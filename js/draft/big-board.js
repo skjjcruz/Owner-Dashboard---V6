@@ -145,18 +145,41 @@
         // hide is a direct DOM mutation React never sees, so it must be
         // restored with the captured value on drop/dragend.
         const dragRowElRef = React.useRef(null);
+        const dragSlotRef = React.useRef(null);
+        // Open a row-height SLOT above a row (iOS-style, owner call
+        // 2026-08-18): the players part so the landing spot is a visible
+        // open gap and the row being displaced is pushed down under it.
+        const openDragSlot = (rowEl, pid) => {
+            const src = dragRowElRef.current;
+            if (!src || rowEl === src.el) return;
+            const cur = dragSlotRef.current;
+            if (cur && cur.el === rowEl) return;
+            closeDragSlot();
+            dragSlotRef.current = { el: rowEl, pid, mt: rowEl.style.marginTop };
+            rowEl.style.marginTop = (src.h || 40) + 'px';
+        };
+        const closeDragSlot = () => {
+            const cur = dragSlotRef.current;
+            if (cur) { dragSlotRef.current = null; try { cur.el.style.marginTop = cur.mt; } catch (_) {} }
+        };
         const hideDragRow = (el) => {
-            dragRowElRef.current = { el, css: null };
+            dragRowElRef.current = { el, css: null, h: el.getBoundingClientRect().height };
             setTimeout(() => {
                 if (dragRowElRef.current && dragRowElRef.current.el === el) {
                     // Fold to zero height, NOT display:none — WebKit kills the
                     // native drag session when the source element goes hidden.
                     dragRowElRef.current.css = el.style.cssText;
                     el.style.cssText += ';height:0;min-height:0;max-height:0;padding-top:0;padding-bottom:0;border:none;margin:0;overflow:hidden;opacity:0;';
+                    // Open the slot right where the player left, same frame as
+                    // the fold, so the list doesn't move at drag start.
+                    let nxt = el.nextElementSibling;
+                    while (nxt && !(nxt.hasAttribute && nxt.hasAttribute('data-reorder-key'))) nxt = nxt.nextElementSibling;
+                    if (nxt) openDragSlot(nxt, nxt.getAttribute('data-reorder-key'));
                 }
             }, 0);
         };
         const restoreDragRow = () => {
+            closeDragSlot();
             const s = dragRowElRef.current;
             if (s) { dragRowElRef.current = null; try { if (s.css != null) s.el.style.cssText = s.css; } catch (_) {} }
         };
@@ -576,10 +599,9 @@
             saveManualOrder(next);
         };
 
-        const onDropPlayer = (target) => {
+        const onDropPid = (targetPid) => {
             restoreDragRow();
             const sourcePid = dragPid;
-            const targetPid = idOf(target);
             setDragPid(null);
             if (!sourcePid || !targetPid || sourcePid === targetPid || activeLane !== 'my') return;
             const order = manualOrderIds().filter(pid => pid !== sourcePid);
@@ -588,6 +610,7 @@
             order.splice(targetIdx, 0, sourcePid);
             saveManualOrder(order);
         };
+        const onDropPlayer = (target) => onDropPid(idOf(target));
 
         // Grip drag commit (WR.dragReorderGrip): honors the insertion-line
         // half — drop on a row's lower half lands AFTER it (owner ask 2026-07-13).
@@ -988,7 +1011,10 @@
                     {(isUserTurn || state.overrideMode || state.mode === 'manual') && <span />}
                 </div>
 
-                <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', marginRight: '-4px', paddingRight: '4px', maxHeight: scrollMaxHeight }}>
+                <div
+                    style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', marginRight: '-4px', paddingRight: '4px', maxHeight: scrollMaxHeight }}
+                    onDragOver={e => { if (activeLane === 'my') { e.preventDefault(); try { e.dataTransfer.dropEffect = 'move'; } catch (_) {} } }}
+                    onDrop={e => { if (activeLane !== 'my') return; e.preventDefault(); const slot = dragSlotRef.current; if (slot) onDropPid(slot.pid); }}>
                     {available.length === 0 && (
                         <div style={{ padding: '12px', textAlign: 'center', color: 'var(--silver)', opacity: 0.4, fontSize: '0.72rem' }}>
                             No players match filter
@@ -1025,11 +1051,13 @@
                                     if (activeLane === 'my') {
                                         e.preventDefault();
                                         e.dataTransfer.dropEffect = 'move';
+                                        openDragSlot(e.currentTarget, idOf(p));
                                     }
                                 }}
                                 onDrop={e => {
                                     if (activeLane !== 'my') return;
                                     e.preventDefault();
+                                    e.stopPropagation();
                                     onDropPlayer(p);
                                 }}
                                 style={{
