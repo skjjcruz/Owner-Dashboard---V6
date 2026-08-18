@@ -3940,7 +3940,8 @@
                                             const isOpen = openPlanRound === round;
                                             const planLabels = plan.map(k => (bbPositions.find(ps => ps.key === k) || { label: k }).label);
                                             return (
-                                                <span style={{ display: 'inline-flex', gap: 4, marginLeft: 'auto', alignSelf: 'center', alignItems: 'center' }}>
+                                                <span style={{ display: 'inline-flex', gap: 6, marginLeft: 'auto', alignSelf: 'center', alignItems: 'center' }}>
+                                                    <span style={{ color: 'var(--silver)', opacity: 0.75, fontSize: 'var(--text-micro, 0.6875rem)', ...bbMarkerFont }}>POSITIONAL TARGET</span>
                                                     {isOpen && bbPositions.map(ps => {
                                                         const on = plan.includes(ps.key);
                                                         return (
