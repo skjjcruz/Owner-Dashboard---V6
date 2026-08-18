@@ -764,7 +764,7 @@
         _dragSes = null;
         if (s.raf) cancelAnimationFrame(s.raf);
         try { if (s.ghost && s.ghost.parentNode) s.ghost.parentNode.removeChild(s.ghost); } catch (e) { /* detached */ }
-        try { s.row.style.opacity = s.rowOpacity; } catch (e) { /* row unmounted */ }
+        try { s.row.style.opacity = s.rowOpacity; if (s.collapsed) s.row.style.display = s.rowDisplay; } catch (e) { /* row unmounted */ }
         try { if (s.marked) s.marked.style.boxShadow = s.markedShadow; } catch (e) { /* row unmounted */ }
     }
     function _dragRetarget(s) {
@@ -775,13 +775,15 @@
             targetKey = row.getAttribute('data-reorder-key');
             const r = row.getBoundingClientRect();
             // Drops TAKE the target's spot — the occupant shifts DOWN (owner
-            // call 2026-08-18). The old midpoint rule made downward drags land
-            // below the hovered row, reading as the occupant jumping up. The
-            // below-target insert survives only on the list's LAST row, so a
+            // call 2026-08-18). The source row collapses once the drag is
+            // real, so the row under the pointer is exactly where the drop
+            // lands, dragging up AND down. The below-target insert survives
+            // only on the list's LAST row (skipping the hidden source), so a
             // player can still be sent to the very bottom.
             const rows = (row.parentElement || document).querySelectorAll('[data-reorder-key]');
-            const isLastRow = rows.length > 0 && row === rows[rows.length - 1];
-            after = isLastRow && s.lastY > r.top + r.height / 2;
+            let lastRow = null;
+            for (let i = rows.length - 1; i >= 0; i--) { if (rows[i] !== s.row) { lastRow = rows[i]; break; } }
+            after = row === lastRow && s.lastY > r.top + r.height / 2;
             targetEl = row;
         }
         if (s.marked && (s.marked !== targetEl || s.after !== after)) {
@@ -828,6 +830,7 @@
                     lastX: e.clientX, lastY: e.clientY,
                     scroller: scroller === document.body ? null : scroller,
                     rowOpacity: row.style.opacity || '',
+                    rowDisplay: row.style.display || '', collapsed: false,
                     marked: null, markedShadow: '', targetKey: null, after: false,
                     scrollVel: 0, raf: 0,
                 };
@@ -845,6 +848,14 @@
                 const s = _dragSes;
                 if (!s || s.key !== key) return;
                 s.lastX = e.clientX; s.lastY = e.clientY;
+                if (!s.collapsed) {
+                    // Collapse the source row once the pointer has really moved
+                    // (not on a bare tap): the list closes the gap, so every
+                    // row sits exactly where it will land and downward drops
+                    // stop landing one row high (owner call 2026-08-18).
+                    const dx = s.lastX - s.startX, dy = s.lastY - s.startY;
+                    if (dx * dx + dy * dy > 36) { s.row.style.display = 'none'; s.collapsed = true; }
+                }
                 s.ghost.style.transform = 'translate(' + (e.clientX - s.startX) + 'px,' + (e.clientY - s.startY) + 'px)';
                 if (s.scroller) {
                     const cr = s.scroller.getBoundingClientRect();

@@ -139,6 +139,20 @@
         const [sortDir, setSortDir] = React.useState(1);
         const [boardLane, setBoardLane] = React.useState(defaultLane);
         const [dragPid, setDragPid] = React.useState(null);
+        // HTML5 row-body drags: the source row collapses mid-drag (deferred so
+        // the browser can snapshot the drag image first) so the row under the
+        // finger is exactly where the drop lands — dragging up AND down. The
+        // hide is a direct DOM mutation React never sees, so it must be
+        // restored with the captured value on drop/dragend.
+        const dragRowElRef = React.useRef(null);
+        const hideDragRow = (el) => {
+            dragRowElRef.current = { el, display: el.style.display };
+            setTimeout(() => { if (dragRowElRef.current && dragRowElRef.current.el === el) el.style.display = 'none'; }, 0);
+        };
+        const restoreDragRow = () => {
+            const s = dragRowElRef.current;
+            if (s) { dragRowElRef.current = null; try { s.el.style.display = s.display; } catch (_) {} }
+        };
         const [bucket, setBucket] = React.useState(() => bpBucket());
         // Hide-drafted toggle (default OFF — matches the prior always-show behavior).
         // Persisted as a single user preference across leagues/variants.
@@ -556,6 +570,7 @@
         };
 
         const onDropPlayer = (target) => {
+            restoreDragRow();
             const sourcePid = dragPid;
             const targetPid = idOf(target);
             setDragPid(null);
@@ -994,10 +1009,11 @@
                                 onDragStart={e => {
                                     if (activeLane !== 'my' || p._drafted) return;
                                     setDragPid(idOf(p));
+                                    if (e.currentTarget) hideDragRow(e.currentTarget);
                                     e.dataTransfer.effectAllowed = 'move';
                                     try { e.dataTransfer.setData('text/plain', idOf(p)); } catch (_) {}
                                 }}
-                                onDragEnd={() => setDragPid(null)}
+                                onDragEnd={() => { restoreDragRow(); setDragPid(null); }}
                                 onDragOver={e => {
                                     if (activeLane === 'my') {
                                         e.preventDefault();

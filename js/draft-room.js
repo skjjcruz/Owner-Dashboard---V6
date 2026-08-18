@@ -143,6 +143,20 @@
         const [depthReadPos, setDepthReadPos] = useState(null); // Class Depth row with the full Alex read expanded
         const [nflFitAI, setNflFitAI] = useState({}); // pid -> live web-search "Alex NFL Fit" read (premium)
         const [dragPid, setDragPid] = useState(null); // currently dragging pid
+        // HTML5 row-body drags: the source row collapses mid-drag (deferred so
+        // the browser can snapshot the drag image first) so the row under the
+        // finger is exactly where the drop lands — dragging up AND down. The
+        // hide is a direct DOM mutation React never sees, so it must be
+        // restored with the captured value on drop/dragend.
+        const dragRowElRef = useRef(null);
+        const hideDragRow = (el) => {
+            dragRowElRef.current = { el, display: el.style.display };
+            setTimeout(() => { if (dragRowElRef.current && dragRowElRef.current.el === el) el.style.display = 'none'; }, 0);
+        };
+        const restoreDragRow = () => {
+            const s = dragRowElRef.current;
+            if (s) { dragRowElRef.current = null; try { s.el.style.display = s.display; } catch (_) {} }
+        };
         const [draftStrategyEditing, setDraftStrategyEditing] = useState(false);
         const draftStrategyKey = 'wr_draft_strategy_' + leagueKey;
         const [customDraftStrategy, setCustomDraftStrategy] = useState(() => {
@@ -3440,6 +3454,7 @@
                     // without it the touch falls back to selecting text.
                     const handleDragStart = (e, pid) => {
                         setDragPid(pid);
+                        if (e && e.currentTarget) hideDragRow(e.currentTarget);
                         try {
                             if (e?.dataTransfer) {
                                 e.dataTransfer.effectAllowed = 'move';
@@ -3452,6 +3467,7 @@
                         try { if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; } catch (_) {}
                     };
                     const handleDrop = (targetPid) => {
+                        restoreDragRow();
                         if (!dragPid || dragPid === targetPid) return;
                         setMyBoardOrder(prev => {
                             const order = prev.length ? [...prev] : aiSeedOrder.slice();
@@ -3701,7 +3717,7 @@
                                         draggable={!isDhq}
                                         onDragStart={!isDhq ? (e) => handleDragStart(e, r.pid) : undefined}
                                         onDragOver={!isDhq ? handleDragOver : undefined}
-                                        onDragEnd={!isDhq ? () => setDragPid(null) : undefined}
+                                        onDragEnd={!isDhq ? () => { restoreDragRow(); setDragPid(null); } : undefined}
                                         onDrop={!isDhq ? () => handleDrop(r.pid) : undefined}
                                         onClick={openPlayerDetail}
                                         style={{ display: 'grid', gridTemplateColumns: boardGridCols, alignItems: 'center', minHeight: '42px', opacity: isDrafted ? 0.35 : 1, borderBottom: isExp ? 'none' : '1px solid var(--ov-3, rgba(255,255,255,0.035))', cursor: 'pointer', background: isExp ? 'var(--acc-fill1, rgba(212,175,55,0.065))' : idx % 2 === 1 ? 'var(--ov-1, rgba(255,255,255,0.016))' : 'transparent', transition: 'background 0.1s', position: 'relative' }}
