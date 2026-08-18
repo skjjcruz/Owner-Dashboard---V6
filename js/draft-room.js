@@ -120,6 +120,7 @@
         const [boardNotes, setBoardNotes] = useState({});
         const [boardTags, setBoardTags] = useState({}); // pid -> 'target'|'avoid'|'sleeper'|'must'
         const [roundPlans, setRoundPlans] = useState({}); // round -> ['RB','WR'] — position targets on the round breaker lines
+        const [openPlanRound, setOpenPlanRound] = useState(null); // which round line has its position picker expanded
         const [boardMode, setBoardMode] = useState('dhq'); // 'dhq' | 'ai' | 'my'
         const [myBoardOrder, setMyBoardOrder] = useState([]); // custom ordered pid array
         const [boardPosFilter, setBoardPosFilter] = useState(''); // '' | 'QB' | 'RB' | 'WR' | 'TE' | 'DL' | 'LB' | 'DB'
@@ -3929,19 +3930,33 @@
                                 out.push(
                                     <div key={'bbrd' + n} style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: round === 1 ? '8px 12px 6px' : '16px 12px 6px', borderBottom: '1px solid var(--gold)', background: 'var(--acc-fill3, rgba(212,175,55,0.06))' }}>
                                         <span style={{ color: 'var(--gold)', fontSize: '0.78rem', ...bbMarkerFont }}>ROUND {round}</span>
-                                        <span style={{ display: 'inline-flex', gap: 4, marginLeft: 8, alignSelf: 'center' }}>
-                                            {bbPositions.map(ps => {
-                                                const on = (roundPlans[round] || []).includes(ps.key);
-                                                return (
-                                                    <button key={ps.key} type="button" onClick={() => toggleRoundPlan(round, ps.key)}
-                                                        title={on ? 'Round ' + round + ' target: ' + ps.label + ' (tap to clear)' : 'Target ' + ps.label + ' in round ' + round}
+                                        {(() => {
+                                            const plan = roundPlans[round] || [];
+                                            const isOpen = openPlanRound === round;
+                                            const planLabels = plan.map(k => (bbPositions.find(ps => ps.key === k) || { label: k }).label);
+                                            return (
+                                                <span style={{ display: 'inline-flex', gap: 4, marginLeft: 8, alignSelf: 'center', alignItems: 'center' }}>
+                                                    <button type="button" onClick={() => setOpenPlanRound(isOpen ? null : round)}
+                                                        title={plan.length ? 'Round ' + round + ' target: ' + planLabels.join(', ') : 'Pick a position target for round ' + round}
                                                         style={{ padding: '2px 8px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', fontWeight: 800, letterSpacing: '0.06em', borderRadius: 5, cursor: 'pointer', lineHeight: 1.6,
-                                                            border: '1px solid ' + (on ? 'var(--gold)' : 'var(--ov-5, rgba(255,255,255,0.1))'),
-                                                            background: on ? 'var(--acc-fill2, rgba(212,175,55,0.16))' : 'transparent',
-                                                            color: on ? 'var(--gold)' : 'var(--silver)' }}>{ps.label}</button>
-                                                );
-                                            })}
-                                        </span>
+                                                            border: '1px solid ' + (plan.length ? 'var(--gold)' : 'var(--ov-5, rgba(255,255,255,0.1))'),
+                                                            background: plan.length ? 'var(--acc-fill2, rgba(212,175,55,0.16))' : 'transparent',
+                                                            color: plan.length ? 'var(--gold)' : 'var(--silver)', opacity: plan.length || isOpen ? 1 : 0.75 }}>
+                                                        {plan.length ? planLabels.join(' · ') : 'TARGET'} {isOpen ? '▴' : '▾'}
+                                                    </button>
+                                                    {isOpen && bbPositions.map(ps => {
+                                                        const on = plan.includes(ps.key);
+                                                        return (
+                                                            <button key={ps.key} type="button" onClick={() => toggleRoundPlan(round, ps.key)}
+                                                                style={{ padding: '2px 8px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', fontWeight: 800, letterSpacing: '0.06em', borderRadius: 5, cursor: 'pointer', lineHeight: 1.6,
+                                                                    border: '1px solid ' + (on ? 'var(--gold)' : 'var(--ov-5, rgba(255,255,255,0.1))'),
+                                                                    background: on ? 'var(--acc-fill2, rgba(212,175,55,0.16))' : 'transparent',
+                                                                    color: on ? 'var(--gold)' : 'var(--silver)' }}>{ps.label}</button>
+                                                        );
+                                                    })}
+                                                </span>
+                                            );
+                                        })()}
                                         {mine && <span style={{ marginLeft: 'auto', color: 'var(--silver)', fontSize: 'var(--text-micro, 0.6875rem)', ...bbMarkerFont }}>YOU PICK {bbPickLabel(mine)} · #{mine}</span>}
                                     </div>
                                 );
