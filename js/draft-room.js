@@ -3900,11 +3900,11 @@
                         if (rp.some(p => ['DL', 'LB', 'DB', 'IDP_FLEX', 'IDP'].includes(p))) out.push({ key: 'IDP', label: 'IDP' });
                         return out;
                     })();
+                    // Single-select (owner call 2026-08-18): one position per round —
+                    // a new pick replaces the old; tapping the current one clears it.
                     const toggleRoundPlan = (round, key) => setRoundPlans(prev => {
-                        const cur = prev[round] || [];
-                        const next = cur.includes(key) ? cur.filter(x => x !== key) : [...cur, key];
                         const out = { ...prev };
-                        if (next.length) out[round] = next; else delete out[round];
+                        if ((prev[round] || [])[0] === key) delete out[round]; else out[round] = [key];
                         return out;
                     });
                     const bbMarkerFont = { fontFamily: 'var(--font-body)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 800 };
