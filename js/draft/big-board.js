@@ -160,6 +160,41 @@
             }
         }, [boardContext?.activeLane]);
 
+        // Re-sync from the shared board store on mount (owner report 2026-08-18:
+        // the Draft tab's feeder and this room showed different orders). A saved
+        // room carries a BAKED boardContext from when it was created; edits made
+        // on the feeder while the room was closed never reached it — the
+        // wr:bigboard-write live link only works while both are mounted. On
+        // mount, adopt the stored board through the same absorb path when its
+        // user signature differs from what this room is showing.
+        React.useEffect(() => {
+            try {
+                const ctxFns = window.DraftCC && window.DraftCC.context;
+                if (!ctxFns || typeof ctxFns.loadStoredBoard !== 'function' || !state.leagueId) return;
+                const stored = ctxFns.loadStoredBoard(state.leagueId, state.variant || 'startup');
+                if (!stored) return;
+                const sig = boardUserSig({
+                    myOrder: stored.myOrder || [], tags: stored.tags || {}, notes: stored.notes || {},
+                    drafted: stored.drafted || [], activeLane: stored.activeLane,
+                });
+                const shownSig = boardUserSig({
+                    myOrder: boardContext?.lanes?.my?.order || [], tags: boardContext?.tags || {},
+                    notes: boardContext?.notes || {}, drafted: boardContext?.drafted || [],
+                    activeLane: boardContext?.activeLane,
+                });
+                if (!sig || sig === shownSig) return;
+                if (!(stored.myOrder && stored.myOrder.length) && !Object.keys(stored.tags || {}).length && !Object.keys(stored.notes || {}).length) return;
+                dispatch({
+                    type: 'UPDATE_BOARD_CONTEXT',
+                    patch: {
+                        myOrder: stored.myOrder, tags: stored.tags, notes: stored.notes,
+                        tiers: stored.tiers, drafted: stored.drafted, activeLane: stored.activeLane,
+                    },
+                });
+            } catch (e) { if (window.wrLog) window.wrLog('bigBoard.mountResync', e); }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [state.leagueId, state.variant]);
+
         // Track the signature of the board we're currently showing so the listener
         // below can tell a real edit from the Draft tab apart from the echo of our
         // own writes to the shared store.
