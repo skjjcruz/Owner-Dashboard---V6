@@ -146,12 +146,19 @@
         // restored with the captured value on drop/dragend.
         const dragRowElRef = React.useRef(null);
         const hideDragRow = (el) => {
-            dragRowElRef.current = { el, display: el.style.display };
-            setTimeout(() => { if (dragRowElRef.current && dragRowElRef.current.el === el) el.style.display = 'none'; }, 0);
+            dragRowElRef.current = { el, css: null };
+            setTimeout(() => {
+                if (dragRowElRef.current && dragRowElRef.current.el === el) {
+                    // Fold to zero height, NOT display:none — WebKit kills the
+                    // native drag session when the source element goes hidden.
+                    dragRowElRef.current.css = el.style.cssText;
+                    el.style.cssText += ';height:0;min-height:0;max-height:0;padding-top:0;padding-bottom:0;border:none;margin:0;overflow:hidden;opacity:0;';
+                }
+            }, 0);
         };
         const restoreDragRow = () => {
             const s = dragRowElRef.current;
-            if (s) { dragRowElRef.current = null; try { s.el.style.display = s.display; } catch (_) {} }
+            if (s) { dragRowElRef.current = null; try { if (s.css != null) s.el.style.cssText = s.css; } catch (_) {} }
         };
         const [bucket, setBucket] = React.useState(() => bpBucket());
         // Hide-drafted toggle (default OFF — matches the prior always-show behavior).
