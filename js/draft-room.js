@@ -3907,15 +3907,6 @@
                                     </div>
                                 );
                             }
-                            if (bbUserPicks.has(n)) {
-                                out.push(
-                                    <div key={'bbup' + n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 12px', color: 'var(--gold)', fontSize: 'var(--text-micro, 0.6875rem)', ...bbMarkerFont }}>
-                                        <span style={{ flex: 1, height: 1, background: 'var(--gold)', opacity: 0.5 }} />
-                                        <span>◆ YOUR PICK {bbPickLabel(n)} · #{n} OVERALL</span>
-                                        <span style={{ flex: 1, height: 1, background: 'var(--gold)', opacity: 0.5 }} />
-                                    </div>
-                                );
-                            }
                         }
                         return out.length ? out : null;
                     };

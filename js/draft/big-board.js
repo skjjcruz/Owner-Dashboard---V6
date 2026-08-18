@@ -415,15 +415,6 @@
                         </div>
                     );
                 }
-                if (userPickRanks.has(n)) {
-                    out.push(
-                        <div key={'bbup' + n} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '6px 0', color: 'var(--gold)', fontSize: '0.64rem', letterSpacing: '0.12em', fontFamily: FONT_MONO }}>
-                            <span style={{ flex: 1, height: '1px', background: 'var(--gold)', opacity: 0.55 }} />
-                            <span>◆ YOUR PICK {pickLabel(n)} · #{n} OVERALL</span>
-                            <span style={{ flex: 1, height: '1px', background: 'var(--gold)', opacity: 0.55 }} />
-                        </div>
-                    );
-                }
             }
             return out.length ? out : null;
         };
