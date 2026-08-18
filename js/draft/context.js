@@ -140,6 +140,7 @@
             tags: mergeKeyedPatch(b.tags, p.tags),
             notes: mergeKeyedPatch(b.notes, p.notes),
             tiers: mergeKeyedPatch(b.tiers, p.tiers),
+            roundPlans: mergeKeyedPatch(b.roundPlans, p.roundPlans),
             fades: mergeKeyedPatch(b.fades, p.fades),
             targets: mergeKeyedPatch(b.targets, p.targets),
             drafted: p.drafted || b.drafted || [],
@@ -168,7 +169,8 @@
         return ((b.myOrder && b.myOrder.length) || 0) * 2
             + Object.keys(b.tags || {}).length
             + Object.keys(b.notes || {}).length
-            + Object.keys(b.tiers || {}).length;
+            + Object.keys(b.tiers || {}).length
+            + Object.keys(b.roundPlans || {}).length;
     }
 
     // RECOVERY SWEEP (owner report 2026-08-17, board lost twice): the board is

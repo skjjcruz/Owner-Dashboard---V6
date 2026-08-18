@@ -23,6 +23,7 @@
                 ai: b.aiOrder || [],
                 tags: b.tags || {},
                 notes: b.notes || {},
+                plans: b.roundPlans || {},
                 drafted: (b.drafted || []).slice().sort(),
                 lane: b.activeLane || b.boardMode || 'dhq',
             });
@@ -118,6 +119,7 @@
         });
         const [boardNotes, setBoardNotes] = useState({});
         const [boardTags, setBoardTags] = useState({}); // pid -> 'target'|'avoid'|'sleeper'|'must'
+        const [roundPlans, setRoundPlans] = useState({}); // round -> ['RB','WR'] — position targets on the round breaker lines
         const [boardMode, setBoardMode] = useState('dhq'); // 'dhq' | 'ai' | 'my'
         const [myBoardOrder, setMyBoardOrder] = useState([]); // custom ordered pid array
         const [boardPosFilter, setBoardPosFilter] = useState(''); // '' | 'QB' | 'RB' | 'WR' | 'TE' | 'DL' | 'LB' | 'DB'
@@ -818,6 +820,7 @@
                 setDraftedPids(new Set());
                 setBoardNotes({});
                 setBoardTags({});
+                setRoundPlans({});
                 setMyBoardOrder([]);
                 setBoardMode('dhq');
             }
@@ -828,6 +831,7 @@
             if (boardData) {
                 if (boardData.tags) setBoardTags(boardData.tags);
                 if (boardData.notes) setBoardNotes(boardData.notes);
+                if (boardData.roundPlans) setRoundPlans(boardData.roundPlans);
                 if (boardData.drafted) setDraftedPids(new Set(boardData.drafted));
                 if (boardData.myOrder) setMyBoardOrder(boardData.myOrder);
                 if (['dhq', 'ai', 'my'].includes(boardData.activeLane || boardData.boardMode)) setBoardMode(boardData.activeLane || boardData.boardMode);
@@ -982,6 +986,7 @@
             const payload = {
                 tags: boardTags,
                 notes: boardNotes,
+                roundPlans,
                 drafted: Array.from(draftedPids),
                 aiOrder: aiRecommendedOrder,
                 myOrder: myBoardOrder,
@@ -1019,10 +1024,14 @@
                     try {
                         const lid = currentLeague?.league_id || currentLeague?.id || leagueKey;
                         if (lid) window.OD?.saveLeagueDoc?.(lid, 'bigboard', { key: boardStorageKey, data: stored });
+                        // Big Board cloud vault (owner directive 2026-08-17): this
+                        // effect is the Draft tab's own save path — it bypasses
+                        // context.saveBoardPatch, so the vault must be fed here too.
+                        if (lid) window.OD?.saveBigBoardBackup?.(lid, stored);
                     } catch (e) { /* cloud unavailable — local board still serves */ }
                 }, 1200);
             } catch (e) { /* never let sync break the save */ }
-        }, [boardTags, boardNotes, draftedPids, aiRecommendedOrder, myBoardOrder, boardMode, boardStorageKey]);
+        }, [boardTags, boardNotes, roundPlans, draftedPids, aiRecommendedOrder, myBoardOrder, boardMode, boardStorageKey]);
 
         // Re-hydrate from the shared Big Board store when the live draft room (or
         // another tab) edits the same league's board. Without this, the Draft tab's
@@ -3880,6 +3889,23 @@
                     })();
                     const bbRankByPid = new Map(allBoardPlayers.map((r, i) => [r.pid, i + 1]));
                     const bbPickLabel = (o) => (Math.floor((o - 1) / bbRoundSize) + 1) + '.' + String(((o - 1) % bbRoundSize) + 1).padStart(2, '0');
+                    // League-specific position chips for the round lines: tap to declare
+                    // "this round I'm going RB" — saved with the board (and the vault).
+                    const bbPositions = (() => {
+                        const rp = (currentLeague?.roster_positions || []).map(String);
+                        const out = [{ key: 'QB', label: 'QB' }, { key: 'RB', label: 'RB' }, { key: 'WR', label: 'WR' }, { key: 'TE', label: 'TE' }];
+                        if (rp.includes('K')) out.push({ key: 'K', label: 'K' });
+                        if (rp.includes('DEF')) out.push({ key: 'DEF', label: 'D/ST' });
+                        if (rp.some(p => ['DL', 'LB', 'DB', 'IDP_FLEX', 'IDP'].includes(p))) out.push({ key: 'IDP', label: 'IDP' });
+                        return out;
+                    })();
+                    const toggleRoundPlan = (round, key) => setRoundPlans(prev => {
+                        const cur = prev[round] || [];
+                        const next = cur.includes(key) ? cur.filter(x => x !== key) : [...cur, key];
+                        const out = { ...prev };
+                        if (next.length) out[round] = next; else delete out[round];
+                        return out;
+                    });
                     const bbMarkerFont = { fontFamily: 'var(--font-body)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 800 };
                     const boardRoundMarkers = (prevRank, rank, showBreakersNow) => {
                         if (!showBreakersNow || !bbRoundSize || rank <= prevRank || rank - prevRank > 500) return null;
@@ -3903,6 +3929,19 @@
                                 out.push(
                                     <div key={'bbrd' + n} style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: round === 1 ? '8px 12px 6px' : '16px 12px 6px', borderBottom: '1px solid var(--gold)', background: 'var(--acc-fill3, rgba(212,175,55,0.06))' }}>
                                         <span style={{ color: 'var(--gold)', fontSize: '0.78rem', ...bbMarkerFont }}>ROUND {round}</span>
+                                        <span style={{ display: 'inline-flex', gap: 4, marginLeft: 8, alignSelf: 'center' }}>
+                                            {bbPositions.map(ps => {
+                                                const on = (roundPlans[round] || []).includes(ps.key);
+                                                return (
+                                                    <button key={ps.key} type="button" onClick={() => toggleRoundPlan(round, ps.key)}
+                                                        title={on ? 'Round ' + round + ' target: ' + ps.label + ' (tap to clear)' : 'Target ' + ps.label + ' in round ' + round}
+                                                        style={{ padding: '2px 8px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', fontWeight: 800, letterSpacing: '0.06em', borderRadius: 5, cursor: 'pointer', lineHeight: 1.6,
+                                                            border: '1px solid ' + (on ? 'var(--gold)' : 'var(--ov-5, rgba(255,255,255,0.1))'),
+                                                            background: on ? 'var(--acc-fill2, rgba(212,175,55,0.16))' : 'transparent',
+                                                            color: on ? 'var(--gold)' : 'var(--silver)' }}>{ps.label}</button>
+                                                );
+                                            })}
+                                        </span>
                                         {mine && <span style={{ marginLeft: 'auto', color: 'var(--silver)', fontSize: 'var(--text-micro, 0.6875rem)', ...bbMarkerFont }}>YOU PICK {bbPickLabel(mine)} · #{mine}</span>}
                                     </div>
                                 );
