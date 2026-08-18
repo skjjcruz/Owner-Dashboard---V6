@@ -779,7 +779,7 @@
             // below the hovered row, reading as the occupant jumping up. The
             // below-target insert survives only on the list's LAST row, so a
             // player can still be sent to the very bottom.
-            const rows = document.querySelectorAll('[data-reorder-key]');
+            const rows = (row.parentElement || document).querySelectorAll('[data-reorder-key]');
             const isLastRow = rows.length > 0 && row === rows[rows.length - 1];
             after = isLastRow && s.lastY > r.top + r.height / 2;
             targetEl = row;
@@ -815,6 +815,10 @@
                     scroller = scroller.parentElement;
                 }
                 const ghost = row.cloneNode(true);
+                // The clone must NOT count as a list row: it would otherwise
+                // read as the document's last [data-reorder-key] and break the
+                // last-row bottom-drop rule in _dragRetarget.
+                ghost.removeAttribute('data-reorder-key');
                 ghost.style.cssText += ';position:fixed;left:' + rect.left + 'px;top:' + rect.top + 'px;width:' + rect.width + 'px;height:' + rect.height + 'px;margin:0;z-index:9999;pointer-events:none;opacity:0.97;background:var(--black, #121217);border:1px solid var(--acc-line4, rgba(212,175,55,0.55));border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,0.55);transition:none;';
                 document.body.appendChild(ghost);
                 _dragSes = {
