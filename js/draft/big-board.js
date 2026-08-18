@@ -357,6 +357,77 @@
             return sorted.slice(0, 300); // mirror the Draft tab feeder depth
         }, [decoratedPool, posFilter, search, sortKey, sortDir, hideDrafted]);
 
+        // ── ROUND BREAKERS + YOUR-PICK MARKERS (owner feature 2026-08-17) ──
+        // Slice the board into league-specific rounds (leagueSize per round,
+        // capped at the draft's round count) and mark exactly where the user's
+        // picks land — traded-pick aware when a real pickOrder exists, snake
+        // math otherwise. Rank-driven, so hidden rows (hide-drafted) can't
+        // shift the boundaries. Only shown on the pure board view: any sort,
+        // filter or search makes index-based rounds a lie.
+        const roundSize = Math.max(0, Number(state.leagueSize) || 0);
+        const totalRounds = Math.max(0, Number(state.rounds) || 0);
+        const showBreakers = roundSize >= 4 && sortKey === 'board' && !posFilter && !search;
+        const userPickRanks = React.useMemo(() => {
+            const out = new Set();
+            if (!roundSize) return out;
+            const order = Array.isArray(state.pickOrder) && state.pickOrder.length ? state.pickOrder : null;
+            if (order) {
+                order.forEach((slot, i) => { if (Number(slot) === Number(state.userSlot)) out.add(i + 1); });
+            } else {
+                const slot = Math.min(roundSize, Math.max(1, Number(state.userSlot) || 1));
+                const rounds = totalRounds || Math.ceil(300 / roundSize);
+                for (let r = 1; r <= rounds; r++) {
+                    const inRound = state.draftType === 'linear' ? slot : (r % 2 === 1 ? slot : roundSize + 1 - slot);
+                    out.add((r - 1) * roundSize + inRound);
+                }
+            }
+            return out;
+        }, [roundSize, totalRounds, state.pickOrder, state.userSlot, state.draftType]);
+        const pickLabel = (overall) => {
+            const r = Math.floor((overall - 1) / roundSize) + 1;
+            return r + '.' + String(((overall - 1) % roundSize) + 1).padStart(2, '0');
+        };
+        // Everything crossed between the previous visible row's board rank and
+        // this row's: round headers, the user's exact pick line, the end rule.
+        const boardMarkers = (prevRank, rank) => {
+            if (!showBreakers || rank <= prevRank || rank - prevRank > 400) return null;
+            const out = [];
+            const lastDraftedRank = totalRounds ? totalRounds * roundSize : Infinity;
+            for (let n = prevRank + 1; n <= rank; n++) {
+                if (n > lastDraftedRank) {
+                    if (n === lastDraftedRank + 1) out.push(
+                        <div key={'bbend' + n} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '10px 0 6px', color: 'var(--silver)', opacity: 0.55, fontSize: '0.62rem', letterSpacing: '0.14em', fontFamily: FONT_MONO }}>
+                            <span style={{ flex: 1, height: '1px', background: 'var(--acc-line1, rgba(212,175,55,0.25))' }} />
+                            <span>END OF DRAFT · {totalRounds} ROUNDS</span>
+                            <span style={{ flex: 1, height: '1px', background: 'var(--acc-line1, rgba(212,175,55,0.25))' }} />
+                        </div>
+                    );
+                    continue;
+                }
+                const round = Math.floor((n - 1) / roundSize) + 1;
+                if ((n - 1) % roundSize === 0) {
+                    let mine = null;
+                    for (let k = (round - 1) * roundSize + 1; k <= round * roundSize; k++) { if (userPickRanks.has(k)) { mine = k; break; } }
+                    out.push(
+                        <div key={'bbrd' + n} style={{ display: 'flex', alignItems: 'baseline', gap: '10px', margin: round === 1 ? '2px 0 8px' : '14px 0 8px', borderBottom: '1px solid var(--gold)', paddingBottom: '5px' }}>
+                            <span style={{ color: 'var(--gold)', fontFamily: FONT_MONO, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.16em' }}>ROUND {round}</span>
+                            {mine && <span style={{ marginLeft: 'auto', color: 'var(--silver)', fontFamily: FONT_MONO, fontSize: '0.62rem', letterSpacing: '0.1em' }}>YOU PICK {pickLabel(mine)} · #{mine}</span>}
+                        </div>
+                    );
+                }
+                if (userPickRanks.has(n)) {
+                    out.push(
+                        <div key={'bbup' + n} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '6px 0', color: 'var(--gold)', fontSize: '0.64rem', letterSpacing: '0.12em', fontFamily: FONT_MONO }}>
+                            <span style={{ flex: 1, height: '1px', background: 'var(--gold)', opacity: 0.55 }} />
+                            <span>◆ YOUR PICK {pickLabel(n)} · #{n} OVERALL</span>
+                            <span style={{ flex: 1, height: '1px', background: 'var(--gold)', opacity: 0.55 }} />
+                        </div>
+                    );
+                }
+            }
+            return out.length ? out : null;
+        };
+
         // Ask Alex about the board: opens recon chat pre-loaded with the
         // top of the active lane (crossover, owner ask 2026-07-13).
         const askAlexBoard = () => {
@@ -648,8 +719,12 @@
                             // Grip drag handle beside my-lane cards (owner ask 2026-07-13);
                             // ▲/▼ under the card stays as the precision fallback.
                             const phGp = showTouchMove && window.WR && window.WR.dragReorderGrip ? window.WR.dragReorderGrip({ key: idOf(p), onDrop: onGripDrop }) : null;
+                            const prevRowP = idx > 0 ? available[idx - 1] : null;
+                            const prevRankP = !prevRowP ? 0 : (prevRowP._board && prevRowP._board.activeRank < 99999 ? prevRowP._board.activeRank : idx);
                             return (
-                                <div key={p.pid} data-reorder-key={idOf(p)} style={p._drafted ? { opacity: 0.45 } : undefined}>
+                                <React.Fragment key={p.pid}>
+                                {boardMarkers(prevRankP, rowRank)}
+                                <div data-reorder-key={idOf(p)} style={p._drafted ? { opacity: 0.45 } : undefined}>
                                     <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
                                     {phGp && (
                                         // Slim 22px rail mirroring the Draft tab feeder (owner ask
@@ -685,6 +760,7 @@
                                     </div>
                                     </div>
                                 </div>
+                                </React.Fragment>
                             );
                         })}
                     </div>
@@ -881,8 +957,11 @@
                         const nflTeam = nflTeamOf(p);
                         const college = collegeOf(p);
                         const showTouchMove = touchReorder && activeLane === 'my' && !p._drafted;
+                        const prevRowD = idx > 0 ? available[idx - 1] : null;
+                        const prevRankD = !prevRowD ? 0 : (prevRowD._board && prevRowD._board.activeRank < 99999 ? prevRowD._board.activeRank : idx);
                         return (
                             <React.Fragment key={p.pid}>
+                            {boardMarkers(prevRankD, rowRank)}
                             <div
                                 data-reorder-key={idOf(p)}
                                 onClick={() => onOpenModal(p)}
