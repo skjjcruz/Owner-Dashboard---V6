@@ -3730,6 +3730,14 @@
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                                                     <strong style={{ color: 'var(--white)', fontSize: '0.76rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: isDrafted ? 'line-through' : 'none' }}>{pName(r.p)}</strong>
                                                     {chip(pos, posColors[pos] || 'var(--silver)', (posColors[pos] || 'var(--k-666666, #666666)') + '22')}
+                                                    {bbShowNow && bbRank && bbUserPicks.has(bbRank) && (
+                                                        <span title={'Your pick: ' + bbPickLabel(bbRank) + ' (#' + bbRank + ' overall)'}
+                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, flexShrink: 0,
+                                                                border: '1px solid var(--gold)', background: 'var(--acc-fill2, rgba(212,175,55,0.14))', color: 'var(--gold)',
+                                                                fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', fontWeight: 900, letterSpacing: '0.05em' }}>
+                                                            ◆ {bbPickLabel(bbRank)}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -3925,12 +3933,9 @@
                             }
                             const round = Math.floor((n - 1) / bbRoundSize) + 1;
                             if ((n - 1) % bbRoundSize === 0) {
-                                let mine = null;
-                                for (let k = (round - 1) * bbRoundSize + 1; k <= round * bbRoundSize; k++) { if (bbUserPicks.has(k)) { mine = k; break; } }
                                 out.push(
                                     <div key={'bbrd' + n} style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: round === 1 ? '8px 12px 6px' : '16px 12px 6px', borderBottom: '1px solid var(--gold)', background: 'var(--acc-fill3, rgba(212,175,55,0.06))' }}>
                                         <span style={{ color: 'var(--gold)', fontSize: '0.78rem', ...bbMarkerFont }}>ROUND {round}</span>
-                                        {mine && <span style={{ marginLeft: 'auto', color: 'var(--silver)', fontSize: 'var(--text-micro, 0.6875rem)', ...bbMarkerFont }}>YOU PICK {bbPickLabel(mine)} · #{mine}</span>}
                                         {(() => {
                                             // Far-right target toggle (owner call 2026-08-18): collapsed it
                                             // shows ONLY the chosen position; tapping a chip picks AND
@@ -3939,7 +3944,7 @@
                                             const isOpen = openPlanRound === round;
                                             const planLabels = plan.map(k => (bbPositions.find(ps => ps.key === k) || { label: k }).label);
                                             return (
-                                                <span style={{ display: 'inline-flex', gap: 4, marginLeft: mine ? 12 : 'auto', alignSelf: 'center', alignItems: 'center' }}>
+                                                <span style={{ display: 'inline-flex', gap: 4, marginLeft: 'auto', alignSelf: 'center', alignItems: 'center' }}>
                                                     {isOpen && bbPositions.map(ps => {
                                                         const on = plan.includes(ps.key);
                                                         return (
