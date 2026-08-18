@@ -192,7 +192,6 @@
                     },
                 });
             } catch (e) { if (window.wrLog) window.wrLog('bigBoard.mountResync', e); }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [state.leagueId, state.variant]);
 
         // Track the signature of the board we're currently showing so the listener
