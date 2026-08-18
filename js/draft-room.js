@@ -3693,11 +3693,7 @@
                                         style={{ display: 'grid', gridTemplateColumns: boardGridCols, alignItems: 'center', minHeight: '42px', opacity: isDrafted ? 0.35 : 1, borderBottom: isExp ? 'none' : '1px solid var(--ov-3, rgba(255,255,255,0.035))', cursor: 'pointer', background: isExp ? 'var(--acc-fill1, rgba(212,175,55,0.065))' : idx % 2 === 1 ? 'var(--ov-1, rgba(255,255,255,0.016))' : 'transparent', transition: 'background 0.1s', position: 'relative' }}
                                         onMouseEnter={e => { if (!isExp) e.currentTarget.style.background = 'var(--acc-fill1, rgba(212,175,55,0.04))'; }}
                                         onMouseLeave={e => { if (!isExp) e.currentTarget.style.background = idx % 2 === 1 ? 'var(--ov-1, rgba(255,255,255,0.016))' : 'transparent'; }}>
-                                        <div className="wr-brd-numcell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, fontFamily: 'var(--font-body)', fontSize: '0.74rem', color: idx < 3 ? 'var(--gold)' : 'var(--silver)', fontWeight: 800,
-                                            /* Light red wash on the rank cell at the user's pick slots (owner
-                                               ask 2026-08-18) — a quiet "this row is your turn" cue, shown only
-                                               on the pure board where rank = draft order. */
-                                            ...(bbShowNow && bbRank && bbUserPicks.has(bbRank) ? { background: 'rgba(231, 76, 60, 0.16)', boxShadow: 'inset 2px 0 0 rgba(231, 76, 60, 0.55)', borderRadius: 4 } : {}) }}>
+                                        <div className="wr-brd-numcell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, fontFamily: 'var(--font-body)', fontSize: '0.74rem', color: idx < 3 ? 'var(--gold)' : 'var(--silver)', fontWeight: 800 }}>
                                             {!isDhq && (() => {
                                                 // Grip drag handle (owner ask 2026-07-13): pointer-based reorder
                                                 // for touch/pencil/mouse; HTML5 row drag + ▲/▼ stay as-is.
