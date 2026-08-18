@@ -3674,8 +3674,13 @@
                                     });
                                     return next;
                                 });
+                                const bbShowNow = bbRoundSize >= 4 && !boardQuery && !boardPosFilter
+                                    && (boardMode === 'my' || (boardSort.key === 'dhq' && boardSort.dir === -1));
+                                const bbRank = bbRankByPid.get(r.pid);
+                                const bbPrevRank = idx > 0 ? (bbRankByPid.get(players[idx - 1].pid) || 0) : 0;
                                 return (
                                     <React.Fragment key={r.pid}>
+                                    {bbRank ? boardRoundMarkers(bbPrevRank, bbRank, bbShowNow) : null}
                                     <div
                                         data-draft-pid={r.pid}
                                         data-reorder-key={r.pid}
@@ -3847,6 +3852,73 @@
                     ];
                     const activeBoardInfo = boardModeOptions.find(opt => opt.k === boardMode) || boardModeOptions[0];
                     const allBoardPlayers = boardMode === 'my' ? myBoardPlayers : boardMode === 'ai' ? aiBoardPlayers : dhqBoardPlayers;
+                    // ── ROUND BREAKERS + YOUR-PICK MARKERS (owner feature 2026-08-17) ──
+                    // League-specific round rules every numTeams players, your picks
+                    // marked on the line and at the exact overall rank — driven by
+                    // draftProjectionMeta, so traded picks and snake order are truth.
+                    // Only on the pure board: search, position tabs or a re-sorted
+                    // Default Board make index-based rounds a lie.
+                    const bbMeta = draftProjectionMeta || {};
+                    const bbRoundSize = Math.max(0, Number(bbMeta.numTeams) || 0);
+                    const bbTotalRounds = Math.max(0, Number(bbMeta.rounds) || 0);
+                    const bbMyRid = myRoster?.roster_id;
+                    const bbUserPicks = (() => {
+                        const out = new Set();
+                        if (!bbRoundSize || !bbTotalRounds) return out;
+                        const own = bbMeta.pickOwnership || {};
+                        const snake = (bbMeta.draftType || 'snake') !== 'linear';
+                        for (let rd = 1; rd <= bbTotalRounds; rd++) {
+                            for (let slot = 1; slot <= bbRoundSize; slot++) {
+                                const cell = own[rd + '-' + slot];
+                                const mine = cell && cell.rosterId != null ? sameId(cell.rosterId, bbMyRid) : slot === Number(bbMeta.mySlot);
+                                if (!mine) continue;
+                                const inRound = snake && rd % 2 === 0 ? bbRoundSize + 1 - slot : slot;
+                                out.add((rd - 1) * bbRoundSize + inRound);
+                            }
+                        }
+                        return out;
+                    })();
+                    const bbRankByPid = new Map(allBoardPlayers.map((r, i) => [r.pid, i + 1]));
+                    const bbPickLabel = (o) => (Math.floor((o - 1) / bbRoundSize) + 1) + '.' + String(((o - 1) % bbRoundSize) + 1).padStart(2, '0');
+                    const bbMarkerFont = { fontFamily: 'var(--font-body)', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 800 };
+                    const boardRoundMarkers = (prevRank, rank, showBreakersNow) => {
+                        if (!showBreakersNow || !bbRoundSize || rank <= prevRank || rank - prevRank > 500) return null;
+                        const out = [];
+                        const lastRank = bbTotalRounds ? bbTotalRounds * bbRoundSize : Infinity;
+                        for (let n = prevRank + 1; n <= rank; n++) {
+                            if (n > lastRank) {
+                                if (n === lastRank + 1) out.push(
+                                    <div key={'bbend' + n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px 4px', color: 'var(--silver)', opacity: 0.55, fontSize: 'var(--text-micro, 0.6875rem)', ...bbMarkerFont }}>
+                                        <span style={{ flex: 1, height: 1, background: 'var(--acc-line1, rgba(212,175,55,0.25))' }} />
+                                        <span>END OF DRAFT · {bbTotalRounds} ROUNDS</span>
+                                        <span style={{ flex: 1, height: 1, background: 'var(--acc-line1, rgba(212,175,55,0.25))' }} />
+                                    </div>
+                                );
+                                continue;
+                            }
+                            const round = Math.floor((n - 1) / bbRoundSize) + 1;
+                            if ((n - 1) % bbRoundSize === 0) {
+                                let mine = null;
+                                for (let k = (round - 1) * bbRoundSize + 1; k <= round * bbRoundSize; k++) { if (bbUserPicks.has(k)) { mine = k; break; } }
+                                out.push(
+                                    <div key={'bbrd' + n} style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: round === 1 ? '8px 12px 6px' : '16px 12px 6px', borderBottom: '1px solid var(--gold)', background: 'var(--acc-fill3, rgba(212,175,55,0.06))' }}>
+                                        <span style={{ color: 'var(--gold)', fontSize: '0.78rem', ...bbMarkerFont }}>ROUND {round}</span>
+                                        {mine && <span style={{ marginLeft: 'auto', color: 'var(--silver)', fontSize: 'var(--text-micro, 0.6875rem)', ...bbMarkerFont }}>YOU PICK {bbPickLabel(mine)} · #{mine}</span>}
+                                    </div>
+                                );
+                            }
+                            if (bbUserPicks.has(n)) {
+                                out.push(
+                                    <div key={'bbup' + n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 12px', color: 'var(--gold)', fontSize: 'var(--text-micro, 0.6875rem)', ...bbMarkerFont }}>
+                                        <span style={{ flex: 1, height: 1, background: 'var(--gold)', opacity: 0.5 }} />
+                                        <span>◆ YOUR PICK {bbPickLabel(n)} · #{n} OVERALL</span>
+                                        <span style={{ flex: 1, height: 1, background: 'var(--gold)', opacity: 0.5 }} />
+                                    </div>
+                                );
+                            }
+                        }
+                        return out.length ? out : null;
+                    };
                     // Combined drafted lookup (manual "Off" set + live-sync drafted map), hoisted
                     // here so the "Hide drafted" toggle can drop rows when building the visible
                     // list — mirrors the per-row isDrafted inside renderCompactBoard (L2565).
