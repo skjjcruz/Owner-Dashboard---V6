@@ -3930,8 +3930,8 @@
                             const round = Math.floor((n - 1) / bbRoundSize) + 1;
                             if ((n - 1) % bbRoundSize === 0) {
                                 out.push(
-                                    <div key={'bbrd' + n} style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: round === 1 ? '8px 12px 6px' : '16px 12px 6px', borderBottom: '1px solid var(--gold)', background: 'var(--acc-fill3, rgba(212,175,55,0.06))' }}>
-                                        <span style={{ color: 'var(--gold)', fontSize: '0.78rem', ...bbMarkerFont }}>ROUND {round}</span>
+                                    <div key={'bbrd' + n} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, minHeight: 30, padding: round === 1 ? '3px 12px' : '8px 12px 3px', borderBottom: '1px solid var(--gold)', background: 'var(--acc-fill3, rgba(212,175,55,0.06))' }}>
+                                        <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', color: 'var(--gold)', fontSize: '0.78rem', whiteSpace: 'nowrap', ...bbMarkerFont }}>ROUND {round}</span>
                                         {(() => {
                                             // Far-right target toggle (owner call 2026-08-18): collapsed it
                                             // shows ONLY the chosen position; tapping a chip picks AND
