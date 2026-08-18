@@ -3456,10 +3456,14 @@
                         setMyBoardOrder(prev => {
                             const order = prev.length ? [...prev] : aiSeedOrder.slice();
                             const fromIdx = order.indexOf(dragPid);
-                            const toIdx = order.indexOf(targetPid);
-                            if (fromIdx === -1 || toIdx === -1) return order;
+                            if (fromIdx === -1) return order;
                             order.splice(fromIdx, 1);
-                            order.splice(toIdx, 0, dragPid);
+                            // Index AFTER removal: dragging down with the pre-removal
+                            // index landed one row late — the occupant read as
+                            // shifting up. Post-removal, the drop takes the spot.
+                            const at = order.indexOf(targetPid);
+                            if (at === -1) return prev;
+                            order.splice(at, 0, dragPid);
                             return order;
                         });
                         setDragPid(null);

@@ -774,7 +774,14 @@
         if (row && row !== s.row) {
             targetKey = row.getAttribute('data-reorder-key');
             const r = row.getBoundingClientRect();
-            after = s.lastY > r.top + r.height / 2;
+            // Drops TAKE the target's spot — the occupant shifts DOWN (owner
+            // call 2026-08-18). The old midpoint rule made downward drags land
+            // below the hovered row, reading as the occupant jumping up. The
+            // below-target insert survives only on the list's LAST row, so a
+            // player can still be sent to the very bottom.
+            const rows = document.querySelectorAll('[data-reorder-key]');
+            const isLastRow = rows.length > 0 && row === rows[rows.length - 1];
+            after = isLastRow && s.lastY > r.top + r.height / 2;
             targetEl = row;
         }
         if (s.marked && (s.marked !== targetEl || s.after !== after)) {
