@@ -3732,11 +3732,7 @@
                                                     {chip(pos, posColors[pos] || 'var(--silver)', (posColors[pos] || 'var(--k-666666, #666666)') + '22')}
                                                     {bbShowNow && bbRank && bbUserPicks.has(bbRank) && (
                                                         <span title={'Your pick: ' + bbPickLabel(bbRank) + ' (#' + bbRank + ' overall)'}
-                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, flexShrink: 0,
-                                                                border: '1px solid var(--gold)', background: 'var(--acc-fill2, rgba(212,175,55,0.14))', color: 'var(--gold)',
-                                                                fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', fontWeight: 900, letterSpacing: '0.05em' }}>
-                                                            ◆ {bbPickLabel(bbRank)}
-                                                        </span>
+                                                            style={{ marginLeft: 8, flexShrink: 0, color: 'var(--gold)', fontSize: '0.7rem', lineHeight: 1 }}>◆</span>
                                                     )}
                                                 </div>
                                             </div>
