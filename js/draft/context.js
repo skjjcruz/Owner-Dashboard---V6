@@ -214,6 +214,7 @@
             const typed = typedKey !== legacyKey ? (store.get(typedKey, {}) || {}) : {};
             const merged = mergeBoardData(mergeBoardData(fallback || {}, legacy), typed);
             const recovered = recoverRichestBoard(leagueId, merged);
+            if (boardUserWeight(recovered) === 0) tryVaultRestore(leagueId, draftType);
             // Permanent heal: an adopted board is re-filed under the ACTIVE key
             // so both surfaces converge on it from now on.
             if (recovered !== merged && boardUserWeight(recovered) > 0 && store.set) {
@@ -241,11 +242,55 @@
                 updatedAt: new Date().toISOString(),
             });
             store.set(boardStorageKey(leagueId, draftType), next);
+            scheduleVaultPush(leagueId, next);
             return next;
         } catch (e) {
             if (window.wrLog) window.wrLog('draftContext.saveBoardPatch', e);
             return null;
         }
+    }
+
+    // ── BIG BOARD CLOUD VAULT (owner directive 2026-08-17) ────────────
+    // Every board edit is backed up to Supabase a few seconds after the
+    // local write (debounced per league); when a load finds NO hand-built
+    // board anywhere on the device, the vault copy is adopted and re-filed
+    // locally. Backup-only: local edits always win — the race guard below
+    // re-checks local weight when the async restore lands.
+    const _vaultPushTimers = {};
+    function scheduleVaultPush(leagueId, board) {
+        try {
+            if (!leagueId || typeof window.OD?.saveBigBoardBackup !== 'function') return;
+            if (boardUserWeight(board) === 0) return; // nothing hand-built to protect
+            if (_vaultPushTimers[leagueId]) clearTimeout(_vaultPushTimers[leagueId]);
+            _vaultPushTimers[leagueId] = setTimeout(() => {
+                delete _vaultPushTimers[leagueId];
+                window.OD.saveBigBoardBackup(leagueId, board).then(ok => {
+                    if (!ok && window.wrLog) window.wrLog('draftContext.vaultPushFailed', { leagueId });
+                });
+            }, 4000);
+        } catch (e) { /* backup must never break an edit */ }
+    }
+
+    const _vaultRestoreTried = {};
+    function tryVaultRestore(leagueId, draftType) {
+        try {
+            const guardKey = leagueId + '|' + draftType;
+            if (_vaultRestoreTried[guardKey]) return;
+            _vaultRestoreTried[guardKey] = true;
+            if (typeof window.OD?.loadBigBoardBackup !== 'function') return;
+            window.OD.loadBigBoardBackup(leagueId).then(hit => {
+                if (!hit || boardUserWeight(hit.board) === 0) return;
+                // Race guard: the user may have started a fresh board while the
+                // fetch was in flight — a restore must never clobber live work.
+                const store = window.App?.WrStorage;
+                if (!store?.get || !store?.set) return;
+                const typedKey = boardStorageKey(leagueId, draftType);
+                const current = store.get(typedKey, {}) || {};
+                if (boardUserWeight(current) > 0) return;
+                store.set(typedKey, mergeBoardData(current, hit.board));
+                if (window.wrLog) window.wrLog('draftContext.boardVaultRestored', { leagueId, savedAt: hit.updatedAt });
+            });
+        } catch (e) { /* restore is best-effort */ }
     }
 
     function normalizeDraftType(input) {
