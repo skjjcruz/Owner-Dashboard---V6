@@ -905,8 +905,12 @@
         }
         const src = kids.find(e => e.el === srcRow);
         if (!src || !nonSource.length) return false;
+        // The slot index the source already occupies — dropping there is a
+        // no-op, so nothing may slide when the pointer resolves to it.
+        let srcIdx = 0;
+        for (const e of nonSource) { if (e.top < src.top) srcIdx++; }
         _listDrag = {
-            container, srcRow, src, kids, nonSource,
+            container, srcRow, src, kids, nonSource, srcIdx,
             srcOpacity: srcRow.style.opacity || '',
             k: -1, hideTimer: 0,
         };
@@ -934,9 +938,16 @@
         const slotTop = k < s.nonSource.length ? s.nonSource[k].top : last.top + last.h;
         for (const e of s.kids) {
             if (e.el === s.srcRow) continue;
+            // Everything AT and BELOW the landing spot steps DOWN one row to
+            // make room — never up (owner call 2026-08-19). The dragged
+            // player's own spot stays open behind him, so the motion always
+            // reads the way the result reads: he takes the spot, the man
+            // there and everyone under him move down. Dragging up already
+            // worked this way; this makes downward drags match. k === srcIdx
+            // is the player's own spot: a no-op, so nothing moves.
             let ty = 0;
-            if (slotTop > srcTop) { if (e.top > srcTop && e.top < slotTop) ty = -srcH; }
-            else if (e.top >= slotTop && e.top < srcTop) ty = srcH;
+            if (k > s.srcIdx) { if (e.top >= slotTop) ty = srcH; }
+            else if (k < s.srcIdx) { if (e.top >= slotTop && e.top < srcTop) ty = srcH; }
             e.el.style.transform = ty ? 'translateY(' + ty + 'px)' : e.prevTransform;
         }
     }
