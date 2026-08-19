@@ -3440,6 +3440,11 @@
                     // without it the touch falls back to selecting text.
                     const handleDragStart = (e, pid) => {
                         setDragPid(pid);
+                        // Rows SLIDE out of the way while the drag is in flight
+                        // (WR.listDrag, owner call 2026-08-19): an open slot
+                        // travels with the finger, so nudging a player one row
+                        // down works and the landing spot is always visible.
+                        if (e?.currentTarget && window.WR?.listDrag) window.WR.listDrag.start(e.currentTarget);
                         try {
                             if (e?.dataTransfer) {
                                 e.dataTransfer.effectAllowed = 'move';
@@ -3450,17 +3455,25 @@
                     const handleDragOver = (e) => {
                         e.preventDefault();
                         try { if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+                        if (window.WR?.listDrag) window.WR.listDrag.over(e.clientY);
                     };
-                    const handleDrop = (targetPid) => {
-                        if (!dragPid || dragPid === targetPid) return;
+                    // Drop commit: the slot index k from WR.listDrag counts the
+                    // DISPLAYED rows minus the dragged one — map it back to a
+                    // typed pid via the same rows list the board renders from
+                    // (passed in by renderCompactBoard, where it's in scope).
+                    const handleListDrop = (rowsList) => {
+                        const t = window.WR?.listDrag ? window.WR.listDrag.target() : null;
+                        if (window.WR?.listDrag) window.WR.listDrag.end();
+                        if (!t || !dragPid) { setDragPid(null); return; }
+                        const displayed = rowsList.map(r => r.pid).filter(pid => pid !== dragPid);
+                        const targetPid = t.appended ? null : displayed[t.k];
+                        if (targetPid === undefined) { setDragPid(null); return; }
                         setMyBoardOrder(prev => {
                             const order = prev.length ? [...prev] : aiSeedOrder.slice();
                             const fromIdx = order.indexOf(dragPid);
                             if (fromIdx === -1) return order;
                             order.splice(fromIdx, 1);
-                            // Index AFTER removal: dragging down with the pre-removal
-                            // index landed one row late — the occupant read as
-                            // shifting up. Post-removal, the drop takes the spot.
+                            if (targetPid == null) { order.push(dragPid); return order; }
                             const at = order.indexOf(targetPid);
                             if (at === -1) return prev;
                             order.splice(at, 0, dragPid);
@@ -3593,7 +3606,10 @@
 	                              .wr-brd-move .wr-brd-move-btn:first-child::after{top:-12px;}
 	                              .wr-brd-move .wr-brd-move-btn:last-child::after{bottom:-12px;}
 	                          }`}</style>
-	                          <div style={{ minWidth: '100%' }}>
+	                          <div
+	                            style={{ minWidth: '100%' }}
+	                            onDragOver={!isDhq ? handleDragOver : undefined}
+	                            onDrop={!isDhq ? (e) => { e.preventDefault(); handleListDrop(players); } : undefined}>
                             <div style={{ display: 'grid', gridTemplateColumns: boardGridCols, minHeight: '34px', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', borderBottom: '2px solid var(--acc-line1, rgba(212,175,55,0.2))', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, color: 'var(--gold)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', alignItems: 'center', position: 'sticky', top: 0, zIndex: 1 }}>
                                 <div style={{ textAlign: 'center' }}>#</div>
                                 {boardHeaderCell('Player', 'name', { padding: '0 8px' })}
@@ -3700,9 +3716,15 @@
                                         data-reorder-key={r.pid}
                                         draggable={!isDhq}
                                         onDragStart={!isDhq ? (e) => handleDragStart(e, r.pid) : undefined}
+                                        // dragover/drop MUST sit on the row itself: iOS Safari
+                                        // never fired `drop` when only the container carried them
+                                        // (owner: "you can move the player but he will not drop
+                                        // into a position", reproduced in WebKit 2026-08-19). The
+                                        // container keeps a copy purely as the past-the-last-row
+                                        // fallback.
                                         onDragOver={!isDhq ? handleDragOver : undefined}
-                                        onDragEnd={!isDhq ? () => setDragPid(null) : undefined}
-                                        onDrop={!isDhq ? () => handleDrop(r.pid) : undefined}
+                                        onDrop={!isDhq ? (e) => { e.preventDefault(); e.stopPropagation(); handleListDrop(players); } : undefined}
+                                        onDragEnd={!isDhq ? () => { if (window.WR?.listDrag) window.WR.listDrag.end(); setDragPid(null); } : undefined}
                                         onClick={openPlayerDetail}
                                         style={{ display: 'grid', gridTemplateColumns: boardGridCols, alignItems: 'center', minHeight: '42px', opacity: isDrafted ? 0.35 : 1, borderBottom: isExp ? 'none' : '1px solid var(--ov-3, rgba(255,255,255,0.035))', cursor: 'pointer', background: isExp ? 'var(--acc-fill1, rgba(212,175,55,0.065))' : idx % 2 === 1 ? 'var(--ov-1, rgba(255,255,255,0.016))' : 'transparent', transition: 'background 0.1s', position: 'relative' }}
                                         onMouseEnter={e => { if (!isExp) e.currentTarget.style.background = 'var(--acc-fill1, rgba(212,175,55,0.04))'; }}
