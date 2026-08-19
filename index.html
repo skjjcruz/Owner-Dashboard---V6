@@ -2909,7 +2909,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/components.js?v=20260707desk1"></script>
 <!-- 2b. Unified Player Card (SI-2) — window.WR.openPlayerCard — replaces CDN modal -->
 <!-- Shared visual primitives (WR.Card / Badge / Chip / ConfChip / DeltaLine / Kpi / InsightCard) -->
-<script type="text/babel" src="js/components/wr-primitives.js?v=20260818dg5"></script>
+<script type="text/babel" src="js/components/wr-primitives.js?v=20260819rb1"></script>
     <script type="text/babel" src="js/components/player-card.js?v=20260702scout1"></script>
 <!-- 2c. Saved List Views (SI-1) — window.WR.SavedViews — shared across list surfaces -->
 <script type="text/babel" src="js/shared/saved-views.js?v=20260427font1"></script>
@@ -2992,7 +2992,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="draft" src="js/draft/persona.js?v=20260415cd8"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/cpu-engine.js?v=20260415cd8"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/state.js?v=20260613gm1"></script>
-<script type="text/babel" data-wr-defer="draft" src="js/draft/big-board.js?v=20260818dg3"></script>
+<script type="text/babel" data-wr-defer="draft" src="js/draft/big-board.js?v=20260819rb1"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/draft-grid.js?v=20260418a"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/opponent-intel.js?v=20260601layout"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/alex-stream.js?v=20260601layout"></script>
@@ -3012,7 +3012,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="draft" src="js/draft/live-decision-engine.js?v=20260601draftux"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/analyst-mock.js?v=20260531voice1"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/command-center.js?v=20260613strip2"></script>
-<script type="text/babel" data-wr-defer="draft" src="js/draft-room.js?v=20260818dg4"></script>
+<script type="text/babel" data-wr-defer="draft" src="js/draft-room.js?v=20260819rb1"></script>
 <!-- 5. League detail tab components (extracted from league-detail.js) -->
 <!-- v2 widget modules (load before dashboard.js which consumes them) -->
 <script type="text/babel" src="js/widgets/roster-pulse.js?v=20260613gm1"></script>
@@ -3126,6 +3126,10 @@ window.addEventListener('appinstalled', () => {
   _deferredPrompt = null;
 });
 </script>
+<!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
+     owner can read back exactly which version his device is running before
+     testing — kills the stale-cache guessing game. Bump the code every deploy. -->
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b1</div>
 </body>
 </html>
 <!-- build 1774212614 -->

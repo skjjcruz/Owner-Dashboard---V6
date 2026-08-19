@@ -143,50 +143,6 @@
         const [depthReadPos, setDepthReadPos] = useState(null); // Class Depth row with the full Alex read expanded
         const [nflFitAI, setNflFitAI] = useState({}); // pid -> live web-search "Alex NFL Fit" read (premium)
         const [dragPid, setDragPid] = useState(null); // currently dragging pid
-        // HTML5 row-body drags: the source row collapses mid-drag (deferred so
-        // the browser can snapshot the drag image first) so the row under the
-        // finger is exactly where the drop lands — dragging up AND down. The
-        // hide is a direct DOM mutation React never sees, so it must be
-        // restored with the captured value on drop/dragend.
-        const dragRowElRef = useRef(null);
-        const dragSlotRef = useRef(null);
-        // Open a row-height SLOT above a row (iOS-style, owner call
-        // 2026-08-18): the players part so the landing spot is a visible
-        // open gap and the row being displaced is pushed down under it.
-        const openDragSlot = (rowEl, pid) => {
-            const src = dragRowElRef.current;
-            if (!src || rowEl === src.el) return;
-            const cur = dragSlotRef.current;
-            if (cur && cur.el === rowEl) return;
-            closeDragSlot();
-            dragSlotRef.current = { el: rowEl, pid, mt: rowEl.style.marginTop };
-            rowEl.style.marginTop = (src.h || 40) + 'px';
-        };
-        const closeDragSlot = () => {
-            const cur = dragSlotRef.current;
-            if (cur) { dragSlotRef.current = null; try { cur.el.style.marginTop = cur.mt; } catch (_) {} }
-        };
-        const hideDragRow = (el) => {
-            dragRowElRef.current = { el, css: null, h: el.getBoundingClientRect().height };
-            setTimeout(() => {
-                if (dragRowElRef.current && dragRowElRef.current.el === el) {
-                    // Fold to zero height, NOT display:none — WebKit kills the
-                    // native drag session when the source element goes hidden.
-                    dragRowElRef.current.css = el.style.cssText;
-                    el.style.cssText += ';height:0;min-height:0;max-height:0;padding-top:0;padding-bottom:0;border:none;margin:0;overflow:hidden;opacity:0;';
-                    // Open the slot right where the player left, same frame as
-                    // the fold, so the list doesn't move at drag start.
-                    let nxt = el.nextElementSibling;
-                    while (nxt && !(nxt.hasAttribute && nxt.hasAttribute('data-reorder-key'))) nxt = nxt.nextElementSibling;
-                    if (nxt) openDragSlot(nxt, nxt.getAttribute('data-reorder-key'));
-                }
-            }, 0);
-        };
-        const restoreDragRow = () => {
-            closeDragSlot();
-            const s = dragRowElRef.current;
-            if (s) { dragRowElRef.current = null; try { if (s.css != null) s.el.style.cssText = s.css; } catch (_) {} }
-        };
         const [draftStrategyEditing, setDraftStrategyEditing] = useState(false);
         const draftStrategyKey = 'wr_draft_strategy_' + leagueKey;
         const [customDraftStrategy, setCustomDraftStrategy] = useState(() => {
@@ -3484,7 +3440,6 @@
                     // without it the touch falls back to selecting text.
                     const handleDragStart = (e, pid) => {
                         setDragPid(pid);
-                        if (e && e.currentTarget) hideDragRow(e.currentTarget);
                         try {
                             if (e?.dataTransfer) {
                                 e.dataTransfer.effectAllowed = 'move';
@@ -3497,7 +3452,6 @@
                         try { if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; } catch (_) {}
                     };
                     const handleDrop = (targetPid) => {
-                        restoreDragRow();
                         if (!dragPid || dragPid === targetPid) return;
                         setMyBoardOrder(prev => {
                             const order = prev.length ? [...prev] : aiSeedOrder.slice();
@@ -3639,10 +3593,7 @@
 	                              .wr-brd-move .wr-brd-move-btn:first-child::after{top:-12px;}
 	                              .wr-brd-move .wr-brd-move-btn:last-child::after{bottom:-12px;}
 	                          }`}</style>
-	                          <div
-	                            style={{ minWidth: '100%' }}
-	                            onDragOver={handleDragOver}
-	                            onDrop={() => { const slot = dragSlotRef.current; if (slot) handleDrop(slot.pid); }}>
+	                          <div style={{ minWidth: '100%' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: boardGridCols, minHeight: '34px', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', borderBottom: '2px solid var(--acc-line1, rgba(212,175,55,0.2))', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, color: 'var(--gold)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', alignItems: 'center', position: 'sticky', top: 0, zIndex: 1 }}>
                                 <div style={{ textAlign: 'center' }}>#</div>
                                 {boardHeaderCell('Player', 'name', { padding: '0 8px' })}
@@ -3749,9 +3700,9 @@
                                         data-reorder-key={r.pid}
                                         draggable={!isDhq}
                                         onDragStart={!isDhq ? (e) => handleDragStart(e, r.pid) : undefined}
-                                        onDragOver={!isDhq ? (e) => { handleDragOver(e); openDragSlot(e.currentTarget, r.pid); } : undefined}
-                                        onDragEnd={!isDhq ? () => { restoreDragRow(); setDragPid(null); } : undefined}
-                                        onDrop={!isDhq ? (e) => { e.stopPropagation(); handleDrop(r.pid); } : undefined}
+                                        onDragOver={!isDhq ? handleDragOver : undefined}
+                                        onDragEnd={!isDhq ? () => setDragPid(null) : undefined}
+                                        onDrop={!isDhq ? () => handleDrop(r.pid) : undefined}
                                         onClick={openPlayerDetail}
                                         style={{ display: 'grid', gridTemplateColumns: boardGridCols, alignItems: 'center', minHeight: '42px', opacity: isDrafted ? 0.35 : 1, borderBottom: isExp ? 'none' : '1px solid var(--ov-3, rgba(255,255,255,0.035))', cursor: 'pointer', background: isExp ? 'var(--acc-fill1, rgba(212,175,55,0.065))' : idx % 2 === 1 ? 'var(--ov-1, rgba(255,255,255,0.016))' : 'transparent', transition: 'background 0.1s', position: 'relative' }}
                                         onMouseEnter={e => { if (!isExp) e.currentTarget.style.background = 'var(--acc-fill1, rgba(212,175,55,0.04))'; }}
