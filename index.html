@@ -57,7 +57,7 @@
          still owns execution order. (No crossorigin on the preconnect/preloads:
          classic scripts fetch no-cors, and the connection must match.) -->
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
-    <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js">
+    <link rel="preload" as="script" href="vendor/supabase.min.js">
     <link rel="preload" as="script" href="vendor/react.production.min.js">
     <link rel="preload" as="script" href="vendor/react-dom.production.min.js">
     <script src="js/shared/shared-loader.js?v=20260705fdn1"></script>
@@ -2868,7 +2868,8 @@ WRShared.preloadMany(WR_SHARED_FILES);
         </div>
     </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"></script>
+<script src="vendor/supabase.min.js"></script>
+<script>window.supabase||document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"><\/script>')</script>
 <!-- Shared module list + WRShared live in <head> (preloaded there); this
      document.write chain just executes them, in order, from the warm cache. -->
 <script>WRShared.loadMany(WR_SHARED_FILES);</script>
@@ -3129,7 +3130,7 @@ window.addEventListener('appinstalled', () => {
 <!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
      owner can read back exactly which version his device is running before
      testing — kills the stale-cache guessing game. Bump the code every deploy. -->
-<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b6</div>
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b7</div>
 </body>
 </html>
 <!-- build 1774212614 -->

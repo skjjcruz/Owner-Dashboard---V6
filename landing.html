@@ -1805,7 +1805,8 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
   <script src="js/vendor/CustomEase.min.js"></script>
   <script src="js/vendor/lenis.min.js"></script>
   <!-- Value simulator engine (ported from brochure) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"></script>
+  <script src="vendor/supabase.min.js"></script>
+<script>window.supabase||document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"><\/script>')</script>
   <script>
     const FW_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4c2hpcXl4aGhpZnZ0ZnFhd2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTExMzAsImV4cCI6MjA4ODI4NzEzMH0.zJi9W986ZLaANiZN6pt6ReFwaQU6yPeidsERIWo2ibI';
     const SUPABASE_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co';
@@ -2017,6 +2018,10 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
       const db = getSbClient();
       if (!db) { showAlert('error', 'Sign-in is still loading \u2014 try again in a moment.'); return; }
       trackLandingEvent('oauth_started', { provider: 'google' });
+      // Mission Control's funnel counts signup_started/signup_succeeded.
+      // Without these a Google or Apple signup is invisible and the funnel
+      // reads 0 no matter how many people sign up (owner ask 2026-08-20).
+      trackLandingEvent(authMode === 'signup' ? 'signup_started' : 'signin_started', { method: 'google' });
       db.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
     }
 
@@ -2025,6 +2030,10 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
       const db = getSbClient();
       if (!db) { showAlert('error', 'Sign-in is still loading — try again in a moment.'); return; }
       trackLandingEvent('oauth_started', { provider: 'apple' });
+      // Mission Control's funnel counts signup_started/signup_succeeded.
+      // Without these a Google or Apple signup is invisible and the funnel
+      // reads 0 no matter how many people sign up (owner ask 2026-08-20).
+      trackLandingEvent(authMode === 'signup' ? 'signup_started' : 'signin_started', { method: 'apple' });
       db.auth.signInWithOAuth({ provider: 'apple', options: { redirectTo: window.location.origin + window.location.pathname } });
     }
 
@@ -2117,7 +2126,9 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
             return;
           }
         }
-        trackLandingEvent('oauth_succeeded', { provider: 'google', isNew: !!(appSession && appSession.isNew === true) });
+        const oauthIsNew = !!(appSession && appSession.isNew === true);
+        trackLandingEvent('oauth_succeeded', { provider: 'google', isNew: oauthIsNew });
+        trackLandingEvent(oauthIsNew ? 'signup_succeeded' : 'signin_succeeded', { method: 'oauth' });
         // First-ever sign-in (fw-oauth-sync just created the account): route
         // to the connect-your-leagues page instead of straight in.
         if (appSession && appSession.isNew === true) {

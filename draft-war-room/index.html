@@ -14,7 +14,8 @@
   <script>WRShared.load('rookie-data.js');</script>
   <script src="./csv-loader.js"></script>
   <!-- Supabase JS v2 (CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="../vendor/supabase.min.js"></script>
+<script>window.supabase||document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"><\/script>')</script>
   <!-- Supabase project credentials — edit before deploying -->
   <script src="./supabase-config.js"></script>
   <!-- Draft board + mock draft Supabase helpers -->
