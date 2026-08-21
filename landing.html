@@ -78,6 +78,10 @@
           }, 8000);
           return;
         }
+        // Returning guest: a guest with a connected league goes straight in
+        // (restored 2026-08-21 — same line the pre-swap page carried).
+        var ga = null; try { ga = JSON.parse(localStorage.getItem('od_auth_v1') || 'null'); } catch (e) {}
+        if (localStorage.getItem('wr_guest_v1') === '1' && ga && ga.username) { window.location.replace('index.html'); return; }
         var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
         if (!sess || !sess.token) { reveal(); return; } // not signed in -> show landing
         var profile = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
@@ -1178,6 +1182,16 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
     <div class="alert" id="alertJoin"></div>
 
     <!-- Google -->
+    <!-- Guest lane (restored 2026-08-21; owner ruling: show it on the website
+         too). Originally shipped 2026-08-05 for Apple 5.1.1(v) — registration
+         must be optional — and lost in the 2026-08-17 marketing-page swap.
+         Sets the guest flag and heads straight to the league-connect page; no
+         account, no personal info. connect-sleeper.html and the index.html
+         auth gate both honor the flag. -->
+    <button class="auth-submit" id="btnGuest" style="margin-bottom:14px"
+      onclick="try{localStorage.setItem('wr_guest_v1','1')}catch(e){};window.location.href='connect-sleeper.html'">Guest Sign In</button>
+    <div class="auth-or"><span>or</span></div>
+
     <button id="btnGoogle" class="auth-google" onclick="handleGoogle()">
       <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29.1 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29.1 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35 26.7 36 24 36c-5.3 0-9.7-2.6-11.3-7l-6.6 5.1C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.6l6.2 5.2C39.9 36 44 30.6 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
       Continue with Google

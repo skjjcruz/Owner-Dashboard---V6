@@ -15,7 +15,9 @@
       function reveal(){ var s=document.getElementById('preboot-hide'); if(s&&s.parentNode){ s.parentNode.removeChild(s); } }
       try {
         var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
-        if (!sess || !sess.token) { window.location.replace('landing.html'); return; }
+        var guestMode = false;
+        try { guestMode = localStorage.getItem('wr_guest_v1') === '1'; } catch (e) {}
+        if ((!sess || !sess.token) && !guestMode) { window.location.replace('landing.html'); return; }
         var profile = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
         var legacy  = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
         // Onboarded = any league source bound (Sleeper OR MFL) or an explicit
@@ -268,7 +270,7 @@
         const uname = user.username || username;
         localStorage.setItem(AUTH_KEY, JSON.stringify({ username: uname, sleeperUserId: user.user_id, createdAt: new Date().toISOString() }));
         localStorage.setItem('od_locked_username_v2', uname);
-        patchProfile({ sleeperUsername: uname, sleeperUserId: user.user_id });
+        try { if (localStorage.getItem('wr_guest_v1') !== '1') patchProfile({ sleeperUsername: uname, sleeperUserId: user.user_id }); } catch (e) {}
         input.disabled = true;
         trackConnectEvent('sleeper_connected', uname, { sleeperUsername: uname });
         markLinked('sleeper', '@' + uname);

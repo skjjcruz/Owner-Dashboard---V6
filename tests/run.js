@@ -836,6 +836,24 @@ test('google oauth callback stores the full user record (id included)',
 // repo alongside supabase/functions/ — this web-only repo has no backend
 // sources to pin, so that check is intentionally absent here.)
 
+test('guest lane: the whole loop survives (button, gates, connect page)',
+  () => {
+    // The Guest Sign In lane (Apple 5.1.1(v), owner ruling 2026-08-21: shown
+    // on the website too) vanished once already — the 2026-08-17 marketing
+    // swap replaced landing.html and nothing pinned the button. Pin every
+    // link in the chain so no future page swap can silently drop it.
+    const landing = fs.readFileSync(path.join(ROOT, 'landing.html'), 'utf8');
+    const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const connect = fs.readFileSync(path.join(ROOT, 'connect-sleeper.html'), 'utf8');
+    ok(landing.includes('id="btnGuest"'), 'landing must carry the Guest Sign In button');
+    ok(landing.includes("localStorage.setItem('wr_guest_v1','1')"), 'guest button must set the guest flag');
+    ok(landing.includes("window.location.href='connect-sleeper.html'"), 'guest button must lead to the connect page');
+    ok((landing.match(/wr_guest_v1/g) || []).length >= 2, 'landing head gate must fast-path returning guests');
+    ok(index.includes('wr_guest_v1'), 'index auth gate must accept a connected guest');
+    ok(connect.includes('guestMode'), 'connect page must not bounce guests to landing');
+    ok(connect.includes("localStorage.getItem('wr_guest_v1') !== '1'"), 'connect page must not patch an account profile for guests');
+  });
+
 test('league hub brand icon returns to the app front page, which stays put',
   () => {
     const app = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');

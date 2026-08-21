@@ -27,6 +27,14 @@
             ok = !payload.exp || Number(payload.exp) * 1000 > Date.now();
           } catch (e) { ok = false; }
         }
+        // Guest lane: a guest with a connected league enters without a JWT
+        // (local-only, free tier; server features stay signed-out).
+        if (!ok) {
+          try {
+            var ga = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
+            if (localStorage.getItem('wr_guest_v1') === '1' && ga && ga.username) ok = true;
+          } catch (e) {}
+        }
         if (!ok) {
           try { localStorage.removeItem('od_auth_v1'); } catch (e) {}
           if (sess && !ok) { try { localStorage.removeItem('fw_session_v1'); } catch (e) {} }
@@ -3130,7 +3138,7 @@ window.addEventListener('appinstalled', () => {
 <!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
      owner can read back exactly which version his device is running before
      testing — kills the stale-cache guessing game. Bump the code every deploy. -->
-<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b8</div>
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b9</div>
 </body>
 </html>
 <!-- build 1774212614 -->
