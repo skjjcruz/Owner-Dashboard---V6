@@ -319,7 +319,10 @@
                 || ((S.leagues && S.leagues[0]) || {}).scoring_settings || {};
             // Warm the matchup engines so opponent + weather fill in when ready.
             if (A.SOS && A.SOS.initialize && !A.SOS.ready) A.SOS.initialize(season, playersData, () => { if (alive) setScoutTick(t => t + 1); });
-            if (A.NflContext && A.NflContext.loadCurrent) A.NflContext.loadCurrent(season).then(() => { if (alive) setScoutTick(t => t + 1); }).catch(() => {});
+            // Bump the tick only when the load delivered new context: loadCurrent
+            // resolves {} on cache-hit and failure alike, and an unconditional
+            // bump re-runs this effect (scoutTick is a dep) in an endless loop.
+            if (A.NflContext && A.NflContext.loadCurrent) A.NflContext.loadCurrent(season).then(map => { if (alive && map && Object.keys(map).length) setScoutTick(t => t + 1); }).catch(() => {});
             // Game-by-game log.
             if (A.GameLog && A.GameLog.buildPlayerLog) {
                 A.GameLog.buildPlayerLog(pid, season, { playersData, scoring }).then(r => { if (alive) setGameLog(r || []); }).catch(() => { if (alive) setGameLog([]); });

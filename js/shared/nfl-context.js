@@ -6,13 +6,16 @@
 // scoreboard (schedule + odds + weather in one call), fetched THROUGH a
 // same-origin proxy (the browser is CORS-blocked from ESPN directly):
 //   dev  → /api/nfl-scoreboard  (serve-static.cjs)
-//   prod → a Supabase edge fn mirroring that proxy (DYNASTY_HQ_CONFIG).
+//   prod → the nfl-scoreboard Supabase edge fn (endpoint() below).
 // Degrades to a no-op (neutral projections) if the proxy is unavailable.
 // ══════════════════════════════════════════════════════════════════
 (function (root) {
     'use strict';
     const App = root.App = root.App || {};
     const _done = {}; // `${season}|${week}` already loaded
+    const _fail = {}; // `${season}|${week}` → { count, until } — failure backoff
+    const FAIL_MAX_TRIES = 3;               // attempts per week key per page load
+    const FAIL_COOLDOWN_MS = 5 * 60 * 1000; // wait between failed attempts
 
     // ESPN uses a few abbreviations that differ from Sleeper/MFL — normalize so
     // context keys match each player's team. (LAR/LAC/LV already align.)
@@ -20,8 +23,17 @@
     function normTeam(a) { a = String(a || '').toUpperCase(); return ESPN_TO_SLEEPER[a] || a; }
 
     function endpoint() {
-        try { return (root.DYNASTY_HQ_CONFIG && root.DYNASTY_HQ_CONFIG.endpoints && root.DYNASTY_HQ_CONFIG.endpoints.nflScoreboard) || '/api/nfl-scoreboard'; }
-        catch (e) { return '/api/nfl-scoreboard'; }
+        // Explicit config wins; localhost keeps the dev proxy (serve-static.cjs);
+        // every deployed page goes to the Supabase relay — GitHub Pages serves
+        // no /api, which is why this fetch 404-ed in production for months.
+        try {
+            var cfg = root.DYNASTY_HQ_CONFIG || (root.App && root.App.CONFIG) || (root.OD && root.OD.CONFIG) || {};
+            if (cfg.endpoints && cfg.endpoints.nflScoreboard) return cfg.endpoints.nflScoreboard;
+            var host = (root.location && root.location.hostname) || '';
+            if (host === 'localhost' || host === '127.0.0.1') return '/api/nfl-scoreboard';
+            var base = cfg.functionsBase || 'https://sxshiqyxhhifvtfqawbq.supabase.co/functions/v1';
+            return String(base).replace(/\/+$/, '') + '/nfl-scoreboard';
+        } catch (e) { return '/api/nfl-scoreboard'; }
     }
 
     // ESPN scoreboard → { `${TEAM}|${week}`: { opp, home, vegas:{impliedTotal,spread,opp}, weather } }
@@ -92,11 +104,22 @@
         for (const wk of list) {
             const key = season + '|' + wk;
             if (_done[key]) continue;
+            const f = _fail[key];
+            if (f && (f.count >= FAIL_MAX_TRIES || Date.now() < f.until)) continue;
             try {
                 const espn = await fetchWeek(wk, season);
                 Object.assign(byTeamWeek, parse(espn, wk));
                 _done[key] = true;
-            } catch (e) { if (root.wrLog) root.wrLog('nflContext.load', e); }
+                delete _fail[key];
+            } catch (e) {
+                // Back off instead of retrying forever: a hot caller (e.g. a
+                // re-rendering scouting tab) must not turn one dead endpoint
+                // into hundreds of fetches — one logged error per week key.
+                const g = _fail[key] = _fail[key] || { count: 0, until: 0 };
+                g.count += 1;
+                g.until = Date.now() + FAIL_COOLDOWN_MS;
+                if (g.count === 1 && root.wrLog) root.wrLog('nflContext.load', e);
+            }
         }
         if (Object.keys(byTeamWeek).length && WP.setContext) WP.setContext({ byTeamWeek });
         return byTeamWeek;

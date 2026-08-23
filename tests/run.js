@@ -854,6 +854,23 @@ test('guest lane: the whole loop survives (button, gates, connect page)',
     ok(connect.includes("localStorage.getItem('wr_guest_v1') !== '1'"), 'connect page must not patch an account profile for guests');
   });
 
+test('nfl scoreboard: production endpoint + failure backoff (contract)',
+  () => {
+    // The matchup/weather feed 404-ed in production for months: nothing ever
+    // pointed the client at the deployed nfl-scoreboard relay, and one user's
+    // scouting tab retried the dead /api path 495 times in a day (2026-08-22
+    // Mission Control). Pin both halves of the fix.
+    const ctx = fs.readFileSync(path.join(ROOT, 'js/shared/nfl-context.js'), 'utf8');
+    const card = fs.readFileSync(path.join(ROOT, 'js/components/player-card.js'), 'utf8');
+    ok(ctx.includes("'/nfl-scoreboard'"), 'deployed pages must derive the Supabase relay endpoint');
+    ok(ctx.includes('functionsBase'), 'endpoint must honor the shared config functionsBase');
+    ok(ctx.includes("host === 'localhost'"), 'localhost must keep the dev proxy');
+    ok(ctx.includes('FAIL_MAX_TRIES'), 'failed weeks must stop retrying after a few attempts');
+    ok(ctx.includes('FAIL_COOLDOWN_MS'), 'failed weeks must cool down between attempts');
+    ok(ctx.includes('g.count === 1 && root.wrLog'), 'only the first failure per week may log');
+    ok(card.includes('Object.keys(map).length) setScoutTick'), 'scouting tab must not re-tick (and re-fetch) on empty loads');
+  });
+
 test('league hub brand icon returns to the app front page, which stays put',
   () => {
     const app = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
