@@ -675,9 +675,8 @@ function ReportSubView({
 // ══════════════════════════════════════════════════════════════════
 const ALL_PLAYERS_COLUMNS = [
     { key: 'name',       label: 'Player',   width: '1fr',   toggleable: false, group: 'core' },
-    // ── Core ──
-    { key: 'pos',        label: 'Pos',      width: '36px',  group: 'core' },
-    { key: 'nflTeam',    label: 'NFL Team', width: '60px',  group: 'core' },
+    // ── Core ── (Position and NFL Team live INSIDE the player cell — owner
+    // ruling 2026-08-24: fold them into the pinned box to cut scroll width.)
     { key: 'yoe',        label: 'Yrs',      width: '36px',  group: 'core' },
     { key: 'age',        label: 'Age',      width: '32px',  group: 'core' },
     // ── Stats (mirrors the roster tab's stats group; owner ruling 2026-08-24
@@ -723,15 +722,15 @@ const ALL_PLAYERS_GROUP_LABELS = { core: 'Core', stats: 'Stats', dynasty: 'Dynas
 // Scout / Deep Data, with Custom auto-detected when no preset matches).
 const ALL_PLAYERS_PRESETS = {
     default: null, // filled below — the owner-ruled default view
-    stats:   ['name', 'pos', 'nflTeam', 'points', 'gp', 'ppg', 'proj', 'hi', 'lo', 'prev', 'trend', 'durability', 'sos'],
-    dynasty: ['name', 'pos', 'nflTeam', 'age', 'yoe', 'dhq', 'trend', 'adp', 'peakPhase', 'peakYrs', 'posRankLg', 'posRankNfl', 'starterSzn'],
-    scout:   ['name', 'pos', 'nflTeam', 'age', 'yoe', 'college', 'height', 'weight', 'depthChart', 'rkSlot', 'rkTeam'],
+    stats:   ['name', 'points', 'gp', 'ppg', 'proj', 'hi', 'lo', 'prev', 'trend', 'durability', 'sos'],
+    dynasty: ['name', 'age', 'yoe', 'dhq', 'trend', 'adp', 'peakPhase', 'peakYrs', 'posRankLg', 'posRankNfl', 'starterSzn'],
+    scout:   ['name', 'age', 'yoe', 'college', 'height', 'weight', 'depthChart', 'rkSlot', 'rkTeam'],
     deep:    ALL_PLAYERS_COLUMNS.map(c => c.key),
 };
 const ALL_PLAYERS_PRESET_LABELS = { default: 'Default', stats: 'Stats', dynasty: 'Dynasty', scout: 'Scout', deep: 'Deep Data', custom: 'Custom' };
 // Default view (owner ruling 2026-08-24): Pos · Team · Years · Points · GP ·
 // PPG · Weekly Proj · DHQ · ADP. Everything else stays in the picker.
-const ALL_PLAYERS_DEFAULT_VISIBLE = ['name', 'pos', 'nflTeam', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'];
+const ALL_PLAYERS_DEFAULT_VISIBLE = ['name', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'];
 ALL_PLAYERS_PRESETS.default = ALL_PLAYERS_DEFAULT_VISIBLE;
 // The pre-2026-08-24 default — used ONLY to migrate untouched saved prefs
 // (the persistence effect writes the default on first visit, so nearly every
@@ -1064,8 +1063,9 @@ function LeagueMapTab({
               // user choice — the persistence effect wrote it on first visit —
               // so it adopts the new owner-ruled default. A customized set is
               // the user's and stays.
-              const isOldDefault = clean.length === ALL_PLAYERS_PREV_DEFAULT.length
-                  && ALL_PLAYERS_PREV_DEFAULT.every(k => clean.includes(k));
+              const prevClean = ALL_PLAYERS_PREV_DEFAULT.filter(k => registryKeys.has(k));
+              const isOldDefault = clean.length === prevClean.length
+                  && prevClean.every(k => clean.includes(k));
               if (clean.length && !isOldDefault) return clean;
           }
       } catch (_) {}
@@ -1547,33 +1547,34 @@ function LeagueMapTab({
            height and paints a solid same-color halo (spread-only box-shadow)
            over the surrounding gap strips. A shade darker than the card so
            the frozen pane reads as its own surface. */
-        /* Owner reports on b15: sideways scroll stutters (the blurred fade
-           shadows repainted on every scroll frame across 1,000+ rows) and the
-           pane's edge was mushy (emerging columns half-peeked instead of
-           fading in). Now: blur-free spread halos only (cheap solid fills),
-           and the fade runway + gold hairline edge are a STATIC pseudo-element
-           painted once with the cell — nothing blurred repaints on scroll. */
-        .lm-ap-head > :nth-child(-n+3), .lm-ap-row > :nth-child(-n+3) {
-            position: sticky; z-index: 1;
-            align-self: stretch; display: flex; align-items: center;
+        /* All Players ledger — ONE pinned player cell per row (rank + headshot
+           + name with pos · team beneath; owner ruling 2026-08-24). A single
+           sticky element per row scrolls far smoother than the previous three
+           and leaves no internal gaps to patch. The 5px spread halo covers the
+           row's vertical padding + the grid gap; the -10px layer covers the
+           row's left padding strip. A static pseudo-element paints the gold
+           hairline + fade runway where the stats emerge — nothing blurred
+           repaints on scroll. */
+        .lm-ap-head > :nth-child(1), .lm-ap-row > :nth-child(1) {
+            position: sticky; left: 10px; z-index: 1;
+            align-self: stretch;
             background: #0d0d12;
-            box-shadow: 0 0 0 5px #0d0d12;
+            box-shadow: 0 0 0 5px #0d0d12, -10px 0 0 0 #0d0d12;
         }
-        .lm-ap-head > :nth-child(1), .lm-ap-row > :nth-child(1) { left: 10px; box-shadow: 0 0 0 5px #0d0d12, -10px 0 0 0 #0d0d12; }
-        .lm-ap-head > :nth-child(2), .lm-ap-row > :nth-child(2) { left: 38px; }
-        .lm-ap-head > :nth-child(3), .lm-ap-row > :nth-child(3) { left: 70px; }
-        .lm-ap-head > :nth-child(3)::after, .lm-ap-row > :nth-child(3)::after {
+        .lm-ap-head > :nth-child(1)::after, .lm-ap-row > :nth-child(1)::after {
             content: ''; position: absolute; top: -5px; bottom: -5px; right: -23px; width: 18px;
             background: linear-gradient(90deg, #0d0d12 0%, rgba(13,13,18,0) 100%);
             border-left: 1px solid rgba(212,175,55,0.28);
             pointer-events: none;
         }
-        .lm-ap-head > :nth-child(-n+3) { background: #221f1a; box-shadow: 0 0 0 5px #221f1a; }
-        .lm-ap-head > :nth-child(1) { box-shadow: 0 0 0 5px #221f1a, -10px 0 0 0 #221f1a; }
-        .lm-ap-head > :nth-child(3)::after { background: linear-gradient(90deg, #221f1a 0%, rgba(34,31,26,0) 100%); }
-        .lm-ap-row.is-hl > :nth-child(-n+3) { background: #191715; box-shadow: 0 0 0 5px #191715; }
-        .lm-ap-row.is-hl > :nth-child(1) { box-shadow: 0 0 0 5px #191715, -10px 0 0 0 #191715; }
-        .lm-ap-row.is-hl > :nth-child(3)::after { background: linear-gradient(90deg, #191715 0%, rgba(25,23,21,0) 100%); }
+        .lm-ap-head > :nth-child(1) {
+            background: #221f1a;
+            box-shadow: 0 0 0 5px #221f1a, -10px 0 0 0 #221f1a;
+            display: flex; align-items: center;
+        }
+        .lm-ap-head > :nth-child(1)::after { background: linear-gradient(90deg, #221f1a 0%, rgba(34,31,26,0) 100%); }
+        .lm-ap-row.is-hl > :nth-child(1) { background: #191715; box-shadow: 0 0 0 5px #191715, -10px 0 0 0 #191715; }
+        .lm-ap-row.is-hl > :nth-child(1)::after { background: linear-gradient(90deg, #191715 0%, rgba(25,23,21,0) 100%); }
         @media (max-width: 767px) {
 
             /* Draft Picks ledger (free tier): 240px of fixed columns + two 1fr
@@ -2341,22 +2342,19 @@ function LeagueMapTab({
                     // The user's stored order drives display order (roster-tab
                     // customize model); Player stays pinned first. Owner Tier is
                     // a Pro read, filtered at this seam as before.
-                    const activeCols = [ALL_PLAYERS_COL_BY_KEY.name].concat(
-                        allPlayersCols
-                            .filter(k => k !== 'name' && ALL_PLAYERS_COL_BY_KEY[k] && (isPro || k !== 'tier'))
-                            .map(k => ALL_PLAYERS_COL_BY_KEY[k])
-                    );
-                    // Every column shares surplus width (owner report 2026-08-24:
-                    // a fixed-width stat block left one huge gap after the 1fr
-                    // name on wide iPads). Name takes a bigger share; each stat
-                    // column keeps its width as a floor and stretches evenly.
-                    const gridTpl = ['24px', '28px'].concat(activeCols.map(c =>
-                        c.width === '1fr' ? 'minmax(160px, 2.5fr)' : 'minmax(' + c.width + ', 1fr)'
-                    )).join(' ');
-                    // Sum fixed (px) column widths + index/avatar cols + a 140px floor for the 1fr name col,
-                    // so wide column selections scroll horizontally inside the card on iPad instead of crushing the name column.
+                    const activeCols = allPlayersCols
+                        .filter(k => k !== 'name' && ALL_PLAYERS_COL_BY_KEY[k] && (isPro || k !== 'tier'))
+                        .map(k => ALL_PLAYERS_COL_BY_KEY[k]);
+                    // ONE pinned player cell (rank + headshot + name with pos ·
+                    // team stacked beneath — owner ruling 2026-08-24). A single
+                    // sticky element per row scrolls far smoother than the
+                    // previous three, and the pane has no internal gaps to
+                    // patch. Stat columns keep their width as a floor and
+                    // stretch evenly when there's surplus.
+                    const PLAYER_COL_W = 224;
+                    const gridTpl = [PLAYER_COL_W + 'px'].concat(activeCols.map(c => 'minmax(' + c.width + ', 1fr)')).join(' ');
                     const fixedColPx = activeCols.reduce((sum, c) => sum + (/px$/.test(c.width) ? parseInt(c.width, 10) : 0), 0);
-                    const gridMinWidth = (24 + 28 + 140 + fixedColPx + (activeCols.length + 2) * 4) + 'px';
+                    const gridMinWidth = (PLAYER_COL_W + fixedColPx + (activeCols.length + 1) * 4 + 20) + 'px';
                     const tierOf = (rid) => {
                         const h = window.App?.LI?.teamHealth?.[rid];
                         return h?.tier || '';
@@ -2369,20 +2367,14 @@ function LeagueMapTab({
                     return (
                 <div ref={apScrollRef} style={{ background: 'var(--black)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.2))', borderRadius: '8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                     <div className="lm-ap-head" style={{ display: 'grid', gridTemplateColumns: gridTpl, gap: '4px', padding: '6px 10px', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', borderBottom: '2px solid var(--acc-line1, rgba(212,175,55,0.2))', fontSize: '0.78rem', fontWeight: 700, color: 'var(--gold)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', minWidth: gridMinWidth }}>
-                        <span>#</span><span></span>
+                        <span style={{ cursor: 'pointer', paddingLeft: '27px' }} onClick={() => setLpSort(prev => prev.key === 'name' ? { ...prev, dir: prev.dir * -1 } : { key: 'name', dir: 1 })}>
+                            Player{lpSort.key === 'name' ? (lpSort.dir === -1 ? ' \u25BC' : ' \u25B2') : ''}
+                        </span>
                         {activeCols.map(c => {
                             if (c.sortable && c.sortKey) {
                                 const isActive = lpSort.key === c.sortKey;
                                 return (
                                     <span key={c.key} style={{ cursor: 'pointer' }} onClick={() => setLpSort(prev => prev.key === c.sortKey ? { ...prev, dir: prev.dir * -1 } : { key: c.sortKey, dir: (c.sortKey === 'team' || c.sortKey === 'adp') ? 1 : -1 })}>
-                                        {c.label}{isActive ? (lpSort.dir === -1 ? ' \u25BC' : ' \u25B2') : ''}
-                                    </span>
-                                );
-                            }
-                            if (c.key === 'name') {
-                                const isActive = lpSort.key === 'name';
-                                return (
-                                    <span key={c.key} style={{ cursor: 'pointer' }} onClick={() => setLpSort(prev => prev.key === 'name' ? { ...prev, dir: prev.dir * -1 } : { key: 'name', dir: 1 })}>
                                         {c.label}{isActive ? (lpSort.dir === -1 ? ' \u25BC' : ' \u25B2') : ''}
                                     </span>
                                 );
@@ -2552,8 +2544,17 @@ function LeagueMapTab({
                                 style={{ display: 'grid', gridTemplateColumns: gridTpl, gap: '4px', padding: '5px 10px', borderBottom: '1px solid var(--ov-2, rgba(255,255,255,0.03))', cursor: 'pointer', fontSize: '0.72rem', alignItems: 'center', background: rowBg, transition: 'background 0.1s' }}
                                 onMouseEnter={e => e.currentTarget.style.background = 'var(--acc-fill1, rgba(212,175,55,0.06))'}
                                 onMouseLeave={e => e.currentTarget.style.background = rowBg}>
-                                <span style={{ fontSize: '0.72rem', color: 'var(--silver)', fontFamily: 'var(--font-body)' }}>{idx+1}</span>
-                                <div style={{ width: '22px', height: '22px', flexShrink: 0 }}><img src={'https://sleepercdn.com/content/nfl/players/thumb/'+x.pid+'.jpg'} onError={e=>e.target.style.display='none'} style={{ width:'22px',height:'22px',borderRadius:'50%',objectFit:'cover' }} /></div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                                    <span style={{ width: '20px', textAlign: 'right', flexShrink: 0, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.7, fontFamily: 'var(--font-body)' }}>{idx+1}</span>
+                                    <div style={{ width: '24px', height: '24px', flexShrink: 0 }}><img src={'https://sleepercdn.com/content/nfl/players/thumb/'+x.pid+'.jpg'} onError={e=>e.target.style.display='none'} style={{ width:'24px',height:'24px',borderRadius:'50%',objectFit:'cover' }} /></div>
+                                    <div style={{ minWidth: 0 }}>
+                                        <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontWeight: 600, fontSize: '0.76rem', color: x.isMe ? 'var(--gold)' : 'var(--white)' }}>{x.p.full_name || ((x.p.first_name || '') + ' ' + (x.p.last_name || '')).trim()}</div>
+                                        <div style={{ display: 'flex', gap: '5px', alignItems: 'baseline', fontSize: 'var(--text-micro, 0.6875rem)', lineHeight: 1.25 }}>
+                                            <span style={{ fontWeight: 700, color: posColors[x.pos] || 'var(--silver)' }}>{leagueMapPosLabel(x.pos)}</span>
+                                            <span style={{ color: 'var(--silver)', opacity: 0.75 }}>{x.p.team || 'FA'}</span>
+                                        </div>
+                                    </div>
+                                </div>
                                 {activeCols.map(renderCell)}
                             </div>
                             {/* Dossier pins at the visible width (roster boardWidth

@@ -882,8 +882,13 @@ test('all players default view matches the owner ruling (2026-08-24)',
     const def = src.match(/ALL_PLAYERS_DEFAULT_VISIBLE = \[([^\]]+)\]/);
     ok(def, 'default-visible list must exist');
     const keys = def[1].match(/'[^']+'/g).map(s => s.slice(1, -1));
-    const want = ['name', 'pos', 'nflTeam', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'];
+    // Pos + NFL Team live inside the pinned player cell (owner ruling
+    // 2026-08-24), not as standalone columns.
+    const want = ['name', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'];
     ok(JSON.stringify(keys) === JSON.stringify(want), 'default view must be the owner-ruled set, got: ' + keys.join(','));
+    const registryBlock = src.match(/ALL_PLAYERS_COLUMNS = \[[\s\S]*?\n\];/)[0];
+    ok(!registryBlock.includes("key: 'pos'") && !registryBlock.includes("key: 'nflTeam'"), 'pos/team must be folded into the player cell, not standalone columns');
+    ok(src.includes('leagueMapPosLabel(x.pos)') && src.includes("x.p.team || 'FA'"), 'the pinned player cell must carry position and NFL team');
     ok(src.includes('ALL_PLAYERS_PREV_DEFAULT'), 'untouched old-default prefs must migrate to the new default');
     for (const c of ["case 'points'", "case 'gp'", "case 'proj'", "case 'adp'"]) {
         ok(src.includes(c), 'renderCell must handle ' + c);
@@ -898,7 +903,8 @@ test('all players default view matches the owner ruling (2026-08-24)',
     ok(src.includes('Customize Columns'), 'All Players must carry the roster-style customize panel');
     ok(src.includes('apMoveColumn'), 'columns must be reorderable');
     ok(src.includes('apRemoveColumn') && src.includes('apAddColumn'), 'columns must be hideable and addable');
-    ok(src.includes('ALL_PLAYERS_COL_BY_KEY.name].concat'), 'display order must follow the stored array with Player pinned first');
+    ok(src.includes("filter(k => k !== 'name' && ALL_PLAYERS_COL_BY_KEY[k]"), 'display order must follow the stored array');
+    ok(src.includes('PLAYER_COL_W'), 'the player cell must be a single structural pinned column');
     ok(src.includes('ALL_PLAYERS_GROUP_LABELS'), 'picker fields must be grouped');
     // Full roster-tab mirror (owner ruling 2026-08-24): every roster data
     // column exists here too, reading the SAME engines/sources my-team.js
@@ -910,7 +916,7 @@ test('all players default view matches the owner ruling (2026-08-24)',
     ok(src.includes('stats2025Data'), 'Last/Trend must read the prior-season stats the roster tab reads');
     ok(src.includes('ALL_PLAYERS_PRESETS'), 'roster-style presets must exist');
     ok(src.includes("'Deep Data'"), 'the Deep Data preset must expose every field');
-    ok(src.includes('.lm-ap-row > :nth-child(-n+3)'), 'the player column must pin at every width (roster-style scroll)');
+    ok(src.includes('.lm-ap-row > :nth-child(1)'), 'the single player cell must pin at every width (roster-style scroll)');
     const analytics = fs.readFileSync(path.join(ROOT, 'js/tabs/analytics.js'), 'utf8');
     ok(analytics.includes('stats2025Data'), 'the Analytics embed must thread prior-season stats through');
     const myTeam = fs.readFileSync(path.join(ROOT, 'js/tabs/my-team.js'), 'utf8');
