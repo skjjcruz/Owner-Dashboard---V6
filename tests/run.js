@@ -893,6 +893,13 @@ test('all players default view matches the owner ruling (2026-08-24)',
     }
     ok(src.includes('_allPlayersProjMemo'), 'weekly projections must be memoized — the ledger renders 1,000+ rows');
     ok(src.includes("addEventListener('wr:adp-loaded'"), 'ADP column must re-render when the market map lands');
+    // Roster-tab customize model (owner ruling 2026-08-24): the stored array
+    // is the display order, with move/hide/add helpers and the grouped panel.
+    ok(src.includes('Customize Columns'), 'All Players must carry the roster-style customize panel');
+    ok(src.includes('apMoveColumn'), 'columns must be reorderable');
+    ok(src.includes('apRemoveColumn') && src.includes('apAddColumn'), 'columns must be hideable and addable');
+    ok(src.includes('ALL_PLAYERS_COL_BY_KEY.name].concat'), 'display order must follow the stored array with Player pinned first');
+    ok(src.includes('ALL_PLAYERS_GROUP_LABELS'), 'picker fields must be grouped');
   });
 
 test('league hub brand icon returns to the app front page, which stays put',

@@ -674,23 +674,26 @@ function ReportSubView({
 // numeric columns sortable+sortKey AND a comparator case in filtered.sort.
 // ══════════════════════════════════════════════════════════════════
 const ALL_PLAYERS_COLUMNS = [
-    { key: 'name',     label: 'Player',   width: '1fr',   toggleable: false },
-    { key: 'pos',      label: 'Pos',      width: '36px' },
-    { key: 'nflTeam',  label: 'NFL Team', width: '60px' },
-    { key: 'yoe',      label: 'Yrs',      width: '36px' },
-    { key: 'points',   label: 'Pts',      width: '48px', sortable: true, sortKey: 'points' },
-    { key: 'gp',       label: 'GP',       width: '36px', sortable: true, sortKey: 'gp' },
-    { key: 'ppg',      label: 'PPG',      width: '42px', sortable: true, sortKey: 'ppg' },
-    { key: 'proj',     label: 'Proj',     width: '52px', sortable: true, sortKey: 'proj' },
-    { key: 'dhq',      label: 'DHQ',      width: '54px', sortable: true, sortKey: 'dhq' },
-    { key: 'adp',      label: 'ADP',      width: '48px', sortable: true, sortKey: 'adp' },
-    { key: 'age',      label: 'Age',      width: '32px' },
-    { key: 'peak',     label: 'Peak',     width: '60px' },
-    { key: 'peakYrs',  label: 'Peak Yrs', width: '52px' },
-    { key: 'tier',     label: 'Tier',     width: '72px' },
-    { key: 'owner',    label: 'Owner',    width: '100px', sortable: true, sortKey: 'team' },
-    { key: 'acq',      label: 'Acquired', width: '72px' },
+    { key: 'name',     label: 'Player',   width: '1fr',   toggleable: false, group: 'core' },
+    { key: 'pos',      label: 'Pos',      width: '36px',  group: 'core' },
+    { key: 'nflTeam',  label: 'NFL Team', width: '60px',  group: 'core' },
+    { key: 'yoe',      label: 'Yrs',      width: '36px',  group: 'core' },
+    { key: 'age',      label: 'Age',      width: '32px',  group: 'core' },
+    { key: 'points',   label: 'Pts',      width: '48px', sortable: true, sortKey: 'points', group: 'stats' },
+    { key: 'gp',       label: 'GP',       width: '36px', sortable: true, sortKey: 'gp', group: 'stats' },
+    { key: 'ppg',      label: 'PPG',      width: '42px', sortable: true, sortKey: 'ppg', group: 'stats' },
+    { key: 'proj',     label: 'Proj',     width: '52px', sortable: true, sortKey: 'proj', group: 'stats' },
+    { key: 'dhq',      label: 'DHQ',      width: '54px', sortable: true, sortKey: 'dhq', group: 'value' },
+    { key: 'adp',      label: 'ADP',      width: '48px', sortable: true, sortKey: 'adp', group: 'value' },
+    { key: 'peak',     label: 'Peak',     width: '60px',  group: 'value' },
+    { key: 'peakYrs',  label: 'Peak Yrs', width: '52px',  group: 'value' },
+    { key: 'tier',     label: 'Tier',     width: '72px',  group: 'league' },
+    { key: 'owner',    label: 'Owner',    width: '100px', sortable: true, sortKey: 'team', group: 'league' },
+    { key: 'acq',      label: 'Acquired', width: '72px',  group: 'league' },
 ];
+const ALL_PLAYERS_COL_BY_KEY = {};
+ALL_PLAYERS_COLUMNS.forEach(c => { ALL_PLAYERS_COL_BY_KEY[c.key] = c; });
+const ALL_PLAYERS_GROUP_LABELS = { core: 'Core', stats: 'Stats', value: 'Value & Market', league: 'League' };
 // Default view (owner ruling 2026-08-24): Pos · Team · Years · Points · GP ·
 // PPG · Weekly Proj · DHQ · ADP. Everything else stays in the picker.
 const ALL_PLAYERS_DEFAULT_VISIBLE = ['name', 'pos', 'nflTeam', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'];
@@ -1029,6 +1032,21 @@ function LeagueMapTab({
       return ALL_PLAYERS_DEFAULT_VISIBLE.slice();
   });
   const [allPlayersColPickerOpen, setAllPlayersColPickerOpen] = React.useState(false);
+  // Roster-tab customize model (owner ruling 2026-08-24): the stored array IS
+  // the display order. Move/hide/add mirror my-team.js's helpers; the Player
+  // column is pinned first and never appears in the order list.
+  const apMoveColumn = (key, delta) => setAllPlayersCols(prev => {
+      const idx = prev.indexOf(key);
+      if (idx < 0) return prev;
+      const next = prev.slice();
+      const j = Math.max(0, Math.min(next.length - 1, idx + delta));
+      if (j === idx) return prev;
+      const [it] = next.splice(idx, 1);
+      next.splice(j, 0, it);
+      return next;
+  });
+  const apRemoveColumn = (key) => setAllPlayersCols(prev => prev.filter(k => k !== key));
+  const apAddColumn = (key) => setAllPlayersCols(prev => prev.includes(key) ? prev : [...prev, key]);
   React.useEffect(() => {
       try { localStorage.setItem(ALL_PLAYERS_COL_KEY, JSON.stringify(allPlayersCols)); } catch (_) {}
   }, [ALL_PLAYERS_COL_KEY, allPlayersCols]);
@@ -1962,29 +1980,8 @@ function LeagueMapTab({
                                 <button key={opt.k} onClick={() => setPpgWindow(opt.k)} title={opt.k === 'season' ? 'Season-to-date PPG' : 'Last ' + (opt.k === 'l5' ? 5 : 3) + ' games'} style={{ minHeight: '38px', padding: '6px 12px', borderRadius: '7px', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', color: ppgWindow === opt.k ? 'var(--gold)' : 'var(--silver)', background: ppgWindow === opt.k ? 'rgba(212,175,55,0.14)' : 'transparent', border: '1px solid ' + (ppgWindow === opt.k ? 'var(--gold)' : 'var(--ov-6, rgba(255,255,255,0.12))') }}>{opt.l}</button>
                             ))}
                             <div style={{ position: 'relative', marginLeft: 'auto' }}>
-                                <button onClick={() => setAllPlayersColPickerOpen(o => !o)} style={{ minHeight: '38px', padding: '6px 12px', borderRadius: '7px', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, textTransform: 'uppercase', background: 'var(--acc-fill2, rgba(212,175,55,0.1))', color: 'var(--gold)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', cursor: 'pointer' }}>⚙ Columns ({allPlayersCols.length})</button>
-                                {allPlayersColPickerOpen && (
-                                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--black)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: '6px', padding: '8px', zIndex: 20, minWidth: '200px', boxShadow: '0 6px 20px rgba(0,0,0,0.6)' }}>
-                                        <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '6px' }}>Visible Columns</div>
-                                        {ALL_PLAYERS_COLUMNS.filter(c => isPro || c.key !== 'tier').map(c => {
-                                            const on = allPlayersCols.includes(c.key);
-                                            return (
-                                                <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 0', fontSize: '0.76rem', color: 'var(--silver)', cursor: c.toggleable === false ? 'not-allowed' : 'pointer', opacity: c.toggleable === false ? 0.6 : 1 }}>
-                                                    <input type="checkbox" checked={on} disabled={c.toggleable === false} onChange={() => {
-                                                        if (c.toggleable === false) return;
-                                                        setAllPlayersCols(prev => prev.includes(c.key) ? prev.filter(k => k !== c.key) : [...prev, c.key]);
-                                                    }} />
-                                                    {c.label}
-                                                </label>
-                                            );
-                                        })}
-                                        <div style={{ display: 'flex', gap: '4px', marginTop: '8px', borderTop: '1px solid var(--ov-5, rgba(255,255,255,0.08))', paddingTop: '6px' }}>
-                                            <button onClick={() => setAllPlayersCols(ALL_PLAYERS_COLUMNS.map(c => c.key))} style={{ flex: 1, padding: '8px 4px', fontSize: 'var(--text-micro, 0.6875rem)', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-5, rgba(255,255,255,0.08))', borderRadius: '3px', color: 'var(--silver)', cursor: 'pointer', fontFamily: 'inherit' }}>All</button>
-                                            <button onClick={() => setAllPlayersCols(ALL_PLAYERS_DEFAULT_VISIBLE.slice())} style={{ flex: 1, padding: '8px 4px', fontSize: 'var(--text-micro, 0.6875rem)', background: 'var(--acc-fill3, rgba(212,175,55,0.15))', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: '3px', color: 'var(--gold)', cursor: 'pointer', fontFamily: 'inherit' }}>Reset</button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                                <button onClick={() => setAllPlayersColPickerOpen(o => !o)} style={{ minHeight: '38px', padding: '6px 12px', borderRadius: '7px', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, textTransform: 'uppercase', background: 'var(--acc-fill2, rgba(212,175,55,0.1))', color: 'var(--gold)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', cursor: 'pointer' }}>⚙ Customize ({allPlayersCols.length})</button>
+                                                            </div>
                         </div>
                         {window.WR?.SavedViews?.SavedViewBar && (
                             React.createElement(window.WR.SavedViews.SavedViewBar, {
@@ -2047,29 +2044,8 @@ function LeagueMapTab({
                             padding: '4px 10px', fontSize: '0.72rem', fontFamily: 'var(--font-body)',
                             background: 'var(--acc-fill2, rgba(212,175,55,0.1))', color: 'var(--gold)',
                             border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: '3px', cursor: 'pointer',
-                        }}>⚙ Columns ({allPlayersCols.length})</button>
-                        {allPlayersColPickerOpen && (
-                            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--black)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: '6px', padding: '8px', zIndex: 20, minWidth: '180px', boxShadow: '0 6px 20px rgba(0,0,0,0.6)' }}>
-                                <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '6px' }}>Visible Columns</div>
-                                {ALL_PLAYERS_COLUMNS.filter(c => isPro || c.key !== 'tier').map(c => {
-                                    const on = allPlayersCols.includes(c.key);
-                                    return (
-                                        <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', fontSize: '0.72rem', color: 'var(--silver)', cursor: c.toggleable === false ? 'not-allowed' : 'pointer', opacity: c.toggleable === false ? 0.6 : 1 }}>
-                                            <input type="checkbox" checked={on} disabled={c.toggleable === false} onChange={() => {
-                                                if (c.toggleable === false) return;
-                                                setAllPlayersCols(prev => prev.includes(c.key) ? prev.filter(k => k !== c.key) : [...prev, c.key]);
-                                            }} />
-                                            {c.label}
-                                        </label>
-                                    );
-                                })}
-                                <div style={{ display: 'flex', gap: '4px', marginTop: '8px', borderTop: '1px solid var(--ov-5, rgba(255,255,255,0.08))', paddingTop: '6px' }}>
-                                    <button onClick={() => setAllPlayersCols(ALL_PLAYERS_COLUMNS.map(c => c.key))} style={{ flex: 1, padding: '4px', fontSize: 'var(--text-micro, 0.6875rem)', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-5, rgba(255,255,255,0.08))', borderRadius: '3px', color: 'var(--silver)', cursor: 'pointer', fontFamily: 'inherit' }}>All</button>
-                                    <button onClick={() => setAllPlayersCols(ALL_PLAYERS_DEFAULT_VISIBLE.slice())} style={{ flex: 1, padding: '4px', fontSize: 'var(--text-micro, 0.6875rem)', background: 'var(--acc-fill3, rgba(212,175,55,0.15))', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: '3px', color: 'var(--gold)', cursor: 'pointer', fontFamily: 'inherit' }}>Reset</button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                        }}>⚙ Customize ({allPlayersCols.length})</button>
+                                            </div>
                     {window.WR?.SavedViews?.SavedViewBar && (
                         <div style={{ marginLeft: 'auto' }}>
                             {React.createElement(window.WR.SavedViews.SavedViewBar, {
@@ -2089,6 +2065,72 @@ function LeagueMapTab({
                     )}
                 </div>
                 )}
+                {/* Roster-tab customize panel (owner ruling 2026-08-24): Active
+                    Order with move/hide + grouped field checkboxes, replacing
+                    the old flat checkbox popover. Same state, same per-league
+                    storage — the stored array is now the display order. */}
+                {allPlayersColPickerOpen && (() => {
+                    const orderKeys = allPlayersCols.filter(k => k !== 'name' && ALL_PLAYERS_COL_BY_KEY[k] && (isPro || k !== 'tier'));
+                    const groups = ['core', 'stats', 'value', 'league']
+                        .map(g => ({ g, cols: ALL_PLAYERS_COLUMNS.filter(c => c.group === g && c.toggleable !== false && (isPro || c.key !== 'tier')) }))
+                        .filter(e => e.cols.length);
+                    const smallBtn = (on) => ({ padding: '6px 12px', minHeight: '32px', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'pointer', borderRadius: 'var(--card-radius-xs, 5px)', fontFamily: 'var(--font-body)', border: '1px solid ' + (on ? 'var(--acc-line2, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.12))'), background: on ? 'rgba(212,175,55,0.12)' : 'transparent', color: on ? 'var(--gold)' : 'var(--silver)' });
+                    return (
+                        <div style={{ background: 'linear-gradient(180deg, var(--surf-solid, rgba(22,22,29,0.98)), var(--surf-solid, rgba(10,10,14,0.98)))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.22))', borderRadius: 'var(--card-radius, 10px)', padding: '12px', marginBottom: '10px', boxShadow: '0 10px 28px rgba(0,0,0,0.24)' }}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                                <div style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: 'var(--text-title, 1.125rem)', color: 'var(--white)', fontWeight: 700, letterSpacing: '0.04em' }}>Customize Columns</div>
+                                <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.58 }}>{orderKeys.length + 1} of {ALL_PLAYERS_COLUMNS.filter(c => isPro || c.key !== 'tier').length} active</div>
+                                <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <button onClick={() => setAllPlayersCols(ALL_PLAYERS_COLUMNS.filter(c => isPro || c.key !== 'tier').map(c => c.key))} style={smallBtn(false)}>All Fields</button>
+                                    <button onClick={() => setAllPlayersCols(ALL_PLAYERS_DEFAULT_VISIBLE.slice())} style={smallBtn(true)}>Reset Default</button>
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px', alignItems: 'start' }}>
+                                <div style={{ background: 'var(--ov-2, rgba(255,255,255,0.025))', border: '1px solid var(--ov-4, rgba(255,255,255,0.07))', borderRadius: 'var(--card-radius-sm, 8px)', padding: '10px', minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '8px' }}>
+                                        <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 800 }}>Active Order</div>
+                                        <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.54 }}>Player is always first</div>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                        {orderKeys.length === 0 ? (
+                                            <div style={{ padding: '12px', borderRadius: 'var(--card-radius-sm, 8px)', border: '1px dashed var(--ov-6, rgba(255,255,255,0.12))', color: 'var(--silver)', opacity: 0.62, fontSize: '0.74rem' }}>Only the player column is visible.</div>
+                                        ) : orderKeys.map((key, idx) => {
+                                            const col = ALL_PLAYERS_COL_BY_KEY[key];
+                                            const navBtn = (off) => ({ height: '26px', borderRadius: 'var(--card-radius-xs, 5px)', border: '1px solid var(--ov-5, rgba(255,255,255,0.09))', background: off ? 'var(--ov-2, rgba(255,255,255,0.025))' : 'var(--ov-4, rgba(255,255,255,0.06))', color: off ? 'var(--ov-7, rgba(255,255,255,0.24))' : 'var(--silver)', cursor: off ? 'default' : 'pointer' });
+                                            return (
+                                                <div key={key} style={{ display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr) 28px 28px 28px', gap: '5px', alignItems: 'center', padding: '5px 6px', borderRadius: 'var(--card-radius-xs, 5px)', background: 'var(--acc-fill2, rgba(212,175,55,0.075))', border: '1px solid var(--acc-fill3, rgba(212,175,55,0.14))' }}>
+                                                    <span style={{ color: 'var(--silver)', opacity: 0.55, fontSize: 'var(--text-micro, 0.6875rem)', textAlign: 'right' }}>{idx + 1}</span>
+                                                    <span title={col.label} style={{ color: 'var(--white)', fontSize: '0.74rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.label}</span>
+                                                    <button disabled={idx === 0} onClick={() => apMoveColumn(key, -1)} title="Move left" style={navBtn(idx === 0)}>{'‹'}</button>
+                                                    <button disabled={idx === orderKeys.length - 1} onClick={() => apMoveColumn(key, 1)} title="Move right" style={navBtn(idx === orderKeys.length - 1)}>{'›'}</button>
+                                                    <button onClick={() => apRemoveColumn(key)} title="Hide column" style={{ height: '26px', borderRadius: 'var(--card-radius-xs, 5px)', border: '1px solid rgba(231,76,60,0.22)', background: 'rgba(231,76,60,0.08)', color: 'var(--bad)', cursor: 'pointer' }}>{'×'}</button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
+                                    {groups.map(({ g, cols }) => (
+                                        <div key={g} style={{ background: 'var(--ov-2, rgba(255,255,255,0.025))', border: '1px solid var(--ov-4, rgba(255,255,255,0.07))', borderRadius: 'var(--card-radius-sm, 8px)', padding: '8px' }}>
+                                            <div style={{ marginBottom: '6px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 800 }}>{ALL_PLAYERS_GROUP_LABELS[g] || g}</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                {cols.map(c => {
+                                                    const active = allPlayersCols.includes(c.key);
+                                                    return (
+                                                        <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '5px 7px', borderRadius: 'var(--card-radius-xs, 5px)', cursor: 'pointer', fontSize: '0.74rem', background: active ? 'var(--acc-fill2, rgba(212,175,55,0.1))' : 'var(--ov-1, rgba(255,255,255,0.018))', color: active ? 'var(--gold)' : 'var(--silver)', border: '1px solid ' + (active ? 'var(--acc-fill3, rgba(212,175,55,0.18))' : 'var(--ov-3, rgba(255,255,255,0.04))') }}>
+                                                            <input type="checkbox" checked={active} onChange={() => { if (active) apRemoveColumn(c.key); else apAddColumn(c.key); }} style={{ accentColor: 'var(--gold)' }} />
+                                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
                 {(() => {
                     // ══ PHONE (≤767) — the All Players ledger re-pours as P1
                     // AssetRows (iPhone program Phase 3, Analytics assets
@@ -2133,7 +2175,14 @@ function LeagueMapTab({
                     // assessment — a competitive-tier read (Q7) → Pro. Filtered at
                     // the render seam so persisted column prefs and saved views
                     // can't resurrect it for free.
-                    const activeCols = ALL_PLAYERS_COLUMNS.filter(c => allPlayersCols.includes(c.key) && (isPro || c.key !== 'tier'));
+                    // The user's stored order drives display order (roster-tab
+                    // customize model); Player stays pinned first. Owner Tier is
+                    // a Pro read, filtered at this seam as before.
+                    const activeCols = [ALL_PLAYERS_COL_BY_KEY.name].concat(
+                        allPlayersCols
+                            .filter(k => k !== 'name' && ALL_PLAYERS_COL_BY_KEY[k] && (isPro || k !== 'tier'))
+                            .map(k => ALL_PLAYERS_COL_BY_KEY[k])
+                    );
                     // Every column shares surplus width (owner report 2026-08-24:
                     // a fixed-width stat block left one huge gap after the 1fr
                     // name on wide iPads). Name takes a bigger share; each stat
