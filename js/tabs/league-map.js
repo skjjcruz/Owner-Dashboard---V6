@@ -741,6 +741,28 @@ const ALL_PLAYERS_PREV_DEFAULT = ['name', 'pos', 'nflTeam', 'age', 'dhq', 'ppg',
 // 1,000+ rows with no virtualization, so each (league|season|week|pid) is
 // computed once per page load and reused across re-renders and sorts.
 const _allPlayersProjMemo = {};
+// NFL positional rank across EVERY NFL player by DHQ value (owner ask
+// 2026-08-24: populate NFL # — the market fcRank meta is empty in practice).
+// Built once per session from playersData; rebuilt only while empty so a
+// build that ran before values loaded heals on a later render.
+let _nflRankMap = null;
+function _buildNflRankMap(playersData) {
+    const PV = window.App && window.App.PlayerValue;
+    const getV = PV && PV.getValue ? (pid) => PV.getValue(pid) : (pid) => (window.App?.LI?.playerScores?.[pid] || 0);
+    const norm = window.App && window.App.normPos;
+    const byPos = {};
+    Object.keys(playersData || {}).forEach(pid => {
+        const pl = playersData[pid];
+        if (!pl || !pl.position) return;
+        const v = getV(pid) || 0;
+        if (!(v > 0)) return;
+        const pos = (norm && norm(pl.position)) || pl.position;
+        (byPos[pos] = byPos[pos] || []).push({ pid, v });
+    });
+    const out = {};
+    Object.keys(byPos).forEach(pos => byPos[pos].sort((a, b) => b.v - a.v).forEach((e, i) => { out[e.pid] = pos + (i + 1); }));
+    return out;
+}
 
 // ══════════════════════════════════════════════════════════════════
 // RosterPlayerDossier — the My-Roster-style inline player card, reused in
@@ -2054,7 +2076,12 @@ function LeagueMapTab({
             });
             return out;
         })();
-        const nflRankOf = (x) => { const m = metaOf(x); return m && m.fcRank ? '#' + m.fcRank : null; };
+        const nflRankOf = (x) => {
+            const m = metaOf(x);
+            if (m && m.fcRank) return x.pos + m.fcRank;
+            if (!_nflRankMap || !Object.keys(_nflRankMap).length) _nflRankMap = _buildNflRankMap(playersData);
+            return _nflRankMap[x.pid] || null;
+        };
         const sosOf = (x) => {
             const S2 = window.App?.SOS;
             if (!S2 || !S2.ready || typeof S2.getPlayerSOS !== 'function') return null;
