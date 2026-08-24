@@ -1916,10 +1916,10 @@ function MyTeamTab({
           list by default, or the full board inside the scoped Deep Data
           scroll wrap (P7) so no column is ever lost. */}
       {!_phone && _renderRosterBoard()}
-      {_phone && isDeepData && (
-        <div className="wr-sticky-table-wrap" style={{ border: 'none' }}>{_renderRosterBoard()}</div>
-      )}
-      {_phone && !isDeepData && _renderPhoneCards()}
+      {/* Owner ruling 2026-08-24 (continuity with the Big Board card style):
+          phones ALWAYS render the positional card boxes — the Deep Data
+          scrolling table stays a tablet/desktop treatment. */}
+      {_phone && _renderPhoneCards()}
 
       {myDraftPicks.length > 0 && (
         <div style={{ marginTop: '12px', border: '1px solid var(--ov-5, rgba(255,255,255,0.075))', borderRadius: 'var(--card-radius)', overflow: 'hidden', background: 'var(--surf-solid, rgba(12,12,17,0.98))', boxShadow: '0 10px 24px rgba(0,0,0,0.2)' }}>
