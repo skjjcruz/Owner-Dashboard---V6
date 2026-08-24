@@ -2550,7 +2550,7 @@ function LeagueMapTab({
                                 style={{ display: 'grid', gridTemplateColumns: gridTpl, gap: '4px', padding: '5px 10px', borderBottom: '1px solid var(--ov-2, rgba(255,255,255,0.03))', cursor: 'pointer', fontSize: '0.72rem', alignItems: 'center', background: rowBg, transition: 'background 0.1s' }}
                                 onMouseEnter={e => e.currentTarget.style.background = 'var(--acc-fill1, rgba(212,175,55,0.06))'}
                                 onMouseLeave={e => e.currentTarget.style.background = rowBg}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, paddingRight: '10px' }}>
                                     <span style={{ width: '20px', textAlign: 'right', flexShrink: 0, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.7, fontFamily: 'var(--font-body)' }}>{idx+1}</span>
                                     <div style={{ width: '24px', height: '24px', flexShrink: 0 }}><img src={'https://sleepercdn.com/content/nfl/players/thumb/'+x.pid+'.jpg'} onError={e=>e.target.style.display='none'} style={{ width:'24px',height:'24px',borderRadius:'50%',objectFit:'cover' }} /></div>
                                     <div style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: '6px' }}>
