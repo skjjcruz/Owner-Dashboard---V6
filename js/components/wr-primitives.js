@@ -612,7 +612,13 @@
                 }, pos),
                 h('div', { style: { flex: 1, minWidth: 0 } },
                     h('div', { style: { fontFamily: 'var(--font-body, "DM Sans", sans-serif)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--white)', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: struck ? 'line-through' : 'none' } }, name),
-                    tag != null && h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 500, color: 'var(--text-muted, #8B8B96)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' } }, tag)
+                    // Verdict rides the TAG line, not the stat cluster (owner
+                    // call 2026-08-24: chips on the top row squeezed names to
+                    // "Mat…" — the name now owns its full line).
+                    (tag != null || verdict) && h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '1px', minWidth: 0 } },
+                        tag != null ? h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 500, color: 'var(--text-muted, #8B8B96)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: '0 1 auto' } }, tag) : null,
+                        verdict ? h('div', { style: { flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '130px' } }, verdict) : null
+                    )
                 ),
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 } },
                     ...(slots || []).slice(0, 3).map((s, i) => h('div', { key: 'slot-' + i, style: { textAlign: 'right', minWidth: '32px' } },
@@ -621,13 +627,6 @@
                         h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: s.strong ? 700 : 500, color: s.strong ? 'var(--gold)' : 'var(--text-muted, #55555f)', textTransform: 'uppercase', letterSpacing: '0.02em' } }, s.label),
                         h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: s.strong ? '0.98rem' : '0.8rem', fontWeight: s.strong ? 700 : 600, color: s.strong ? 'var(--gold)' : toneColor(s.tone) } }, s.value != null && s.value !== '' ? s.value : '—')
                     )),
-                    // Verdict clamp (owner iPhone pass 2026-07-12, widened 2026-08-09):
-                    // an unclamped chip here squeezed the name column to ~2 chars on
-                    // 375px rows with three slots — cap and ellipsize. 92px cut off
-                    // two-word verdicts mid-word ("Build Around" → "BUILD AROUN…");
-                    // 108px is still well short of the original bug's threshold but
-                    // fits the longest current verdict label in full.
-                    verdict ? h('div', { style: { maxWidth: '108px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 } }, verdict) : null,
                     h('span', { 'aria-hidden': 'true', style: { color: 'var(--text-muted, #55555f)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: '0.9rem', fontWeight: 600, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' } }, '›')
                 )
             ),
