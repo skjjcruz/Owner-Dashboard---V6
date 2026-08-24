@@ -1555,26 +1555,28 @@ function LeagueMapTab({
            row's left padding strip. A static pseudo-element paints the gold
            hairline + fade runway where the stats emerge — nothing blurred
            repaints on scroll. */
+        /* The pane must end EXACTLY at its gold hairline (owner report on
+           b17: an overhanging fade runway sat on top of the first stat
+           column — "the years column is cut off"). Cover layers paint only
+           left/above/below — never to the right — so the resting first
+           column is fully visible and scrolled content clips crisply at
+           the hairline. */
         .lm-ap-head > :nth-child(1), .lm-ap-row > :nth-child(1) {
             position: sticky; left: 10px; z-index: 1;
             align-self: stretch;
             background: #0d0d12;
-            box-shadow: 0 0 0 5px #0d0d12, -10px 0 0 0 #0d0d12;
-        }
-        .lm-ap-head > :nth-child(1)::after, .lm-ap-row > :nth-child(1)::after {
-            content: ''; position: absolute; top: -5px; bottom: -5px; right: -23px; width: 18px;
-            background: linear-gradient(90deg, #0d0d12 0%, rgba(13,13,18,0) 100%);
-            border-left: 1px solid rgba(212,175,55,0.28);
-            pointer-events: none;
+            border-right: 1px solid rgba(212,175,55,0.28);
+            box-shadow: -10px 0 0 0 #0d0d12, 0 -5px 0 0 #0d0d12, 0 5px 0 0 #0d0d12, -10px -5px 0 0 #0d0d12, -10px 5px 0 0 #0d0d12;
         }
         .lm-ap-head > :nth-child(1) {
             background: #221f1a;
-            box-shadow: 0 0 0 5px #221f1a, -10px 0 0 0 #221f1a;
+            box-shadow: -10px 0 0 0 #221f1a, 0 -6px 0 0 #221f1a, 0 6px 0 0 #221f1a, -10px -6px 0 0 #221f1a, -10px 6px 0 0 #221f1a;
             display: flex; align-items: center;
         }
-        .lm-ap-head > :nth-child(1)::after { background: linear-gradient(90deg, #221f1a 0%, rgba(34,31,26,0) 100%); }
-        .lm-ap-row.is-hl > :nth-child(1) { background: #191715; box-shadow: 0 0 0 5px #191715, -10px 0 0 0 #191715; }
-        .lm-ap-row.is-hl > :nth-child(1)::after { background: linear-gradient(90deg, #191715 0%, rgba(25,23,21,0) 100%); }
+        .lm-ap-row.is-hl > :nth-child(1) {
+            background: #191715;
+            box-shadow: -10px 0 0 0 #191715, 0 -5px 0 0 #191715, 0 5px 0 0 #191715, -10px -5px 0 0 #191715, -10px 5px 0 0 #191715;
+        }
         @media (max-width: 767px) {
 
             /* Draft Picks ledger (free tier): 240px of fixed columns + two 1fr
