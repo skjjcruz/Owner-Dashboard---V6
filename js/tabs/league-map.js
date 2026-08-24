@@ -2134,7 +2134,13 @@ function LeagueMapTab({
                     // the render seam so persisted column prefs and saved views
                     // can't resurrect it for free.
                     const activeCols = ALL_PLAYERS_COLUMNS.filter(c => allPlayersCols.includes(c.key) && (isPro || c.key !== 'tier'));
-                    const gridTpl = ['24px', '28px'].concat(activeCols.map(c => c.width)).join(' ');
+                    // Every column shares surplus width (owner report 2026-08-24:
+                    // a fixed-width stat block left one huge gap after the 1fr
+                    // name on wide iPads). Name takes a bigger share; each stat
+                    // column keeps its width as a floor and stretches evenly.
+                    const gridTpl = ['24px', '28px'].concat(activeCols.map(c =>
+                        c.width === '1fr' ? 'minmax(160px, 2.5fr)' : 'minmax(' + c.width + ', 1fr)'
+                    )).join(' ');
                     // Sum fixed (px) column widths + index/avatar cols + a 140px floor for the 1fr name col,
                     // so wide column selections scroll horizontally inside the card on iPad instead of crushing the name column.
                     const fixedColPx = activeCols.reduce((sum, c) => sum + (/px$/.test(c.width) ? parseInt(c.width, 10) : 0), 0);
