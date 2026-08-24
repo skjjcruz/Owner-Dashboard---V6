@@ -677,7 +677,7 @@ const ALL_PLAYERS_COLUMNS = [
     { key: 'name',       label: 'Player',   width: '1fr',   toggleable: false, group: 'core' },
     // ── Core ── (Position and NFL Team live INSIDE the player cell — owner
     // ruling 2026-08-24: fold them into the pinned box to cut scroll width.)
-    { key: 'yoe',        label: 'Yrs',      width: '36px',  group: 'core' },
+    { key: 'yoe',        label: 'Yrs',      width: '40px',  group: 'core', center: true },
     { key: 'age',        label: 'Age',      width: '32px',  group: 'core' },
     // ── Stats (mirrors the roster tab's stats group; owner ruling 2026-08-24
     // "completely mirror the roster tab data columns" — same engines/sources) ──
@@ -696,7 +696,7 @@ const ALL_PLAYERS_COLUMNS = [
     { key: 'adp',        label: 'ADP',      width: '48px', sortable: true, sortKey: 'adp', group: 'dynasty' },
     { key: 'peakPhase',  label: 'Peak',     width: '50px',  group: 'dynasty' },
     { key: 'peak',       label: 'Peak Bar', width: '60px',  group: 'dynasty' },
-    { key: 'peakYrs',    label: 'Peak Yrs', width: '52px',  group: 'dynasty' },
+    { key: 'peakYrs',    label: 'Peak Yrs', width: '70px',  group: 'dynasty', center: true },
     { key: 'posRankLg',  label: 'Lg #',     width: '46px',  group: 'dynasty' },
     { key: 'posRankNfl', label: 'NFL #',    width: '48px',  group: 'dynasty' },
     { key: 'starterSzn', label: 'Starts',   width: '48px',  group: 'dynasty' },
@@ -2376,7 +2376,7 @@ function LeagueMapTab({
                             if (c.sortable && c.sortKey) {
                                 const isActive = lpSort.key === c.sortKey;
                                 return (
-                                    <span key={c.key} style={{ cursor: 'pointer' }} onClick={() => setLpSort(prev => prev.key === c.sortKey ? { ...prev, dir: prev.dir * -1 } : { key: c.sortKey, dir: (c.sortKey === 'team' || c.sortKey === 'adp') ? 1 : -1 })}>
+                                    <span key={c.key} style={{ cursor: 'pointer', whiteSpace: 'nowrap', textAlign: c.center ? 'center' : undefined }} onClick={() => setLpSort(prev => prev.key === c.sortKey ? { ...prev, dir: prev.dir * -1 } : { key: c.sortKey, dir: (c.sortKey === 'team' || c.sortKey === 'adp') ? 1 : -1 })}>
                                         {c.label}{isActive ? (lpSort.dir === -1 ? ' \u25BC' : ' \u25B2') : ''}
                                     </span>
                                 );
@@ -2389,7 +2389,7 @@ function LeagueMapTab({
                                     </span>
                                 );
                             }
-                            return <span key={c.key}>{c.label}</span>;
+                            return <span key={c.key} style={{ whiteSpace: 'nowrap', textAlign: c.center ? 'center' : undefined }}>{c.label}</span>;
                         })}
                     </div>
                     <div style={_analyticsEmbed ? { minWidth: gridMinWidth } : { maxHeight: '600px', overflowY: 'auto', minWidth: gridMinWidth }}>
@@ -2423,7 +2423,7 @@ function LeagueMapTab({
                                     case 'age':
                                         return <span key={c.key} style={{ color: 'var(--silver)' }}>{x.age || '\u2014'}</span>;
                                     case 'yoe':
-                                        return <span key={c.key} style={{ color: 'var(--silver)' }}>{yoe === '' ? '\u2014' : yoe}</span>;
+                                        return <span key={c.key} style={{ color: 'var(--silver)', textAlign: 'center' }}>{yoe === '' ? '\u2014' : yoe}</span>;
                                     case 'points': {
                                         const v = ptsOf(x);
                                         return <span key={c.key} style={{ color: 'var(--silver)', fontFamily: 'var(--font-body)' }}>{v > 0 ? v : '\u2014'}</span>;
@@ -2511,7 +2511,7 @@ function LeagueMapTab({
                                             </span>
                                         );
                                     case 'peakYrs':
-                                        return <span key={c.key} style={{ color: 'var(--silver)' }}>{yrs == null ? '\u2014' : yrs}</span>;
+                                        return <span key={c.key} style={{ color: 'var(--silver)', textAlign: 'center' }}>{yrs == null ? '\u2014' : yrs}</span>;
                                     case 'dhq':
                                         return <span key={c.key} style={{ fontWeight: 700, fontFamily: 'var(--font-body)', color: x.dhq >= 7000 ? 'var(--good)' : x.dhq >= 4000 ? 'var(--k-3498db, #3498db)' : x.dhq >= 2000 ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))' }}>{x.dhq > 0 ? x.dhq.toLocaleString() : '\u2014'}</span>;
                                     case 'ppg': {
@@ -2549,12 +2549,10 @@ function LeagueMapTab({
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
                                     <span style={{ width: '20px', textAlign: 'right', flexShrink: 0, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.7, fontFamily: 'var(--font-body)' }}>{idx+1}</span>
                                     <div style={{ width: '24px', height: '24px', flexShrink: 0 }}><img src={'https://sleepercdn.com/content/nfl/players/thumb/'+x.pid+'.jpg'} onError={e=>e.target.style.display='none'} style={{ width:'24px',height:'24px',borderRadius:'50%',objectFit:'cover' }} /></div>
-                                    <div style={{ minWidth: 0 }}>
-                                        <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontWeight: 600, fontSize: '0.76rem', color: x.isMe ? 'var(--gold)' : 'var(--white)' }}>{x.p.full_name || ((x.p.first_name || '') + ' ' + (x.p.last_name || '')).trim()}</div>
-                                        <div style={{ display: 'flex', gap: '5px', alignItems: 'baseline', fontSize: 'var(--text-micro, 0.6875rem)', lineHeight: 1.25 }}>
-                                            <span style={{ fontWeight: 700, color: posColors[x.pos] || 'var(--silver)' }}>{leagueMapPosLabel(x.pos)}</span>
-                                            <span style={{ color: 'var(--silver)', opacity: 0.75 }}>{x.p.team || 'FA'}</span>
-                                        </div>
+                                    <div style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                                        <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontWeight: 600, fontSize: '0.76rem', color: x.isMe ? 'var(--gold)' : 'var(--white)', minWidth: 0 }}>{x.p.full_name || ((x.p.first_name || '') + ' ' + (x.p.last_name || '')).trim()}</div>
+                                        <span style={{ flexShrink: 0, fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: posColors[x.pos] || 'var(--silver)' }}>{leagueMapPosLabel(x.pos)}</span>
+                                        <span style={{ flexShrink: 0, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.75 }}>{x.p.team || 'FA'}</span>
                                     </div>
                                 </div>
                                 {activeCols.map(renderCell)}
