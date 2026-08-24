@@ -666,31 +666,43 @@ function ReportSubView({
 
 // ══════════════════════════════════════════════════════════════════
 // All Players column registry — the single source of truth for the column picker
-// on the combined Players & Picks screen. This is a SUPERSET of every column the
-// Custom Report builder offers for the 'players' data source (getPlayerColumns):
-//   report 'name'->name, 'pos'->pos, 'team'->nflTeam, 'age'->age, 'dhq'->dhq,
-//   'ppg'->ppg, 'peakYrs'->peakYrs, 'owner'->owner, 'tier'->tier, 'acquired'->acq.
-// Plus two extras (yoe, peak bar). Every key here has a renderCell case below and a
-// width (the grid template + min-width math depend on it), so all are toggleable.
-// To add a new report column: add an entry here (with width) AND a renderCell case.
+// on the combined Players & Picks screen. Registry ORDER is display order
+// (activeCols filters this list), so the owner's default reads left-to-right
+// exactly as ruled. Every key here has a renderCell case below and a width
+// (the grid template + min-width math depend on it), so all are toggleable.
+// To add a column: add an entry here (with width) AND a renderCell case; give
+// numeric columns sortable+sortKey AND a comparator case in filtered.sort.
 // ══════════════════════════════════════════════════════════════════
 const ALL_PLAYERS_COLUMNS = [
     { key: 'name',     label: 'Player',   width: '1fr',   toggleable: false },
     { key: 'pos',      label: 'Pos',      width: '36px' },
     { key: 'nflTeam',  label: 'NFL Team', width: '60px' },
+    { key: 'yoe',      label: 'Yrs',      width: '36px' },
+    { key: 'points',   label: 'Pts',      width: '48px', sortable: true, sortKey: 'points' },
+    { key: 'gp',       label: 'GP',       width: '36px', sortable: true, sortKey: 'gp' },
+    { key: 'ppg',      label: 'PPG',      width: '42px', sortable: true, sortKey: 'ppg' },
+    { key: 'proj',     label: 'Proj',     width: '52px', sortable: true, sortKey: 'proj' },
+    { key: 'dhq',      label: 'DHQ',      width: '54px', sortable: true, sortKey: 'dhq' },
+    { key: 'adp',      label: 'ADP',      width: '48px', sortable: true, sortKey: 'adp' },
     { key: 'age',      label: 'Age',      width: '32px' },
-    { key: 'yoe',      label: 'YOE',      width: '36px' },
     { key: 'peak',     label: 'Peak',     width: '60px' },
     { key: 'peakYrs',  label: 'Peak Yrs', width: '52px' },
-    { key: 'dhq',      label: 'DHQ',      width: '54px', sortable: true, sortKey: 'dhq' },
-    { key: 'ppg',      label: 'PPG',      width: '42px', sortable: true, sortKey: 'ppg' },
     { key: 'tier',     label: 'Tier',     width: '72px' },
     { key: 'owner',    label: 'Owner',    width: '100px', sortable: true, sortKey: 'team' },
     { key: 'acq',      label: 'Acquired', width: '72px' },
 ];
-// Default visible = the report-builder parity set, so the combined screen opens with
-// report-grade columns and users can toggle the extras (YOE, Peak bar) from the picker.
-const ALL_PLAYERS_DEFAULT_VISIBLE = ['name', 'pos', 'nflTeam', 'age', 'dhq', 'ppg', 'peakYrs', 'tier', 'owner', 'acq'];
+// Default view (owner ruling 2026-08-24): Pos · Team · Years · Points · GP ·
+// PPG · Weekly Proj · DHQ · ADP. Everything else stays in the picker.
+const ALL_PLAYERS_DEFAULT_VISIBLE = ['name', 'pos', 'nflTeam', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'];
+// The pre-2026-08-24 default — used ONLY to migrate untouched saved prefs
+// (the persistence effect writes the default on first visit, so nearly every
+// visitor has the OLD default stored; without this check the new default
+// would never reach them).
+const ALL_PLAYERS_PREV_DEFAULT = ['name', 'pos', 'nflTeam', 'age', 'dhq', 'ppg', 'peakYrs', 'tier', 'owner', 'acq'];
+// Weekly-projection memo — projectPlayer is pure math but the ledger renders
+// 1,000+ rows with no virtualization, so each (league|season|week|pid) is
+// computed once per page load and reused across re-renders and sorts.
+const _allPlayersProjMemo = {};
 
 // ══════════════════════════════════════════════════════════════════
 // RosterPlayerDossier — the My-Roster-style inline player card, reused in
@@ -1005,7 +1017,13 @@ function LeagueMapTab({
               // dead entries from silently widening the grid vs the row renderer.
               const registryKeys = new Set(ALL_PLAYERS_COLUMNS.map(c => c.key));
               const clean = saved.filter(k => registryKeys.has(k));
-              if (clean.length) return clean;
+              // A stored set identical to the pre-2026-08-24 default is not a
+              // user choice — the persistence effect wrote it on first visit —
+              // so it adopts the new owner-ruled default. A customized set is
+              // the user's and stays.
+              const isOldDefault = clean.length === ALL_PLAYERS_PREV_DEFAULT.length
+                  && ALL_PLAYERS_PREV_DEFAULT.every(k => clean.includes(k));
+              if (clean.length && !isOldDefault) return clean;
           }
       } catch (_) {}
       return ALL_PLAYERS_DEFAULT_VISIBLE.slice();
@@ -1032,7 +1050,13 @@ function LeagueMapTab({
   React.useEffect(() => {
       const h = () => forcePpgRerender(n => n + 1);
       window.addEventListener('wr:weekly-points-loaded', h);
-      return () => window.removeEventListener('wr:weekly-points-loaded', h);
+      // The ADP market map lands after first paint (18h-cached fetch) — the
+      // All Players ADP column re-renders from dashes when it does.
+      window.addEventListener('wr:adp-loaded', h);
+      return () => {
+          window.removeEventListener('wr:weekly-points-loaded', h);
+          window.removeEventListener('wr:adp-loaded', h);
+      };
   }, []);
 
   // ── Report Engine ─────────────────────────────────────────────────
@@ -1835,11 +1859,53 @@ function LeagueMapTab({
         }
         if (lpFilter === '__ROOKIE__') filtered = filtered.filter(x => x.p.years_exp === 0);
         else if (lpFilter) filtered = filtered.filter(x => x.pos === lpFilter);
+        // ── Default-view column values (owner ruling 2026-08-24) ──
+        // Shared by renderCell AND the sort comparator so a header sort and the
+        // cell always agree. Points/GP read the same statsData the PPG math
+        // uses; ADP is the display-only redraft market map (null until loaded);
+        // Proj memoizes projectPlayer per (league|season|week|pid) because this
+        // ledger renders every row, every render.
+        const ptsOf = (x) => { const st = statsData[x.pid] || {}; return st.gp > 0 ? +calcRawPts(st).toFixed(1) : 0; };
+        const gpOf = (x) => (statsData[x.pid] || {}).gp || 0;
+        const adpOf = (x) => { const g = typeof window.App?.getRedraftAdp === 'function' ? window.App.getRedraftAdp(String(x.pid)) : null; return g && typeof g.adp === 'number' && g.adp > 0 ? g.adp : null; };
+        const projCtx = (() => {
+            const WP = window.App && window.App.WeeklyProj;
+            const wk = WP && WP.currentWeek ? WP.currentWeek() : (window.S?.currentWeek || 1);
+            const season = (window.S?.nflState && window.S.nflState.season) || window.S?.season || '';
+            const lid = currentLeague?.league_id || currentLeague?.id || '';
+            return { wk, scoring: currentLeague?.scoring_settings || {}, prefix: lid + '|' + season + '|' + wk + '|' };
+        })();
+        const projOf = (x) => {
+            const WP = window.App && window.App.WeeklyProj;
+            if (!WP || !WP.projectPlayer) return null;
+            const k = projCtx.prefix + x.pid;
+            if (k in _allPlayersProjMemo) return _allPlayersProjMemo[k];
+            let v = null;
+            try {
+                const prj = WP.projectPlayer(x.pid, { playersData, statsData, priorData: {}, scoring: projCtx.scoring, week: projCtx.wk });
+                const med = prj && prj.points && prj.points.median;
+                v = (med != null && isFinite(med)) ? +(+med).toFixed(1) : null;
+            } catch (e) { v = null; }
+            _allPlayersProjMemo[k] = v;
+            return v;
+        };
         filtered.sort((a, b) => {
             const { key, dir } = lpSort;
             if (key === 'dhq') return (a.dhq - b.dhq) * dir;
             if (key === 'age') return ((a.age||99) - (b.age||99)) * dir;
             if (key === 'ppg') return (a.ppg - b.ppg) * dir;
+            if (key === 'points') return (ptsOf(a) - ptsOf(b)) * dir;
+            if (key === 'gp') return (gpOf(a) - gpOf(b)) * dir;
+            if (key === 'proj') return ((projOf(a) || 0) - (projOf(b) || 0)) * dir;
+            // Missing ADP sorts to the bottom in BOTH directions — a player the
+            // market isn't drafting must not "win" an ascending sort.
+            if (key === 'adp') {
+                const va = adpOf(a), vb = adpOf(b);
+                if (va == null && vb == null) return 0;
+                if (va == null) return 1;
+                if (vb == null) return -1;
+                return (va - vb) * dir;
+            }
             if (key === 'name') return (a.p.full_name||'').localeCompare(b.p.full_name||'') * dir;
             if (key === 'team') return a.teamName.localeCompare(b.teamName) * dir;
             return 0;
@@ -2090,7 +2156,7 @@ function LeagueMapTab({
                             if (c.sortable && c.sortKey) {
                                 const isActive = lpSort.key === c.sortKey;
                                 return (
-                                    <span key={c.key} style={{ cursor: 'pointer' }} onClick={() => setLpSort(prev => prev.key === c.sortKey ? { ...prev, dir: prev.dir * -1 } : { key: c.sortKey, dir: c.sortKey === 'team' ? 1 : -1 })}>
+                                    <span key={c.key} style={{ cursor: 'pointer' }} onClick={() => setLpSort(prev => prev.key === c.sortKey ? { ...prev, dir: prev.dir * -1 } : { key: c.sortKey, dir: (c.sortKey === 'team' || c.sortKey === 'adp') ? 1 : -1 })}>
                                         {c.label}{isActive ? (lpSort.dir === -1 ? ' \u25BC' : ' \u25B2') : ''}
                                     </span>
                                 );
@@ -2146,6 +2212,22 @@ function LeagueMapTab({
                                         return <span key={c.key} style={{ color: 'var(--silver)' }}>{x.age || '\u2014'}</span>;
                                     case 'yoe':
                                         return <span key={c.key} style={{ color: 'var(--silver)' }}>{yoe === '' ? '\u2014' : yoe}</span>;
+                                    case 'points': {
+                                        const v = ptsOf(x);
+                                        return <span key={c.key} style={{ color: 'var(--silver)', fontFamily: 'var(--font-body)' }}>{v > 0 ? v : '\u2014'}</span>;
+                                    }
+                                    case 'gp': {
+                                        const v = gpOf(x);
+                                        return <span key={c.key} style={{ color: 'var(--silver)' }}>{v > 0 ? v : '\u2014'}</span>;
+                                    }
+                                    case 'proj': {
+                                        const v = projOf(x);
+                                        return <span key={c.key} style={{ color: v != null && v > 0 ? 'var(--white)' : 'var(--silver)', fontFamily: 'var(--font-body)' }}>{v != null && v > 0 ? v : '\u2014'}</span>;
+                                    }
+                                    case 'adp': {
+                                        const a = adpOf(x);
+                                        return <span key={c.key} style={{ color: 'var(--silver)' }}>{a != null ? a.toFixed(1) : '\u2014'}</span>;
+                                    }
                                     case 'peak':
                                         return (
                                             <span key={c.key} style={{ display: 'flex', alignItems: 'center' }}>

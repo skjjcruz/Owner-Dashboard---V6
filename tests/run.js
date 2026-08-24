@@ -871,6 +871,30 @@ test('nfl scoreboard: production endpoint + failure backoff (contract)',
     ok(card.includes('Object.keys(map).length) setScoutTick'), 'scouting tab must not re-tick (and re-fetch) on empty loads');
   });
 
+test('all players default view matches the owner ruling (2026-08-24)',
+  () => {
+    // Pos · Team · Years · Points · GP · PPG · Weekly Proj · DHQ · ADP.
+    // Pins the registry entries, the default-visible set, the old-default
+    // migration (nearly every visitor has the old default persisted — the
+    // effect writes it on first visit), and the render/sort seams for the
+    // four new columns.
+    const src = fs.readFileSync(path.join(ROOT, 'js/tabs/league-map.js'), 'utf8');
+    const def = src.match(/ALL_PLAYERS_DEFAULT_VISIBLE = \[([^\]]+)\]/);
+    ok(def, 'default-visible list must exist');
+    const keys = def[1].match(/'[^']+'/g).map(s => s.slice(1, -1));
+    const want = ['name', 'pos', 'nflTeam', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'];
+    ok(JSON.stringify(keys) === JSON.stringify(want), 'default view must be the owner-ruled set, got: ' + keys.join(','));
+    ok(src.includes('ALL_PLAYERS_PREV_DEFAULT'), 'untouched old-default prefs must migrate to the new default');
+    for (const c of ["case 'points'", "case 'gp'", "case 'proj'", "case 'adp'"]) {
+        ok(src.includes(c), 'renderCell must handle ' + c);
+    }
+    for (const s of ["key === 'points'", "key === 'gp'", "key === 'proj'", "key === 'adp'"]) {
+        ok(src.includes(s), 'sort comparator must handle ' + s);
+    }
+    ok(src.includes('_allPlayersProjMemo'), 'weekly projections must be memoized — the ledger renders 1,000+ rows');
+    ok(src.includes("addEventListener('wr:adp-loaded'"), 'ADP column must re-render when the market map lands');
+  });
+
 test('league hub brand icon returns to the app front page, which stays put',
   () => {
     const app = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
