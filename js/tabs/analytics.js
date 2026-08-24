@@ -8,7 +8,7 @@
 // LeagueMapTab in embed mode. Keeping it separate prevents AnalyticsPanel from
 // re-initialising the sort/filter/search state on every render of other sub-tabs.
 window.AnalyticsLeagueEmbed = function AnalyticsLeagueEmbed(props) {
-    const { analyticsTab, standings, currentLeague, playersData, statsData, sleeperUserId,
+    const { analyticsTab, standings, currentLeague, playersData, statsData, stats2025Data, sleeperUserId,
         myRoster, leagueSkin, activeYear, timeRecomputeTs, setActiveTab, getAcquisitionInfo, getOwnerName } = props;
     const [lpSort, setLpSort] = React.useState({ key: 'dhq', dir: -1 });
     const [lpFilter, setLpFilter] = React.useState('');
@@ -34,7 +34,7 @@ window.AnalyticsLeagueEmbed = function AnalyticsLeagueEmbed(props) {
         lpSort, setLpSort,
         lpFilter, setLpFilter,
         lpSearch, setLpSearch,
-        standings, currentLeague, leagueSkin, playersData, statsData, sleeperUserId, myRoster,
+        standings, currentLeague, leagueSkin, playersData, statsData, stats2025Data, sleeperUserId, myRoster,
         activeYear, timeRecomputeTs, setActiveTab,
         getAcquisitionInfo: getAcquisitionInfo || (() => ({ method: 'Unknown', date: '', cost: '' })),
         getOwnerName,
@@ -1682,7 +1682,7 @@ function AnalyticsPanel({
             rendered inline via LeagueMapTab's embed mode. Local state lives in AnalyticsPanel
             so sort/filter/search persist as the user moves between sub-tabs. */}
         {(analyticsViewTab === 'assets' || analyticsViewTab === 'reports') && React.createElement(window.AnalyticsLeagueEmbed || (() => null), {
-            analyticsTab: analyticsViewTab, standings, currentLeague, playersData, statsData, sleeperUserId,
+            analyticsTab: analyticsViewTab, standings, currentLeague, playersData, statsData, stats2025Data, sleeperUserId,
             myRoster, leagueSkin: resolvedLeagueSkin, activeYear, timeRecomputeTs, setActiveTab, getAcquisitionInfo, getOwnerName,
         })}
 

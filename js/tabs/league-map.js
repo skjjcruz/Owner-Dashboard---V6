@@ -674,29 +674,65 @@ function ReportSubView({
 // numeric columns sortable+sortKey AND a comparator case in filtered.sort.
 // ══════════════════════════════════════════════════════════════════
 const ALL_PLAYERS_COLUMNS = [
-    { key: 'name',     label: 'Player',   width: '1fr',   toggleable: false, group: 'core' },
-    { key: 'pos',      label: 'Pos',      width: '36px',  group: 'core' },
-    { key: 'nflTeam',  label: 'NFL Team', width: '60px',  group: 'core' },
-    { key: 'yoe',      label: 'Yrs',      width: '36px',  group: 'core' },
-    { key: 'age',      label: 'Age',      width: '32px',  group: 'core' },
-    { key: 'points',   label: 'Pts',      width: '48px', sortable: true, sortKey: 'points', group: 'stats' },
-    { key: 'gp',       label: 'GP',       width: '36px', sortable: true, sortKey: 'gp', group: 'stats' },
-    { key: 'ppg',      label: 'PPG',      width: '42px', sortable: true, sortKey: 'ppg', group: 'stats' },
-    { key: 'proj',     label: 'Proj',     width: '52px', sortable: true, sortKey: 'proj', group: 'stats' },
-    { key: 'dhq',      label: 'DHQ',      width: '54px', sortable: true, sortKey: 'dhq', group: 'value' },
-    { key: 'adp',      label: 'ADP',      width: '48px', sortable: true, sortKey: 'adp', group: 'value' },
-    { key: 'peak',     label: 'Peak',     width: '60px',  group: 'value' },
-    { key: 'peakYrs',  label: 'Peak Yrs', width: '52px',  group: 'value' },
-    { key: 'tier',     label: 'Tier',     width: '72px',  group: 'league' },
-    { key: 'owner',    label: 'Owner',    width: '100px', sortable: true, sortKey: 'team', group: 'league' },
-    { key: 'acq',      label: 'Acquired', width: '72px',  group: 'league' },
+    { key: 'name',       label: 'Player',   width: '1fr',   toggleable: false, group: 'core' },
+    // ── Core ──
+    { key: 'pos',        label: 'Pos',      width: '36px',  group: 'core' },
+    { key: 'nflTeam',    label: 'NFL Team', width: '60px',  group: 'core' },
+    { key: 'yoe',        label: 'Yrs',      width: '36px',  group: 'core' },
+    { key: 'age',        label: 'Age',      width: '32px',  group: 'core' },
+    // ── Stats (mirrors the roster tab's stats group; owner ruling 2026-08-24
+    // "completely mirror the roster tab data columns" — same engines/sources) ──
+    { key: 'points',     label: 'Pts',      width: '48px', sortable: true, sortKey: 'points', group: 'stats' },
+    { key: 'gp',         label: 'GP',       width: '36px', sortable: true, sortKey: 'gp', group: 'stats' },
+    { key: 'ppg',        label: 'PPG',      width: '42px', sortable: true, sortKey: 'ppg', group: 'stats' },
+    { key: 'proj',       label: 'Proj',     width: '52px', sortable: true, sortKey: 'proj', group: 'stats' },
+    { key: 'hi',         label: 'Hi',       width: '40px', sortable: true, sortKey: 'hi', group: 'stats' },
+    { key: 'lo',         label: 'Lo',       width: '40px', sortable: true, sortKey: 'lo', group: 'stats' },
+    { key: 'prev',       label: 'Last',     width: '44px', sortable: true, sortKey: 'prev', group: 'stats' },
+    { key: 'durability', label: 'Dur',      width: '40px',  group: 'stats' },
+    { key: 'sos',        label: 'SOS',      width: '44px',  group: 'stats' },
+    // ── Dynasty ──
+    { key: 'dhq',        label: 'DHQ',      width: '54px', sortable: true, sortKey: 'dhq', group: 'dynasty' },
+    { key: 'trend',      label: 'Trend',    width: '52px', sortable: true, sortKey: 'trend', group: 'dynasty' },
+    { key: 'adp',        label: 'ADP',      width: '48px', sortable: true, sortKey: 'adp', group: 'dynasty' },
+    { key: 'peakPhase',  label: 'Peak',     width: '50px',  group: 'dynasty' },
+    { key: 'peak',       label: 'Peak Bar', width: '60px',  group: 'dynasty' },
+    { key: 'peakYrs',    label: 'Peak Yrs', width: '52px',  group: 'dynasty' },
+    { key: 'posRankLg',  label: 'Lg #',     width: '46px',  group: 'dynasty' },
+    { key: 'posRankNfl', label: 'NFL #',    width: '48px',  group: 'dynasty' },
+    { key: 'starterSzn', label: 'Starts',   width: '48px',  group: 'dynasty' },
+    // ── Scout ──
+    { key: 'college',    label: 'School',   width: '82px',  group: 'scout' },
+    { key: 'height',     label: 'Ht',       width: '42px',  group: 'scout' },
+    { key: 'weight',     label: 'Wt',       width: '42px',  group: 'scout' },
+    { key: 'depthChart', label: 'Depth',    width: '48px',  group: 'scout' },
+    { key: 'rkSlot',     label: 'Draft',    width: '54px',  group: 'scout' },
+    { key: 'rkTeam',     label: 'Drafted',  width: '50px',  group: 'scout' },
+    // ── League (All Players-only columns; no roster equivalent) ──
+    { key: 'tier',       label: 'Tier',     width: '72px',  group: 'league' },
+    { key: 'owner',      label: 'Owner',    width: '100px', sortable: true, sortKey: 'team', group: 'league' },
+    { key: 'acq',        label: 'Acquired', width: '72px',  group: 'league' },
 ];
+// Deliberately NOT mirrored from the roster tab: Move (a trade verdict about
+// YOUR roster — meaningless on another owner's player), Roster Slot, and the
+// separate Date Acquired (the Acquired column here already carries the date).
 const ALL_PLAYERS_COL_BY_KEY = {};
 ALL_PLAYERS_COLUMNS.forEach(c => { ALL_PLAYERS_COL_BY_KEY[c.key] = c; });
-const ALL_PLAYERS_GROUP_LABELS = { core: 'Core', stats: 'Stats', value: 'Value & Market', league: 'League' };
+const ALL_PLAYERS_GROUP_LABELS = { core: 'Core', stats: 'Stats', dynasty: 'Dynasty', scout: 'Scout', league: 'League' };
+// Column presets — the roster tab's preset model (Default / Stats / Dynasty /
+// Scout / Deep Data, with Custom auto-detected when no preset matches).
+const ALL_PLAYERS_PRESETS = {
+    default: null, // filled below — the owner-ruled default view
+    stats:   ['name', 'pos', 'nflTeam', 'points', 'gp', 'ppg', 'proj', 'hi', 'lo', 'prev', 'trend', 'durability', 'sos'],
+    dynasty: ['name', 'pos', 'nflTeam', 'age', 'yoe', 'dhq', 'trend', 'adp', 'peakPhase', 'peakYrs', 'posRankLg', 'posRankNfl', 'starterSzn'],
+    scout:   ['name', 'pos', 'nflTeam', 'age', 'yoe', 'college', 'height', 'weight', 'depthChart', 'rkSlot', 'rkTeam'],
+    deep:    ALL_PLAYERS_COLUMNS.map(c => c.key),
+};
+const ALL_PLAYERS_PRESET_LABELS = { default: 'Default', stats: 'Stats', dynasty: 'Dynasty', scout: 'Scout', deep: 'Deep Data', custom: 'Custom' };
 // Default view (owner ruling 2026-08-24): Pos · Team · Years · Points · GP ·
 // PPG · Weekly Proj · DHQ · ADP. Everything else stays in the picker.
 const ALL_PLAYERS_DEFAULT_VISIBLE = ['name', 'pos', 'nflTeam', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'];
+ALL_PLAYERS_PRESETS.default = ALL_PLAYERS_DEFAULT_VISIBLE;
 // The pre-2026-08-24 default — used ONLY to migrate untouched saved prefs
 // (the persistence effect writes the default on first visit, so nearly every
 // visitor has the OLD default stored; without this check the new default
@@ -953,6 +989,10 @@ function LeagueMapTab({
   leagueSkin,
   playersData,
   statsData,
+  // Prior-season stats — the roster tab's Last/Trend/Durability columns read
+  // these; threaded here for the mirrored All Players columns (may be
+  // undefined when a consumer pre-dates the prop).
+  stats2025Data,
   sleeperUserId,
   myRoster,
   activeYear,
@@ -1047,6 +1087,18 @@ function LeagueMapTab({
   });
   const apRemoveColumn = (key) => setAllPlayersCols(prev => prev.filter(k => k !== key));
   const apAddColumn = (key) => setAllPlayersCols(prev => prev.includes(key) ? prev : [...prev, key]);
+  // Preset detection (roster-tab model): order-insensitive match, else Custom.
+  const apActivePreset = Object.keys(ALL_PLAYERS_PRESETS).find(k => {
+      const set = ALL_PLAYERS_PRESETS[k];
+      return set && set.length === allPlayersCols.length && set.every(c => allPlayersCols.includes(c));
+  }) || 'custom';
+  // Measured visible width of the ledger's scroll container, so the expanded
+  // dossier can pin (sticky left) at viewport width instead of scrolling off
+  // with the stat columns — the roster tab's boardWidth pattern.
+  const [apBoardW, setApBoardW] = React.useState(0);
+  const apScrollRef = React.useCallback(el => {
+      if (el && Math.abs(el.clientWidth - apBoardW) > 1) setApBoardW(el.clientWidth);
+  }, [apBoardW]);
   React.useEffect(() => {
       try { localStorage.setItem(ALL_PLAYERS_COL_KEY, JSON.stringify(allPlayersCols)); } catch (_) {}
   }, [ALL_PLAYERS_COL_KEY, allPlayersCols]);
@@ -1076,6 +1128,15 @@ function LeagueMapTab({
           window.removeEventListener('wr:adp-loaded', h);
       };
   }, []);
+  // Warm the SOS engine for the mirrored SOS column (same warm-up the player
+  // card's scouting tab does) — re-render when it becomes ready.
+  React.useEffect(() => {
+      const A = window.App || {};
+      if (A.SOS && A.SOS.initialize && !A.SOS.ready && playersData && Object.keys(playersData).length) {
+          const season = (window.S?.nflState && window.S.nflState.season) || window.S?.season || new Date().getFullYear();
+          try { A.SOS.initialize(season, playersData, () => forcePpgRerender(n => n + 1)); } catch (e) { /* neutral column */ }
+      }
+  }, [playersData]);
 
   // ── Report Engine ─────────────────────────────────────────────────
   const REPORT_STORAGE_KEY = 'wr_custom_reports';
@@ -1470,16 +1531,26 @@ function LeagueMapTab({
           the semi-transparent gold tints over the --black (#121217) /
           --off-black (#1B1B22) cards they sit on. ── */}
       <style>{`
+        /* All Players ledger — roster-style frozen player column at EVERY
+           width (owner ruling 2026-08-24: "enable the scrolling feature just
+           like the roster tab"): the # / headshot / Player cells pin while the
+           stat columns scroll under them. Was phone-only; promoted global.
+           Sticky cells need SOLID backgrounds — the hex values are the
+           composites of the semi-transparent tints over the --black card.
+           Offsets = row padding (10) + col widths (24, 28) + 4px gaps. */
+        .lm-ap-head > :nth-child(-n+3), .lm-ap-row > :nth-child(-n+3) {
+            position: sticky; z-index: 1;
+            background: var(--black, #121217);
+        }
+        .lm-ap-head > :nth-child(1), .lm-ap-row > :nth-child(1) { left: 10px; }
+        .lm-ap-head > :nth-child(2), .lm-ap-row > :nth-child(2) { left: 38px; }
+        .lm-ap-head > :nth-child(3), .lm-ap-row > :nth-child(3) {
+            left: 70px;
+            box-shadow: 6px 0 8px -6px rgba(0,0,0,0.6);
+        }
+        .lm-ap-head > :nth-child(-n+3) { background: #221f1a; }
+        .lm-ap-row.is-hl > :nth-child(-n+3) { background: #1a1818; }
         @media (max-width: 767px) {
-            /* All Players ledger (free tier): already a min-width scroll table
-               (iPad pass) — pin the name column (3rd cell: # · avatar · name). */
-            .lm-ap-head > :nth-child(3), .lm-ap-row > :nth-child(3) {
-                position: sticky; left: 0; z-index: 1;
-                background: var(--black, #121217);
-                box-shadow: 6px 0 8px -6px rgba(0,0,0,0.6);
-            }
-            .lm-ap-head > :nth-child(3) { background: #221f1a; }
-            .lm-ap-row.is-hl > :nth-child(3) { background: #1a1818; }
 
             /* Draft Picks ledger (free tier): 240px of fixed columns + two 1fr
                owner columns crush inside an overflow:hidden card at 375 — the
@@ -1696,9 +1767,40 @@ function LeagueMapTab({
           <button className={assetsView === 'players' ? 'is-on' : ''} onClick={() => setAssetsView('players')}>Players</button>
           <button className={assetsView === 'picks' ? 'is-on' : ''} onClick={() => setAssetsView('picks')}>Picks</button>
         </div>
-      ) : <div className="wr-module-nav" style={{ marginBottom: '12px' }}>
+      ) : <div className="wr-module-nav" style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
         <button className={assetsView === 'players' ? 'is-active' : ''} onClick={() => setAssetsView('players')}>All Players</button>
         <button className={assetsView === 'picks' ? 'is-active' : ''} onClick={() => setAssetsView('picks')}>Draft Picks</button>
+        {/* Roster-tab view controls, relocated beside the tab buttons (owner
+            ruling 2026-08-24): preset select + Customize + saved views. */}
+        {assetsView === 'players' && (
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.6, fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>View</span>
+                <select
+                    value={apActivePreset}
+                    onChange={e => { const set = ALL_PLAYERS_PRESETS[e.target.value]; if (set) setAllPlayersCols(set.slice()); }}
+                    title="Column preset"
+                    style={{ background: 'var(--ov-4, rgba(255,255,255,0.06))', border: '1px solid ' + (apActivePreset !== 'default' ? 'var(--acc-line2, rgba(212,175,55,0.35))' : 'var(--ov-6, rgba(255,255,255,0.12))'), borderRadius: 'var(--card-radius-xs, 5px)', padding: '6px 8px', color: apActivePreset !== 'default' ? 'var(--gold)' : 'var(--silver)', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', minHeight: '38px', outline: 'none' }}>
+                    {Object.keys(ALL_PLAYERS_PRESETS).map(k => <option key={k} value={k}>{ALL_PLAYERS_PRESET_LABELS[k] || k}</option>)}
+                    {apActivePreset === 'custom' && <option value="custom">{ALL_PLAYERS_PRESET_LABELS.custom}</option>}
+                </select>
+                <button onClick={() => setAllPlayersColPickerOpen(o => !o)} style={{ minHeight: '38px', padding: '6px 12px', borderRadius: 'var(--card-radius-xs, 5px)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, textTransform: 'uppercase', background: allPlayersColPickerOpen ? 'rgba(212,175,55,0.18)' : 'var(--acc-fill2, rgba(212,175,55,0.1))', color: 'var(--gold)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', cursor: 'pointer' }}>Customize · {allPlayersCols.length}/{ALL_PLAYERS_COLUMNS.length}</button>
+                {window.WR?.SavedViews?.SavedViewBar && (
+                    React.createElement(window.WR.SavedViews.SavedViewBar, {
+                        surface: 'all_players',
+                        leagueId: currentLeague?.id || currentLeague?.league_id,
+                        currentState: { columns: allPlayersCols, sort: lpSort, filters: { lpFilter, lpSearch: lpSearch || '' } },
+                        onApply: v => {
+                            if (Array.isArray(v.columns) && v.columns.length) setAllPlayersCols(v.columns);
+                            if (v.sort && v.sort.key) setLpSort({ key: v.sort.key, dir: v.sort.dir || -1 });
+                            if (v.filters) {
+                                if (typeof v.filters.lpFilter === 'string') setLpFilter(v.filters.lpFilter);
+                                if (typeof v.filters.lpSearch === 'string' && setLpSearch) setLpSearch(v.filters.lpSearch);
+                            }
+                        },
+                    })
+                )}
+            </div>
+        )}
       </div>)}
       {_activeSubView === 'teams' && (<div>
       <div className="wr-module-toolbar">
@@ -1885,6 +1987,61 @@ function LeagueMapTab({
         // ledger renders every row, every render.
         const ptsOf = (x) => { const st = statsData[x.pid] || {}; return st.gp > 0 ? +calcRawPts(st).toFixed(1) : 0; };
         const gpOf = (x) => (statsData[x.pid] || {}).gp || 0;
+        // ── Roster-tab mirrored sources (owner ruling 2026-08-24): same
+        // engines/data my-team.js reads, so the two tables agree per player. ──
+        const metaOf = (x) => window.App?.LI?.playerMeta?.[x.pid];
+        const prevPpgOf = (x) => {
+            const pv = (stats2025Data || {})[x.pid] || {};
+            return pv.gp > 0 ? +(calcRawPts(pv) / pv.gp).toFixed(1) : 0;
+        };
+        const trendOf = (x) => {
+            const m = metaOf(x);
+            if (m && m.trend) return m.trend;
+            const prev = prevPpgOf(x);
+            return prev && x.ppg ? Math.round((x.ppg - prev) / prev * 100) : 0;
+        };
+        const fsOf = (x) => (typeof window.App?.WeeklyProj?.formStats === 'function' ? window.App.WeeklyProj.formStats(x.pid, 'season') : null);
+        const durGpOf = (x) => {
+            const m = metaOf(x);
+            if (m && m.recentGP > 0) return m.recentGP;
+            const cur = gpOf(x), prev = ((stats2025Data || {})[x.pid] || {}).gp || 0;
+            return cur > 0 && prev > 0 ? Math.round((cur + prev) / 2) : (cur || prev);
+        };
+        const peakPhaseOf = (x) => {
+            if (!x.age) return '—';
+            const curve = typeof window.App?.getAgeCurve === 'function'
+                ? window.App.getAgeCurve(x.pos)
+                : { peak: (window.App?.peakWindows || {})[x.pos] || [24, 29], decline: [30, 32] };
+            const [pLo, pHi] = curve.peak || [24, 29];
+            const declineHi = (curve.decline && curve.decline[1]) || (pHi + 3);
+            return x.age < pLo ? 'PRE' : x.age <= pHi ? 'PRIME' : x.age <= declineHi ? 'VET' : 'POST';
+        };
+        // League position rank among ROSTERED players (matches the roster
+        // tab's Lg # semantics) — one map per render, not O(n) per row.
+        const lgRankByPid = (() => {
+            const byPos = {};
+            allPlayers.forEach(x => { if (!x.isPool) (byPos[x.pos] = byPos[x.pos] || []).push(x); });
+            const out = {};
+            Object.keys(byPos).forEach(pos => {
+                byPos[pos].sort((a, b) => b.dhq - a.dhq).forEach((x, i) => { out[x.pid] = pos + (i + 1); });
+            });
+            return out;
+        })();
+        const nflRankOf = (x) => { const m = metaOf(x); return m && m.fcRank ? '#' + m.fcRank : null; };
+        const sosOf = (x) => {
+            const S2 = window.App?.SOS;
+            if (!S2 || !S2.ready || typeof S2.getPlayerSOS !== 'function') return null;
+            const s = S2.getPlayerSOS(x.pid, x.pos, x.p?.team);
+            return s ? s.avgRank : null;
+        };
+        // NFL draft capital — static vendored dataset, same helper the roster
+        // tab and Free Agency carry ([year, round, OVERALL pick, team]).
+        const draftCapFor = (pid) => {
+            const d = window.WR_DRAFT_PROFILE?.[pid];
+            if (!d) return null;
+            return { year: d[0] || 0, round: d[1] || 0, overall: d[2] || 0, team: d[3] || '' };
+        };
+        const fmtHeight = (h) => { const n = parseInt(h, 10); return n > 40 && n < 90 ? Math.floor(n / 12) + "'" + (n % 12) + '"' : (h || null); };
         const adpOf = (x) => { const g = typeof window.App?.getRedraftAdp === 'function' ? window.App.getRedraftAdp(String(x.pid)) : null; return g && typeof g.adp === 'number' && g.adp > 0 ? g.adp : null; };
         const projCtx = (() => {
             const WP = window.App && window.App.WeeklyProj;
@@ -1924,6 +2081,10 @@ function LeagueMapTab({
                 if (vb == null) return -1;
                 return (va - vb) * dir;
             }
+            if (key === 'hi') { const fa = fsOf(a), fb = fsOf(b); return (((fa && fa.high) || 0) - ((fb && fb.high) || 0)) * dir; }
+            if (key === 'lo') { const fa = fsOf(a), fb = fsOf(b); return (((fa && fa.low) || 0) - ((fb && fb.low) || 0)) * dir; }
+            if (key === 'prev') return (prevPpgOf(a) - prevPpgOf(b)) * dir;
+            if (key === 'trend') return (trendOf(a) - trendOf(b)) * dir;
             if (key === 'name') return (a.p.full_name||'').localeCompare(b.p.full_name||'') * dir;
             if (key === 'team') return a.teamName.localeCompare(b.teamName) * dir;
             return 0;
@@ -2038,31 +2199,9 @@ function LeagueMapTab({
                             borderRadius: '3px', cursor: 'pointer', letterSpacing: '0.03em', minHeight: '44px'
                         }}>{opt.l}</button>
                     ))}
-                    {/* Column picker */}
-                    <div style={{ position: 'relative' }}>
-                        <button onClick={() => setAllPlayersColPickerOpen(o => !o)} style={{
-                            padding: '4px 10px', fontSize: '0.72rem', fontFamily: 'var(--font-body)',
-                            background: 'var(--acc-fill2, rgba(212,175,55,0.1))', color: 'var(--gold)',
-                            border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: '3px', cursor: 'pointer',
-                        }}>⚙ Customize ({allPlayersCols.length})</button>
-                                            </div>
-                    {window.WR?.SavedViews?.SavedViewBar && (
-                        <div style={{ marginLeft: 'auto' }}>
-                            {React.createElement(window.WR.SavedViews.SavedViewBar, {
-                                surface: 'all_players',
-                                leagueId: currentLeague?.id || currentLeague?.league_id,
-                                currentState: { columns: allPlayersCols, sort: lpSort, filters: { lpFilter, lpSearch: lpSearch || '' } },
-                                onApply: v => {
-                                    if (Array.isArray(v.columns) && v.columns.length) setAllPlayersCols(v.columns);
-                                    if (v.sort && v.sort.key) setLpSort({ key: v.sort.key, dir: v.sort.dir || -1 });
-                                    if (v.filters) {
-                                        if (typeof v.filters.lpFilter === 'string') setLpFilter(v.filters.lpFilter);
-                                        if (typeof v.filters.lpSearch === 'string' && setLpSearch) setLpSearch(v.filters.lpSearch);
-                                    }
-                                },
-                            })}
-                        </div>
-                    )}
+                    {/* Customize + saved views moved beside the Draft Picks tab
+                        button (owner ruling 2026-08-24) — desktop keeps only
+                        search / filters / PPG here. */}
                 </div>
                 )}
                 {/* Roster-tab customize panel (owner ruling 2026-08-24): Active
@@ -2204,7 +2343,7 @@ function LeagueMapTab({
                         return Math.max(0, pw[1] - x.age);
                     };
                     return (
-                <div style={{ background: 'var(--black)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.2))', borderRadius: '8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <div ref={apScrollRef} style={{ background: 'var(--black)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.2))', borderRadius: '8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                     <div className="lm-ap-head" style={{ display: 'grid', gridTemplateColumns: gridTpl, gap: '4px', padding: '6px 10px', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', borderBottom: '2px solid var(--acc-line1, rgba(212,175,55,0.2))', fontSize: '0.78rem', fontWeight: 700, color: 'var(--gold)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', minWidth: gridMinWidth }}>
                         <span>#</span><span></span>
                         {activeCols.map(c => {
@@ -2283,6 +2422,66 @@ function LeagueMapTab({
                                         const a = adpOf(x);
                                         return <span key={c.key} style={{ color: 'var(--silver)' }}>{a != null ? a.toFixed(1) : '\u2014'}</span>;
                                     }
+                                    case 'hi': {
+                                        const fsv = fsOf(x);
+                                        return <span key={c.key} style={{ color: fsv ? 'var(--good)' : 'var(--silver)', opacity: fsv ? 1 : 0.45 }}>{fsv ? fsv.high.toFixed(1) : '\u2014'}</span>;
+                                    }
+                                    case 'lo': {
+                                        const fsv = fsOf(x);
+                                        return <span key={c.key} style={{ color: 'var(--silver)', opacity: fsv ? 0.85 : 0.45 }}>{fsv ? fsv.low.toFixed(1) : '\u2014'}</span>;
+                                    }
+                                    case 'prev': {
+                                        const v = prevPpgOf(x);
+                                        return <span key={c.key} style={{ color: 'var(--silver)', opacity: 0.85 }}>{v > 0 ? v : '\u2014'}</span>;
+                                    }
+                                    case 'trend': {
+                                        const t = trendOf(x);
+                                        return <span key={c.key} style={{ fontWeight: 600, color: t > 0 ? 'var(--good)' : t < 0 ? 'var(--bad)' : 'var(--silver)' }}>{t ? (t > 0 ? '+' : '') + t + '%' : '\u2014'}</span>;
+                                    }
+                                    case 'durability': {
+                                        const g = durGpOf(x) || 0;
+                                        return (
+                                            <span key={c.key} title={'Avg GP: ' + g + '/17'} style={{ display: 'flex', alignItems: 'center' }}>
+                                                {g > 0 ? (
+                                                    <div style={{ width: '24px', height: '4px', borderRadius: '2px', background: 'var(--ov-4, rgba(255,255,255,0.06))', overflow: 'hidden' }}>
+                                                        <div style={{ width: Math.min(100, (g / 17) * 100) + '%', height: '100%', background: g >= 15 ? 'var(--good)' : g >= 10 ? 'var(--silver)' : 'var(--bad)', opacity: 0.8, borderRadius: '2px' }} />
+                                                    </div>
+                                                ) : <span style={{ color: 'var(--ov-7, rgba(255,255,255,0.2))', fontSize: 'var(--text-micro, 0.6875rem)' }}>\u2014</span>}
+                                            </span>
+                                        );
+                                    }
+                                    case 'sos': {
+                                        const s = sosOf(x);
+                                        return <span key={c.key} style={{ color: 'var(--silver)' }}>{s != null ? s : '\u2014'}</span>;
+                                    }
+                                    case 'peakPhase': {
+                                        const ph = peakPhaseOf(x);
+                                        return <span key={c.key} style={{ fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, letterSpacing: '0.04em', color: ph === 'PRIME' ? 'var(--good)' : ph === 'PRE' ? 'var(--k-3498db, #3498db)' : ph === 'VET' ? 'var(--warn)' : ph === 'POST' ? 'var(--bad)' : 'var(--silver)' }}>{ph}</span>;
+                                    }
+                                    case 'posRankLg':
+                                        return <span key={c.key} style={{ color: 'var(--gold)', fontWeight: 600 }}>{x.isPool ? '\u2014' : (lgRankByPid[x.pid] || '\u2014')}</span>;
+                                    case 'posRankNfl':
+                                        return <span key={c.key} style={{ color: 'var(--silver)' }}>{nflRankOf(x) || '\u2014'}</span>;
+                                    case 'starterSzn': {
+                                        const m = metaOf(x);
+                                        return <span key={c.key} style={{ color: 'var(--silver)' }}>{m && m.starterSeasons != null ? m.starterSeasons : '\u2014'}</span>;
+                                    }
+                                    case 'college':
+                                        return <span key={c.key} style={{ color: 'var(--silver)', fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.p.college || '\u2014'}</span>;
+                                    case 'height':
+                                        return <span key={c.key} style={{ color: 'var(--silver)' }}>{fmtHeight(x.p.height) || '\u2014'}</span>;
+                                    case 'weight':
+                                        return <span key={c.key} style={{ color: 'var(--silver)' }}>{x.p.weight || '\u2014'}</span>;
+                                    case 'depthChart':
+                                        return <span key={c.key} style={{ color: x.p.depth_chart_order != null ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))', fontSize: '0.7rem' }}>{x.p.depth_chart_order != null ? x.pos + (x.p.depth_chart_order + 1) : ((!x.p.team || x.p.team === 'FA') ? 'FA' : '\u2014')}</span>;
+                                    case 'rkSlot': {
+                                        const d = draftCapFor(x.pid);
+                                        return <span key={c.key} style={{ color: d ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))', fontSize: '0.7rem' }}>{d ? (d.round > 0 ? 'R' + d.round + ' #' + d.overall : 'UDFA') : '\u2014'}</span>;
+                                    }
+                                    case 'rkTeam': {
+                                        const d = draftCapFor(x.pid);
+                                        return <span key={c.key} style={{ color: 'var(--silver)', fontSize: '0.7rem' }}>{d && d.team ? d.team : '\u2014'}</span>;
+                                    }
                                     case 'peak':
                                         return (
                                             <span key={c.key} style={{ display: 'flex', alignItems: 'center' }}>
@@ -2333,7 +2532,14 @@ function LeagueMapTab({
                                 <div style={{ width: '22px', height: '22px', flexShrink: 0 }}><img src={'https://sleepercdn.com/content/nfl/players/thumb/'+x.pid+'.jpg'} onError={e=>e.target.style.display='none'} style={{ width:'22px',height:'22px',borderRadius:'50%',objectFit:'cover' }} /></div>
                                 {activeCols.map(renderCell)}
                             </div>
-                            {isExpanded && <RosterPlayerDossier x={x} playersData={playersData} statsData={statsData} currentLeague={currentLeague} normPos={normPos} onCollapse={() => setAllPlayersExpandedPid(null)} />}
+                            {/* Dossier pins at the visible width (roster boardWidth
+                                pattern) so it doesn't scroll off with the stat
+                                columns when the ledger is scrolled sideways. */}
+                            {isExpanded && (
+                                <div style={{ position: 'sticky', left: 0, zIndex: 2, width: apBoardW ? apBoardW + 'px' : 'auto' }}>
+                                    <RosterPlayerDossier x={x} playersData={playersData} statsData={statsData} currentLeague={currentLeague} normPos={normPos} onCollapse={() => setAllPlayersExpandedPid(null)} />
+                                </div>
+                            )}
                             </React.Fragment>
                             );
                         })}

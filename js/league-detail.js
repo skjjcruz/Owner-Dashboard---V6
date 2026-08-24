@@ -4040,6 +4040,7 @@
                     leagueSkin={leagueSkin}
                     playersData={playersData}
                     statsData={statsData}
+                    stats2025Data={stats2025Data}
                     sleeperUserId={sleeperUserId}
                     myRoster={myRoster}
                     activeYear={activeYear}

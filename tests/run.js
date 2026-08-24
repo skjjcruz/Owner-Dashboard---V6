@@ -900,6 +900,21 @@ test('all players default view matches the owner ruling (2026-08-24)',
     ok(src.includes('apRemoveColumn') && src.includes('apAddColumn'), 'columns must be hideable and addable');
     ok(src.includes('ALL_PLAYERS_COL_BY_KEY.name].concat'), 'display order must follow the stored array with Player pinned first');
     ok(src.includes('ALL_PLAYERS_GROUP_LABELS'), 'picker fields must be grouped');
+    // Full roster-tab mirror (owner ruling 2026-08-24): every roster data
+    // column exists here too, reading the SAME engines/sources my-team.js
+    // reads, plus roster-style presets and the frozen player column.
+    for (const k of ["'hi'", "'lo'", "'prev'", "'trend'", "'durability'", "'sos'", "'peakPhase'", "'posRankLg'", "'posRankNfl'", "'starterSzn'", "'college'", "'height'", "'weight'", "'depthChart'", "'rkSlot'", "'rkTeam'"]) {
+        ok(src.includes('key: ' + k), 'mirrored roster column ' + k + ' must be in the registry');
+    }
+    ok(src.includes('WeeklyProj.formStats'), 'Hi/Lo must read the same formStats engine as the roster tab');
+    ok(src.includes('stats2025Data'), 'Last/Trend must read the prior-season stats the roster tab reads');
+    ok(src.includes('ALL_PLAYERS_PRESETS'), 'roster-style presets must exist');
+    ok(src.includes("'Deep Data'"), 'the Deep Data preset must expose every field');
+    ok(src.includes('.lm-ap-row > :nth-child(-n+3)'), 'the player column must pin at every width (roster-style scroll)');
+    const analytics = fs.readFileSync(path.join(ROOT, 'js/tabs/analytics.js'), 'utf8');
+    ok(analytics.includes('stats2025Data'), 'the Analytics embed must thread prior-season stats through');
+    const myTeam = fs.readFileSync(path.join(ROOT, 'js/tabs/my-team.js'), 'utf8');
+    ok(myTeam.includes("pts:        { label: 'Total Points"), 'the roster tab must carry the Total Points column (mirror completeness)');
   });
 
 test('league hub brand icon returns to the app front page, which stays put',

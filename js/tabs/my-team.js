@@ -233,6 +233,7 @@ function MyTeamTab({
         return (fam(b) - fam(a)) * dir;
       }
       if (key === 'yrsExp') return ((b.p.years_exp||0) - (a.p.years_exp||0)) * dir;
+      if (key === 'pts') { const t = (r) => { const s = statsData[r.pid] || {}; return s.gp > 0 ? calcRawPts(s) : 0; }; return (t(a) - t(b)) * dir; }
       if (key === 'college') { const ca = (a.p.college||'').toLowerCase(), cb = (b.p.college||'').toLowerCase(); return (ca < cb ? -1 : ca > cb ? 1 : 0) * dir; }
       if (key === 'nflDraft') return (((a.p.draft_round || (a.p.draft_pick ? Math.ceil(a.p.draft_pick/32) : 99)) - (b.p.draft_round || (b.p.draft_pick ? Math.ceil(b.p.draft_pick/32) : 99))) * dir);
       if (key === 'posRankLg') return (a.dhq - b.dhq) * dir; // proxy: higher dhq = better rank
@@ -291,6 +292,7 @@ function MyTeamTab({
     age:        { label: 'Age', shortLabel: 'Age', width: '38px', group: 'dynasty' },
     dhq:        { label: valueLabel, shortLabel: valueShortLabel, width: '60px', group: 'dynasty' },
     ppg:        { label: 'Points Per Game', shortLabel: 'PPG', width: '48px', group: 'stats' },
+    pts:        { label: 'Total Points (season)', shortLabel: 'Pts', width: '52px', group: 'stats' },
     proj:       { label: isPro && wkVerdict ? 'This Week — projected pts + start/sit (league-scored)' : 'This Week — projected pts (league-scored)', shortLabel: 'Proj', width: '62px', group: 'stats' },
     hi:         { label: 'Season High — most fantasy pts in a week', shortLabel: 'Hi', width: '40px', group: 'stats' },
     lo:         { label: 'Season Low — fewest fantasy pts in a played week', shortLabel: 'Lo', width: '40px', group: 'stats' },
@@ -336,7 +338,7 @@ function MyTeamTab({
   const COLUMN_PRESETS = {
     default: ['pos','age','dhq','posRankLg','ppg',...(wkVerdict ? ['proj'] : []),'durability','peak','action','sos'].filter(k => ROSTER_COLUMNS[k]),
     ...(wkVerdict ? { redraft: ['pos','proj','ppg','prev','trend','hi','lo','sos'] } : {}),
-    stats:   ['pos','dhq','ppg','prev','trend','gp','durability','sos'],
+    stats:   ['pos','dhq','pts','ppg','prev','trend','gp','durability','sos'],
     scout:   ['pos','age','college','slot','height','weight','depthChart','yrsExp','starterSzn','posRankNfl'],
     rookie:  ['pos','age','college','rkSlot','rkTeam','rkProfile'],
     full:    Object.keys(ROSTER_COLUMNS),
@@ -951,6 +953,7 @@ function MyTeamTab({
           {_amanual ? <span style={{ fontSize: '0.56rem', fontWeight: 800, color: 'var(--gold)', letterSpacing: '0.05em', opacity: 0.85, lineHeight: 1 }}>YOU</span> : (r.gmSellNudge && <span style={{ fontSize: '0.56rem', fontWeight: 800, color: 'var(--warn)', letterSpacing: '0.05em', opacity: 0.85, lineHeight: 1 }}>GM</span>)}
         </div>;
       }
+      case 'pts': { const stv = statsData[r.pid] || {}; const tot = stv.gp > 0 ? calcRawPts(stv) : 0; return <div key={colKey} style={{...base}}><span style={{ color: 'var(--silver)', fontWeight: 550 }}>{tot > 0 ? tot.toFixed(1) : '\u2014'}</span></div>; }
       case 'gp': return <div key={colKey} style={{...base}}><span style={{ color: 'var(--silver)', fontSize: '0.74rem' }}>{r.effectiveGP > 0 ? r.effectiveGP : '\u2014'}{r.curGP === 0 && r.prevGP > 0 ? '*' : ''}</span></div>;
       case 'durability': { const gpForDur = r.durabilityGP || 0; return <div key={colKey} style={{...base}} title={'Avg GP: ' + gpForDur + '/17'}><div style={{ width:'24px',height:'4px',borderRadius:'2px',background:'var(--ov-4, rgba(255,255,255,0.06))',overflow:'hidden' }}><div style={{ width:Math.min(100,(gpForDur/17)*100)+'%',height:'100%',background:'var(--silver)',opacity:0.7,borderRadius:'2px' }}></div></div></div>; }
       case 'yrsExp': return <div key={colKey} style={{...base}}><span style={{ color: 'var(--silver)' }}>{r.p.years_exp ?? '\u2014'}</span></div>;
@@ -1256,6 +1259,7 @@ function MyTeamTab({
       case 'prev': return { label: short, value: r.prevPPG > 0 ? r.prevPPG : '—', tone: 'mute' };
       case 'trend': return { label: short, value: r.trend > 0 ? '+' + r.trend + '%' : r.trend < 0 ? r.trend + '%' : '—', tone: 'mute' };
       case 'age': return { label: short, value: r.age || '—', tone: 'mute' };
+      case 'pts': { const stv = statsData[r.pid] || {}; const tot = stv.gp > 0 ? calcRawPts(stv) : 0; return { label: short, value: tot > 0 ? tot.toFixed(1) : '—', tone: 'mute' }; }
       case 'gp': return { label: short, value: r.effectiveGP > 0 ? r.effectiveGP : '—', tone: 'mute' };
       case 'hi': { const fs = window.App?.WeeklyProj?.formStats?.(r.pid, 'season'); return { label: short, value: fs ? fs.high.toFixed(1) : '—', tone: fs ? 'good' : 'mute' }; }
       case 'lo': { const fs = window.App?.WeeklyProj?.formStats?.(r.pid, 'season'); return { label: short, value: fs ? fs.low.toFixed(1) : '—', tone: 'mute' }; }
