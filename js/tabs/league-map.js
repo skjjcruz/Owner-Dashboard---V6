@@ -2336,11 +2336,45 @@ function LeagueMapTab({
                     );
                 })()}
                 {(() => {
-                    // Owner ruling 2026-08-24: phones use the SAME frozen
-                    // scouting ledger as iPad/desktop (the P1 AssetRow card
-                    // list this block once rendered is retired — the pinned
-                    // player cell + sideways scroll works at every width, and
-                    // the dossier already stacks on phones).
+                    // ══ PHONE (≤767) — the All Players ledger re-pours as P1
+                    // AssetRows (iPhone program Phase 3, Analytics assets
+                    // embed): DHQ / PPG / Age slots from the SAME sources the
+                    // desktop renderCell uses; row tap toggles the EXISTING
+                    // allPlayersExpandedPid state and expands the same
+                    // RosterPlayerDossier inline. Free/Pro: raw table data is
+                    // free on desktop and stays free here (no tier column, no
+                    // verdicts — the dossier gates internally). Early return —
+                    // the desktop/tablet ledger below is untouched.
+                    if (_phone) {
+                        const phoneRows = filtered.map(x => {
+                            const isExpanded = String(allPlayersExpandedPid) === String(x.pid);
+                            let ppgShown = x.ppg, ppgLbl = 'PPG';
+                            if (ppgWindow !== 'season') {
+                                const n = ppgWindow === 'l3' ? 3 : 5;
+                                const rolling = typeof window.App?.computeRollingPPG === 'function' ? window.App.computeRollingPPG(x.pid, n) : 0;
+                                if (rolling > 0) { ppgShown = rolling; ppgLbl = 'L' + n; } else { ppgLbl = 'SZN'; }
+                            }
+                            return React.createElement(window.WR.AssetRow, {
+                                key: x.pid,
+                                pos: x.pos,
+                                name: x.p.full_name || ((x.p.first_name || '') + ' ' + (x.p.last_name || '')).trim(),
+                                tag: (x.p.team || 'FA') + (x.age ? ' · ' + x.age : '') + ' · ' + x.teamName + (x.isMe ? ' (You)' : ''),
+                                slots: [
+                                    { label: 'DHQ', value: x.dhq > 0 ? x.dhq.toLocaleString() : '—', tone: x.dhq >= 7000 ? 'good' : x.dhq >= 2000 ? undefined : 'mute' },
+                                    { label: ppgLbl, value: ppgShown > 0 ? ppgShown : '—' },
+                                    { label: 'Age', value: x.age || '—', tone: 'mute' },
+                                ],
+                                accent: x.isMe ? 'gold' : undefined,
+                                expanded: isExpanded,
+                                onClick: () => setAllPlayersExpandedPid(prev => String(prev) === String(x.pid) ? null : x.pid),
+                                title: 'Open player dossier',
+                            }, isExpanded ? <RosterPlayerDossier x={x} playersData={playersData} statsData={statsData} currentLeague={currentLeague} normPos={normPos} onCollapse={() => setAllPlayersExpandedPid(null)} /> : null);
+                        });
+                        if (!phoneRows.length) {
+                            return <div style={{ padding: '14px', border: '1px dashed var(--ov-6, rgba(255,255,255,0.12))', borderRadius: '9px', color: 'var(--silver)', opacity: 0.7, fontSize: '0.78rem' }}>No players match this view.</div>;
+                        }
+                        return React.createElement(window.WR.CardList, { groups: [{ label: null, rows: phoneRows }] });
+                    }
                     // Owner Tier = the owning team's ELITE/CONTENDER/REBUILDING
                     // assessment — a competitive-tier read (Q7) → Pro. Filtered at
                     // the render seam so persisted column prefs and saved views
@@ -2357,7 +2391,7 @@ function LeagueMapTab({
                     // previous three, and the pane has no internal gaps to
                     // patch. Stat columns keep their width as a floor and
                     // stretch evenly when there's surplus.
-                    const PLAYER_COL_W = _phone ? 172 : 224;
+                    const PLAYER_COL_W = 224;
                     const gridTpl = [PLAYER_COL_W + 'px'].concat(activeCols.map(c => 'minmax(' + c.width + ', 1fr)')).join(' ');
                     const fixedColPx = activeCols.reduce((sum, c) => sum + (/px$/.test(c.width) ? parseInt(c.width, 10) : 0), 0);
                     const gridMinWidth = (PLAYER_COL_W + fixedColPx + (activeCols.length + 1) * 4 + 20) + 'px';
