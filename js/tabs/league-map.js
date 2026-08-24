@@ -1547,24 +1547,33 @@ function LeagueMapTab({
            height and paints a solid same-color halo (spread-only box-shadow)
            over the surrounding gap strips. A shade darker than the card so
            the frozen pane reads as its own surface. */
+        /* Owner reports on b15: sideways scroll stutters (the blurred fade
+           shadows repainted on every scroll frame across 1,000+ rows) and the
+           pane's edge was mushy (emerging columns half-peeked instead of
+           fading in). Now: blur-free spread halos only (cheap solid fills),
+           and the fade runway + gold hairline edge are a STATIC pseudo-element
+           painted once with the cell — nothing blurred repaints on scroll. */
         .lm-ap-head > :nth-child(-n+3), .lm-ap-row > :nth-child(-n+3) {
             position: sticky; z-index: 1;
             align-self: stretch; display: flex; align-items: center;
             background: #0d0d12;
-            box-shadow: 0 0 0 6px #0d0d12;
+            box-shadow: 0 0 0 5px #0d0d12;
         }
-        .lm-ap-head > :nth-child(1), .lm-ap-row > :nth-child(1) { left: 10px; box-shadow: 0 0 0 10px #0d0d12; }
+        .lm-ap-head > :nth-child(1), .lm-ap-row > :nth-child(1) { left: 10px; box-shadow: 0 0 0 5px #0d0d12, -10px 0 0 0 #0d0d12; }
         .lm-ap-head > :nth-child(2), .lm-ap-row > :nth-child(2) { left: 38px; }
-        .lm-ap-head > :nth-child(3), .lm-ap-row > :nth-child(3) {
-            left: 70px;
-            box-shadow: 0 0 0 6px #0d0d12, 14px 0 14px -6px rgba(0,0,0,0.8);
+        .lm-ap-head > :nth-child(3), .lm-ap-row > :nth-child(3) { left: 70px; }
+        .lm-ap-head > :nth-child(3)::after, .lm-ap-row > :nth-child(3)::after {
+            content: ''; position: absolute; top: -5px; bottom: -5px; right: -23px; width: 18px;
+            background: linear-gradient(90deg, #0d0d12 0%, rgba(13,13,18,0) 100%);
+            border-left: 1px solid rgba(212,175,55,0.28);
+            pointer-events: none;
         }
-        .lm-ap-head > :nth-child(-n+3) { background: #221f1a; box-shadow: 0 0 0 6px #221f1a; }
-        .lm-ap-head > :nth-child(1) { box-shadow: 0 0 0 10px #221f1a; }
-        .lm-ap-head > :nth-child(3) { box-shadow: 0 0 0 6px #221f1a, 14px 0 14px -6px rgba(0,0,0,0.8); }
-        .lm-ap-row.is-hl > :nth-child(-n+3) { background: #191715; box-shadow: 0 0 0 6px #191715; }
-        .lm-ap-row.is-hl > :nth-child(1) { box-shadow: 0 0 0 10px #191715; }
-        .lm-ap-row.is-hl > :nth-child(3) { box-shadow: 0 0 0 6px #191715, 14px 0 14px -6px rgba(0,0,0,0.8); }
+        .lm-ap-head > :nth-child(-n+3) { background: #221f1a; box-shadow: 0 0 0 5px #221f1a; }
+        .lm-ap-head > :nth-child(1) { box-shadow: 0 0 0 5px #221f1a, -10px 0 0 0 #221f1a; }
+        .lm-ap-head > :nth-child(3)::after { background: linear-gradient(90deg, #221f1a 0%, rgba(34,31,26,0) 100%); }
+        .lm-ap-row.is-hl > :nth-child(-n+3) { background: #191715; box-shadow: 0 0 0 5px #191715; }
+        .lm-ap-row.is-hl > :nth-child(1) { box-shadow: 0 0 0 5px #191715, -10px 0 0 0 #191715; }
+        .lm-ap-row.is-hl > :nth-child(3)::after { background: linear-gradient(90deg, #191715 0%, rgba(25,23,21,0) 100%); }
         @media (max-width: 767px) {
 
             /* Draft Picks ledger (free tier): 240px of fixed columns + two 1fr
@@ -2461,7 +2470,7 @@ function LeagueMapTab({
                                                     <div style={{ width: '24px', height: '4px', borderRadius: '2px', background: 'var(--ov-4, rgba(255,255,255,0.06))', overflow: 'hidden' }}>
                                                         <div style={{ width: Math.min(100, (g / 17) * 100) + '%', height: '100%', background: g >= 15 ? 'var(--good)' : g >= 10 ? 'var(--silver)' : 'var(--bad)', opacity: 0.8, borderRadius: '2px' }} />
                                                     </div>
-                                                ) : <span style={{ color: 'var(--ov-7, rgba(255,255,255,0.2))', fontSize: 'var(--text-micro, 0.6875rem)' }}>\u2014</span>}
+                                                ) : <span style={{ color: 'var(--ov-7, rgba(255,255,255,0.2))', fontSize: 'var(--text-micro, 0.6875rem)' }}>{'\u2014'}</span>}
                                             </span>
                                         );
                                     }
