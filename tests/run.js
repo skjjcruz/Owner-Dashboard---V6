@@ -883,8 +883,10 @@ test('all players default view matches the owner ruling (2026-08-24)',
     ok(def, 'default-visible list must exist');
     const keys = def[1].match(/'[^']+'/g).map(s => s.slice(1, -1));
     // Pos + NFL Team live inside the pinned player cell (owner ruling
-    // 2026-08-24), not as standalone columns.
-    const want = ['name', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'];
+    // 2026-08-24), not as standalone columns. The default is the owner's
+    // own board set from his live Customize panel (2026-08-24 3:09 PM):
+    // the full scouting ledger minus Dur / SOS / Lg # / NFL # / Starts.
+    const want = ['name', 'yoe', 'age', 'points', 'gp', 'ppg', 'proj', 'hi', 'lo', 'prev', 'dhq', 'adp', 'trend', 'peakPhase', 'peak', 'peakYrs', 'height', 'weight', 'college', 'depthChart', 'rkSlot', 'rkTeam', 'tier', 'owner', 'acq'];
     ok(JSON.stringify(keys) === JSON.stringify(want), 'default view must be the owner-ruled set, got: ' + keys.join(','));
     const registryBlock = src.match(/ALL_PLAYERS_COLUMNS = \[[\s\S]*?\n\];/)[0];
     ok(!registryBlock.includes("key: 'pos'") && !registryBlock.includes("key: 'nflTeam'"), 'pos/team must be folded into the player cell, not standalone columns');

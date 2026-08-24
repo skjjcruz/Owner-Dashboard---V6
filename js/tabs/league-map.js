@@ -730,13 +730,19 @@ const ALL_PLAYERS_PRESETS = {
 const ALL_PLAYERS_PRESET_LABELS = { default: 'Default', stats: 'Stats', dynasty: 'Dynasty', scout: 'Scout', deep: 'Deep Data', custom: 'Custom' };
 // Default view (owner ruling 2026-08-24): Pos · Team · Years · Points · GP ·
 // PPG · Weekly Proj · DHQ · ADP. Everything else stays in the picker.
-const ALL_PLAYERS_DEFAULT_VISIBLE = ['name', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'];
+// Owner-set board (2026-08-24, from his live Customize panel): the full
+// scouting ledger minus Dur / SOS / Lg # / NFL # / Starts, in his order.
+const ALL_PLAYERS_DEFAULT_VISIBLE = ['name', 'yoe', 'age', 'points', 'gp', 'ppg', 'proj', 'hi', 'lo', 'prev', 'dhq', 'adp', 'trend', 'peakPhase', 'peak', 'peakYrs', 'height', 'weight', 'college', 'depthChart', 'rkSlot', 'rkTeam', 'tier', 'owner', 'acq'];
 ALL_PLAYERS_PRESETS.default = ALL_PLAYERS_DEFAULT_VISIBLE;
-// The pre-2026-08-24 default — used ONLY to migrate untouched saved prefs
-// (the persistence effect writes the default on first visit, so nearly every
-// visitor has the OLD default stored; without this check the new default
-// would never reach them).
-const ALL_PLAYERS_PREV_DEFAULT = ['name', 'pos', 'nflTeam', 'age', 'dhq', 'ppg', 'peakYrs', 'tier', 'owner', 'acq'];
+// Every PREVIOUS default — used ONLY to migrate untouched saved prefs (the
+// persistence effect writes the default on first visit, so nearly every
+// visitor has some old default stored; without this check a new default
+// would never reach them). A stored set matching ANY of these adopts the
+// current default; a customized set is the user's and stays.
+const ALL_PLAYERS_PREV_DEFAULTS = [
+    ['name', 'pos', 'nflTeam', 'age', 'dhq', 'ppg', 'peakYrs', 'tier', 'owner', 'acq'], // pre-b11
+    ['name', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'],                        // b11–b20
+];
 // Weekly-projection memo — projectPlayer is pure math but the ledger renders
 // 1,000+ rows with no virtualization, so each (league|season|week|pid) is
 // computed once per page load and reused across re-renders and sorts.
@@ -1085,9 +1091,10 @@ function LeagueMapTab({
               // user choice — the persistence effect wrote it on first visit —
               // so it adopts the new owner-ruled default. A customized set is
               // the user's and stays.
-              const prevClean = ALL_PLAYERS_PREV_DEFAULT.filter(k => registryKeys.has(k));
-              const isOldDefault = clean.length === prevClean.length
-                  && prevClean.every(k => clean.includes(k));
+              const isOldDefault = ALL_PLAYERS_PREV_DEFAULTS.some(prev => {
+                  const pc = prev.filter(k => registryKeys.has(k));
+                  return clean.length === pc.length && pc.every(k => clean.includes(k));
+              });
               if (clean.length && !isOldDefault) return clean;
           }
       } catch (_) {}
