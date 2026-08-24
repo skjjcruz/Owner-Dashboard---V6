@@ -781,6 +781,10 @@ function _buildNflRankMap(playersData) {
 // ══════════════════════════════════════════════════════════════════
 function RosterPlayerDossier({ x, playersData, statsData, currentLeague, normPos, onCollapse }) {
     const App = window.App || {};
+    // Owner report 2026-08-24 (iPhone app): the three-across header grid
+    // crushed at phone width — photo/bio, Dynasty Read, and Decision Stack
+    // stack vertically on phones instead.
+    const phoneDossier = typeof window !== 'undefined' && window.innerWidth <= 767;
     const p = x.p || {};
     const pos = x.pos;
     const pid = x.pid;
@@ -904,7 +908,7 @@ function RosterPlayerDossier({ x, playersData, statsData, currentLeague, normPos
 
     return (
         <div style={{ borderBottom: '2px solid var(--acc-line1, rgba(212,175,55,0.2))', background: 'linear-gradient(180deg, var(--surf-solid, rgba(18,18,24,0.99)), var(--surf-solid, rgba(6,6,10,0.99)))', padding: '12px 14px', animation: 'wrFadeIn 0.2s ease' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.95fr) minmax(0, 1.4fr) minmax(0, 0.8fr)', gap: '10px', marginBottom: '10px', alignItems: 'stretch' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: phoneDossier ? 'minmax(0, 1fr)' : 'minmax(0, 0.95fr) minmax(0, 1.4fr) minmax(0, 0.8fr)', gap: '10px', marginBottom: '10px', alignItems: 'stretch' }}>
                 {/* Header: photo + bio */}
                 <div style={{ display: 'grid', gridTemplateColumns: '76px minmax(0, 1fr)', gap: '10px', alignItems: 'center', background: 'var(--ov-1, rgba(255,255,255,0.022))', border: '1px solid var(--ov-4, rgba(255,255,255,0.065))', borderRadius: '8px', padding: '9px' }}>
                     <div style={{ flexShrink: 0, position: 'relative' }}>
@@ -914,7 +918,7 @@ function RosterPlayerDossier({ x, playersData, statsData, currentLeague, normPos
                     </div>
                     <div style={{ minWidth: 0 }}>
                         <div style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '1.18rem', color: 'var(--white)', letterSpacing: '0.01em', lineHeight: 1.08 }}>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name || ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || 'Player'}</span>
+                            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.full_name || ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || 'Player'}</span>
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--silver)', marginTop: '4px', lineHeight: 1.4 }}>
                             {p.team || 'FA'} {'·'} Age {age || '?'} {'·'} {p.years_exp || 0}yr exp
