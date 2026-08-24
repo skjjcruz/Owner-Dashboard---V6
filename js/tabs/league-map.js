@@ -1121,7 +1121,13 @@ function LeagueMapTab({
       const h = () => forcePpgRerender(n => n + 1);
       window.addEventListener('wr:weekly-points-loaded', h);
       // The ADP market map lands after first paint (18h-cached fetch) — the
-      // All Players ADP column re-renders from dashes when it does.
+      // All Players ADP column re-renders from dashes when it does. LISTENING
+      // is not enough (owner report on b14: ADP never populated): the module's
+      // eager warm-up fires before the supabase client exists, can miss the
+      // MFL proxy, and only retries on the NEXT fetch call — which the draft
+      // surfaces make on mount and this ledger didn't. Ask for the map here
+      // too; cached results resolve instantly, a failed warm-up retries now.
+      try { if (typeof window.App?.fetchRedraftAdp === 'function') window.App.fetchRedraftAdp().catch(() => {}); } catch (e) { /* dashes */ }
       window.addEventListener('wr:adp-loaded', h);
       return () => {
           window.removeEventListener('wr:weekly-points-loaded', h);
@@ -1535,21 +1541,30 @@ function LeagueMapTab({
            width (owner ruling 2026-08-24: "enable the scrolling feature just
            like the roster tab"): the # / headshot / Player cells pin while the
            stat columns scroll under them. Was phone-only; promoted global.
-           Sticky cells need SOLID backgrounds — the hex values are the
-           composites of the semi-transparent tints over the --black card.
-           Offsets = row padding (10) + col widths (24, 28) + 4px gaps. */
+           The pinned cells must form one OPAQUE pane (owner report on b14:
+           columns visibly slid through the grid gaps / padding strips / the
+           space above and below short cells): each cell stretches to full row
+           height and paints a solid same-color halo (spread-only box-shadow)
+           over the surrounding gap strips. A shade darker than the card so
+           the frozen pane reads as its own surface. */
         .lm-ap-head > :nth-child(-n+3), .lm-ap-row > :nth-child(-n+3) {
             position: sticky; z-index: 1;
-            background: var(--black, #121217);
+            align-self: stretch; display: flex; align-items: center;
+            background: #0d0d12;
+            box-shadow: 0 0 0 6px #0d0d12;
         }
-        .lm-ap-head > :nth-child(1), .lm-ap-row > :nth-child(1) { left: 10px; }
+        .lm-ap-head > :nth-child(1), .lm-ap-row > :nth-child(1) { left: 10px; box-shadow: 0 0 0 10px #0d0d12; }
         .lm-ap-head > :nth-child(2), .lm-ap-row > :nth-child(2) { left: 38px; }
         .lm-ap-head > :nth-child(3), .lm-ap-row > :nth-child(3) {
             left: 70px;
-            box-shadow: 6px 0 8px -6px rgba(0,0,0,0.6);
+            box-shadow: 0 0 0 6px #0d0d12, 14px 0 14px -6px rgba(0,0,0,0.8);
         }
-        .lm-ap-head > :nth-child(-n+3) { background: #221f1a; }
-        .lm-ap-row.is-hl > :nth-child(-n+3) { background: #1a1818; }
+        .lm-ap-head > :nth-child(-n+3) { background: #221f1a; box-shadow: 0 0 0 6px #221f1a; }
+        .lm-ap-head > :nth-child(1) { box-shadow: 0 0 0 10px #221f1a; }
+        .lm-ap-head > :nth-child(3) { box-shadow: 0 0 0 6px #221f1a, 14px 0 14px -6px rgba(0,0,0,0.8); }
+        .lm-ap-row.is-hl > :nth-child(-n+3) { background: #191715; box-shadow: 0 0 0 6px #191715; }
+        .lm-ap-row.is-hl > :nth-child(1) { box-shadow: 0 0 0 10px #191715; }
+        .lm-ap-row.is-hl > :nth-child(3) { box-shadow: 0 0 0 6px #191715, 14px 0 14px -6px rgba(0,0,0,0.8); }
         @media (max-width: 767px) {
 
             /* Draft Picks ledger (free tier): 240px of fixed columns + two 1fr
