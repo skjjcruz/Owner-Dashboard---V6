@@ -2092,11 +2092,14 @@ function CompareTab({
                                 second line in a half-width cell (owner ask 2026-07-12). */}
                             <div style={{ color: 'var(--white)', fontSize: '0.78rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isPhone ? ((r.p?.first_name ? r.p.first_name[0] + '. ' : '') + (r.p?.last_name || r.p?.full_name || '?')) : (r.p?.full_name || '?')}</div>
                             <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.68, marginTop: '1px', display: 'flex', gap: '6px', flexWrap: 'wrap', ...(isPhone ? { whiteSpace: 'nowrap', overflow: 'hidden', flexWrap: 'nowrap' } : null) }}>
+                                {/* Owner ruling 2026-08-26: team · years · GP · season pts ·
+                                    PPG · weekly proj (phone keeps 3 chips per 2026-07-12). */}
                                 <span>{r.team}</span>
-                                {r.age != null ? <span>{r.age}yo</span> : null}
-                                {r.ppg > 0 ? <span>{r.ppg} PPG</span> : null}
-                                {!isPhone && <span>{r.yrsExp}y exp</span>}
-                                {!isPhone && <span>{r.peakYrs > 0 ? r.peakYrs + 'yr peak' : r.valueYrs + 'yr value'}</span>}
+                                {!isPhone && <span>{r.yrsExp}y</span>}
+                                {!isPhone && <span>{r.gp > 0 ? r.gp : 0} GP</span>}
+                                {!isPhone && <span>{(r.pts != null ? r.pts : '—') + ' pts'}</span>}
+                                <span>{(r.ppg > 0 ? r.ppg : '—') + ' ppg'}</span>
+                                <span>{(r.proj != null ? r.proj : '—') + ' proj'}</span>
                             </div>
                         </div>
                         <span style={{ ...mono, fontWeight: 700, fontSize: '0.76rem', color: dhqCol, flexShrink: 0 }}>{r.dhq > 0 ? r.dhq.toLocaleString() : '-'}</span>
