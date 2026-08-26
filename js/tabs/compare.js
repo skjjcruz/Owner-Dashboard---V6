@@ -16,6 +16,11 @@
 // compact per-opponent `meetings` result keeps its own localStorage cache.
 window._wrCompareRawCache = window._wrCompareRawCache || {};
 
+// Weekly-projection memo for the Full Breakdown player cells, keyed
+// league|season|week|pid — same shape as the All Players ledger's memo, so a
+// 4-team field (100+ cells) projects each player once per week, not per render.
+const _cmpProjMemo = {};
+
 function CompareTab({
     currentLeague,
     leagueSkin,
@@ -37,6 +42,14 @@ function CompareTab({
     // Action row + the field-verdict Read gate on this predicate (mirrors
     // reconai compare-scout.js, which filters its Verdict row for free).
     const isPro = typeof window.wrIsPro === 'function' ? window.wrIsPro() : true;
+    // Weekly projections land after first paint — re-render the field cells
+    // from dashes when they do (same listener the All Players ledger uses).
+    const [, forceProjRerender] = React.useState(0);
+    React.useEffect(() => {
+        const h = () => forceProjRerender(n => n + 1);
+        window.addEventListener('wr:weekly-points-loaded', h);
+        return () => window.removeEventListener('wr:weekly-points-loaded', h);
+    }, []);
     // Redraft → build ROS values so roster-strength comparisons reflect
     // rest-of-season production (no-op → DHQ for dynasty/keeper).
     React.useMemo(() => {
@@ -545,9 +558,33 @@ function CompareTab({
         if (prevGP > 0 && prevPts != null) return +(prevPts / prevGP).toFixed(1);
         return derived.seasonAvg || derived.prevAvg || 0;
     };
+    const projCtxForField = (() => {
+        const WP = window.App && window.App.WeeklyProj;
+        const wk = WP && WP.currentWeek ? WP.currentWeek() : (window.S?.currentWeek || 1);
+        const season = (window.S?.nflState && window.S.nflState.season) || window.S?.season || '';
+        return { wk, prefix: leagueId + '|' + season + '|' + wk + '|' };
+    })();
+    const projForField = (pid) => {
+        const WP = window.App && window.App.WeeklyProj;
+        if (!WP || !WP.projectPlayer) return null;
+        const k = projCtxForField.prefix + pid;
+        if (k in _cmpProjMemo) return _cmpProjMemo[k];
+        let v = null;
+        try {
+            const prj = WP.projectPlayer(pid, { playersData, statsData, priorData: {}, scoring: scoringForField, week: projCtxForField.wk });
+            const med = prj && prj.points && prj.points.median;
+            v = (med != null && isFinite(med)) ? +(+med).toFixed(1) : null;
+        } catch (e) { v = null; }
+        _cmpProjMemo[k] = v;
+        return v;
+    };
     const enrichFieldPlayer = (pid) => {
         const p = playersData?.[pid] || playersData?.[String(pid)];
         if (!p) return null;
+        const st = statsRefForField[pid] || statsRefForField[String(pid)] || {};
+        const gp = Number(st.gp || 0);
+        const pts = gp > 0 && typeof window.App?.calcRawPts === 'function'
+            ? Math.round(window.App.calcRawPts(st, scoringForField)) : null;
         const pos = normPos(p.position);
         const curve = typeof window.App?.getAgeCurve === 'function'
             ? window.App.getAgeCurve(pos)
@@ -562,6 +599,9 @@ function CompareTab({
             age,
             team: p.team || 'FA',
             yrsExp: p.years_exp || 0,
+            gp,
+            pts,
+            proj: projForField(pid),
             ppg: calcFieldPPG(pid),
             dhq: scores[pid] || scores[String(pid)] || 0,
             peakYrs: age ? Math.max(0, peakEnd - age) : 0,
@@ -895,8 +935,14 @@ function CompareTab({
                         {!isPhone && <img src={'https://sleepercdn.com/content/nfl/players/thumb/'+player.pid+'.jpg'} onError={e=>e.target.style.display='none'} style={{ width:'24px',height:'24px',borderRadius:'50%',objectFit:'cover', flexShrink: 0 }} />}
                         <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ color: 'var(--white)', fontSize: '0.76rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isPhone ? ((player.p?.first_name ? player.p.first_name[0] + '. ' : '') + (player.p?.last_name || player.p?.full_name || '?')) : (player.p?.full_name || '?')}</div>
+                            {/* Owner ruling 2026-08-26: the line under each name in the
+                                side-by-side field shows team · years in league · games
+                                played, then season points · PPG · weekly projection. */}
                             <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.66, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {player.team} {player.age != null ? '· ' + player.age + 'yo' : ''}{player.ppg > 0 ? ' · ' + player.ppg + ' PPG' : ''} · {player.peakYrs > 0 ? player.peakYrs + 'yr peak' : player.valueYrs + 'yr value'}
+                                {player.team} · {player.yrsExp}y · {player.gp > 0 ? player.gp + ' GP' : '0 GP'}
+                            </div>
+                            <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.66, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {(player.pts != null ? player.pts : '—') + ' pts · ' + (player.ppg > 0 ? player.ppg : '—') + ' ppg · ' + (player.proj != null ? player.proj : '—') + ' proj'}
                             </div>
                         </div>
                         <div style={{ ...mono, color: dhqCol, fontSize: '0.72rem', fontWeight: 850, flexShrink: 0 }}>{player.dhq > 0 ? player.dhq.toLocaleString() : '-'}</div>
