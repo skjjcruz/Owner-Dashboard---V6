@@ -590,6 +590,27 @@ function CompareTab({
         : dhq > 0 ? { label: 'Depth', color: 'var(--silver)' }
         : { label: '—', color: 'var(--silver)' };
 
+    // Roster-slot tag (owner ask 2026-08-27): where a player sits on his team —
+    // starter, bench, taxi, or IR — shown as a small chip beside the name so a
+    // roster comparison doubles as a trade-fit read. Slots come straight from
+    // the Sleeper roster arrays (starters / taxi / reserve; bench = the rest).
+    const slotOf = (roster, pid) => {
+        if (!roster) return null;
+        const sid = String(pid);
+        if ((roster.reserve || []).some(x => String(x) === sid)) return 'IR';
+        if ((roster.taxi || []).some(x => String(x) === sid)) return 'TX';
+        if ((roster.starters || []).some(x => String(x) === sid && sid !== '0')) return 'ST';
+        return 'BN';
+    };
+    const slotChip = (slot) => {
+        if (!slot) return null;
+        const cfg = slot === 'ST' ? { color: 'var(--good)', title: 'Starter' }
+            : slot === 'IR' ? { color: 'var(--bad)', title: 'Injured Reserve' }
+            : slot === 'TX' ? { color: 'var(--k-3498db, #3498db)', title: 'Taxi squad' }
+            : { color: 'var(--silver)', title: 'Bench' };
+        return <span title={cfg.title} style={{ flexShrink: 0, fontSize: '0.55rem', fontWeight: 850, letterSpacing: '0.04em', color: cfg.color, border: '1px solid currentColor', borderRadius: '4px', padding: '0 3px', opacity: 0.85, lineHeight: 1.5 }}>{slot}</span>;
+    };
+
     const statsRefForField = statsData || {};
     const stats2025RefForField = stats2025Data || {};
     const derivedStatsRefForField = window.S?.playerStats || {};
@@ -663,7 +684,11 @@ function CompareTab({
     const teamProfile = (teamOption, isMine) => {
         const roster = isMine ? myRoster : teamOption?.roster;
         if (!roster) return null;
-        const players = (roster.players || []).map(enrichFieldPlayer).filter(Boolean);
+        const players = (roster.players || []).map(pid => {
+            const e = enrichFieldPlayer(pid);
+            if (e) e.slot = slotOf(roster, pid);
+            return e;
+        }).filter(Boolean);
         const posTotals = {};
         const posTop = {};
         allPositions.forEach(pos => {
@@ -982,7 +1007,10 @@ function CompareTab({
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: 0 }}>
                         {!isPhone && <img src={'https://sleepercdn.com/content/nfl/players/thumb/'+player.pid+'.jpg'} onError={e=>e.target.style.display='none'} style={{ width:'24px',height:'24px',borderRadius:'50%',objectFit:'cover', flexShrink: 0 }} />}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ color: 'var(--white)', fontSize: '0.76rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isPhone ? ((player.p?.first_name ? player.p.first_name[0] + '. ' : '') + (player.p?.last_name || player.p?.full_name || '?')) : (player.p?.full_name || '?')}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                <span style={{ color: 'var(--white)', fontSize: '0.76rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{isPhone ? ((player.p?.first_name ? player.p.first_name[0] + '. ' : '') + (player.p?.last_name || player.p?.full_name || '?')) : (player.p?.full_name || '?')}</span>
+                                {slotChip(player.slot)}
+                            </div>
                             {/* Owner ruling 2026-08-26: the line under each name in the
                                 side-by-side field shows team · years in league · games
                                 played, then season points · PPG · weekly projection. */}
@@ -2032,8 +2060,8 @@ function CompareTab({
                 };
             };
 
-            const enrichedMine = myPlayers.map(enrich).filter(Boolean);
-            const enrichedTheirs = theirPlayers.map(enrich).filter(Boolean);
+            const enrichedMine = myPlayers.map(pid => { const e = enrich(pid); if (e) e.slot = slotOf(myRoster, pid); return e; }).filter(Boolean);
+            const enrichedTheirs = theirPlayers.map(pid => { const e = enrich(pid); if (e) e.slot = slotOf(theirRoster, pid); return e; }).filter(Boolean);
             const positionSummaries = allPositions.map(pos => {
                 const myAtPos = enrichedMine.filter(r => r.pos === pos).sort((a, b) => b.dhq - a.dhq);
                 const theirAtPos = enrichedTheirs.filter(r => r.pos === pos).sort((a, b) => b.dhq - a.dhq);
@@ -2061,8 +2089,8 @@ function CompareTab({
             const histTheirsRoster = histReady ? histRosters.byOwner[String(theirRoster?.owner_id)] : null;
             const histGridActive = !!(histMineRoster || histTheirsRoster);
             const gridSummaries = histGridActive ? (() => {
-                const em = ((histMineRoster && histMineRoster.players) || []).map(enrich).filter(Boolean);
-                const et = ((histTheirsRoster && histTheirsRoster.players) || []).map(enrich).filter(Boolean);
+                const em = ((histMineRoster && histMineRoster.players) || []).map(pid => { const e = enrich(pid); if (e) e.slot = slotOf(histMineRoster, pid); return e; }).filter(Boolean);
+                const et = ((histTheirsRoster && histTheirsRoster.players) || []).map(pid => { const e = enrich(pid); if (e) e.slot = slotOf(histTheirsRoster, pid); return e; }).filter(Boolean);
                 return allPositions.map(pos => {
                     const myAtPos = em.filter(r => r.pos === pos).sort((a, b) => b.dhq - a.dhq);
                     const theirAtPos = et.filter(r => r.pos === pos).sort((a, b) => b.dhq - a.dhq);
@@ -2169,7 +2197,10 @@ function CompareTab({
                         <div style={{ flex: 1, minWidth: 0 }}>
                             {/* Phone: "F. Last" + 3 meta chips — five chips wrapped to a
                                 second line in a half-width cell (owner ask 2026-07-12). */}
-                            <div style={{ color: 'var(--white)', fontSize: '0.78rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isPhone ? ((r.p?.first_name ? r.p.first_name[0] + '. ' : '') + (r.p?.last_name || r.p?.full_name || '?')) : (r.p?.full_name || '?')}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                <span style={{ color: 'var(--white)', fontSize: '0.78rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{isPhone ? ((r.p?.first_name ? r.p.first_name[0] + '. ' : '') + (r.p?.last_name || r.p?.full_name || '?')) : (r.p?.full_name || '?')}</span>
+                                {slotChip(r.slot)}
+                            </div>
                             <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.68, marginTop: '1px', display: 'flex', gap: '6px', flexWrap: 'wrap', ...(isPhone ? { whiteSpace: 'nowrap', overflow: 'hidden', flexWrap: 'nowrap' } : null) }}>
                                 {/* Owner ruling 2026-08-26: team · years · GP · season pts ·
                                     PPG · weekly proj (phone keeps 3 chips per 2026-07-12). */}
