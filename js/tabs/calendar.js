@@ -48,7 +48,12 @@ const WrCalendar = (function () {
             let draftType = currentLeague?.metadata?.draft_type;
             let draftRounds = Number(settings.draft_rounds || 0);
             let latestDraft = null;
-            const drafts = (window.S && window.S.drafts) || currentLeague?.drafts || [];
+            // Trust the shared pocket only when its league stamp matches THIS
+            // league (or predates stamping) — cross-league bleed guard.
+            const thisLid = String(currentLeague?.league_id || currentLeague?.id || '');
+            const pocketLid = window.S && window.S.draftsLeagueId;
+            const pocketOk = !pocketLid || String(pocketLid) === thisLid;
+            const drafts = (pocketOk && window.S && window.S.drafts && window.S.drafts.length ? window.S.drafts : null) || currentLeague?.drafts || [];
             if (!draftTs) {
                 const sameSeason = drafts.find(d => String(d.season) === String(season));
                 latestDraft = sameSeason || drafts[0] || null;

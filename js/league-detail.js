@@ -568,6 +568,9 @@
                     if (drafts.length) {
                         window.S = window.S || {};
                         window.S.drafts = drafts;
+                        // Stamp the owner league so hydration keeps (not wipes)
+                        // this pocket and the calendar can verify provenance.
+                        window.S.draftsLeagueId = String(leagueId);
                         try { window.dispatchEvent(new CustomEvent('wr:drafts-loaded')); } catch (e) { /* old Safari */ }
                     }
                     // Draft-of-record rule (draft/state.js selectCurrentDraft):
@@ -2218,7 +2221,20 @@
                     ? window.App.normalizeTradedPicks(rosters, tradedPicks)
                     : tradedPicks;
                 window.S.matchups = matchupsData;
-                window.S.drafts = hydrated.drafts || [];
+                // Drafts: the Sleeper provider's hydrate bundle never carries
+                // drafts, so unconditionally writing `hydrated.drafts || []`
+                // wiped the pocket the header draft fetch fills — for EVERY
+                // league, on open and on each ~5-min background sync — and the
+                // calendar raced back to 'date TBD' (owner report 2026-08-27).
+                // Only overwrite with real data; on a league SWITCH, clear so
+                // one league's dates can never bleed into another's calendar.
+                if (hydrated.drafts && hydrated.drafts.length) {
+                    window.S.drafts = hydrated.drafts;
+                    window.S.draftsLeagueId = String(currentLeague.id);
+                } else if (String(window.S.draftsLeagueId || '') !== String(currentLeague.id)) {
+                    window.S.drafts = [];
+                    window.S.draftsLeagueId = null;
+                }
                 // MFL: complete future-pick ownership (exact years/rounds) so the
                 // Trade Center shows real future picks, not invented N-round sets.
                 window.S._mflFuturePicks = hydrated._extras?.mflFuturePicks || null;
