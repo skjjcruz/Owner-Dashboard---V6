@@ -871,6 +871,25 @@ test('nfl scoreboard: production endpoint + failure backoff (contract)',
     ok(card.includes('Object.keys(map).length) setScoutTick'), 'scouting tab must not re-tick (and re-fetch) on empty loads');
   });
 
+test('update sentinel: quiet self-update with all owner guard rails (2026-08-27)',
+  () => {
+    // Users must receive shipped builds without force-quitting the app shell,
+    // and a reload must never interrupt live work. Pin every guard the owner
+    // approved: real absence, no draft, no typing, no recent touch, no loops.
+    const s = fs.readFileSync(path.join(ROOT, 'js/shared/update-sentinel.js'), 'utf8');
+    ok(s.includes('15 * 60 * 1000'), 'wake check requires a 15-minute absence');
+    ok(s.includes("doc.querySelector('[data-draft-pid]')"), 'a mounted draft board must block the reload');
+    ok(s.includes('typingNow'), 'a focused input must block the reload');
+    ok(s.includes('minTouchGapMs'), 'a recent touch must block the reload');
+    ok(s.includes('DONE_FOR_KEY'), 'a target tag may only be attempted once per session (no reload loops)');
+    ok(s.includes("cache: 'no-store'"), 'the version probe must bypass every HTTP cache');
+    ok(/dhq-build-tag[^']*'/.test(s) || s.includes('dhq-build-tag'), 'the probe reads the build tag the deploy pipeline stamps');
+    ok(s.includes('onLine === false'), 'offline wakes must skip silently');
+    ok(s.includes('location.replace'), 'the reload must navigate with a cache-busting query, not location.reload');
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    ok(html.includes('js/shared/update-sentinel.js?v='), 'index.html must load the sentinel with a cache-buster');
+  });
+
 test('all players default view matches the owner ruling (2026-08-24)',
   () => {
     // Pos · Team · Years · Points · GP · PPG · Weekly Proj · DHQ · ADP.
