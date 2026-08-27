@@ -739,6 +739,42 @@
         const [faSort, setFaSort] = useState({ key: 'dhq', dir: -1 });
         const [faSelectedPid, setFaSelectedPid] = useState(null);
         const [faSearch, setFaSearch] = useState('');
+        // ── Detailed search prototype (owner ask 2026-08-27): stackable numeric
+        // criteria over the market pool — combined with the text search and the
+        // POS chips below. All data is already in hand (prevStatsData prop,
+        // years_exp/age on the player record, ADP via the shared market feed).
+        const [faAdvOpen, setFaAdvOpen] = useState(false);
+        const [faAdv, setFaAdv] = useState({ minPrevPts: '', maxYears: '', adpTop: '', maxAge: '' });
+        const faAdvCount = Object.values(faAdv).filter(v => String(v).trim() !== '').length;
+        // ADP lands after first paint; LISTENING alone is not enough (b14/b15
+        // lesson) — ask for the map on mount too, cached results resolve fast.
+        const [, forceAdpTick] = useState(0);
+        useEffect(() => {
+            const h = () => forceAdpTick(n => n + 1);
+            window.addEventListener('wr:adp-loaded', h);
+            try { if (typeof window.App?.fetchRedraftAdp === 'function') window.App.fetchRedraftAdp().catch(() => {}); } catch (e) { /* dashes */ }
+            return () => window.removeEventListener('wr:adp-loaded', h);
+        }, []);
+        const faAdvPass = (x) => {
+            if (!faAdvCount) return true;
+            const minPts = parseFloat(faAdv.minPrevPts);
+            if (isFinite(minPts)) {
+                const prev = (prevStatsData || {})[x.pid] || {};
+                const pts = prev.gp > 0 && typeof calcRawPts === 'function' ? calcRawPts(prev) : 0;
+                if (!(pts >= minPts)) return false;
+            }
+            const maxY = parseInt(faAdv.maxYears, 10);
+            if (isFinite(maxY) && (x.p.years_exp || 0) > maxY) return false;
+            const maxA = parseInt(faAdv.maxAge, 10);
+            if (isFinite(maxA) && (x.p.age || 99) > maxA) return false;
+            const topN = parseInt(faAdv.adpTop, 10);
+            if (isFinite(topN) && topN > 0) {
+                const g = typeof window.App?.getRedraftAdp === 'function' ? window.App.getRedraftAdp(String(x.pid)) : null;
+                const adp = g && typeof g.adp === 'number' && g.adp > 0 ? g.adp : null;
+                if (adp == null || adp > topN) return false;
+            }
+            return true;
+        };
         const [visibleFaCols, setVisibleFaCols] = useState(() => {
             const stored = window.App?.WrStorage?.get?.('wr_fa_cols');
             const valid = Array.isArray(stored) ? stored.filter(k => FA_COLUMNS[k]) : [];
@@ -1020,6 +1056,7 @@
                     if (rookieCollegeFilter && rookieCollegeOf(x) !== rookieCollegeFilter) return false;
                     if (rookieSlotFilter && !rookieSlotMatch(x, rookieSlotFilter)) return false;
                 }
+                if (!faAdvPass(x)) return false;
                 if (!q) return true;
                 const name = (x.p.full_name || ((x.p.first_name || '') + ' ' + (x.p.last_name || '')).trim()).toLowerCase();
                 const team = (x.p.team || 'FA').toLowerCase();
@@ -1077,7 +1114,7 @@
                 }
                 return 0;
             }).slice(0, 50);
-        }, [availablePlayers, faFilter, faSearch, faSort, statsData, rookieOnly, isRookiePlayer, rookieTeamFilter, rookieCollegeFilter, rookieSlotFilter, rookieTeamOf, rookieCollegeOf, rookieSlotMatch, prospectFor]);
+        }, [availablePlayers, faFilter, faSearch, faSort, statsData, prevStatsData, faAdv, rookieOnly, isRookiePlayer, rookieTeamFilter, rookieCollegeFilter, rookieSlotFilter, rookieTeamOf, rookieCollegeOf, rookieSlotMatch, prospectFor]);
 
         const faHeaderStyle = { fontSize: '0.78rem', fontWeight: 700, color: 'var(--gold)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
 
@@ -2125,10 +2162,41 @@
                         <span>Market Explorer</span>
                         <p>{sortedPlayers.length} shown from {availablePlayers.length} available players. Saved views and custom columns still apply.</p>
                     </div>
-                    <div className="fa-market-search">
+                    <div className="fa-market-search" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <input value={faSearch} onChange={e => setFaSearch(e.target.value)} placeholder="Search player, team, college..." />
+                        <button
+                            onClick={() => setFaAdvOpen(o => !o)}
+                            title="Detailed search: stack numeric criteria with the search box and POS chips"
+                            style={{ flexShrink: 0, padding: '8px 12px', minHeight: '40px', fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontFamily: 'var(--font-body)', background: faAdvCount ? 'var(--acc-fill1, rgba(212,175,55,0.08))' : 'var(--ov-3, rgba(255,255,255,0.04))', color: faAdvCount || faAdvOpen ? 'var(--gold)' : 'var(--silver)', border: '1px solid ' + (faAdvCount || faAdvOpen ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.1))'), borderRadius: 'var(--card-radius-sm, 8px)', cursor: 'pointer' }}
+                        >Filters{faAdvCount ? ' · ' + faAdvCount : ''}</button>
                     </div>
                 </div>
+
+                {faAdvOpen && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end', padding: '12px 14px', margin: '0 0 12px', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: 'var(--card-radius-sm, 8px)' }}>
+                    {[
+                        { key: 'minPrevPts', label: 'Min pts last season', ph: 'e.g. 100' },
+                        { key: 'maxYears', label: 'Max years in league', ph: 'e.g. 3' },
+                        { key: 'adpTop', label: 'ADP inside top', ph: 'e.g. 150' },
+                        { key: 'maxAge', label: 'Max age', ph: 'e.g. 25' },
+                    ].map(f => (
+                        <label key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {f.label}
+                            <input
+                                type="number" inputMode="numeric" value={faAdv[f.key]} placeholder={f.ph}
+                                onChange={e => { const v = e.target.value; setFaAdv(prev => ({ ...prev, [f.key]: v })); }}
+                                style={{ width: '110px', padding: '8px 10px', minHeight: '40px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid ' + (String(faAdv[f.key]).trim() ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.1))'), borderRadius: 'var(--card-radius-sm, 8px)', color: 'var(--white)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+                            />
+                        </label>
+                    ))}
+                    <button
+                        onClick={() => setFaAdv({ minPrevPts: '', maxYears: '', adpTop: '', maxAge: '' })}
+                        disabled={!faAdvCount}
+                        style={{ padding: '8px 12px', minHeight: '40px', fontSize: '0.72rem', fontWeight: 700, background: 'transparent', color: faAdvCount ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.28))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: 'var(--card-radius-sm, 8px)', cursor: faAdvCount ? 'pointer' : 'default' }}
+                    >Clear</button>
+                    <span style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.65, marginLeft: 'auto', alignSelf: 'center' }}>Stacks with the search box and the POS row below. ADP is redraft market ADP.</span>
+                </div>
+                )}
 
                 <div className="fa-market-toolbar wr-module-toolbar">
                     <span className="wr-module-toolbar-label">POS</span>
