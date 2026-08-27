@@ -50,6 +50,54 @@ function CompareTab({
         window.addEventListener('wr:weekly-points-loaded', h);
         return () => window.removeEventListener('wr:weekly-points-loaded', h);
     }, []);
+    // ── Historical View (owner ask 2026-08-27): when the league time machine
+    // sits on a past season, the Full Roster grid shows THAT season's rosters.
+    // Sleeper keeps each year as a linked league — walk previous_league_id to
+    // the matching season and pull its rosters, reusing the H2H chain cache
+    // when it has already walked. Player values stay today's DHQ (there is no
+    // historical value engine); stats are already that season's because the
+    // time machine swaps statsData. The weekly-projection chip hides in past
+    // seasons — there is nothing to project.
+    const _tmSeason = parseInt(window.S?.season, 10) || 0;
+    const _curLeagueSeason = parseInt(currentLeague?.season, 10) || new Date().getFullYear();
+    const histSeason = _tmSeason && _tmSeason < _curLeagueSeason ? String(_tmSeason) : null;
+    const [histRosters, setHistRosters] = React.useState(null);
+    React.useEffect(() => {
+        if (!histSeason || !leagueId) { setHistRosters(null); return; }
+        let alive = true;
+        (async () => {
+            try {
+                const base = 'https://api.sleeper.app/v1';
+                const get = async (url) => { try { const r = await fetch(url); return r.ok ? await r.json() : null; } catch { return null; } };
+                const cachedChain = window._wrCompareRawCache[leagueId];
+                let entry = Array.isArray(cachedChain?.seasons) ? cachedChain.seasons.find(s => String(s.season) === histSeason) : null;
+                if (!entry) {
+                    let lid = String(leagueId), hops = 0, foundId = null;
+                    const seen = new Set();
+                    while (lid && lid !== '0' && !seen.has(lid) && hops < 12) {
+                        seen.add(lid);
+                        const info = await get(base + '/league/' + lid);
+                        if (!info) break;
+                        if (String(info.season) === histSeason) { foundId = lid; break; }
+                        lid = info.previous_league_id ? String(info.previous_league_id) : '';
+                        hops += 1;
+                    }
+                    if (foundId) {
+                        const rosters = await get(base + '/league/' + foundId + '/rosters');
+                        if (Array.isArray(rosters) && rosters.length) entry = { season: histSeason, rosters };
+                    }
+                }
+                if (!alive) return;
+                const byOwner = {};
+                (entry?.rosters || []).forEach(r => { if (r && r.owner_id) byOwner[String(r.owner_id)] = r; });
+                setHistRosters({ season: histSeason, byOwner: entry ? byOwner : null });
+            } catch (e) {
+                if (window.wrLog) window.wrLog('compare.histRosters', e);
+                if (alive) setHistRosters({ season: histSeason, byOwner: null });
+            }
+        })();
+        return () => { alive = false; };
+    }, [histSeason, leagueId]);
     // Redraft → build ROS values so roster-strength comparisons reflect
     // rest-of-season production (no-op → DHQ for dynasty/keeper).
     React.useMemo(() => {
@@ -601,7 +649,7 @@ function CompareTab({
             yrsExp: p.years_exp || 0,
             gp,
             pts,
-            proj: projForField(pid),
+            proj: histSeason ? null : projForField(pid),
             ppg: calcFieldPPG(pid),
             dhq: scores[pid] || scores[String(pid)] || 0,
             peakYrs: age ? Math.max(0, peakEnd - age) : 0,
@@ -942,7 +990,7 @@ function CompareTab({
                                 {player.team} · {player.yrsExp}y · {player.gp > 0 ? player.gp + ' GP' : '0 GP'}
                             </div>
                             <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.66, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {(player.pts != null ? player.pts : '—') + ' pts · ' + (player.ppg > 0 ? player.ppg : '—') + ' ppg · ' + (player.proj != null ? player.proj : '—') + ' proj'}
+                                {(player.pts != null ? player.pts : '—') + ' pts · ' + (player.ppg > 0 ? player.ppg : '—') + ' ppg' + (histSeason ? '' : ' · ' + (player.proj != null ? player.proj : '—') + ' proj')}
                             </div>
                         </div>
                         <div style={{ ...mono, color: dhqCol, fontSize: '0.72rem', fontWeight: 850, flexShrink: 0 }}>{player.dhq > 0 ? player.dhq.toLocaleString() : '-'}</div>
@@ -1959,6 +2007,14 @@ function CompareTab({
                 const [, pHi] = curve.peak || [24, 29];
                 const declineHi = curve.decline?.[1] || 32;
                 const age = p.age || null;
+                // gp/pts come from statsData, which the time machine swaps to the
+                // viewed season — so the stat line is that year's in Historical
+                // View and this year's otherwise (owner report 2026-08-27: this
+                // enrich lacked them entirely; the roster grid showed 0 GP / —).
+                const st = statsRef[pid] || statsRef[String(pid)] || {};
+                const gp = Number(st.gp || 0);
+                const pts = gp > 0 && typeof window.App?.calcRawPts === 'function'
+                    ? Math.round(window.App.calcRawPts(st, scoring)) : null;
                 return {
                     pid,
                     p,
@@ -1967,6 +2023,9 @@ function CompareTab({
                     age,
                     team: p.team || 'FA',
                     yrsExp: p.years_exp || 0,
+                    gp,
+                    pts,
+                    proj: histSeason ? null : projForField(pid),
                     peakYrs: age ? Math.max(0, pHi - age) : 0,
                     valueYrs: age ? Math.max(0, declineHi - age) : 0,
                     ppg: calcPlayerPPG(pid),
@@ -1992,6 +2051,26 @@ function CompareTab({
                     count: Math.max(myAtPos.length, theirAtPos.length),
                 };
             }).filter(p => p.count > 0);
+
+            // Historical View: ONLY the roster grid swaps to that season's
+            // owner-matched rosters — every other duel panel (matchup read,
+            // edges, picks) stays on today's rosters and values, which the
+            // Historical banner already frames as current-day.
+            const histReady = histSeason && histRosters && histRosters.season === histSeason && histRosters.byOwner;
+            const histMineRoster = histReady ? histRosters.byOwner[String(myRoster?.owner_id)] : null;
+            const histTheirsRoster = histReady ? histRosters.byOwner[String(theirRoster?.owner_id)] : null;
+            const histGridActive = !!(histMineRoster || histTheirsRoster);
+            const gridSummaries = histGridActive ? (() => {
+                const em = ((histMineRoster && histMineRoster.players) || []).map(enrich).filter(Boolean);
+                const et = ((histTheirsRoster && histTheirsRoster.players) || []).map(enrich).filter(Boolean);
+                return allPositions.map(pos => {
+                    const myAtPos = em.filter(r => r.pos === pos).sort((a, b) => b.dhq - a.dhq);
+                    const theirAtPos = et.filter(r => r.pos === pos).sort((a, b) => b.dhq - a.dhq);
+                    const myPosDHQ = myAtPos.reduce((s, x) => s + x.dhq, 0);
+                    const theirPosDHQ = theirAtPos.reduce((s, x) => s + x.dhq, 0);
+                    return { pos, myAtPos, theirAtPos, myPosDHQ, theirPosDHQ, diff: myPosDHQ - theirPosDHQ, topMine: myAtPos[0], topTheirs: theirAtPos[0], count: Math.max(myAtPos.length, theirAtPos.length) };
+                }).filter(p => p.count > 0);
+            })() : positionSummaries;
 
             const youLead = positionSummaries.filter(p => p.diff > 0).length;
             const theyLead = positionSummaries.filter(p => p.diff < 0).length;
@@ -2099,7 +2178,7 @@ function CompareTab({
                                 {!isPhone && <span>{r.gp > 0 ? r.gp : 0} GP</span>}
                                 {!isPhone && <span>{(r.pts != null ? r.pts : '—') + ' pts'}</span>}
                                 <span>{(r.ppg > 0 ? r.ppg : '—') + ' ppg'}</span>
-                                <span>{(r.proj != null ? r.proj : '—') + ' proj'}</span>
+                                {!histSeason && <span>{(r.proj != null ? r.proj : '—') + ' proj'}</span>}
                             </div>
                         </div>
                         <span style={{ ...mono, fontWeight: 700, fontSize: '0.76rem', color: dhqCol, flexShrink: 0 }}>{r.dhq > 0 ? r.dhq.toLocaleString() : '-'}</span>
@@ -2331,10 +2410,12 @@ function CompareTab({
 
                 <div style={{ marginTop: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', marginBottom: '10px' }}>
-                        <div style={{ fontFamily: 'var(--font-body)', fontSize: '0.72rem', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Full Roster by Position</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: '0.72rem', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                            Full Roster by Position{histSeason ? (histGridActive ? ' — ' + histSeason + ' rosters' : ' — ' + histSeason + ' rosters unavailable, showing current') : ''}
+                        </div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.62 }}>Click any player to open the player card.</div>
                     </div>
-                    {positionSummaries.map(summary => {
+                    {gridSummaries.map(summary => {
                         const maxLen = Math.max(summary.myAtPos.length, summary.theirAtPos.length);
                         const total = Math.max(1, summary.myPosDHQ + summary.theirPosDHQ);
                         const myPosPct = summary.myPosDHQ / total * 100;
