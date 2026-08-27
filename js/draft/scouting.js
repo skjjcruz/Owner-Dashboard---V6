@@ -80,7 +80,10 @@
             });
             _nameIndex = indexProspects(_prospects);
             window.DraftCC.scouting.isLoaded = true;
-            if (window.wrLog) window.wrLog('scouting.loaded', { count: _prospects.length, source: 'rookie-data' });
+            // Success breadcrumb — console only. This used to go through wrLog,
+            // which files into the Mission Control error table: every draft-
+            // surface open logged a fake error (17 rows / 4 users, 2026-08-27).
+            if (typeof console !== 'undefined') console.info('[WarRoom] scouting.loaded', { count: _prospects.length, source: 'rookie-data' });
             return _prospects;
         })();
         return _ready;

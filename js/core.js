@@ -746,7 +746,18 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
                         window.dispatchEvent(new CustomEvent('wr:bigboard-write', { detail: { key, value: parsed } }));
                     } catch (e2) { /* CustomEvent unsupported — non-fatal, persistence already succeeded */ }
                 }
-            } catch(e) { wrLog('storage.set:' + key, e); }
+            } catch(e) {
+                // Storage full: run the shared janitor (evicts rebuildable
+                // caches only) and retry once before logging the failure.
+                const J = window.DhqStorageJanitor;
+                if (J && J.isQuotaError(e) && J.run('quota:wr-set')) {
+                    try {
+                        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+                        return;
+                    } catch (e2) { wrLog('storage.set:' + key, e2); return; }
+                }
+                wrLog('storage.set:' + key, e);
+            }
         },
         remove(key) {
             try { localStorage.removeItem(key); } catch(e) { wrLog('storage.remove:' + key, e); }
