@@ -72,6 +72,9 @@ const WrCalendar = (function () {
                     date: new Date(Number(draftTs)),
                     icon: '🏈',
                     type: 'league',
+                    // Sleeper schedules drafts to the minute — carry the
+                    // time-of-day so renderers can show the real clock time.
+                    hasTime: true,
                     detail: (draftRounds ? draftRounds + ' rounds' : 'Draft') + ', ' + (draftType || 'snake'),
                 });
             } else {
@@ -210,9 +213,17 @@ function CalendarTab({ currentLeague, myRoster, leagueSkin }) {
     // ── Build calendar events from league settings + custom ──
     // Delegates to the shared engine (window.WrCalendar, defined above)
     // so the Home dashboard "League Calendar" widget shows the same dates.
+    // Re-render when the league-detail header's draft fetch lands — that fetch
+    // publishes window.S.drafts, which build() prefers for the draft date.
+    const [draftsTick, setDraftsTick] = useState(0);
+    React.useEffect(() => {
+        const h = () => setDraftsTick(n => n + 1);
+        window.addEventListener('wr:drafts-loaded', h);
+        return () => window.removeEventListener('wr:drafts-loaded', h);
+    }, []);
     const events = useMemo(
         () => WrCalendar.build(currentLeague, leagueSkin, customEvents),
-        [currentLeague, customEvents, leagueSkin]
+        [currentLeague, customEvents, leagueSkin, draftsTick]
     );
 
     // ── Add custom event ──
@@ -262,7 +273,8 @@ function CalendarTab({ currentLeague, myRoster, leagueSkin }) {
                         const isPast = event.date.getTime() < now;
                         const isNext = !isPast && (i === 0 || events[i - 1].date.getTime() < now);
                         const daysAway = Math.ceil((event.date.getTime() - now) / 86400000);
-                        const dateStr = event.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: event.date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined });
+                        const dateStr = event.date.toLocaleDateString('en-US', { weekday: event.hasTime ? 'short' : undefined, month: 'short', day: 'numeric', year: event.date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })
+                            + (event.hasTime ? ', ' + event.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '');
                         const countdown = !isPast && daysAway <= 30 ? (daysAway === 0 ? 'Today' : daysAway === 1 ? 'Tomorrow' : daysAway + ' days') : null;
 
                         return React.createElement('div', { key: event.id, style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderBottom: i < events.length - 1 ? '1px solid var(--ov-3, rgba(255,255,255,0.04))' : 'none', opacity: isPast ? 0.4 : 1, background: isNext ? 'var(--acc-fill1, rgba(212,175,55,0.06))' : 'transparent' } },

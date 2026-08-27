@@ -559,6 +559,17 @@
                 .then(rows => {
                     if (cancelled) return;
                     const drafts = Array.isArray(rows) ? rows : [];
+                    // Publish to the shared pocket the calendar engine reads
+                    // (WrCalendar.build: window.S.drafts || currentLeague.drafts)
+                    // and announce — otherwise the calendar falls back to its
+                    // mid-August "date TBD" placeholder while this header
+                    // already knows the real Sleeper draft time (owner report
+                    // 2026-08-27). Empty results never clobber hydrated data.
+                    if (drafts.length) {
+                        window.S = window.S || {};
+                        window.S.drafts = drafts;
+                        try { window.dispatchEvent(new CustomEvent('wr:drafts-loaded')); } catch (e) { /* old Safari */ }
+                    }
                     // Draft-of-record rule (draft/state.js selectCurrentDraft):
                     // live > unsuperseded latest complete ('review') > next
                     // pre_draft — so a just-completed draft keeps a header entry
