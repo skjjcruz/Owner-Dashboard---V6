@@ -36,7 +36,12 @@
         return {
             minAwayMs: t.minAwayMs != null ? t.minAwayMs : 15 * 60 * 1000,
             minTouchGapMs: t.minTouchGapMs != null ? t.minTouchGapMs : 30 * 1000,
-            minCheckGapMs: t.minCheckGapMs != null ? t.minCheckGapMs : 60 * 60 * 1000,
+            // 10 min, not an hour: the hour-long cool-down meant a wake inside
+            // the window skipped the probe entirely and a fresh deploy could sit
+            // unnoticed for most of an hour past its first wake (owner test
+            // 2026-08-27 "didn't work"). One ~230KB probe per 10-min-spaced
+            // wake is cheap; the reload rules are unchanged.
+            minCheckGapMs: t.minCheckGapMs != null ? t.minCheckGapMs : 10 * 60 * 1000,
             intervalMs: t.intervalMs != null ? t.intervalMs : 6 * 60 * 60 * 1000,
             intervalIdleMs: t.intervalIdleMs != null ? t.intervalIdleMs : 5 * 60 * 1000,
         };
