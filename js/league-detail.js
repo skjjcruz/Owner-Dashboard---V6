@@ -615,7 +615,10 @@
             const days = Math.floor(diff / 86400000);
             const hours = Math.floor((diff % 86400000) / 3600000);
             const mins = Math.floor((diff % 3600000) / 60000);
-            return { label: 'Draft Upcoming', clock: (days > 0 ? days + 'd ' : '') + hours + 'h ' + mins + 'm' };
+            // Owner ask 2026-08-27: the countdown alone made owners do date
+            // math — show the scheduled date beside the timer.
+            const when = new Date(Number(headerDraftInfo.start_time)).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            return { label: 'Draft Upcoming', clock: (days > 0 ? days + 'd ' : '') + hours + 'h ' + mins + 'm', when };
         }, [headerDraftInfo, headerClockNow]);
 
         // ── SeasonContext state — reactive data shared with tab components ──
@@ -3714,7 +3717,7 @@
                                         </div>}
                                         {headerDraftClock && <button style={rowSt} onClick={doDraftJump}>
                                             <span style={rowLbl}>Draft</span>
-                                            <span style={{ ...rowVal, color: 'var(--gold)', fontFamily: "'JetBrains Mono', monospace" }}>{[headerDraftClock.label, headerDraftClock.clock].filter(Boolean).join(' · ')}</span>
+                                            <span style={{ ...rowVal, color: 'var(--gold)', fontFamily: "'JetBrains Mono', monospace" }}>{[headerDraftClock.label, headerDraftClock.clock, headerDraftClock.when].filter(Boolean).join(' · ')}</span>
                                             <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: '0.8rem' }}>›</span>
                                         </button>}
                                     </div>
@@ -3832,7 +3835,8 @@
                             }
                         },
                             headerDraftClock.label ? React.createElement('span', { style: { color: 'var(--silver)', opacity: 0.78 } }, headerDraftClock.label) : null,
-                            React.createElement('strong', { style: { color: 'var(--white)', fontFamily: "'JetBrains Mono', monospace", fontSize: 'var(--text-label, 0.75rem)' } }, headerDraftClock.clock)
+                            React.createElement('strong', { style: { color: 'var(--white)', fontFamily: "'JetBrains Mono', monospace", fontSize: 'var(--text-label, 0.75rem)' } }, headerDraftClock.clock),
+                            headerDraftClock.when ? React.createElement('span', { style: { color: 'var(--silver)', opacity: 0.85, fontFamily: "'JetBrains Mono', monospace", fontSize: 'var(--text-label, 0.75rem)' } }, '· ' + headerDraftClock.when) : null
                         )}
                     </div>
                     )}

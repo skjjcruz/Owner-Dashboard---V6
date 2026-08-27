@@ -10,6 +10,42 @@
 // ─── Shared calendar engine — window.WrCalendar ──────────────────────
 const WrCalendar = (function () {
     function eventsKey(leagueId) { return 'wr_calendar_' + leagueId; }
+
+    // ── Real NFL kickoff (owner report 2026-08-27: 'Sep 5' was a hardcoded
+    // guess). The first Week-1 game's actual datetime comes from our own
+    // nfl-scoreboard relay (3h-cached server-side); while it loads — or if it
+    // fails — fall back to the Thursday after Labor Day, the modern opener
+    // slot. Sleeper's state.season_start_date is the PRESEASON start during
+    // August, so it is deliberately not used here.
+    const _kickoff = {}; // season → { ts } | { pending } | { failed }
+    function kickoffGuess(season) {
+        const first = new Date(Number(season), 8, 1);
+        const firstMonday = new Date(Number(season), 8, 1 + ((8 - first.getDay()) % 7));
+        return new Date(firstMonday.getTime() + 3 * 86400000);
+    }
+    function kickoffFor(season) {
+        const key = String(season);
+        const k = _kickoff[key];
+        if (k && k.ts) return new Date(k.ts);
+        if (!k) {
+            _kickoff[key] = { pending: true };
+            try {
+                const ep = window.App?.NflContext?.endpoint ? window.App.NflContext.endpoint() : null;
+                if (!ep) { _kickoff[key] = { failed: true }; return null; }
+                fetch(ep + '?week=1&seasontype=2&season=' + key)
+                    .then(r => (r.ok ? r.json() : null))
+                    .then(espn => {
+                        const times = ((espn && espn.events) || []).map(e => Date.parse(e.date)).filter(t => t > 0);
+                        if (times.length) {
+                            _kickoff[key] = { ts: Math.min.apply(null, times) };
+                            try { window.dispatchEvent(new CustomEvent('wr:kickoff-loaded')); } catch (e) { /* old Safari */ }
+                        } else { _kickoff[key] = { failed: true }; }
+                    })
+                    .catch(() => { _kickoff[key] = { failed: true }; });
+            } catch (e) { _kickoff[key] = { failed: true }; }
+        }
+        return null;
+    }
     function readCustomEvents(leagueId) {
         try { return JSON.parse(localStorage.getItem(eventsKey(leagueId)) || '[]'); } catch { return []; }
     }
@@ -96,12 +132,15 @@ const WrCalendar = (function () {
             }
         }
 
+        // Real kickoff (or the Labor-Day-Thursday guess while it loads) anchors
+        // every week-derived date below.
+        const realKickoff = kickoffFor(season);
+        const seasonStart = realKickoff || kickoffGuess(season);
+
         // Trade deadline
         const tradeDeadline = settings.trade_deadline;
         if (tradeDeadline && tradeDeadline > 0) {
             // Sleeper uses week number for trade deadline
-            // Approximate: season start (Sept 5) + (week * 7 days)
-            const seasonStart = new Date(season, 8, 5); // Sept 5
             const deadlineDate = new Date(seasonStart.getTime() + tradeDeadline * 7 * 86400000);
             items.push({
                 id: 'trade-deadline',
@@ -116,7 +155,6 @@ const WrCalendar = (function () {
         // Playoff start
         const playoffStart = settings.playoff_week_start;
         if (playoffStart && playoffStart > 0) {
-            const seasonStart = new Date(season, 8, 5);
             const playoffDate = new Date(seasonStart.getTime() + playoffStart * 7 * 86400000);
             items.push({
                 id: 'playoffs',
@@ -139,15 +177,15 @@ const WrCalendar = (function () {
             });
         }
 
-        // Season start (Week 1)
-        const seasonStartDate = new Date(season, 8, 5);
-        if (seasonStartDate.getTime() > now - 30 * 86400000) {
+        // Season start (Week 1) — the real first-game datetime when loaded.
+        if (seasonStart.getTime() > now - 30 * 86400000) {
             items.push({
                 id: 'season-start',
                 title: 'Season Kickoff',
-                date: seasonStartDate,
+                date: seasonStart,
                 icon: '🚀',
                 type: 'league',
+                hasTime: !!realKickoff,
                 detail: season + ' NFL Season',
             });
         }
@@ -224,7 +262,11 @@ function CalendarTab({ currentLeague, myRoster, leagueSkin }) {
     React.useEffect(() => {
         const h = () => setDraftsTick(n => n + 1);
         window.addEventListener('wr:drafts-loaded', h);
-        return () => window.removeEventListener('wr:drafts-loaded', h);
+        window.addEventListener('wr:kickoff-loaded', h);
+        return () => {
+            window.removeEventListener('wr:drafts-loaded', h);
+            window.removeEventListener('wr:kickoff-loaded', h);
+        };
     }, []);
     const events = useMemo(
         () => WrCalendar.build(currentLeague, leagueSkin, customEvents),

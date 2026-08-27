@@ -22,7 +22,11 @@
         React.useEffect(() => {
             const h = () => setDraftsTick(n => n + 1);
             window.addEventListener('wr:drafts-loaded', h);
-            return () => window.removeEventListener('wr:drafts-loaded', h);
+            window.addEventListener('wr:kickoff-loaded', h);
+            return () => {
+                window.removeEventListener('wr:drafts-loaded', h);
+                window.removeEventListener('wr:kickoff-loaded', h);
+            };
         }, []);
         const events = React.useMemo(() => {
             try { return (window.WrCalendar?.getUpcoming(currentLeague, leagueSkin)) || []; }
