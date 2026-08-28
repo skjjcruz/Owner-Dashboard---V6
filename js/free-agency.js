@@ -748,13 +748,12 @@
         // last season until then (in August a this-year default would filter
         // out the entire league at 0 GP).
         const faSeasonYear = Number(currentLeague?.season) || new Date().getFullYear();
-        const [faPtsYear, setFaPtsYear] = useState(null); // null = auto
         const faAutoPtsYear = useMemo(() => {
             const st = statsData || {};
             for (const k in st) { if ((st[k]?.gp || 0) > 0) return faSeasonYear; }
             return faSeasonYear - 1;
         }, [statsData, faSeasonYear]);
-        const faPtsYearActive = faPtsYear || faAutoPtsYear;
+        const faPtsYearActive = faAutoPtsYear;
         const faAdvCount = String(faAdv.minPrevPts).trim() !== '' ? 1 : 0;
         const faAdvPass = (x) => {
             if (!faAdvCount) return true;
@@ -2218,11 +2217,6 @@
                     </div>
 
                     <span className="wr-module-toolbar-label">Min pts</span>
-                    <div className="wr-module-nav">
-                    {[faSeasonYear, faSeasonYear - 1].map(yr => (
-                        <button key={yr} className={faPtsYearActive === yr ? 'is-active' : ''} onClick={() => setFaPtsYear(yr)} title={yr === faSeasonYear && faAutoPtsYear !== faSeasonYear ? 'No ' + yr + ' stats yet — everyone reads 0 until games are played' : 'Points scored in ' + yr}>{yr}</button>
-                    ))}
-                    </div>
                     <input
                         type="number" inputMode="numeric" value={faAdv.minPrevPts} placeholder="e.g. 100"
                         title={'Only show players with at least this many ' + faPtsYearActive + ' points'}
@@ -2230,7 +2224,7 @@
                         style={{ width: '84px', padding: '3px 8px', minHeight: '44px', boxSizing: 'border-box', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid ' + (faAdvCount ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.1))'), borderRadius: 'var(--card-radius-sm, 8px)', color: 'var(--white)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', outline: 'none' }}
                     />
                     {faAdvCount ? (
-                        <button type="button" onClick={() => { setFaAdv({ minPrevPts: '' }); setFaPtsYear(null); }} title="Clear the min points filter" style={{ padding: '3px 8px', minHeight: '44px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', background: 'transparent', color: 'var(--silver)', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: 'var(--card-radius-sm, 8px)', cursor: 'pointer' }}>✕</button>
+                        <button type="button" onClick={() => setFaAdv({ minPrevPts: '' })} title="Clear the min points filter" style={{ padding: '3px 8px', minHeight: '44px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', background: 'transparent', color: 'var(--silver)', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: 'var(--card-radius-sm, 8px)', cursor: 'pointer' }}>✕</button>
                     ) : null}
 
                     {window.WR?.SavedViews?.SavedViewBar && (
