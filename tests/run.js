@@ -890,6 +890,20 @@ test('update sentinel: quiet self-update with all owner guard rails (2026-08-27)
     ok(html.includes('js/shared/update-sentinel.js?v='), 'index.html must load the sentinel with a cache-buster');
   });
 
+test('draft storage: no orphan recaps, quota-safe mid-draft saves (2026-08-28)',
+  () => {
+    // The midnight live-draft quota failure: the resume-snapshot save bypassed
+    // the storage wrappers (janitor never ran), and every saved recap also
+    // wrote a never-read wr_draft_recap_<ts> orphan. Pin all three fixes.
+    const st = fs.readFileSync(path.join(ROOT, 'js/draft/state.js'), 'utf8');
+    ok(!st.includes("opts.key || ('wr_draft_recap_'"), 'saveDraftRecap must not write the orphan timestamp copy');
+    ok(st.includes('archiveDraftRecap(recap)'), 'the capped per-league archive stays the recap record');
+    ok(st.includes("J.run('quota:draft-save')"), 'a quota-failed resume-snapshot save must run the janitor and retry');
+    const sh = fs.readFileSync(path.join(ROOT, 'reconai-shared/storage.js'), 'utf8');
+    ok(sh.includes('wr_draft_recap_\\d+$'), 'janitor must reclaim orphan recaps by digit-only suffix');
+    ok(!/PURGEABLE[^]*archive/.test(sh.match(/PURGEABLE_KEY_PATTERNS = \[[^\]]*\]/)[0]), 'archive keys must stay untouchable');
+  });
+
 test('all players default view matches the owner ruling (2026-08-24)',
   () => {
     // Pos · Team · Years · Points · GP · PPG · Weekly Proj · DHQ · ADP.

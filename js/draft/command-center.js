@@ -5897,7 +5897,7 @@
                                             ? stateHelpers.saveDraftRecap(state, { grade, key })
                                             : recap;
                                         if (!payload) localStorage.setItem(key, JSON.stringify(recap || {}));
-                                        alert('Draft recap saved to archive (' + key + ')');
+                                        alert('Draft recap saved to archive');
                                     } catch (e) { alert('Save failed: ' + e.message); }
                                 }}
                                 primaryLabel={forcedMode === 'live-sync' ? 'VIEW DRAFT BOARD →' : 'DRAFT AGAIN'}

@@ -2616,7 +2616,17 @@
             };
             // Use the tab's mode to pick the right key (live-sync → 'live', else 'mock')
             const keyMode = forcedMode || (state.mode === 'live-sync' ? 'live-sync' : null);
-            localStorage.setItem(LS_KEY(state.leagueId, keyMode), JSON.stringify(toSave));
+            try {
+                localStorage.setItem(LS_KEY(state.leagueId, keyMode), JSON.stringify(toSave));
+            } catch (e) {
+                // This raw setItem bypassed the b38 storage-wrapper janitor, so
+                // a full device silently lost its mid-draft resume snapshot
+                // (owner stats 2026-08-28, midnight live draft). Clean the
+                // rebuildable caches and retry once before giving up.
+                const J = window.DhqStorageJanitor;
+                if (!(J && J.isQuotaError(e) && J.run('quota:draft-save'))) throw e;
+                localStorage.setItem(LS_KEY(state.leagueId, keyMode), JSON.stringify(toSave));
+            }
         } catch (e) {
             if (window.wrLog) window.wrLog('draftState.save', e);
         }
@@ -3001,9 +3011,10 @@
 
     function saveDraftRecap(state, opts = {}) {
         const recap = buildDraftRecap(state, opts);
-        if (typeof localStorage !== 'undefined') {
-            localStorage.setItem(opts.key || ('wr_draft_recap_' + Date.now()), JSON.stringify(recap));
-        }
+        // The archive below is the ONLY read path (post-draft's RECAP_KEY).
+        // A loose wr_draft_recap_<ts> copy used to be written here too — never
+        // read by anything, one orphan per saved recap, and the bulk filler on
+        // the quota-blown device from the 2026-08-28 stats. Archive only.
         archiveDraftRecap(recap);
         saveDraftLearning(recap);
         return recap;
