@@ -739,16 +739,14 @@
         const [faSort, setFaSort] = useState({ key: 'dhq', dir: -1 });
         const [faSelectedPid, setFaSelectedPid] = useState(null);
         const [faSearch, setFaSearch] = useState('');
-        // ── Detailed search prototype (owner ask 2026-08-27): stackable numeric
-        // criteria over the market pool — combined with the text search and the
-        // POS chips below. All data is already in hand (prevStatsData prop,
-        // years_exp/age on the player record, ADP via the shared market feed).
+        // ── Min-points filter (owner ruling 2026-08-28: pared from the five-
+        // criteria prototype to the one window he kept). Stacks with the text
+        // search and the POS chips; the season chips pick which year's points.
         const [faAdvOpen, setFaAdvOpen] = useState(false);
-        const [faAdv, setFaAdv] = useState({ minPrevPts: '', maxYears: '', adpTop: '', minDhq: '', maxAge: '' });
-        // Which season the points window reads (owner ask 2026-08-28): chips
-        // for this season and last. Default is AUTO — the current season once
-        // it has real stats, last season until then (in August a this-year
-        // default would filter out the entire league at 0 GP).
+        const [faAdv, setFaAdv] = useState({ minPrevPts: '' });
+        // Season default is AUTO — the current season once it has real stats,
+        // last season until then (in August a this-year default would filter
+        // out the entire league at 0 GP).
         const faSeasonYear = Number(currentLeague?.season) || new Date().getFullYear();
         const [faPtsYear, setFaPtsYear] = useState(null); // null = auto
         const faAutoPtsYear = useMemo(() => {
@@ -757,16 +755,7 @@
             return faSeasonYear - 1;
         }, [statsData, faSeasonYear]);
         const faPtsYearActive = faPtsYear || faAutoPtsYear;
-        const faAdvCount = Object.values(faAdv).filter(v => String(v).trim() !== '').length;
-        // ADP lands after first paint; LISTENING alone is not enough (b14/b15
-        // lesson) — ask for the map on mount too, cached results resolve fast.
-        const [, forceAdpTick] = useState(0);
-        useEffect(() => {
-            const h = () => forceAdpTick(n => n + 1);
-            window.addEventListener('wr:adp-loaded', h);
-            try { if (typeof window.App?.fetchRedraftAdp === 'function') window.App.fetchRedraftAdp().catch(() => {}); } catch (e) { /* dashes */ }
-            return () => window.removeEventListener('wr:adp-loaded', h);
-        }, []);
+        const faAdvCount = String(faAdv.minPrevPts).trim() !== '' ? 1 : 0;
         const faAdvPass = (x) => {
             if (!faAdvCount) return true;
             const minPts = parseFloat(faAdv.minPrevPts);
@@ -776,18 +765,6 @@
                 const pts = st.gp > 0 && typeof calcRawPts === 'function' ? calcRawPts(st) : 0;
                 if (!(pts >= minPts)) return false;
             }
-            const maxY = parseInt(faAdv.maxYears, 10);
-            if (isFinite(maxY) && (x.p.years_exp || 0) > maxY) return false;
-            const maxA = parseInt(faAdv.maxAge, 10);
-            if (isFinite(maxA) && (x.p.age || 99) > maxA) return false;
-            const topN = parseInt(faAdv.adpTop, 10);
-            if (isFinite(topN) && topN > 0) {
-                const g = typeof window.App?.getRedraftAdp === 'function' ? window.App.getRedraftAdp(String(x.pid)) : null;
-                const adp = g && typeof g.adp === 'number' && g.adp > 0 ? g.adp : null;
-                if (adp == null || adp > topN) return false;
-            }
-            const minD = parseFloat(faAdv.minDhq);
-            if (isFinite(minD) && !((x.dhq || 0) >= minD)) return false;
             return true;
         };
         const [visibleFaCols, setVisibleFaCols] = useState(() => {
@@ -2181,7 +2158,7 @@
                         <input value={faSearch} onChange={e => setFaSearch(e.target.value)} placeholder="Search player, team, college..." />
                         <button
                             onClick={() => setFaAdvOpen(o => !o)}
-                            title="Detailed search: stack numeric criteria with the search box and POS chips"
+                            title="Min points filter: stacks with the search box and POS chips"
                             style={{ flexShrink: 0, padding: '8px 12px', minHeight: '40px', fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontFamily: 'var(--font-body)', background: faAdvCount ? 'var(--acc-fill1, rgba(212,175,55,0.08))' : 'var(--ov-3, rgba(255,255,255,0.04))', color: faAdvCount || faAdvOpen ? 'var(--gold)' : 'var(--silver)', border: '1px solid ' + (faAdvCount || faAdvOpen ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.1))'), borderRadius: 'var(--card-radius-sm, 8px)', cursor: 'pointer' }}
                         >Filters{faAdvCount ? ' · ' + faAdvCount : ''}</button>
                     </div>
@@ -2190,42 +2167,34 @@
                 {faAdvOpen && (
                 <div style={{ padding: '10px 14px 8px', margin: '0 0 12px', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: 'var(--card-radius-sm, 8px)' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'flex-start' }}>
-                        {[
-                            { key: 'minPrevPts', label: 'Min points', ph: 'e.g. 100' },
-                            { key: 'maxYears', label: 'Max years', ph: 'e.g. 3' },
-                            { key: 'adpTop', label: 'ADP inside top', ph: 'e.g. 150' },
-                            { key: 'minDhq', label: 'DHQ at least', ph: 'e.g. 1000' },
-                            { key: 'maxAge', label: 'Max age', ph: 'e.g. 25' },
-                        ].map(f => (
-                            <label key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '20px', whiteSpace: 'nowrap' }}>
-                                    {f.label}
-                                    {f.key === 'minPrevPts' && [faSeasonYear, faSeasonYear - 1].map(yr => (
-                                        <button
-                                            key={yr}
-                                            onClick={() => setFaPtsYear(yr)}
-                                            title={yr === faSeasonYear && faAutoPtsYear !== faSeasonYear ? 'No ' + yr + ' stats yet — everyone reads 0 until games are played' : 'Points scored in ' + yr}
-                                            style={{ padding: '1px 7px', fontSize: '0.62rem', fontWeight: 800, fontFamily: 'var(--font-mono)', lineHeight: 1.6, background: faPtsYearActive === yr ? 'var(--acc-fill1, rgba(212,175,55,0.1))' : 'transparent', color: faPtsYearActive === yr ? 'var(--gold)' : 'var(--silver)', border: '1px solid ' + (faPtsYearActive === yr ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.08))'), borderRadius: 'var(--card-radius-xs, 5px)', cursor: 'pointer' }}
-                                        >{yr}</button>
-                                    ))}
-                                </span>
-                                <input
-                                    type="number" inputMode="numeric" value={faAdv[f.key]} placeholder={f.ph}
-                                    onChange={e => { const v = e.target.value; setFaAdv(prev => ({ ...prev, [f.key]: v })); }}
-                                    style={{ width: f.key === 'minPrevPts' ? '150px' : '110px', padding: '8px 10px', height: '40px', boxSizing: 'border-box', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid ' + (String(faAdv[f.key]).trim() ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.1))'), borderRadius: 'var(--card-radius-sm, 8px)', color: 'var(--white)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
-                                />
-                            </label>
-                        ))}
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '20px', whiteSpace: 'nowrap' }}>
+                                Min points
+                                {[faSeasonYear, faSeasonYear - 1].map(yr => (
+                                    <button
+                                        key={yr}
+                                        onClick={() => setFaPtsYear(yr)}
+                                        title={yr === faSeasonYear && faAutoPtsYear !== faSeasonYear ? 'No ' + yr + ' stats yet — everyone reads 0 until games are played' : 'Points scored in ' + yr}
+                                        style={{ padding: '1px 7px', fontSize: '0.62rem', fontWeight: 800, fontFamily: 'var(--font-mono)', lineHeight: 1.6, background: faPtsYearActive === yr ? 'var(--acc-fill1, rgba(212,175,55,0.1))' : 'transparent', color: faPtsYearActive === yr ? 'var(--gold)' : 'var(--silver)', border: '1px solid ' + (faPtsYearActive === yr ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.08))'), borderRadius: 'var(--card-radius-xs, 5px)', cursor: 'pointer' }}
+                                    >{yr}</button>
+                                ))}
+                            </span>
+                            <input
+                                type="number" inputMode="numeric" value={faAdv.minPrevPts} placeholder="e.g. 100"
+                                onChange={e => { const v = e.target.value; setFaAdv({ minPrevPts: v }); }}
+                                style={{ width: '150px', padding: '8px 10px', height: '40px', boxSizing: 'border-box', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid ' + (String(faAdv.minPrevPts).trim() ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.1))'), borderRadius: 'var(--card-radius-sm, 8px)', color: 'var(--white)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+                            />
+                        </label>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                             <span style={{ height: '20px' }}></span>
                             <button
-                                onClick={() => { setFaAdv({ minPrevPts: '', maxYears: '', adpTop: '', minDhq: '', maxAge: '' }); setFaPtsYear(null); }}
+                                onClick={() => { setFaAdv({ minPrevPts: '' }); setFaPtsYear(null); }}
                                 disabled={!faAdvCount}
                                 style={{ padding: '8px 14px', height: '40px', boxSizing: 'border-box', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', background: 'transparent', color: faAdvCount ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.28))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: 'var(--card-radius-sm, 8px)', cursor: faAdvCount ? 'pointer' : 'default' }}
                             >Clear</button>
                         </div>
                     </div>
-                    <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.55, marginTop: '8px' }}>Stacks with the search box and the POS row below · ADP is redraft market ADP</div>
+                    <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.55, marginTop: '8px' }}>Stacks with the search box and the POS row below</div>
                 </div>
                 )}
 
