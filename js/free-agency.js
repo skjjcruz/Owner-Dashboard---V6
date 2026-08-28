@@ -745,6 +745,18 @@
         // years_exp/age on the player record, ADP via the shared market feed).
         const [faAdvOpen, setFaAdvOpen] = useState(false);
         const [faAdv, setFaAdv] = useState({ minPrevPts: '', maxYears: '', adpTop: '', minDhq: '', maxAge: '' });
+        // Which season the points window reads (owner ask 2026-08-28): chips
+        // for this season and last. Default is AUTO — the current season once
+        // it has real stats, last season until then (in August a this-year
+        // default would filter out the entire league at 0 GP).
+        const faSeasonYear = Number(currentLeague?.season) || new Date().getFullYear();
+        const [faPtsYear, setFaPtsYear] = useState(null); // null = auto
+        const faAutoPtsYear = useMemo(() => {
+            const st = statsData || {};
+            for (const k in st) { if ((st[k]?.gp || 0) > 0) return faSeasonYear; }
+            return faSeasonYear - 1;
+        }, [statsData, faSeasonYear]);
+        const faPtsYearActive = faPtsYear || faAutoPtsYear;
         const faAdvCount = Object.values(faAdv).filter(v => String(v).trim() !== '').length;
         // ADP lands after first paint; LISTENING alone is not enough (b14/b15
         // lesson) — ask for the map on mount too, cached results resolve fast.
@@ -759,8 +771,9 @@
             if (!faAdvCount) return true;
             const minPts = parseFloat(faAdv.minPrevPts);
             if (isFinite(minPts)) {
-                const prev = (prevStatsData || {})[x.pid] || {};
-                const pts = prev.gp > 0 && typeof calcRawPts === 'function' ? calcRawPts(prev) : 0;
+                const src = faPtsYearActive === faSeasonYear ? (statsData || {}) : (prevStatsData || {});
+                const st = src[x.pid] || {};
+                const pts = st.gp > 0 && typeof calcRawPts === 'function' ? calcRawPts(st) : 0;
                 if (!(pts >= minPts)) return false;
             }
             const maxY = parseInt(faAdv.maxYears, 10);
@@ -1116,7 +1129,7 @@
                 }
                 return 0;
             }).slice(0, 50);
-        }, [availablePlayers, faFilter, faSearch, faSort, statsData, prevStatsData, faAdv, rookieOnly, isRookiePlayer, rookieTeamFilter, rookieCollegeFilter, rookieSlotFilter, rookieTeamOf, rookieCollegeOf, rookieSlotMatch, prospectFor]);
+        }, [availablePlayers, faFilter, faSearch, faSort, statsData, prevStatsData, faAdv, faPtsYearActive, rookieOnly, isRookiePlayer, rookieTeamFilter, rookieCollegeFilter, rookieSlotFilter, rookieTeamOf, rookieCollegeOf, rookieSlotMatch, prospectFor]);
 
         const faHeaderStyle = { fontSize: '0.78rem', fontWeight: 700, color: 'var(--gold)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
 
@@ -2177,7 +2190,7 @@
                 {faAdvOpen && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end', padding: '12px 14px', margin: '0 0 12px', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: 'var(--card-radius-sm, 8px)' }}>
                     {[
-                        { key: 'minPrevPts', label: 'Min pts last season', ph: 'e.g. 100' },
+                        { key: 'minPrevPts', label: 'Min points', ph: 'e.g. 100' },
                         { key: 'maxYears', label: 'Max years in league', ph: 'e.g. 3' },
                         { key: 'adpTop', label: 'ADP inside top', ph: 'e.g. 150' },
                         { key: 'minDhq', label: 'DHQ at least', ph: 'e.g. 1000' },
@@ -2190,10 +2203,22 @@
                                 onChange={e => { const v = e.target.value; setFaAdv(prev => ({ ...prev, [f.key]: v })); }}
                                 style={{ width: '110px', padding: '8px 10px', minHeight: '40px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid ' + (String(faAdv[f.key]).trim() ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.1))'), borderRadius: 'var(--card-radius-sm, 8px)', color: 'var(--white)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
                             />
+                            {f.key === 'minPrevPts' && (
+                                <span style={{ display: 'flex', gap: '4px' }}>
+                                    {[faSeasonYear, faSeasonYear - 1].map(yr => (
+                                        <button
+                                            key={yr}
+                                            onClick={() => setFaPtsYear(yr)}
+                                            title={yr === faSeasonYear && faAutoPtsYear !== faSeasonYear ? 'No ' + yr + ' stats yet — everyone reads 0 until games are played' : 'Points scored in ' + yr}
+                                            style={{ padding: '3px 8px', fontSize: '0.62rem', fontWeight: 800, fontFamily: 'var(--font-mono)', background: faPtsYearActive === yr ? 'var(--acc-fill1, rgba(212,175,55,0.1))' : 'var(--ov-3, rgba(255,255,255,0.03))', color: faPtsYearActive === yr ? 'var(--gold)' : 'var(--silver)', border: '1px solid ' + (faPtsYearActive === yr ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.08))'), borderRadius: 'var(--card-radius-xs, 5px)', cursor: 'pointer' }}
+                                        >{yr}</button>
+                                    ))}
+                                </span>
+                            )}
                         </label>
                     ))}
                     <button
-                        onClick={() => setFaAdv({ minPrevPts: '', maxYears: '', adpTop: '', minDhq: '', maxAge: '' })}
+                        onClick={() => { setFaAdv({ minPrevPts: '', maxYears: '', adpTop: '', minDhq: '', maxAge: '' }); setFaPtsYear(null); }}
                         disabled={!faAdvCount}
                         style={{ padding: '8px 12px', minHeight: '40px', fontSize: '0.72rem', fontWeight: 700, background: 'transparent', color: faAdvCount ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.28))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: 'var(--card-radius-sm, 8px)', cursor: faAdvCount ? 'pointer' : 'default' }}
                     >Clear</button>
