@@ -1598,7 +1598,11 @@
                             </div>
                         </main>
 
-                        <aside className="fa-hq-panel">
+                        {/* Right column: Market Leverage and the Transaction Ticker are
+                            two separate boxes (owner ruling 2026-08-28). The wrapper stays
+                            an <aside> so the ≤1280px full-width rule still targets it. */}
+                        <aside style={{ display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0 }}>
+                        <div className="fa-hq-panel">
                             <div className="fa-hq-panel-head">
                                 <span>Market Leverage</span>
                                 <em>{canOutbidRows.length ? canOutbidRows.length + ' teams can outbid you' : 'You control most bids'}</em>
@@ -1632,17 +1636,21 @@
                                     );
                                 })}
                             </div>
+                        </div>
 
-                            {tickerTxns.length && typeof window.WrTxnTickerList === 'function' ? <React.Fragment>
-                                <div className="fa-hq-subhead">Transaction Ticker</div>
-                                <div>
-                                    {React.createElement(window.WrTxnTickerList, {
-                                        transactions: tickerTxns.slice(0, compact ? 3 : 5),
-                                        getOwnerName: tickerOwnerName,
-                                        getPlayerName: tickerPlayerName,
-                                    })}
+                        {tickerTxns.length && typeof window.WrTxnTickerList === 'function' ? (
+                            <div className="fa-hq-panel">
+                                <div className="fa-hq-panel-head">
+                                    <span>Transaction Ticker</span>
+                                    <em>latest adds and drops</em>
                                 </div>
-                            </React.Fragment> : null}
+                                {React.createElement(window.WrTxnTickerList, {
+                                    transactions: tickerTxns.slice(0, compact ? 3 : 5),
+                                    getOwnerName: tickerOwnerName,
+                                    getPlayerName: tickerPlayerName,
+                                })}
+                            </div>
+                        ) : null}
                         </aside>
                     </div>
                 </section>
