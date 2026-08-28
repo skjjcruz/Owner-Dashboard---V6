@@ -1467,41 +1467,27 @@
             }
             return out.sort((a, b) => b.dhq - a.dhq).slice(0, 4);
         })();
-        // Transaction Ticker (owner ask 2026-08-28): the league's recent adds
-        // and drops, read from the same per-week transaction buckets the
-        // dashboard ticker uses (the home-tab ticker stays as-is). Trades are
-        // left to the dashboard — this is the waiver-wire pulse.
-        const tickerRows = (() => {
+        // Transaction Ticker (owner ask 2026-08-28): a direct lift of the
+        // home-tab widget — the rows render through the shared
+        // window.WrTxnTickerList (js/widgets/txn-ticker.js), fed by the same
+        // per-week transaction buckets. The home-tab ticker stays as-is.
+        const tickerTxns = (() => {
             const txnMap = window.S?.transactions || {};
-            const ownerOf = (rid) => {
-                const r = (currentLeague.rosters || []).find(x => x.roster_id === rid);
-                const u = r ? (currentLeague.users || []).find(x => x.user_id === r.owner_id) : null;
-                return u?.display_name || u?.username || ('Team ' + rid);
-            };
             const out = [];
             Object.values(txnMap).forEach(wk => (wk || []).forEach(t => {
-                if (t.type !== 'free_agent' && t.type !== 'waiver') return;
-                if (t.status === 'failed') return;
-                const ts = t.status_updated || t.created || 0;
-                const bid = t.type === 'waiver' ? Number(t.settings?.waiver_bid) || 0 : 0;
-                Object.entries(t.adds || {}).forEach(([pid, rid]) => {
-                    const p = playersData[pid];
-                    if (p) out.push({ kind: 'add', pid, name: playerName(p, pid), pos: normPos(p.position) || p.position, owner: ownerOf(rid), via: t.type === 'waiver' ? 'waiver claim' : 'free agent', bid, ts });
-                });
-                Object.entries(t.drops || {}).forEach(([pid, rid]) => {
-                    const p = playersData[pid];
-                    if (p) out.push({ kind: 'drop', pid, name: playerName(p, pid), pos: normPos(p.position) || p.position, owner: ownerOf(rid), via: '', bid: 0, ts });
-                });
+                if (!t || !t.type || t.status === 'failed' || t._fromDHQ) return;
+                out.push(t);
             }));
-            return out.sort((a, b) => b.ts - a.ts).slice(0, 8);
+            return out.sort((a, b) => (b.status_updated || b.created || 0) - (a.status_updated || a.created || 0)).slice(0, 8);
         })();
-        const tickerAgo = (ts) => {
-            if (!ts) return '';
-            const m = Math.max(1, Math.round((Date.now() - ts) / 60000));
-            if (m < 60) return m + 'm';
-            const h = Math.round(m / 60);
-            if (h < 24) return h + 'h';
-            return Math.round(h / 24) + 'd';
+        const tickerOwnerName = (rid) => {
+            const r = (currentLeague.rosters || []).find(x => x.roster_id === rid);
+            const u = r ? (currentLeague.users || []).find(x => x.user_id === r.owner_id) : null;
+            return u?.display_name || u?.username || ('Team ' + rid);
+        };
+        const tickerPlayerName = (pid) => {
+            const p = playersData[pid];
+            return p ? playerName(p, pid) : 'Player #' + pid;
         };
         const positionThreats = Array.from(new Set([...(assess?.needs || []).map(n => n.pos), ...actionBoardPlayers.slice(0, 6).map(x => x.pos)]))
             .slice(0, 6)
@@ -1631,22 +1617,13 @@
                                 ))}
                             </div>
 
-                            {tickerRows.length ? <React.Fragment>
+                            {tickerTxns.length && typeof window.WrTxnTickerList === 'function' ? <React.Fragment>
                                 <div className="fa-hq-subhead">Transaction Ticker</div>
-                                <div className="fa-hq-stack">
-                                    {tickerRows.slice(0, compact ? 4 : 6).map((r, i) => {
-                                        const col = r.kind === 'add' ? 'var(--k-2ecc71, #2ecc71)' : 'var(--k-e74c3c, #e74c3c)';
-                                        return (
-                                            <button key={r.kind + '-' + r.pid + '-' + i} title="Open player card" onClick={() => openFaPlayer(r.pid)} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left', padding: '6px 9px', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid var(--ov-4, rgba(255,255,255,0.05))', borderRadius: 'var(--card-radius-sm, 8px)', cursor: 'pointer', color: 'var(--white)', fontFamily: 'var(--font-body)' }}>
-                                                <span style={{ flexShrink: 0, width: '38px', textAlign: 'center', fontSize: '0.58rem', fontWeight: 900, letterSpacing: '0.05em', padding: '2px 0', borderRadius: 'var(--card-radius-xs, 5px)', color: col, border: '1px solid ' + col }}>{r.kind === 'add' ? 'ADD' : 'DROP'}</span>
-                                                <span style={{ flex: 1, minWidth: 0 }}>
-                                                    <strong style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name} <b style={{ fontSize: '0.6rem', color: posColors[r.pos] || 'var(--silver)' }}>{window.App?.posLabel?.(r.pos) || r.pos}</b></strong>
-                                                    <em style={{ display: 'block', fontStyle: 'normal', fontSize: '0.62rem', color: 'var(--silver)', opacity: 0.75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.owner}{r.via ? ' · ' + r.via : ''}</em>
-                                                </span>
-                                                {r.bid > 0 ? <span style={{ flexShrink: 0, fontSize: '0.64rem', color: 'var(--gold)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>${r.bid}</span> : null}
-                                                <span style={{ flexShrink: 0, fontSize: '0.6rem', color: 'var(--silver)', opacity: 0.6, fontFamily: 'var(--font-mono)' }}>{tickerAgo(r.ts)}</span>
-                                            </button>
-                                        );
+                                <div>
+                                    {React.createElement(window.WrTxnTickerList, {
+                                        transactions: tickerTxns.slice(0, compact ? 3 : 5),
+                                        getOwnerName: tickerOwnerName,
+                                        getPlayerName: tickerPlayerName,
                                     })}
                                 </div>
                             </React.Fragment> : null}

@@ -2987,7 +2987,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/settings.js?v=20260722club1"></script>
 <script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20260722psych2"></script>
 <script type="text/babel" src="js/post-draft.js?v=20260609postdraft1"></script>
-<script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260828tick1"></script>
+<script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260828tick2"></script>
 <!-- Season Odds panel loads with Game Day (owner ruling 2026-07-30) — must
      precede lineup.js in the group so window.WrSeasonOdds exists on first render. -->
 <script type="text/babel" data-wr-defer="lineup" src="js/components/season-odds-panel.js?v=20260817chp1"></script>
@@ -3030,6 +3030,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/widgets/window-forecast.js?v=20260613gm1"></script>
 <script type="text/babel" src="js/widgets/gap-plan.js?v=20260613gm1"></script>
 <script type="text/babel" src="js/widgets/league-landscape.js?v=20260613gm1"></script>
+<script type="text/babel" src="js/widgets/txn-ticker.js?v=20260828tick2"></script>
 <script type="text/babel" src="js/widgets/market-radar.js?v=20260613gm1"></script>
 <script type="text/babel" src="js/widgets/faab-command.js?v=20260816fw1"></script>
 <script type="text/babel" src="js/widgets/draft-capital.js?v=20260613gm1"></script>
@@ -3042,7 +3043,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/widgets/my-trophies.js?v=20260611kpifix1"></script>
 <!-- League Calendar widget — depends on window.WrCalendar (js/tabs/calendar.js) -->
 <script type="text/babel" src="js/widgets/league-calendar.js?v=20260827cal4"></script>
-<script type="text/babel" src="js/tabs/dashboard.js?v=20260817chp1"></script>
+<script type="text/babel" src="js/tabs/dashboard.js?v=20260828tick2"></script>
 <script type="text/babel" src="js/tabs/flash-brief.js?v=20260613gm1"></script>
 <!-- Group "analysis": analytics.js embeds LeagueMapTab, so both defer together
      (league-map.js first — DOM order is execution order within a group). -->
@@ -3139,7 +3140,7 @@ window.addEventListener('appinstalled', () => {
 <!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
      owner can read back exactly which version his device is running before
      testing — kills the stale-cache guessing game. Bump the code every deploy. -->
-<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b48</div>
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b49</div>
 </body>
 </html>
 <!-- build 1774212614 -->

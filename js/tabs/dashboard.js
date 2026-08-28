@@ -1150,64 +1150,6 @@ function DashboardPanel({
                 visibleTransactions = [...visibleTransactions.slice(0, transactionLimit - 1), firstTrade];
             }
         }
-        function openTickerPlayer(pid) {
-            if (!pid) return;
-            if (window.WR?.openPlayerCard) {
-                window.WR.openPlayerCard(pid);
-                return;
-            }
-            if (typeof window._wrSelectPlayer === 'function') {
-                window._wrSelectPlayer(pid);
-                return;
-            }
-            if (typeof window.openPlayerModal === 'function') {
-                window.openPlayerModal(pid);
-            }
-        }
-        function tickerPlayerProps(pid) {
-            return {
-                role: 'button',
-                tabIndex: 0,
-                title: 'Open player card',
-                onClick: e => { e.stopPropagation(); openTickerPlayer(pid); },
-                onKeyDown: e => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    openTickerPlayer(pid);
-                },
-            };
-        }
-        // Tapping a transaction opens the in-place detail overlay for THAT deal —
-        // it never navigates to the Trade page (owner ruling).
-        function tickerRowProps(txn) {
-            return {
-                role: 'button',
-                tabIndex: 0,
-                title: 'See this transaction in full detail',
-                onClick: () => setTxnDetail(txn || true),
-                onKeyDown: e => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                    e.preventDefault();
-                    setTxnDetail(txn || true);
-                },
-            };
-        }
-        // Sleeper trades carry every traded player in BOTH adds{} (keyed to the
-        // receiving roster) and drops{} (keyed to the sending roster) — without
-        // a side split a 2-for-2 renders '+A +B -A -B'. Render the trade from
-        // roster_ids[0]'s perspective (the owner named on the row): + what they
-        // received, - what they sent. Non-trades are one-sided already.
-        function tickerAddPids(txn) {
-            const pids = Object.keys(txn.adds || {});
-            if (txn.type !== 'trade' || txn.roster_ids?.[0] == null) return pids;
-            return pids.filter(pid => String(txn.adds[pid]) === String(txn.roster_ids[0]));
-        }
-        function tickerDropPids(txn) {
-            const pids = Object.keys(txn.drops || {});
-            if (txn.type !== 'trade' || txn.roster_ids?.[0] == null) return pids;
-            return pids.filter(pid => String(txn.drops[pid]) === String(txn.roster_ids[0]));
-        }
         const hiddenCount = Math.max(0, (transactions || []).length - visibleTransactions.length);
         const hasTxns = !!(transactions && transactions.length);
         const openDetail = () => { if (hasTxns) setTxnDetail(true); };
@@ -1232,39 +1174,18 @@ function DashboardPanel({
                 <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 {(!transactions || transactions.length === 0) ? (
                     <SkeletonRows count={size === 'narrow' ? 8 : size === 'lg' ? 5 : size === 'slim' ? 4 : 2} />
-                ) : visibleTransactions.map((txn, ti) => (
-                    <div key={ti} {...tickerRowProps(txn)} style={{ padding: '8px 0', borderBottom: '1px solid var(--ov-3, rgba(255,255,255,0.05))', cursor: 'pointer', outline: 'none' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: S, opacity: 0.55, minWidth: '36px' }}>{timeAgo(txn.status_updated || txn.created)}</span>
-                            <span style={{ fontSize: 'var(--text-label, 0.75rem)', fontWeight: 700, padding: '1px 5px', borderRadius: '3px',
-                                background: txn.type === 'trade' ? 'var(--acc-fill3, rgba(212,175,55,0.15))' : txn.type === 'waiver' ? 'rgba(52,211,153,0.15)' : 'rgba(96,165,250,0.15)',
-                                color: txn.type === 'trade' ? G : txn.type === 'waiver' ? 'var(--k-34d399, #34d399)' : 'var(--k-60a5fa, #60a5fa)',
-                            }}>{(txn.type === 'free_agent' ? 'FA' : txn.type || '').toUpperCase()}</span>
-                            <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: S }}>{getOwnerName(txn.roster_ids?.[0])}</span>
-                            {txn.type === 'trade' && txn.roster_ids?.[1] && (
-                                <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: S, opacity: 0.6 }}>↔ {getOwnerName(txn.roster_ids[1])}</span>
-                            )}
-                        </div>
-                        <div style={{ fontSize: 'var(--text-label, 0.75rem)', color: W, paddingLeft: '42px' }}>
-                            {tickerAddPids(txn).map(pid => (
-                                <span key={'a'+pid} style={{ color: 'var(--good)', cursor: 'pointer', marginRight: '5px' }}
-                                    {...tickerPlayerProps(pid)}>
-                                    +{getPlayerName(pid)}
-                                </span>
-                            ))}
-                            {tickerDropPids(txn).map(pid => (
-                                <span key={'d'+pid} style={{ color: 'var(--bad)', cursor: 'pointer', marginRight: '5px' }}
-                                    {...tickerPlayerProps(pid)}>
-                                    -{getPlayerName(pid)}
-                                </span>
-                            ))}
-                            {txn.settings?.waiver_bid > 0 && <span style={{ color: 'var(--warn)', marginLeft: '2px' }}>${txn.settings.waiver_bid}</span>}
-                            {txn.type === 'trade' && txn.draft_picks?.length > 0 && (
-                                <span style={{ color: G, fontSize: 'var(--text-label, 0.75rem)', marginLeft: '4px' }}>+{txn.draft_picks.length} pick{txn.draft_picks.length !== 1 ? 's' : ''}</span>
-                            )}
-                        </div>
-                    </div>
-                ))}
+                ) : typeof window.WrTxnTickerList === 'function' ? (
+                    /* Rows live in the shared widget (js/widgets/txn-ticker.js) so the
+                       Free Agency ticker is a direct lift of this one. Tapping a row
+                       opens the in-place detail overlay for THAT deal — it never
+                       navigates to the Trade page (owner ruling). */
+                    React.createElement(window.WrTxnTickerList, {
+                        transactions: visibleTransactions,
+                        getOwnerName, getPlayerName, timeAgo,
+                        onRowTap: txn => setTxnDetail(txn || true),
+                        colors: { S, W, G },
+                    })
+                ) : <div style={{ fontSize: 'var(--text-label, 0.75rem)', color: S, opacity: 0.6 }}>Ticker unavailable</div>}
                 </div>
             </div>
         );
