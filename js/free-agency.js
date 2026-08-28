@@ -1617,17 +1617,6 @@
                                 ))}
                             </div>
 
-                            {tickerTxns.length && typeof window.WrTxnTickerList === 'function' ? <React.Fragment>
-                                <div className="fa-hq-subhead">Transaction Ticker</div>
-                                <div>
-                                    {React.createElement(window.WrTxnTickerList, {
-                                        transactions: tickerTxns.slice(0, compact ? 3 : 5),
-                                        getOwnerName: tickerOwnerName,
-                                        getPlayerName: tickerPlayerName,
-                                    })}
-                                </div>
-                            </React.Fragment> : null}
-
                             <div className="fa-hq-subhead">Roster Gap Matrix</div>
                             <div className="fa-hq-gap-matrix">
                                 {rosterGapRows.map(row => {
@@ -1643,6 +1632,17 @@
                                     );
                                 })}
                             </div>
+
+                            {tickerTxns.length && typeof window.WrTxnTickerList === 'function' ? <React.Fragment>
+                                <div className="fa-hq-subhead">Transaction Ticker</div>
+                                <div>
+                                    {React.createElement(window.WrTxnTickerList, {
+                                        transactions: tickerTxns.slice(0, compact ? 3 : 5),
+                                        getOwnerName: tickerOwnerName,
+                                        getPlayerName: tickerPlayerName,
+                                    })}
+                                </div>
+                            </React.Fragment> : null}
                         </aside>
                     </div>
                 </section>
