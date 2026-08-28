@@ -740,9 +740,9 @@
         const [faSelectedPid, setFaSelectedPid] = useState(null);
         const [faSearch, setFaSearch] = useState('');
         // ── Min-points filter (owner ruling 2026-08-28: pared from the five-
-        // criteria prototype to the one window he kept). Stacks with the text
-        // search and the POS chips; the season chips pick which year's points.
-        const [faAdvOpen, setFaAdvOpen] = useState(false);
+        // criteria prototype to the one window he kept, then tucked inline
+        // into the View toolbar row — no separate Filters panel). Stacks with
+        // the text search and POS chips; season chips pick which year's points.
         const [faAdv, setFaAdv] = useState({ minPrevPts: '' });
         // Season default is AUTO — the current season once it has real stats,
         // last season until then (in August a this-year default would filter
@@ -2154,49 +2154,10 @@
                         <span>Market Explorer</span>
                         <p>{sortedPlayers.length} shown from {availablePlayers.length} available players. Saved views and custom columns still apply.</p>
                     </div>
-                    <div className="fa-market-search" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div className="fa-market-search">
                         <input value={faSearch} onChange={e => setFaSearch(e.target.value)} placeholder="Search player, team, college..." />
-                        <button
-                            onClick={() => setFaAdvOpen(o => !o)}
-                            title="Min points filter: stacks with the search box and POS chips"
-                            style={{ flexShrink: 0, padding: '8px 12px', minHeight: '40px', fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontFamily: 'var(--font-body)', background: faAdvCount ? 'var(--acc-fill1, rgba(212,175,55,0.08))' : 'var(--ov-3, rgba(255,255,255,0.04))', color: faAdvCount || faAdvOpen ? 'var(--gold)' : 'var(--silver)', border: '1px solid ' + (faAdvCount || faAdvOpen ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.1))'), borderRadius: 'var(--card-radius-sm, 8px)', cursor: 'pointer' }}
-                        >Filters{faAdvCount ? ' · ' + faAdvCount : ''}</button>
                     </div>
                 </div>
-
-                {faAdvOpen && (
-                <div style={{ padding: '10px 14px 8px', margin: '0 0 12px', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: 'var(--card-radius-sm, 8px)' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'flex-start' }}>
-                        <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '20px', whiteSpace: 'nowrap' }}>
-                                Min points
-                                {[faSeasonYear, faSeasonYear - 1].map(yr => (
-                                    <button
-                                        key={yr}
-                                        onClick={() => setFaPtsYear(yr)}
-                                        title={yr === faSeasonYear && faAutoPtsYear !== faSeasonYear ? 'No ' + yr + ' stats yet — everyone reads 0 until games are played' : 'Points scored in ' + yr}
-                                        style={{ padding: '1px 7px', fontSize: '0.62rem', fontWeight: 800, fontFamily: 'var(--font-mono)', lineHeight: 1.6, background: faPtsYearActive === yr ? 'var(--acc-fill1, rgba(212,175,55,0.1))' : 'transparent', color: faPtsYearActive === yr ? 'var(--gold)' : 'var(--silver)', border: '1px solid ' + (faPtsYearActive === yr ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.08))'), borderRadius: 'var(--card-radius-xs, 5px)', cursor: 'pointer' }}
-                                    >{yr}</button>
-                                ))}
-                            </span>
-                            <input
-                                type="number" inputMode="numeric" value={faAdv.minPrevPts} placeholder="e.g. 100"
-                                onChange={e => { const v = e.target.value; setFaAdv({ minPrevPts: v }); }}
-                                style={{ width: '150px', padding: '8px 10px', height: '40px', boxSizing: 'border-box', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid ' + (String(faAdv.minPrevPts).trim() ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.1))'), borderRadius: 'var(--card-radius-sm, 8px)', color: 'var(--white)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
-                            />
-                        </label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                            <span style={{ height: '20px' }}></span>
-                            <button
-                                onClick={() => { setFaAdv({ minPrevPts: '' }); setFaPtsYear(null); }}
-                                disabled={!faAdvCount}
-                                style={{ padding: '8px 14px', height: '40px', boxSizing: 'border-box', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', background: 'transparent', color: faAdvCount ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.28))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: 'var(--card-radius-sm, 8px)', cursor: faAdvCount ? 'pointer' : 'default' }}
-                            >Clear</button>
-                        </div>
-                    </div>
-                    <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.55, marginTop: '8px' }}>Stacks with the search box and the POS row below</div>
-                </div>
-                )}
 
                 <div className="fa-market-toolbar wr-module-toolbar">
                     <span className="wr-module-toolbar-label">POS</span>
@@ -2255,6 +2216,22 @@
                         <button key={opt.k} className={ppgWindow === opt.k ? 'is-active' : ''} onClick={() => setPpgWindow(opt.k)} title={opt.k === 'season' ? 'Season-to-date PPG' : 'Last ' + (opt.k === 'l5' ? 5 : 3) + ' games'}>{opt.l}</button>
                     ))}
                     </div>
+
+                    <span className="wr-module-toolbar-label">Min pts</span>
+                    <div className="wr-module-nav">
+                    {[faSeasonYear, faSeasonYear - 1].map(yr => (
+                        <button key={yr} className={faPtsYearActive === yr ? 'is-active' : ''} onClick={() => setFaPtsYear(yr)} title={yr === faSeasonYear && faAutoPtsYear !== faSeasonYear ? 'No ' + yr + ' stats yet — everyone reads 0 until games are played' : 'Points scored in ' + yr}>{yr}</button>
+                    ))}
+                    </div>
+                    <input
+                        type="number" inputMode="numeric" value={faAdv.minPrevPts} placeholder="e.g. 100"
+                        title={'Only show players with at least this many ' + faPtsYearActive + ' points'}
+                        onChange={e => { const v = e.target.value; setFaAdv({ minPrevPts: v }); }}
+                        style={{ width: '84px', padding: '3px 8px', minHeight: '44px', boxSizing: 'border-box', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid ' + (faAdvCount ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.1))'), borderRadius: 'var(--card-radius-sm, 8px)', color: 'var(--white)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', outline: 'none' }}
+                    />
+                    {faAdvCount ? (
+                        <button type="button" onClick={() => { setFaAdv({ minPrevPts: '' }); setFaPtsYear(null); }} title="Clear the min points filter" style={{ padding: '3px 8px', minHeight: '44px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', background: 'transparent', color: 'var(--silver)', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: 'var(--card-radius-sm, 8px)', cursor: 'pointer' }}>✕</button>
+                    ) : null}
 
                     {window.WR?.SavedViews?.SavedViewBar && (
                         <div style={{ marginLeft: 'auto' }}>
