@@ -702,7 +702,7 @@ function MyTeamTab({
   ].filter(g => isPro || g.key !== 'action'); // Action lens = verdict grouping → Pro
   const activeGroupModeLabel = GROUP_MODES.find(g => g.key === rosterGroupMode)?.label || 'Position';
   const slotOrder = { starter: 0, bench: 1, taxi: 2, ir: 3 };
-  const recGroup = (rec) => /sell/i.test(rec || '') ? 'Sell'
+  const recGroup = (rec) => /sell|drop/i.test(rec || '') ? 'Sell'
     : /buy|build|core/i.test(rec || '') ? 'Build'
     : /stash/i.test(rec || '') ? 'Stash'
     : 'Hold';
@@ -887,6 +887,19 @@ function MyTeamTab({
     const manual = _manualCall(r);
     return !(manual && !/drop|cut/i.test(manual));
   };
+
+  // One voice (owner rule 2026-08-31): when the app itself flags a player as
+  // a drop candidate, its Move verdict says Drop too — the app never shows
+  // its own 'Hold' beside its own red DROP? chip. A manual YOU verdict is
+  // different: the owner's call stands and the chip remains, the app politely
+  // asking a question. Dismissing the chip restores the engine verdict.
+  rows.forEach(r => {
+    if (_isActiveDrop(r) && !_manualCall(r) && !/^drop/i.test(r.rec || '')) {
+      r.rec = 'Drop';
+      r.recAction = 'DROP';
+      r.recDropReason = dropCandidateReasons.get(r.pid) || 'Drop candidate';
+    }
+  });
   // Call → accent color, shared by chip + badge + picker + desktop action col.
   const _recColor = (rec) => {
     const s = String(rec || '');
@@ -1059,7 +1072,7 @@ function MyTeamTab({
         }
         const _ar = _effRec(r);
         const _amanual = !!(verdictOverrides[r.pid] || (window._playerTags && window._playerTags[r.pid]));
-        return <div key={colKey} style={{...base, flexDirection:'column', gap:'2px', alignItems:'center'}} title={_amanual ? 'Your call — set in the player card' : (gmNudgeTitle || ann?.text || '')}>
+        return <div key={colKey} style={{...base, flexDirection:'column', gap:'2px', alignItems:'center'}} title={_amanual ? 'Your call — set in the player card' : (r.recDropReason || gmNudgeTitle || ann?.text || '')}>
           <span style={{ fontSize:'var(--text-micro, 0.6875rem)',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.03em',color: _recColor(_ar) }}>{_ar}</span>
           {_amanual ? <span style={{ fontSize: '0.56rem', fontWeight: 800, color: 'var(--gold)', letterSpacing: '0.05em', opacity: 0.85, lineHeight: 1 }}>YOU</span> : (r.gmSellNudge && <span style={{ fontSize: '0.56rem', fontWeight: 800, color: 'var(--warn)', letterSpacing: '0.05em', opacity: 0.85, lineHeight: 1 }}>GM</span>)}
         </div>;
