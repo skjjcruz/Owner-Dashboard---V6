@@ -511,7 +511,11 @@ function MyTeamTab({
       for (const pid in scores) {
         if (rostered.has(String(pid))) continue;
         const p = playersData?.[pid];
-        const pos = p ? (window.App?.normPos?.(p.position) || p.position) : null;
+        // Employed players only set the replacement bar — a teamless player's
+        // stale value number is not an upgrade (the Elijah Moore case: the
+        // 'better WR on the wire' had no NFL team).
+        if (!p || !p.team || p.team === 'FA') continue;
+        const pos = (window.App?.normPos?.(p.position) || p.position);
         if (!pos) continue;
         if (!(wireBest[pos] >= scores[pid])) wireBest[pos] = scores[pid];
       }
@@ -523,6 +527,11 @@ function MyTeamTab({
       const lid = currentLeague?.id || currentLeague?.league_id || '';
       manualVerdicts = JSON.parse(localStorage.getItem('dhq_roster_verdict_v1:' + lid) || '{}') || {};
     } catch (e) {}
+    // Roster pressure (owner rule 2026-08-31): with open active spots, you
+    // can add without dropping anyone — wire-comparison flags stay quiet.
+    const activeCap = (currentLeague?.roster_positions || []).filter(s => s !== 'IR').length;
+    const activeCount = rows.filter(r => !r.isIR && !r.isTaxi).length;
+    const rosterFull = activeCap > 0 && activeCount >= activeCap;
     rows.forEach(r => {
       if (r.gmIsUntouchable) return;
       // Rookie first-round picks are development capital — never auto-drop.
@@ -561,10 +570,13 @@ function MyTeamTab({
       // players like Kolar whose value model runs behind the news).
       const adpE = window.App?.getRedraftAdp?.(r.pid);
       if (adpE && adpE.rank > 0 && adpE.rank <= 240) return;
+      if (!rosterFull) return; // open roster spots — nothing needs dropping
+      // Meaningful upgrade only: at least double his value AND +500 — never
+      // sideways churn on model noise.
       const wire = wireBest[r.pos] || 0;
-      if (wire > 0 && r.dhq < wire) {
+      if (wire >= r.dhq * 2 && (wire - r.dhq) >= 500) {
         out.add(r.pid);
-        reasons.set(r.pid, 'The waiver wire has a more valuable ' + r.pos + ' available for free');
+        reasons.set(r.pid, 'Roster is full and the wire has a clearly better ' + r.pos + ' available free');
       }
     });
     return [out, reasons];
