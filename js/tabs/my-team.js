@@ -478,10 +478,15 @@ function MyTeamTab({
   // number says (owner ask 2026-08-31: Kolar/Holani). Best-effort: an empty
   // set simply skips that guard.
   const [trendingAddPids, setTrendingAddPids] = React.useState(() => new Set());
-  const [sitTick, setSitTick] = React.useState(0); // bumps when ADP market lands
+  const [sitTick, setSitTick] = React.useState(0); // bumps when ADP / NFL roles land
   React.useEffect(() => {
     let alive = true;
     try { window.App?.fetchRedraftAdp?.().then(() => { if (alive) setSitTick(t => t + 1); }).catch(() => {}); } catch (e) {}
+    // Fresh ESPN depth charts (owner rule 2026-08-31): checked on open; a
+    // player listed with a starting-caliber role never gets a drop flag.
+    try { window.App?.NflRoles?.load?.().then(() => { if (alive) setSitTick(t => t + 1); }).catch(() => {}); } catch (e) {}
+    const onRoles = () => { if (alive) setSitTick(t => t + 1); };
+    window.addEventListener('wr:roles-loaded', onRoles);
     try {
       if (window.Sleeper?.fetchTrending) {
         window.Sleeper.fetchTrending('add', 24, 25).then(list => {
@@ -490,7 +495,7 @@ function MyTeamTab({
         }).catch(() => {});
       }
     } catch (e) { /* trending optional */ }
-    return () => { alive = false; };
+    return () => { alive = false; window.removeEventListener('wr:roles-loaded', onRoles); };
   }, []);
   const [dropCandidatePids, dropCandidateReasons] = React.useMemo(() => {
     const out = new Set();
@@ -542,8 +547,11 @@ function MyTeamTab({
       if (r.trend >= 10) return;                   // trending up — protected
       if (/^(STASH|CORE|BUY)/.test(r.recAction || '')) return; // engine wants him kept
       // Situation guards (owner ask 2026-08-31): a low value number is not a
-      // cut when his real-world role says otherwise.
-      if (r.p?.depth_chart_order === 1) return;    // #1 on his NFL depth chart
+      // cut when his real-world role says otherwise. ESPN's editorial depth
+      // chart is the primary source (Sleeper's lags by days); Sleeper's own
+      // depth field stays as the fallback when the feed hasn't loaded.
+      if (window.App?.NflRoles?.starterRole?.(r.p)) return; // fresh chart: starting-caliber role
+      if (r.p?.depth_chart_order === 1) return;    // #1 on his NFL depth chart (fallback)
       const wproj = projFor(r.pid);
       const projPts = wproj && wproj.available ? ((wproj.points && (wproj.points.median != null ? wproj.points.median : wproj.points.mean)) || 0) : 0;
       if (projPts >= 6) return;                    // projected for real points this week
