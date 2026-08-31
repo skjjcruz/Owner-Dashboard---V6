@@ -473,6 +473,23 @@ function MyTeamTab({
   //   NEVER flagged: rookie first-round picks, GM untouchables, your only
   //   player at a position, starters, IR, or taxi.
   // dropCandidateReasons carries the WHY for each flag (chip tooltip).
+  // Sleeper's 24h trending-adds list — the market's situation signal. A player
+  // thousands of managers are racing to claim is not a cut, whatever his value
+  // number says (owner ask 2026-08-31: Kolar/Holani). Best-effort: an empty
+  // set simply skips that guard.
+  const [trendingAddPids, setTrendingAddPids] = React.useState(() => new Set());
+  React.useEffect(() => {
+    let alive = true;
+    try {
+      if (window.Sleeper?.fetchTrending) {
+        window.Sleeper.fetchTrending('add', 24, 25).then(list => {
+          if (!alive || !Array.isArray(list)) return;
+          setTrendingAddPids(new Set(list.map(t => String(t && (t.player_id != null ? t.player_id : t))).filter(Boolean)));
+        }).catch(() => {});
+      }
+    } catch (e) { /* trending optional */ }
+    return () => { alive = false; };
+  }, []);
   const [dropCandidatePids, dropCandidateReasons] = React.useMemo(() => {
     const out = new Set();
     const reasons = new Map();
@@ -510,6 +527,13 @@ function MyTeamTab({
       if ((posCounts[r.pos] || 0) <= 1) return;   // only body at the position
       if (r.trend >= 10) return;                   // trending up — protected
       if (/^(STASH|CORE|BUY)/.test(r.recAction || '')) return; // engine wants him kept
+      // Situation guards (owner ask 2026-08-31): a low value number is not a
+      // cut when his real-world role says otherwise.
+      if (r.p?.depth_chart_order === 1) return;    // #1 on his NFL depth chart
+      const wproj = projFor(r.pid);
+      const projPts = wproj && wproj.available ? ((wproj.points && (wproj.points.median != null ? wproj.points.median : wproj.points.mean)) || 0) : 0;
+      if (projPts >= 6) return;                    // projected for real points this week
+      if (trendingAddPids.has(String(r.pid))) return; // hot add across all of Sleeper
       const wire = wireBest[r.pos] || 0;
       if (wire > 0 && r.dhq < wire) {
         out.add(r.pid);
@@ -517,7 +541,7 @@ function MyTeamTab({
       }
     });
     return [out, reasons];
-  }, [rows, currentLeague, playersData, prospectForRow]);
+  }, [rows, currentLeague, playersData, prospectForRow, trendingAddPids, weeklyLineup]);
 
   // Dismissed drop alerts (persisted in localStorage per league)
   const [dismissedDrops, setDismissedDrops] = React.useState(() => {
@@ -1021,7 +1045,7 @@ function MyTeamTab({
         return <div key={colKey} style={{...base}}><span style={{ color: 'var(--silver)', fontSize: '0.72rem' }}>{h ? Math.floor(h/12)+"'"+h%12+'"' : '\u2014'}</span></div>;
       }
       case 'weight': return <div key={colKey} style={{...base}}><span style={{ color: 'var(--silver)', fontSize: '0.72rem' }}>{r.p.weight || '\u2014'}</span></div>;
-      case 'depthChart': return <div key={colKey} style={{...base}}><span style={{ color: r.p.depth_chart_order != null ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))', fontSize: '0.72rem' }}>{r.p.depth_chart_order != null ? r.pos + (r.p.depth_chart_order + 1) : (r.section === 'ir' ? 'IR' : (!r.p.team || r.p.team === 'FA') ? 'FA' : 'N/A')}</span></div>;
+      case 'depthChart': return <div key={colKey} style={{...base}}><span style={{ color: r.p.depth_chart_order != null ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))', fontSize: '0.72rem' }}>{r.p.depth_chart_order != null ? r.pos + r.p.depth_chart_order : (r.section === 'ir' ? 'IR' : (!r.p.team || r.p.team === 'FA') ? 'FA' : 'N/A')}</span></div>;
       case 'slot': return <div key={colKey} style={{...base}}><span style={{ fontSize:'0.76rem',color:'var(--silver)',opacity:0.65,textTransform:'uppercase' }}>{r.section==='starter'?'STR':r.section==='ir'?'IR':r.section==='taxi'?'TAX':'BN'}</span></div>;
       case 'acquired': {
         const acq = getAcquisitionInfo(r.pid, myRoster?.roster_id);
@@ -1111,7 +1135,7 @@ function MyTeamTab({
                     const primeEnd = r.peakYrsLeft > 0 && r.age ? r.age + r.peakYrsLeft : null;
                     const sigWindow = (r.peakPhase || '—') + (primeEnd ? ' · thru ' + primeEnd : r.valueYrsLeft > 0 ? ' · ~' + r.valueYrsLeft + 'yr value' : '');
                     const sigRisk = r.injury ? r.injury : (r.durabilityGP && r.durabilityGP < 13 ? '~' + r.durabilityGP + ' GP/yr' : 'no current flags');
-                    const sigFloor = r.isStarter ? 'weekly starter' : (r.p.depth_chart_order != null && r.p.depth_chart_order <= 1 ? 'rotation role' : 'bench / depth');
+                    const sigFloor = r.isStarter ? 'weekly starter' : (r.p.depth_chart_order != null && r.p.depth_chart_order <= 2 ? 'rotation role' : 'bench / depth');
                     const sigCeiling = r.trend >= 10 ? 'trending up' : (tier === 'Elite' || tier === 'Starter') ? 'proven ' + tier.toLowerCase() : r.peakPhase === 'PRE' ? 'developing' : 'limited upside';
                     const sigRow = (label, val, last) =>(<div style={{ display: 'flex', gap: '9px', alignItems: 'baseline', padding: '6px 0', borderBottom: last ? 'none' : '1px solid rgba(255,255,255,0.05)', fontSize: '0.74rem' }}><span style={{ minWidth: '52px', color: 'var(--silver)', opacity: 0.65 }}>{label}</span><span style={{ color: 'var(--white)', fontWeight: 600 }}>{val}</span></div>);
                     return (<React.Fragment>
