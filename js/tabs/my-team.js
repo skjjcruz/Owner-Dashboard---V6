@@ -464,12 +464,60 @@ function MyTeamTab({
   const trendBg = () => 'transparent';
   const posColors = window.App.POS_COLORS;
 
-  // Drop candidate PIDs: non-starters with lowest DHQ (bottom 3 bench players)
-  const dropCandidatePids = React.useMemo(() => {
-    const benchPlayers = rows.filter(r => !r.isStarter && !r.isIR && !r.isTaxi)
-      .sort((a, b) => a.dhq - b.dhq).slice(0, 3);
-    return new Set(benchPlayers.map(r => r.pid));
-  }, [rows]);
+  // DROP? candidates — owner rules 2026-08-31 (replaces "bottom 3 bench by
+  // value", which flagged rising rookies while missing NFL cuts):
+  //   A. Cut and unsigned (NFL team = FA) → automatic drop candidate.
+  //   B. Otherwise, ALL of: the waiver wire offers a better player at his
+  //      position for free, he isn't trending up, and the engine isn't
+  //      calling him a Stash/Core/Buy.
+  //   NEVER flagged: rookie first-round picks, GM untouchables, your only
+  //   player at a position, starters, IR, or taxi.
+  // dropCandidateReasons carries the WHY for each flag (chip tooltip).
+  const [dropCandidatePids, dropCandidateReasons] = React.useMemo(() => {
+    const out = new Set();
+    const reasons = new Map();
+    const posCounts = {};
+    rows.forEach(r => { posCounts[r.pos] = (posCounts[r.pos] || 0) + 1; });
+    // Best unrostered value per position = what the wire hands you for free.
+    const wireBest = {};
+    try {
+      const scores = window.App?.LI?.playerScores || {};
+      const rostered = new Set();
+      (currentLeague?.rosters || []).forEach(rr => (rr.players || []).forEach(pid => rostered.add(String(pid))));
+      for (const pid in scores) {
+        if (rostered.has(String(pid))) continue;
+        const p = playersData?.[pid];
+        const pos = p ? (window.App?.normPos?.(p.position) || p.position) : null;
+        if (!pos) continue;
+        if (!(wireBest[pos] >= scores[pid])) wireBest[pos] = scores[pid];
+      }
+    } catch (e) { /* wire read is best-effort — rule B just goes quiet */ }
+    rows.forEach(r => {
+      if (r.isStarter || r.isIR || r.isTaxi) return;
+      if (r.gmIsUntouchable) return;
+      // Rookie first-round picks are development capital — never auto-drop.
+      const pr = prospectForRow(r);
+      const cap = draftCapFor(r.pid);
+      const rookieR1 = (pr && Number(pr.draftRound) === 1)
+        || (cap && cap.round === 1 && Number(r.p?.years_exp ?? 1) === 0);
+      if (rookieR1) return;
+      const isFA = !r.p?.team || r.p.team === 'FA';
+      if (isFA) {
+        out.add(r.pid);
+        reasons.set(r.pid, 'Cut by his NFL team — currently an unsigned free agent');
+        return;
+      }
+      if ((posCounts[r.pos] || 0) <= 1) return;   // only body at the position
+      if (r.trend >= 10) return;                   // trending up — protected
+      if (/^(STASH|CORE|BUY)/.test(r.recAction || '')) return; // engine wants him kept
+      const wire = wireBest[r.pos] || 0;
+      if (wire > 0 && r.dhq < wire) {
+        out.add(r.pid);
+        reasons.set(r.pid, 'The waiver wire has a more valuable ' + r.pos + ' available for free');
+      }
+    });
+    return [out, reasons];
+  }, [rows, currentLeague, playersData, prospectForRow]);
 
   // Dismissed drop alerts (persisted in localStorage per league)
   const [dismissedDrops, setDismissedDrops] = React.useState(() => {
@@ -1597,7 +1645,7 @@ function MyTeamTab({
                       {/* GM Strategy: acquisition-focus / sell-candidate position accents */}
                       {!r.gmIsUntouchable && r.gmIsTarget && <span title="GM Strategy: acquisition-focus position" style={{ fontSize: 'var(--text-micro, 0.6875rem)', padding: '1px 4px', borderRadius: '3px', fontWeight: 800, background: 'var(--acc-fill2, rgba(212,175,55,0.12))', color: 'var(--gold)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.28))', flexShrink: 0, lineHeight: 1, letterSpacing: '0.03em' }}>TGT</span>}
                       {!r.gmIsUntouchable && r.gmIsSellPos && <span title="GM Strategy: sell-candidate position" style={{ fontSize: 'var(--text-micro, 0.6875rem)', padding: '1px 4px', borderRadius: '3px', fontWeight: 800, background: 'rgba(240,165,0,0.13)', color: 'var(--warn)', border: '1px solid rgba(240,165,0,0.32)', flexShrink: 0, lineHeight: 1, letterSpacing: '0.03em' }}>SELL</span>}
-                      {isPro && dropCandidatePids.has(r.pid) && !dismissedDrops.has(r.pid) && <span className="wr-drop-chip" onClick={e => { e.stopPropagation(); dismissDrop(r.pid); }} title="Drop candidate (click to dismiss)" style={{ fontSize: 'var(--text-micro, 0.6875rem)', padding: '1px 4px', borderRadius: '3px', fontWeight: 700, background: 'rgba(231,76,60,0.2)', color: 'var(--bad)', border: '1px solid rgba(231,76,60,0.4)', flexShrink: 0, cursor: 'pointer', lineHeight: 1 }}>DROP?</span>}
+                      {isPro && dropCandidatePids.has(r.pid) && !dismissedDrops.has(r.pid) && <span className="wr-drop-chip" onClick={e => { e.stopPropagation(); dismissDrop(r.pid); }} title={(dropCandidateReasons.get(r.pid) || 'Drop candidate') + ' (click to dismiss)'} style={{ fontSize: 'var(--text-micro, 0.6875rem)', padding: '1px 4px', borderRadius: '3px', fontWeight: 700, background: 'rgba(231,76,60,0.2)', color: 'var(--bad)', border: '1px solid rgba(231,76,60,0.4)', flexShrink: 0, cursor: 'pointer', lineHeight: 1 }}>DROP?</span>}
                       </React.Fragment>}
                     </div>
                     <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.62, marginTop: '1px' }}>{r.p.team || 'FA'}{!_phone && r.injury ? ' \u00B7 '+r.injury : ''}</div>
