@@ -28,14 +28,22 @@
           } catch (e) { ok = false; }
         }
         // Guest lane: a guest with a connected league enters without a JWT
-        // (local-only, free tier; server features stay signed-out).
-        if (!ok) {
+        // (local-only, free tier; server features stay signed-out). An
+        // MFL-only guest has no od_auth_v1 — the league id is their proof
+        // (owner bug report 2026-08-31).
+        var isGuest = false;
+        try { isGuest = localStorage.getItem('wr_guest_v1') === '1'; } catch (e) {}
+        if (!ok && isGuest) {
           try {
             var ga = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
-            if (localStorage.getItem('wr_guest_v1') === '1' && ga && ga.username) ok = true;
+            if ((ga && ga.username) || localStorage.getItem('mfl_league_id')) ok = true;
           } catch (e) {}
         }
         if (!ok) {
+          // A guest mid-setup resumes at the connect page — never the
+          // marketing page, and never with their keys wiped (an app relaunch
+          // between tapping Guest and connecting a league hit this path).
+          if (isGuest) { window.location.replace('connect-sleeper.html'); return; }
           try { localStorage.removeItem('od_auth_v1'); } catch (e) {}
           if (sess && !ok) { try { localStorage.removeItem('fw_session_v1'); } catch (e) {} }
           window.location.replace('landing.html');
@@ -3140,7 +3148,7 @@ window.addEventListener('appinstalled', () => {
 <!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
      owner can read back exactly which version his device is running before
      testing — kills the stale-cache guessing game. Bump the code every deploy. -->
-<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b52</div>
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b53</div>
 </body>
 </html>
 <!-- build 1774212614 -->

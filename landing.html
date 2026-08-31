@@ -79,9 +79,16 @@
           return;
         }
         // Returning guest: a guest with a connected league goes straight in
-        // (restored 2026-08-21 — same line the pre-swap page carried).
+        // (restored 2026-08-21 — same line the pre-swap page carried; MFL-only
+        // guests count too, 2026-08-31).
         var ga = null; try { ga = JSON.parse(localStorage.getItem('od_auth_v1') || 'null'); } catch (e) {}
-        if (localStorage.getItem('wr_guest_v1') === '1' && ga && ga.username) { window.location.replace('index.html'); return; }
+        if (localStorage.getItem('wr_guest_v1') === '1' && ((ga && ga.username) || localStorage.getItem('mfl_league_id'))) { window.location.replace('index.html'); return; }
+        // Guest mid-setup (flag set, no league yet): resume at the connect
+        // page instead of stranding them on the marketing page. An app
+        // relaunch between tapping Guest and connecting a league used to
+        // land exactly here (owner bug report 2026-08-31). Sign out on the
+        // connect page clears the flag, so this can't loop.
+        if (localStorage.getItem('wr_guest_v1') === '1') { window.location.replace('connect-sleeper.html'); return; }
         var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
         if (!sess || !sess.token) { reveal(); return; } // not signed in -> show landing
         var profile = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');

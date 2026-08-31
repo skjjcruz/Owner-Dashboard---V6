@@ -325,6 +325,9 @@
       try {
         localStorage.removeItem(SESSION_KEY);
         localStorage.removeItem(AUTH_KEY);
+        // Clear the guest flag too — landing.html forwards mid-setup guests
+        // back here, so a lingering flag would trap them in a loop.
+        localStorage.removeItem('wr_guest_v1');
       } catch {}
       window.location.href = 'landing.html';
     }
