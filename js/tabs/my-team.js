@@ -478,8 +478,10 @@ function MyTeamTab({
   // number says (owner ask 2026-08-31: Kolar/Holani). Best-effort: an empty
   // set simply skips that guard.
   const [trendingAddPids, setTrendingAddPids] = React.useState(() => new Set());
+  const [sitTick, setSitTick] = React.useState(0); // bumps when ADP market lands
   React.useEffect(() => {
     let alive = true;
+    try { window.App?.fetchRedraftAdp?.().then(() => { if (alive) setSitTick(t => t + 1); }).catch(() => {}); } catch (e) {}
     try {
       if (window.Sleeper?.fetchTrending) {
         window.Sleeper.fetchTrending('add', 24, 25).then(list => {
@@ -509,8 +511,14 @@ function MyTeamTab({
         if (!(wireBest[pos] >= scores[pid])) wireBest[pos] = scores[pid];
       }
     } catch (e) { /* wire read is best-effort — rule B just goes quiet */ }
+    // Owner conviction: a manual verdict (other than Cut/Drop) set on the
+    // player silences the chip — the human already made this call.
+    let manualVerdicts = {};
+    try {
+      const lid = currentLeague?.id || currentLeague?.league_id || '';
+      manualVerdicts = JSON.parse(localStorage.getItem('dhq_roster_verdict_v1:' + lid) || '{}') || {};
+    } catch (e) {}
     rows.forEach(r => {
-      if (r.isStarter || r.isIR || r.isTaxi) return;
       if (r.gmIsUntouchable) return;
       // Rookie first-round picks are development capital — never auto-drop.
       const pr = prospectForRow(r);
@@ -518,12 +526,18 @@ function MyTeamTab({
       const rookieR1 = (pr && Number(pr.draftRound) === 1)
         || (cap && cap.round === 1 && Number(r.p?.years_exp ?? 1) === 0);
       if (rookieR1) return;
+      const mv = manualVerdicts[r.pid];
+      if (mv && !/^(cut|drop)$/i.test(String(mv))) return;
+      // Rule A — cut and unsigned. Applies to EVERY roster section: a taxi
+      // stash the NFL let go (owner report 2026-08-31: Will Levis) deserves
+      // the flag as much as a bench body.
       const isFA = !r.p?.team || r.p.team === 'FA';
       if (isFA) {
         out.add(r.pid);
         reasons.set(r.pid, 'Cut by his NFL team — currently an unsigned free agent');
         return;
       }
+      if (r.isStarter || r.isIR || r.isTaxi) return; // rule B judges bench only
       if ((posCounts[r.pos] || 0) <= 1) return;   // only body at the position
       if (r.trend >= 10) return;                   // trending up — protected
       if (/^(STASH|CORE|BUY)/.test(r.recAction || '')) return; // engine wants him kept
@@ -534,6 +548,11 @@ function MyTeamTab({
       const projPts = wproj && wproj.available ? ((wproj.points && (wproj.points.median != null ? wproj.points.median : wproj.points.mean)) || 0) : 0;
       if (projPts >= 6) return;                    // projected for real points this week
       if (trendingAddPids.has(String(r.pid))) return; // hot add across all of Sleeper
+      // Still being taken in real drafts right now — the market says he's
+      // rosterable, whatever his value number reads (catches role-change
+      // players like Kolar whose value model runs behind the news).
+      const adpE = window.App?.getRedraftAdp?.(r.pid);
+      if (adpE && adpE.rank > 0 && adpE.rank <= 240) return;
       const wire = wireBest[r.pos] || 0;
       if (wire > 0 && r.dhq < wire) {
         out.add(r.pid);
@@ -541,7 +560,7 @@ function MyTeamTab({
       }
     });
     return [out, reasons];
-  }, [rows, currentLeague, playersData, prospectForRow, trendingAddPids, weeklyLineup]);
+  }, [rows, currentLeague, playersData, prospectForRow, trendingAddPids, weeklyLineup, sitTick]);
 
   // Dismissed drop alerts (persisted in localStorage per league)
   const [dismissedDrops, setDismissedDrops] = React.useState(() => {
