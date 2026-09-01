@@ -311,7 +311,7 @@ function MyTeamTab({
     height:     { label: 'Height', shortLabel: 'Ht', width: '42px', group: 'scout' },
     weight:     { label: 'Weight (lbs)', shortLabel: 'Wt', width: '42px', group: 'scout' },
     depthChart: { label: 'Depth Chart Position', shortLabel: 'Depth', width: '48px', group: 'scout' },
-    slot:       { label: 'Roster Slot', shortLabel: 'Slot', width: '48px', group: 'core' },
+    slot:       { label: 'Roster Slot', shortLabel: 'Slot', width: '62px', group: 'core' },
     acquired:   { label: 'Acquisition Method', shortLabel: 'Added', width: '74px', group: 'core' },
     acquiredDate: { label: 'Date Acquired', shortLabel: 'When', width: '60px', group: 'core' },
     sos:        { label: 'Sched Strength (1=hardest, 32=easiest)', shortLabel: 'SOS', width: '44px', group: 'stats' },
@@ -749,11 +749,13 @@ function MyTeamTab({
     untouchable: { bg: 'rgba(46,204,113,0.13)', col: 'var(--good)', lbl: 'Core' },
     watch: { bg: 'rgba(52,152,219,0.13)', col: 'var(--k-3498db, #3498db)', lbl: 'Watch' },
   };
+  // Spelled out + color-coded (owner ruling 2026-09-01) — same light-fill
+  // idiom as rosterTagMeta above so both chip families read as one system.
   const slotTagMeta = {
-    starter: { bg: 'var(--ov-3, rgba(255,255,255,0.045))', col: 'var(--white)', lbl: 'STR' },
-    bench: { bg: 'var(--ov-2, rgba(255,255,255,0.03))', col: 'var(--silver)', lbl: 'BN' },
-    taxi: { bg: 'var(--ov-2, rgba(255,255,255,0.03))', col: 'var(--silver)', lbl: 'TAX' },
-    ir: { bg: 'var(--ov-2, rgba(255,255,255,0.03))', col: 'var(--silver)', lbl: 'IR' },
+    starter: { bg: 'rgba(46,204,113,0.13)', col: 'var(--good)', lbl: 'Starter' },
+    bench: { bg: 'rgba(240,165,0,0.13)', col: 'var(--warn)', lbl: 'Bench' },
+    taxi: { bg: 'rgba(52,152,219,0.13)', col: 'var(--k-3498db, #3498db)', lbl: 'Taxi' },
+    ir: { bg: 'rgba(231,76,60,0.13)', col: 'var(--bad)', lbl: 'IR' },
   };
   const inlineTag = (cfg, key) => cfg ? (
     <span key={key} style={{
@@ -1117,7 +1119,7 @@ function MyTeamTab({
       }
       case 'weight': return <div key={colKey} style={{...base}}><span style={{ color: 'var(--silver)', fontSize: '0.72rem' }}>{r.p.weight || '\u2014'}</span></div>;
       case 'depthChart': return <div key={colKey} style={{...base}}><span style={{ color: r.p.depth_chart_order != null ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))', fontSize: '0.72rem' }}>{r.p.depth_chart_order != null ? r.pos + r.p.depth_chart_order : (r.section === 'ir' ? 'IR' : (!r.p.team || r.p.team === 'FA') ? 'FA' : 'N/A')}</span></div>;
-      case 'slot': return <div key={colKey} style={{...base}}><span style={{ fontSize:'0.76rem',color:'var(--silver)',opacity:0.65,textTransform:'uppercase' }}>{r.section==='starter'?'STR':r.section==='ir'?'IR':r.section==='taxi'?'TAX':'BN'}</span></div>;
+      case 'slot': { const sm = slotTagMeta[r.section] || slotTagMeta.bench; return <div key={colKey} style={{...base}}><span style={{ fontSize:'0.76rem',color:sm.col,opacity:0.85,textTransform:'uppercase' }}>{_slotLabel(r)}</span></div>; }
       case 'acquired': {
         const acq = getAcquisitionInfo(r.pid, myRoster?.roster_id);
         const col = 'var(--silver)';
