@@ -195,6 +195,15 @@ function MyTeamTab({
         const gd = (getRowGroupRank(a) - getRowGroupRank(b)) || String(getRowGroupKey(a)).localeCompare(String(getRowGroupKey(b)));
         if (gd !== 0) return gd;
       }
+      // Within a position group, rows band by roster slot — Starter, Bench,
+      // Taxi, IR (owner ruling 2026-09-01). Slot flags come fresh from the
+      // live Sleeper roster every load, so lineup moves re-band on their own;
+      // the chosen column sort still orders players inside each band.
+      if (rosterGroupMode === 'position') {
+        const slotRank = r => r.isIR ? 3 : r.isTaxi ? 2 : r.isStarter ? 0 : 1;
+        const sd = slotRank(a) - slotRank(b);
+        if (sd !== 0) return sd;
+      }
       if (key === 'dhq') return (b.dhq - a.dhq) * dir;
       if (key === 'age') return ((a.age||99) - (b.age||99)) * dir;
       if (key === 'ppg') {
