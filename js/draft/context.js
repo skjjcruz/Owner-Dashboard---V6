@@ -196,7 +196,10 @@
                 if (weight > bestWeight) { best = candidate; bestWeight = weight; bestKey = key; }
             }
             if (!best) return merged;
-            if (window.wrLog) window.wrLog('draftContext.boardRecovered', { from: bestKey, weight: bestWeight });
+            // A successful rescue is GOOD news — wrLog filed it in the admin
+            // error table as a cryptic "Error" row (owner ruling 2026-09-01).
+            console.info('[WarRoom] draftContext.boardRecovered', { from: bestKey, weight: bestWeight });
+            window.DHQBugCapture?.captureMessage?.('boardRecovered from ' + bestKey + ' (weight ' + bestWeight + ')', 'info', { source: 'draftContext' });
             return mergeBoardData(merged, best);
         } catch (e) {
             if (window.wrLog) window.wrLog('draftContext.recoverBoard', e);
@@ -290,7 +293,9 @@
                 const current = store.get(typedKey, {}) || {};
                 if (boardUserWeight(current) > 0) return;
                 store.set(typedKey, mergeBoardData(current, hit.board));
-                if (window.wrLog) window.wrLog('draftContext.boardVaultRestored', { leagueId, savedAt: hit.updatedAt });
+                // Same as boardRecovered above: a rescue report, not an error.
+                console.info('[WarRoom] draftContext.boardVaultRestored', { leagueId, savedAt: hit.updatedAt });
+                window.DHQBugCapture?.captureMessage?.('boardVaultRestored for league ' + leagueId, 'info', { source: 'draftContext' });
             });
         } catch (e) { /* restore is best-effort */ }
     }
