@@ -101,93 +101,20 @@
         } catch (_) { return null; }
     }
 
-    // ── Starter-requirement + count correction over the upstream assessor ──
-    // The shared assessTeamFromGlobal (ReconAI CDN) uses its own per-position
-    // starter requirements (incl. QB:3, unreachable in deep leagues) and counts
-    // startable players by last-season points (missing rookies/breakouts). We
-    // wrap it — upstream untouched — to recompute startingReq/minQuality/ideal
-    // from our constants, recount nflStarters via the DHQ starter set, and
-    // rebuild status/needs/strengths so every consumer stays consistent.
-    let _assessorWrapped = false;
-    function installStarterReqCorrection() {
-        try {
-            if (_assessorWrapped) return;
-            const upstream = window.assessTeamFromGlobal;
-            if (typeof upstream !== 'function') return;
-            const PV = window.App?.PlayerValue;
-            const MINQ = PV?.MIN_STARTER_QUALITY;
-            const IDEAL = PV?.IDEAL_ROSTER;
-            if (!MINQ) return;
-
-            function correct(result, rosterId) {
-                if (!result || !result.posAssessment) return result;
-                const pa = result.posAssessment;
-                // Count starter-quality players per position via the DHQ-ranked set.
-                const confirmedByPos = (() => {
-                    const out = {};
-                    try {
-                        const starterSet = _dhqStarterSet || (_dhqStarterSet = buildDhqStarterSet());
-                        if (!starterSet) return out;
-                        const roster = (window.S?.rosters || []).find(r => String(r.roster_id) === String(rosterId));
-                        const players = roster?.players || [];
-                        const cache = window.App?._playersCache || {};
-                        const normPos = window.App?.normPos;
-                        for (const pid of players) {
-                            const p = cache[pid];
-                            const np = p ? (normPos ? normPos(p.position) : p.position) : null;
-                            if (!np || !starterSet[np]) continue;
-                            if (starterSet[np].has(pid)) out[np] = (out[np] || 0) + 1;
-                        }
-                    } catch (_) {}
-                    return out;
-                })();
-                for (const [pos, data] of Object.entries(pa)) {
-                    if (!data || MINQ[pos] == null) continue;
-                    const req = MINQ[pos];
-                    const ideal = (IDEAL && IDEAL[pos] != null) ? IDEAL[pos] : data.ideal;
-                    const actual = data.actual ?? 0;
-                    // Only ever raise the count (fix undercounts, never invent starters).
-                    const upstreamStarters = data.nflStarters ?? 0;
-                    const confirmed = confirmedByPos[pos] || 0;
-                    const nflStarters = Math.min(actual, Math.max(upstreamStarters, confirmed));
-                    let status;
-                    if (nflStarters === 0) status = 'deficit';
-                    else if (nflStarters < req) status = 'thin';
-                    else if (actual >= ideal) status = 'surplus';
-                    else status = 'ok';
-                    if ((status === 'ok' || status === 'surplus') && actual < ideal) status = 'thin';
-                    data.nflStarters = nflStarters;
-                    data.startingReq = req;
-                    data.minQuality = req;
-                    data.ideal = ideal;
-                    data.status = status;
-                }
-                result.needs = Object.entries(pa)
-                    .filter(([, v]) => v.status === 'deficit' || v.status === 'thin')
-                    .sort((a, b) => {
-                        const aGap = (a[1].nflStarters || 0) - (a[1].startingReq || 1);
-                        const bGap = (b[1].nflStarters || 0) - (b[1].startingReq || 1);
-                        return aGap !== bGap ? aGap - bGap : (a[1].diff || 0) - (b[1].diff || 0);
-                    })
-                    .map(([pos, v]) => ({ pos, urgency: v.status, gap: Math.max(0, (v.startingReq || 1) - (v.nflStarters || 0)), diff: v.diff }))
-                    .slice(0, 5);
-                result.strengths = Object.entries(pa).filter(([, v]) => v.status === 'surplus').map(([pos]) => pos);
-                return result;
-            }
-
-            const wrapped = function (rosterId) { return correct(upstream.apply(this, arguments), rosterId); };
-            Object.defineProperty(wrapped, '_cache', {
-                get() { return upstream._cache; },
-                set(v) { upstream._cache = v; },
-                configurable: true,
-            });
-            wrapped._wrappedUpstream = upstream;
-            window.assessTeamFromGlobal = wrapped;
-            _assessorWrapped = true;
-        } catch (e) {
-            console.warn('[War Room] installStarterReqCorrection failed:', e);
-        }
-    }
+    // ── Starter-requirement correction — RETIRED (owner deep dive 2026-09-01) ──
+    // This wrapper dated from the ReconAI-CDN assessor era: it overwrote the
+    // engine's per-position bars with the static App.PlayerValue table
+    // (LB:5, WR:3 — one size for every league) and rebuilt status/needs
+    // itself. The shared engine now derives bars from THIS league's actual
+    // starting slots, counts quality through the value pool AND the live
+    // ESPN depth chart, and holds an elite-concentration guard — all of
+    // which this wrapper silently discarded, resurrecting phantom
+    // "positional weakness" flags on elite rooms. Its other job (rescuing
+    // undercounted rookies/breakouts) is covered by the modern engine's
+    // value-ranked pool and ESPN starter door. Kept as a no-op so both
+    // call sites stay valid; no field it added (needs[].gap/.diff) has any
+    // consumer.
+    function installStarterReqCorrection() { /* retired — the shared engine is the authority */ }
 
     function wrCanPageScroll() {
         const doc = document.documentElement;
