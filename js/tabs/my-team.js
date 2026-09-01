@@ -1738,11 +1738,7 @@ function MyTeamTab({
                   <div style={{ width: avatarSize + 'px', height: avatarSize + 'px', flexShrink: 0 }}><img src={'https://sleepercdn.com/content/nfl/players/thumb/'+r.pid+'.jpg'} alt="" onError={e=>e.target.style.display='none'} style={{ width: avatarSize + 'px', height: avatarSize + 'px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--ov-5, rgba(255,255,255,0.08))' }} /></div>
                   <div style={{ overflow: 'hidden', flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-	                      {/* Fixed name box (owner ruling 2026-09-01): chips column-align
-	                          down the board instead of trailing each name at a ragged edge.
-	                          flex-shrink stays on so a crowded chip row squeezes the name
-	                          rather than clipping a DROP? flag off the right edge. */}
-	                      <span style={{ fontWeight: 650, color: 'var(--white)', fontSize: playerNameSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(!_phone && !isNarrowRoster ? { flex: '0 1 ' + (isTabletRoster ? 92 : 128) + 'px' } : {}) }}>{frozenName}</span>
+	                      <span style={{ fontWeight: 650, color: 'var(--white)', fontSize: playerNameSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{frozenName}</span>
                       {/* Tag cluster (slot/roster/GM/drop) is desktop + tablet only —
                           phone Deep Data keeps the name cell to photo · name · team. */}
                       {!_phone && <React.Fragment>
