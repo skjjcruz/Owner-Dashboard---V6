@@ -1996,10 +1996,19 @@
             const give = sideBreakdown(givePlayers, givePicks, 0).total;
             const receive = sideBreakdown(receivePlayers, receivePicks, 0).total;
             const gap = receive - give;
-            const maxMyFaab = Math.max(0, Math.min(myAssessment?.faabRemaining || 0, 300));
-            const maxTheirFaab = Math.max(0, Math.min(partner?.faabRemaining || 0, 300));
-            if (gap > 100 && gap <= 600 && maxMyFaab > 0) return { giveFaab: Math.min(maxMyFaab, Math.ceil(gap / FAAB_RATE)), receiveFaab: 0 };
-            if (gap < -100 && Math.abs(gap) <= 600 && maxTheirFaab > 0) return { giveFaab: 0, receiveFaab: Math.min(maxTheirFaab, Math.ceil(Math.abs(gap) / FAAB_RATE)) };
+            // FAAB only travels as a REAL check (owner ruling 2026-09-02): the
+            // balancing amount rounds UP to a clean $25 step, and if the payer's
+            // remaining budget can't cover the whole thing the deal carries no
+            // FAAB at all — never clipped down to a token $37 sweetener.
+            const faabFor = (g, budget) => {
+                if (g <= 100 || g > 600) return 0;
+                const amt = Math.ceil(g / FAAB_RATE / 25) * 25;
+                return amt <= Math.min(budget || 0, 300) ? amt : 0;
+            };
+            const mine = faabFor(gap, myAssessment?.faabRemaining);
+            if (mine) return { giveFaab: mine, receiveFaab: 0 };
+            const theirs = faabFor(-gap, partner?.faabRemaining);
+            if (theirs) return { giveFaab: 0, receiveFaab: theirs };
             return { giveFaab: 0, receiveFaab: 0 };
         }
 
