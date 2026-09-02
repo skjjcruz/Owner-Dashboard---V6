@@ -2252,6 +2252,14 @@
                     }
                 }
                 playerPool.slice(0, 9).forEach(p => pickPool.slice(0, 6).forEach(pk => push([p], [pk])));
+                // Player + TWO picks — the shape the Elite+/Elite QB ladder
+                // demands (two 1sts + a starter). Without it those prices were
+                // quoted but never constructible.
+                for (let a = 0; a < Math.min(playerPool.length, 6); a++) {
+                    for (let i = 0; i < Math.min(pickPool.length, 4); i++) {
+                        for (let j = i + 1; j < Math.min(pickPool.length, 4); j++) push([playerPool[a]], [pickPool[i], pickPool[j]]);
+                    }
+                }
                 if (opts.allowPickOnly) {
                     pickPool.forEach(pk => push([], [pk]));
                     for (let i = 0; i < Math.min(pickPool.length, 5); i++) {
@@ -3150,24 +3158,42 @@
         // Scarcity verdict for a focused rival player the partner can't afford
         // to lose — the finder explains WHY the board is empty instead of
         // leaving a generic shrug.
-        // Shown only when even PREMIUM packages couldn't be built — the cost
-        // exists, but this roster's tradeable pieces can't reach it.
-        const focusScarcityNote = useMemo(() => {
+        // The ASKING PRICE (owner ruling 2026-09-02: "show the standard trade
+        // box with players and draft picks that it will take") — rendered when
+        // even PREMIUM packages couldn't be built from this roster's pieces.
+        // The requirement text comes from the ACTUAL rule ladders, so the box
+        // always names concrete players-and-picks shapes, never a shrug.
+        const focusAskingPrice = useMemo(() => {
             try {
                 const f = focusR;
                 if (!f || f.kind !== 'player' || f.rosterId == null || String(f.rosterId) === String(myRosterId)) return null;
                 const led = gmEngine && gmEngine.ledger(f.rosterId);
-                if (led && led.protectedPids[String(f.id)]) {
-                    const asset = playerAsset(f.id);
-                    const mkt = asset ? assetMarketValue(asset) : 0;
-                    const floor = mkt ? Math.round(mkt * 1.3) : 0;
-                    return (f.label || 'That player') + ' is ' + (led.team.teamName || 'his owner') + '’s protected core — no spare quality behind him. '
-                        + (mkt ? 'Prying him loose runs a scarcity premium: think ' + floor.toLocaleString() + '+ DHQ against his ' + mkt.toLocaleString() + ' market price, plus the composition rules. ' : '')
-                        + 'Your tradeable pieces can’t reach that price right now. Build it manually below if you want to force the question.';
-                }
+                if (!led || !led.protectedPids[String(f.id)]) return null;
+                const asset = playerAsset(f.id);
+                if (!asset) return null;
+                const mkt = assetMarketValue(asset);
+                const floor = Math.round(mkt * 1.3);
+                let reqText = 'a rule-legal package — no piece under $1,500';
+                try {
+                    if (asset.pos === 'QB' && qbTradeRules?.tierOf) {
+                        const REQ = {
+                            'elite+': 'two 1st-round picks PLUS a starter-quality player, or a 1st plus an elite offensive player',
+                            'elite': 'two 1st-round picks, or a 1st plus an elite offensive player, or a 1st plus an elite IDP plus another pick',
+                            'mid+': 'a 1st plus a starting offensive skill player, or a 1st plus an elite IDP, or a 1st plus a 2nd',
+                            'mid': 'a 1st-round pick, or a starting offensive skill player plus a 2nd, or an elite IDP plus a 2nd',
+                            'low': 'a 1st-round pick, or a 2nd plus a starter (offense or defense)',
+                            'bottom': 'a 2nd-round pick plus a starter (offense or defense)',
+                        };
+                        const tier = qbTradeRules.tierOf(String(f.id));
+                        if (tier && REQ[tier]) reqText = REQ[tier] + ' — he prices as a ' + tier.toUpperCase() + ' tier QB';
+                    } else if (eliteSkillRules?.isEliteSkill?.(String(f.id))) {
+                        reqText = 'two 1sts, or a 1st plus a starter-quality offensive player, or a 1st plus an elite IDP, or an elite player straight up — elite-player rules';
+                    }
+                } catch (e2) { }
+                return { name: asset.name, pos: asset.pos, teamName: led.team.teamName || 'his owner', value: asset.value, mkt, floor, reqText };
             } catch (e) { }
             return null;
-        }, [focusR?.id, focusR?.rosterId, gmEngine]);
+        }, [focusR?.id, focusR?.rosterId, gmEngine, qbTradeRules, eliteSkillRules]);
         const focusPlayerPid = focusR?.kind === 'player' ? focusR.id : null;
         // Resolved pick focus (carries .pickAsset) — only routed when the pick still
         // exists in the pool; a stale seed degrades to the plain mode branches.
@@ -3783,9 +3809,16 @@
                             ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'} hidden` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
                             : finderPoolOn && !finderPool.done
                                 ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
-                                : <div ref={finderResultsRef} className="tc-dhq-empty">{focusScarcityNote
-                                    ? focusScarcityNote
-                                    : (effMode === 'engine' || effMode === 'engine-picks')
+                                : focusAskingPrice
+                                    ? <div ref={finderResultsRef} style={{ border: '1px solid rgba(212,175,55,0.35)', borderRadius: 'var(--card-radius, 10px)', padding: '14px 16px', margin: '10px 0 4px', textAlign: 'left' }}>
+                                        <div style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, letterSpacing: '0.08em', fontSize: '0.8rem', color: 'var(--gold)', marginBottom: '8px' }}>
+                                            THE ASKING PRICE — {focusAskingPrice.name} <span style={{ color: posColor(focusAskingPrice.pos) }}>{focusAskingPrice.pos}</span> · {focusAskingPrice.value.toLocaleString()} DHQ
+                                        </div>
+                                        <div style={{ fontSize: '0.82rem', lineHeight: 1.5, marginBottom: '6px' }}><b>It will take:</b> {focusAskingPrice.reqText}.</div>
+                                        <div style={{ fontSize: '0.82rem', lineHeight: 1.5, marginBottom: '6px' }}><b>Scarcity premium:</b> {focusAskingPrice.teamName} has no spare quality behind him — expect the package to total <b>{focusAskingPrice.floor.toLocaleString()}+ DHQ</b> against his {focusAskingPrice.mkt.toLocaleString()} market price.</div>
+                                        <div style={{ fontSize: '0.78rem', lineHeight: 1.5, opacity: 0.75 }}>Your current tradeable pieces can't assemble that package — cost-prohibitive is the honest answer. Load the Trade Builder below if you want to force the question.</div>
+                                    </div>
+                                    : <div ref={finderResultsRef} className="tc-dhq-empty">{(effMode === 'engine' || effMode === 'engine-picks')
                                         ? (selectedPartner && !finderPoolOn
                                             ? `No trades worth making with ${selectedPartner.teamName || selectedPartner.ownerName} right now — nothing on their shelf upgrades you, and your window doesn't call for what they need. That's a verdict, not an error. Tap a player on their roster for a specific price, or build your own below.`
                                             : 'No trades worth making right now — nothing on the league market clears your GM bar. That\'s a verdict, not an error. Focus a player or partner to explore specific ideas, or build your own below.')
