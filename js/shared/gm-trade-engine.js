@@ -48,6 +48,7 @@
         upgradeMargin: 1.15, // upgrade-lane swap: incoming must beat outgoing by ≥15%
         minLineupGain: 150,  // DHQ: a deal must move my starting lineup at least this much
         minPieceValue: 1500, // no junk: every player piece must be at least this
+        pickUpgradeMinGain: 500, // Lane E: burning draft capital demands a bigger lineup step
         acceptFloor: 55,     // plain value+need acceptance likelihood floor (%)
         maxPerNeed: 4,       // deals surfaced per need position
         maxResults: 10,
@@ -234,7 +235,7 @@
             var deals = [];
             var seenIdea = {};
 
-            function consider(purpose, partnerLedger, givePlayers, givePicks, receivePlayers, receivePicks, why) {
+            function consider(purpose, partnerLedger, givePlayers, givePicks, receivePlayers, receivePicks, why, opts) {
                 // Step 4: composition + no-junk standards, both sides.
                 var badPiece = givePlayers.some(function (p) { return !realPaymentFor(p, partnerLedger.needs); })
                     || receivePlayers.some(function (p) { return !realPaymentFor(p, my.needs); });
@@ -252,7 +253,8 @@
                 var lineupDelta = afterLineup - my.lineupValue;
                 var capitalDelta = rawTotal([], receivePicks) - rawTotal([], givePicks);
                 var rebuild = /REBUILD|RETOOL/i.test(String(my.window));
-                var benefits = lineupDelta >= cfg.minLineupGain
+                var minGain = (opts && opts.minGain) || cfg.minLineupGain;
+                var benefits = lineupDelta >= minGain
                     || (rebuild && capitalDelta > 0 && lineupDelta > -cfg.minLineupGain);
                 if (!benefits) return;
                 // Step 3/5: would they plausibly take it?
@@ -335,6 +337,25 @@
                     });
                 });
             });
+
+            // LANE E — spend picks to upgrade (owner addition 2026-09-02): a
+            // healthy team with draft capital and no flagged need can still
+            // buy a genuinely better starter with picks alone. Burning capital
+            // demands a BIGGER lineup step (pickUpgradeMinGain, not the base
+            // bar) — a 1st never moves for a rounding-error upgrade. Rebuild
+            // windows hoard picks instead: this lane stays closed for them.
+            if (!/REBUILD|RETOOL/i.test(String(my.window))) {
+                partners.forEach(function (pl) {
+                    pl.excess.filter(function (p) { return (p.value || 0) >= 2500; }).slice(0, 3).forEach(function (target) {
+                        combos([], my.picks, 0, 2).forEach(function (pay) {
+                            if (!pay.picks.length) return;
+                            consider('Buy an upgrade with picks', pl, [], pay.picks, [target], [],
+                                target.name + ' is a clear step up on a current starter — bought with draft capital, no roster cost.',
+                                { minGain: cfg.pickUpgradeMinGain });
+                        });
+                    });
+                });
+            }
 
             // LANE D — window moves: a rebuilding team sells aging excess for
             // real picks; a contender may cash picks for spare starters (that's
