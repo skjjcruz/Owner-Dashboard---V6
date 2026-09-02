@@ -3214,7 +3214,39 @@
                         roomLine = `needs ${pa.minQuality} startable ${asset.pos}${pa.minQuality === 1 ? '' : 's'} every week and rosters only ${pa.nflStarters} — trading him leaves a hole they can't fill`;
                     }
                 } catch (e3) { }
-                return { name: asset.name, pos: asset.pos, teamName: led.team.teamName || 'his owner', value: asset.value, mkt, floor, reqText, roomLine };
+                // The price as CONCRETE assets (owner ruling: the standard trade
+                // box — players/picks/FAAB — never prose). Primary tier shape,
+                // priced with this league's real pick values, FAAB topping off
+                // the premium floor in clean $25 steps (never token amounts).
+                const teamsN = allRosters.length || 16;
+                const yr = (parseInt(currentLeague?.season) || new Date().getFullYear()) + 1;
+                const pv = rd => { try { return window.App?.PlayerValue?.getPickValue?.(yr, rd, teamsN) || 0; } catch (e4) { return 0; } };
+                const first = () => ({ label: `${yr} 1st-round pick`, value: pv(1), kind: 'pick', round: 1 });
+                const second = () => ({ label: `${yr} 2nd-round pick`, value: pv(2), kind: 'pick', round: 2 });
+                const sq = label => ({ label, value: 2000, kind: 'player', approx: true });
+                let rows = null;
+                try {
+                    if (asset.pos === 'QB' && qbTradeRules?.tierOf) {
+                        const tier = qbTradeRules.tierOf(String(f.id));
+                        rows = tier === 'elite+' ? [first(), first(), sq('Starter-quality player')]
+                            : tier === 'elite' ? [first(), first()]
+                            : tier === 'mid+' ? [first(), second()]
+                            : tier === 'mid' ? [first()]
+                            : tier === 'low' || tier === 'bottom' ? [second(), sq('Starter (offense or defense)')]
+                            : null;
+                    } else if (eliteSkillRules?.isEliteSkill?.(String(f.id))) {
+                        rows = [first(), sq('Starter-quality offensive player')];
+                    }
+                } catch (e5) { }
+                if (!rows) rows = [{ label: 'Value package (no piece under $1,500)', value: floor, kind: 'player', approx: true }];
+                let sum = rows.reduce((s, r) => s + r.value, 0);
+                let faab = 0;
+                if (sum < floor) {
+                    const gapDollars = Math.ceil((floor - sum) / FAAB_RATE / 25) * 25;
+                    if (gapDollars <= 300) { faab = gapDollars; sum += Math.round(faab * FAAB_RATE); }
+                    else rows.push({ label: 'Additional value', value: floor - sum, kind: 'player', approx: true });
+                }
+                return { name: asset.name, pos: asset.pos, team: asset.team, teamName: led.team.teamName || 'his owner', value: asset.value, mkt, floor, reqText, roomLine, rows, faab, total: Math.max(sum, floor) };
             } catch (e) { }
             return null;
         }, [focusR?.id, focusR?.rosterId, gmEngine, qbTradeRules, eliteSkillRules]);
@@ -3842,12 +3874,34 @@
                                 ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
                                 : focusAskingPrice
                                     ? <div ref={finderResultsRef} style={{ border: '1px solid rgba(212,175,55,0.35)', borderRadius: 'var(--card-radius, 10px)', padding: '14px 16px', margin: '10px 0 4px', textAlign: 'left' }}>
-                                        <div style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, letterSpacing: '0.08em', fontSize: '0.8rem', color: 'var(--gold)', marginBottom: '8px' }}>
-                                            THE ASKING PRICE — {focusAskingPrice.name} <span style={{ color: posColor(focusAskingPrice.pos) }}>{focusAskingPrice.pos}</span> · {focusAskingPrice.value.toLocaleString()} DHQ
+                                        <div style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, letterSpacing: '0.08em', fontSize: '0.8rem', color: 'var(--gold)', marginBottom: '10px' }}>THE ASKING PRICE</div>
+                                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                                            <div style={{ flex: 1, minWidth: '220px' }}>
+                                                <div style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--silver)', opacity: 0.8, marginBottom: '6px' }}>YOU GET</div>
+                                                <div className="tc-dhq-asset">
+                                                    <span className="tc-dhq-asset-dot" style={{ background: posColor(focusAskingPrice.pos) }} />
+                                                    <span>{focusAskingPrice.name} <em>{focusAskingPrice.pos} {focusAskingPrice.team}</em></span>
+                                                    <strong>{focusAskingPrice.value.toLocaleString()}</strong>
+                                                </div>
+                                            </div>
+                                            <div style={{ flex: 1, minWidth: '220px', borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '16px' }}>
+                                                <div style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--silver)', opacity: 0.8, marginBottom: '6px' }}>IT WILL TAKE · {focusAskingPrice.total.toLocaleString()}+ DHQ</div>
+                                                {focusAskingPrice.rows.map((r, i) => (
+                                                    <div key={i} className="tc-dhq-asset">
+                                                        <span className="tc-dhq-asset-dot" style={{ background: r.kind === 'pick' ? (PICK_COLORS[r.round] || 'var(--gold)') : 'var(--silver)' }} />
+                                                        <span>{r.label}</span>
+                                                        <strong>{r.approx ? '≈' : ''}{r.value.toLocaleString()}{r.approx ? '+' : ''}</strong>
+                                                    </div>
+                                                ))}
+                                                <div className="tc-dhq-asset">
+                                                    <span className="tc-dhq-asset-dot" style={{ background: 'var(--win-green, #2ecc71)' }} />
+                                                    <span>FAAB</span>
+                                                    <strong>${focusAskingPrice.faab}</strong>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div style={{ fontSize: '0.82rem', lineHeight: 1.5, marginBottom: '6px' }}><b>It will take:</b> {focusAskingPrice.reqText}.</div>
-                                        <div style={{ fontSize: '0.82rem', lineHeight: 1.5, marginBottom: '6px' }}><b>Why the price is so high:</b> {focusAskingPrice.teamName} {focusAskingPrice.roomLine}. Expect the package to total <b>{focusAskingPrice.floor.toLocaleString()}+ DHQ</b> against his {focusAskingPrice.mkt.toLocaleString()} market price — the scarcity premium is the cost of forcing an owner to open a hole in his own lineup.</div>
-                                        <div style={{ fontSize: '0.78rem', lineHeight: 1.5, opacity: 0.75 }}>Your current tradeable pieces can't assemble that package — cost-prohibitive is the honest answer. Load the Trade Builder below if you want to force the question.</div>
+                                        <div style={{ fontSize: '0.8rem', lineHeight: 1.5, marginTop: '10px' }}><b>Why the price is so high:</b> {focusAskingPrice.teamName} {focusAskingPrice.roomLine}. His market price is {focusAskingPrice.mkt.toLocaleString()} — the rest is the scarcity premium for forcing an owner to open a hole in his own lineup.</div>
+                                        <div style={{ fontSize: '0.76rem', lineHeight: 1.5, marginTop: '4px', opacity: 0.72 }}>Your current tradeable pieces can't assemble this package. Load the Trade Builder below to force the question.</div>
                                     </div>
                                     : <div ref={finderResultsRef} className="tc-dhq-empty">{(effMode === 'engine' || effMode === 'engine-picks')
                                         ? (selectedPartner && !finderPoolOn
