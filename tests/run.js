@@ -1202,6 +1202,106 @@ group('account surface (billing + legal requirements)');
 }
 
 // ══════════════════════════════════════════════════════════════════
+// Six-tier QB rules v2 (owner rulings 2026-09-02/03) — functional
+// ══════════════════════════════════════════════════════════════════
+{
+  const g = {};
+  new Function('window', fs.readFileSync('js/shared/qb-trade-rules-v2.js', 'utf8'))(g);
+  const scores = {}, pd = {};
+  for (let i = 0; i < 33; i++) { scores['q' + i] = 8000 - i * 190; pd['q' + i] = { position: 'QB', age: 26 }; }
+  pd.q1.age = 41;                       // rank 2 but 41 — the age rule
+  scores.q32 = 1900;                    // rank 33 — outside the 32 pool
+  const roleFlags = { q32: true };      // ...but holds a live NFL starting job
+  scores.wr1 = 7500; pd.wr1 = { position: 'WR', age: 25 };   // elite off (via isElite)
+  scores.wr2 = 2600; pd.wr2 = { position: 'WR', age: 25 };   // starter-quality off
+  scores.dl1 = 4200; pd.dl1 = { position: 'DL', age: 25 };   // elite IDP
+  const R = g.WrQbTradeRulesV2.build({
+    scores, playersData: pd, rosterPositions: ['QB', 'SUPER_FLEX', 'RB', 'WR'], teams: 16,
+    isElite: pid => pid === 'wr1' || pid === 'dl1',
+    starterRole: p => (p && roleFlags[Object.keys(pd).find(k => pd[k] === p)]) ? 'S1' : null,
+    normPos: x => String(x || '').toUpperCase(),
+    ageOf: pid => pd[pid] ? pd[pid].age : null,
+  });
+  const A = pid => ({ pid, pos: pd[pid].position, value: scores[pid] });
+  const D = o => ({ receivePlayers: [], givePlayers: [], givePicks: [], receivePicks: [], ...o });
+  const P1 = { round: 1 }, P2 = { round: 2 }, P3 = { round: 3 };
+  test('QB v2: tier ladder boundaries', () => {
+    eq(R.tierOf('q0'), 'elite+', 'rank 1 is Elite+');
+    eq(R.tierOf('q5'), 'elite', 'rank 6 is Elite');
+    eq(R.tierOf('q10'), 'mid+', 'rank 11 is Mid+');
+    eq(R.tierOf('q15'), 'mid', 'rank 16 is Mid');
+    eq(R.tierOf('q25'), 'low', 'rank 26 is Low');
+    eq(R.tierOf('q30'), 'bottom', 'rank 31 is Bottom');
+    eq(R.tierOf('q1'), 'mid', 'a 41-year-old ranked #2 prices at Mid (age rule)');
+    eq(R.tierOf('q32'), 'bottom', 'a live NFL starter outside the pool enters at Bottom (Rodgers rule)');
+  });
+  test('QB v2: graduated price floors', () => {
+    ok(R.violates(D({ givePlayers: [A('q0')], receivePicks: [P1] })), 'Elite+ for a single 1st is rejected');
+    ok(R.violates(D({ givePlayers: [A('q0')], receivePicks: [P1, P1] })), 'Elite+ for two bare 1sts is rejected — needs a player too');
+    ok(!R.violates(D({ givePlayers: [A('q0')], receivePicks: [P1, P1], receivePlayers: [A('wr2')] })), 'Elite+ for two 1sts + a starter pays');
+    ok(!R.violates(D({ givePlayers: [A('q5')], receivePicks: [P1, P1] })), 'Elite for two 1sts pays');
+    ok(R.violates(D({ givePlayers: [A('q5')], receivePicks: [P1], receivePlayers: [A('dl1')] })), 'Elite for 1st + elite IDP needs an ADDITIONAL pick');
+    ok(!R.violates(D({ givePlayers: [A('q5')], receivePicks: [P1, P3], receivePlayers: [A('dl1')] })), 'Elite for 1st + elite IDP + extra pick pays');
+    ok(R.violates(D({ givePlayers: [A('q10')], receivePicks: [P1] })), 'Mid+ for a single 1st is rejected');
+    ok(!R.violates(D({ givePlayers: [A('q10')], receivePicks: [P1, P2] })), 'Mid+ for 1st + 2nd pays');
+    ok(!R.violates(D({ givePlayers: [A('q15')], receivePicks: [P1] })), 'Mid for a single 1st pays');
+    ok(R.violates(D({ givePlayers: [A('q25')], receivePicks: [P2] })), 'Low for a bare 2nd is rejected');
+    ok(!R.violates(D({ givePlayers: [A('q25')], receivePicks: [P2], receivePlayers: [A('dl1')] })), 'Low for 2nd + a starter (defense counts) pays');
+    ok(!R.violates(D({ givePlayers: [A('q30')], receivePicks: [P2], receivePlayers: [A('wr2')] })), 'Bottom for 2nd + starter pays');
+    ok(R.violates(D({ givePlayers: [A('q32')], receivePicks: [P3] })), 'the Rodgers-rule QB never moves for a bare 3rd');
+  });
+  test('QB v2: swap bridges by tier distance', () => {
+    ok(!R.violates(D({ givePlayers: [A('q5')], receivePlayers: [A('q6')] })), 'same-tier swap passes even');
+    ok(R.violates(D({ givePlayers: [A('q5')], receivePlayers: [A('q10')] })), 'one tier down bare is rejected');
+    ok(!R.violates(D({ givePlayers: [A('q5')], receivePlayers: [A('q10')], receivePicks: [P1] })), 'one tier down + a 1st bridges');
+    ok(R.violates(D({ givePlayers: [A('q5')], receivePlayers: [A('q15')], receivePicks: [P1] })), 'two tiers down + a 1st is NOT enough');
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GM trade engine (owner surgery 2026-09-03) — functional
+// ══════════════════════════════════════════════════════════════════
+{
+  const g = {};
+  new Function('window', fs.readFileSync('js/shared/gm-trade-engine.js', 'utf8'))(g);
+  const P = (pid, pos, value) => ({ type: 'player', pid, name: pid, pos, value });
+  const teams = [
+    { rosterId: 1, ownerId: 'u1', teamName: 'Me', assessment: {
+        needs: [{ pos: 'RB', urgency: 'thin' }],
+        posAssessment: { QB: { status: 'ok' }, RB: { status: 'deficit', minQuality: 1 }, WR: { status: 'surplus', minQuality: 1, nflStarters: 3 } },
+        window: 'CONTENDING' },
+      players: [P('myqb', 'QB', 5000), P('mywr1', 'WR', 4000), P('mywr2', 'WR', 2500), P('myrb', 'RB', 900)],
+      picks: [{ type: 'pick', id: 'pk1', year: 2027, round: 1, label: '2027 R1', value: 5000 }] },
+    { rosterId: 2, ownerId: 'u2', teamName: 'Them', assessment: {
+        needs: [{ pos: 'WR', urgency: 'thin' }],
+        posAssessment: { RB: { status: 'surplus', minQuality: 1, nflStarters: 3 }, WR: { status: 'deficit' } },
+        window: 'CONTENDING' },
+      players: [P('theirrb1', 'RB', 3200), P('theirrb2', 'RB', 2800), P('theirwr', 'WR', 800), P('theirdb', 'DB', 2100)],
+      picks: [] },
+  ];
+  const eng = g.WrGmTradeEngine.build({
+    myRosterId: 1, rosterPositions: ['QB', 'RB', 'WR', 'FLEX', 'BN'],
+    teams, liquidity: a => (a.pos === 'DB' ? 0.6 : 1), isElite: () => false,
+  });
+  const led = eng.ledger(1);
+  test('GM engine: the ledger protects and frees the right players', () => {
+    ok(led.protectedPids.myqb, 'the only QB is protected');
+    ok(led.protectedPids.mywr1, 'the top WR (weekly requirement) is protected');
+    ok(led.excess.some(p => p.pid === 'mywr2'), 'the spare WR above the bar is tradeable excess');
+    ok(!led.excess.some(p => p.pid === 'myrb'), 'a sub-$1500 bench piece is not a market chip');
+  });
+  test('GM engine: recommendations are purposeful and protected men never pay', () => {
+    const recs = eng.recommend();
+    ok(recs.length >= 1, 'the needs-mirror produces at least one deal');
+    ok(recs.every(d => !d.givePlayers.some(p => led.protectedPids[p.pid])), 'no protected player appears as payment');
+    ok(recs.some(d => d.receivePlayers.some(p => p.pos === 'RB')), 'the deal addresses the flagged RB need');
+    ok(recs.every(d => d.lineupDelta >= 150 || d.capitalDelta > 0), 'every deal clears the benefit gate');
+    const eng2 = g.WrGmTradeEngine.build({ myRosterId: 2, rosterPositions: ['QB', 'RB', 'WR', 'FLEX', 'BN'], teams, liquidity: () => 1, isElite: () => false });
+    ok(Array.isArray(eng2.recommend()), 'the partner board runs clean too');
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Summary
 // ══════════════════════════════════════════════════════════════════
 console.log('\n');

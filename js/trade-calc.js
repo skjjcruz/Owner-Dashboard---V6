@@ -1711,14 +1711,16 @@
         // aggression or the floor — only tradePriority.positions survives, as an
         // additive shopping hint unioned into targetPositions. The opponent's
         // displayed acceptance % is computed elsewhere and is never touched here.
-        // QB trade composition rules (owner ruling 2026-09-02) — a
-        // finder-only gate built from the shared pure module. The manual
-        // Trade Builder is untouched and shows no warnings by design:
-        // whatever an owner hand-builds is on the owner.
+        // QB trade composition rules — six-tier v2 (owner rulings
+        // 2026-09-02: Elite+/Elite/Mid+/Mid/Low/Bottom ladder, the 40+
+        // age rule, live-NFL-starter floor, tier-distance swap bridges).
+        // A finder-only gate built from the pure module. The manual Trade
+        // Builder is untouched and shows no warnings by design: whatever
+        // an owner hand-builds is on the owner.
         const qbTradeRules = useMemo(() => {
             try {
-                if (!window.WrQbTradeRules?.build) return null;
-                return window.WrQbTradeRules.build({
+                if (!window.WrQbTradeRulesV2?.build) return null;
+                return window.WrQbTradeRulesV2.build({
                     scores: window.App?.LI?.playerScores || {},
                     playersData,
                     rosterPositions: currentLeague?.roster_positions || [],
@@ -1726,6 +1728,7 @@
                     isElite: pid => (typeof window.App?.isElitePlayer === 'function') ? window.App.isElitePlayer(pid) : ((window.App?.LI?.playerScores?.[pid] || 0) >= 7000),
                     starterRole: p => window.App?.NflRoles?.starterRole?.(p) || null,
                     normPos,
+                    ageOf: pid => (playersData[pid] && playersData[pid].age) || null,
                 });
             } catch (e) { return null; }
         }, [playersData, currentLeague, allRosters, timeRecomputeTs]);
@@ -1903,7 +1906,13 @@
                     userGain,
                 })
                 : null;
-            const likelihood = Math.round(Math.max(5, Math.min(95, baseLikelihood + (behaviorFit?.acceptanceDelta || 0))));
+            // GM-engine deals carry the acceptance the engine DECIDED on
+            // (plain value + need fit — DNA/psych taxes stay on the manual
+            // builder by owner ruling); legacy focused paths keep the
+            // psych-taxed number.
+            const likelihood = input.likelihoodOverride != null
+                ? Math.round(Math.max(5, Math.min(95, input.likelihoodOverride)))
+                : Math.round(Math.max(5, Math.min(95, baseLikelihood + (behaviorFit?.acceptanceDelta || 0))));
             const fit = myAssessment ? calcComplementarity(myAssessment, partner) : 0;
             const valueScore = Math.max(0, Math.min(100, 50 + (userGain / Math.max(give.total, receive.total, 1)) * 120));
             const confidenceScore = Math.round(Math.max(0, Math.min(100, likelihood * 0.45 + fit * 0.25 + valueScore * 0.30 + (behaviorFit?.scoreDelta || 0))));
@@ -2002,7 +2011,8 @@
                 behaviorReadout,
                 windowImpact,
                 caution,
-                rank: Math.round(likelihood * 1.2 + fit * 0.8 + valueScore + (confidenceScore / 2)),
+                rank: input.rankOverride != null ? input.rankOverride : Math.round(likelihood * 1.2 + fit * 0.8 + valueScore + (confidenceScore / 2)),
+                rankOverride: input.rankOverride != null ? input.rankOverride : undefined,
                 createdAt: input.createdAt || new Date().toISOString(),
                 status: input.status || 'idea',
             };
@@ -2135,10 +2145,11 @@
             const theirs = isAsset && f.rosterId != null && !mine;
             if (f?.kind === 'pick') return mine ? 'shop' : theirs ? 'acquire' : (query.intent === 'picks' ? 'picks' : 'fillNeed');
             if (theirs) return 'acquire';
-            if (query.intent === 'picks') return 'picks';
+            if (query.intent === 'picks') return mine ? 'picks' : 'engine-picks';
             if (mine) return 'shop';
-            if (query.intent === 'shop') return 'sellSurplus';
-            return 'fillNeed'; // 'best' (league-wide dual scan when unpinned) and 'help'
+            // Every unfocused intent runs the GM engine (owner surgery): the
+            // legacy dual scan / sellSurplus wall-throwing is retired.
+            return 'engine';
         }
 
         function generateDealsForPartner(partner, mode, focusPid, opts = {}) {
@@ -2161,7 +2172,13 @@
             const effectiveNeedPos = [...new Set([...myNeedPos, ...priPos, ...tuning.targetPositions])];
             const mySurplusPos = myAssessment?.strengths || [];
             const theirNeedPos = (partner.needs || []).map(n => n.pos);
-            const myPlayers = assetsForRoster(myRosterObj).filter(p => !isUntouchableAsset(p, tuning));
+            // Engine-protected starters are never PAYMENT in any deal. The one
+            // exception: the focused player himself — an owner explicitly
+            // shopping his own starter gets an answer (at full composition
+            // prices), not silence.
+            const myPlayers = assetsForRoster(myRosterObj)
+                .filter(p => !isUntouchableAsset(p, tuning))
+                .filter(p => !gmProtectedPids.has(String(p.pid)) || String(p.pid) === String(focusPid || ''));
             const theirPlayers = assetsForRoster(theirRosterObj);
             const myChips = myPlayers.filter(p =>
                 tuning.sellPositions.has(p.pos)
@@ -2289,7 +2306,7 @@
 
             function addShopPickAsset(pick, returnPlayers, returnPicks, reasonPrefix = '') {
                 const returns = sideCombos(returnPlayers, returnPicks, pick.value, { allowPickOnly: true });
-                const returnLow = 0.72 - aggression * 0.08;
+                const returnLow = 0.90; // owner surgery: no 72-cent pick sales either
                 const returnHigh = 1.04 + aggression * 0.18;
                 returns
                     .filter(pkg => pkg.market >= pick.value * returnLow && pkg.market <= pick.value * returnHigh)
@@ -2314,7 +2331,11 @@
             function addShopAsset(asset, returnPlayers, returnPicks, reasonPrefix = '') {
                 const assetMkt = assetMarketValue(asset);
                 const returns = sideCombos(returnPlayers, returnPicks, assetMkt, { allowPickOnly: true });
-                const returnLow = mode === 'picks' ? 0.50 : 0.72 - aggression * 0.08;
+                // Owner surgery: the finder never endorses selling a player at
+                // 72 cents on the dollar. Returns start at 90% of his market
+                // value (85% when the owner explicitly asks for pick-only
+                // returns — draft capital runs a thin structural discount).
+                const returnLow = mode === 'picks' ? 0.85 : 0.90;
                 const returnHigh = 1.04 + aggression * 0.18;
                 returns
                     .filter(pkg => pkg.market >= assetMkt * returnLow && pkg.market <= assetMkt * returnHigh)
@@ -2338,6 +2359,32 @@
                                 : `You reset value into a roster fit without forcing a lopsided ask.`,
                         });
                     });
+            }
+
+            // ── GM engine modes (all unfocused boards) ──────────────────
+            // The engine already ran every lane league-wide; here we take
+            // THIS partner's slice and wrap each deal through addCandidate →
+            // buildDeal so cards, dedupe, and the rules gates stay uniform.
+            // No FAAB is appended: engine packages are exact.
+            if (mode === 'engine' || mode === 'engine-picks') {
+                (gmDealsByPartner[String(partner.rosterId)] || [])
+                    .filter(d => mode !== 'engine-picks' || (d.givePicks || []).length || (d.receivePicks || []).length)
+                    .forEach(d => addCandidate(candidates, partner, {
+                        mode,
+                        type: d.purpose,
+                        givePlayers: d.givePlayers, givePicks: d.givePicks,
+                        receivePlayers: d.receivePlayers, receivePicks: d.receivePicks,
+                        rankOverride: 100000 + Math.round(d.score || 0),
+                        likelihoodOverride: d.acceptance,
+                        whyYou: (d.why || '') + ' Your starting lineup moves ' + (d.lineupDelta >= 0 ? '+' : '') + d.lineupDelta + ' DHQ.',
+                    }));
+                const seenCoreE = new Set();
+                const rankedE = candidates
+                    .map(deal => ({ ...deal, recommendationScore: deal.rank, viability: dealViability(deal, tuning) }))
+                    .sort((a, b) => b.rank - a.rank)
+                    .filter(deal => { if (seenCoreE.has(deal._core)) return false; seenCoreE.add(deal._core); return true; })
+                    .slice(0, 8);
+                return opts.keepSig ? rankedE : rankedE.map(({ _sig, _core, ...deal }) => deal);
             }
 
             // Pick focus dominates the mode branches: the focused pick is the deal's
@@ -2377,7 +2424,9 @@
             const seenCore = new Set();
             const ranked = candidates
                 .map(deal => {
-                    const rank = scoreDealRecommendation(deal, tuning);
+                    // Engine deals rank by the GM engine's benefit-first score;
+                    // legacy focused deals keep the recommendation scorer.
+                    const rank = deal.rankOverride != null ? deal.rankOverride : scoreDealRecommendation(deal, tuning);
                     return { ...deal, rank, recommendationScore: rank, viability: dealViability(deal, tuning) };
                 })
                 .sort((a, b) => b.rank - a.rank || b.likelihood - a.likelihood || b.fit - a.fit)
@@ -2996,6 +3045,60 @@
             () => ++finderEpochRef.current,
             [assessments, ownerDna, grudges, ownerBehaviorByRosterId, teamContextByRosterId, picksByOwner, draftSlotMaps, leagueDraftRounds]
         );
+        // ── GM trade engine (owner surgery 2026-09-03) ──────────────────
+        // The five-step GM brain drives every UNFOCUSED board: health-report
+        // ledger → cost-benefit lineup gate → complementary-market shopping →
+        // packages under the composition rules → recommend-or-stay-silent.
+        // Focused queries (a clicked player/pick/partner) keep the legacy
+        // combo generator but pay from engine-approved chips only. Owner DNA
+        // taxes are deliberately NOT in this chain (they stay on the manual
+        // builder); buildDeal wraps engine deals for card display.
+        const gmEngine = useMemo(() => {
+            try {
+                if (!window.WrGmTradeEngine?.build || !assessments.length) return null;
+                const gmTeams = assessments.map(a => {
+                    const roster = allRosters.find(r => String(r.roster_id) === String(a.rosterId));
+                    if (!roster) return null;
+                    return {
+                        rosterId: a.rosterId,
+                        ownerId: a.ownerId,
+                        teamName: a.teamName || a.ownerName,
+                        assessment: a,
+                        players: assetsForRoster(roster),
+                        picks: pickAssetsForOwner(a.ownerId),
+                    };
+                }).filter(Boolean);
+                return window.WrGmTradeEngine.build({
+                    myRosterId,
+                    rosterPositions: currentLeague?.roster_positions || [],
+                    teams: gmTeams,
+                    liquidity: tradeLiquidity,
+                    isElite: pid => (typeof window.App?.isElitePlayer === 'function') ? window.App.isElitePlayer(pid) : ((window.App?.LI?.playerScores?.[pid] || 0) >= 7000),
+                    isUntouchable: pid => isUntouchableAsset({ pid: String(pid) }, finderTuning),
+                    primeYearsLeft: a => primeYearsRemaining(a.pos, playerAge(playersData[a.pid])),
+                    rules: [qbTradeRules, eliteSkillRules].filter(Boolean),
+                });
+            } catch (e) { if (window.wrLog) window.wrLog('trade.gmEngine', e); return null; }
+        }, [finderDataEpoch, finderTuningHash, myRosterId]);
+        const gmDealsByPartner = useMemo(() => {
+            const map = {};
+            try {
+                (gmEngine ? gmEngine.recommend() : []).forEach(d => {
+                    (map[String(d.partnerRosterId)] = map[String(d.partnerRosterId)] || []).push(d);
+                });
+            } catch (e) { if (window.wrLog) window.wrLog('trade.gmRecommend', e); }
+            return map;
+        }, [gmEngine]);
+        // My protected list (engine ledger): starters the finder must never
+        // spend as payment — a focused query may still SHOP the focused
+        // player himself (the owner asked), but never pays with protected men.
+        const gmProtectedPids = useMemo(() => {
+            try {
+                const led = gmEngine && gmEngine.ledger(myRosterId);
+                return led ? new Set(Object.keys(led.protectedPids)) : new Set();
+            } catch (e) { return new Set(); }
+        }, [gmEngine, myRosterId]);
+
         const partnerBoard = useMemo(() => computePartnerBoard(), [finderDataEpoch]);
         // Per-(partner, mode, focus) deal cache, invalidated wholesale on tuning/data
         // change. Deals are kept WITH _sig for cross-partner/mode dedupe in the pool.
@@ -3047,7 +3150,9 @@
             // each slice re-publishes the pool for progressive row reveal.
             let cancelled = false;
             const partners = partnerBoard;
-            const modes = finderDualBest ? ['fillNeed', 'sellSurplus'] : [effMode];
+            // Engine modes never dual-scan — the GM engine already runs every
+            // lane (fill-need, upgrade swap, consolidate, picks, window moves).
+            const modes = (effMode === 'engine' || effMode === 'engine-picks' || !finderDualBest) ? [effMode] : ['fillNeed', 'sellSurplus'];
             const minPartners = finderDualBest ? Math.min(6, partners.length) : partners.length;
             const pooled = [];
             const seen = new Set();
@@ -3567,7 +3672,9 @@
                             ? <div className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'} hidden` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
                             : finderPoolOn && !finderPool.done
                                 ? <div className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
-                                : <div className="tc-dhq-empty">No package found for this intent. Try another partner chip, clear the focus, or open the builder below.</div>}
+                                : <div className="tc-dhq-empty">{(effMode === 'engine' || effMode === 'engine-picks')
+                                    ? 'No trades worth making right now — nothing on the league market clears your GM bar. That\'s a verdict, not an error. Focus a player or partner to explore specific ideas, or build your own below.'
+                                    : 'No package found for this intent. Try another partner chip, clear the focus, or open the builder below.'}</div>}
                     </div>
                 </section>
 

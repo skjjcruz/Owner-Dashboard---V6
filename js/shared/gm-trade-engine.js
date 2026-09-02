@@ -193,7 +193,11 @@
             var get = mktTotal(theyGetPlayers, theyGetPicks);
             if (give <= 0) return 0;
             var surplusPct = (get - give) / Math.max(give, get, 1);
-            var base = 50 + surplusPct * 200;
+            // Base 65: a genuinely fair-value offer is plausible on its own.
+            // This scale carries no psych/DNA taxes (owner ruling: those stay
+            // on the manual builder), so the GM-office acceptance floor reads
+            // against plain value + need fit.
+            var base = 65 + surplusPct * 200;
             var needHit = (theyGetPlayers || []).some(function (p) {
                 return partnerLedger.needs.some(function (n) { return n.pos === p.pos; });
             });
