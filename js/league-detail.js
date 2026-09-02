@@ -3503,7 +3503,7 @@
                     {/* Refresh Button */}
                     <button onClick={async () => {
                         try {
-                            Object.keys(localStorage).filter(k => k.startsWith('dhq_leagueintel_') || k.startsWith('dhq_hist_')).forEach(k => localStorage.removeItem(k));
+                            Object.keys(localStorage).filter(k => k.startsWith('dhq_leagueintel_') || k.startsWith('dhq_hist_')).forEach(k => localStorage.removeItem(k)); window.DhqStorage?.idbRemove?.('dhq_leagueintel_v14'); /* the intel build lives in IndexedDB now */
                             // Real cache clears (audit:refresh-stale step 2): the old
                             // `window._wrPlayersCache = null` never touched core.js's
                             // closure-scoped cache, and the sessionStorage key was a
@@ -3576,7 +3576,7 @@
                         const doRefresh = async () => {
                             setPhHdrSheetOpen(false);
                             try {
-                                Object.keys(localStorage).filter(k => k.startsWith('dhq_leagueintel_') || k.startsWith('dhq_hist_')).forEach(k => localStorage.removeItem(k));
+                                Object.keys(localStorage).filter(k => k.startsWith('dhq_leagueintel_') || k.startsWith('dhq_hist_')).forEach(k => localStorage.removeItem(k)); window.DhqStorage?.idbRemove?.('dhq_leagueintel_v14'); /* the intel build lives in IndexedDB now */
                                 window.App?.clearDataCaches?.();
                                 window.Sleeper?.clearSeasonCaches?.();
                                 if (window.App) { window.App.LI = {}; window.App.LI_LOADED = false; window._liLoading = false; }
