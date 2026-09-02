@@ -2179,7 +2179,14 @@
             const myPlayers = assetsForRoster(myRosterObj)
                 .filter(p => !isUntouchableAsset(p, tuning))
                 .filter(p => !gmProtectedPids.has(String(p.pid)) || String(p.pid) === String(focusPid || ''));
-            const theirPlayers = assetsForRoster(theirRosterObj);
+            // Seller-side scarcity (owner ruling 2026-09-02: "BigLoco only has
+            // two QBs, he's not going to give one away"): a player the PARTNER's
+            // own ledger protects is not realistically available — he never
+            // appears as an acquire target or a shop return, no matter the
+            // price. No focus exception: their roster isn't ours to raid.
+            let partnerProtected = {};
+            try { const pl = gmEngine && gmEngine.ledger(partner.rosterId); if (pl) partnerProtected = pl.protectedPids || {}; } catch (e) { }
+            const theirPlayers = assetsForRoster(theirRosterObj).filter(p => !partnerProtected[String(p.pid)]);
             const myChips = myPlayers.filter(p =>
                 tuning.sellPositions.has(p.pos)
                 || mySurplusPos.includes(p.pos)
@@ -2195,7 +2202,7 @@
             const theirPlayerIds = new Set([...(theirRosterObj.players || []), ...(theirRosterObj.reserve || []), ...(theirRosterObj.taxi || [])].map(String));
             const myPlayerIds = new Set([...(myRosterObj.players || []), ...(myRosterObj.reserve || []), ...(myRosterObj.taxi || [])].map(String));
             const targetPool = focusAsset && theirPlayerIds.has(String(focusPid))
-                ? [focusAsset]
+                ? [focusAsset].filter(p => !partnerProtected[String(p.pid)]) // focused or not, a protected man stays home
                 : theirPlayers.filter(p => {
                     if (mode === 'fillNeed') return effectiveNeedPos.length ? effectiveNeedPos.includes(p.pos) : true;
                     if (mode === 'acquire') return priPos.length || tuning.targetPositions.size ? effectiveNeedPos.includes(p.pos) : true;
@@ -2409,7 +2416,11 @@
             } else if (mode === 'acquire' || mode === 'fillNeed') {
                 const givePool = myChips.length ? myChips : myPlayers;
                 targetPool.slice(0, 8).forEach(target => addAcquireTarget(target, givePool, myPicks));
-                if (candidates.length < 3) {
+                // When the FOCUSED player is scarcity-blocked (his owner can't
+                // afford to lose him), the honest answer is the verdict note —
+                // never a fallback board of his teammates burying it.
+                const focusBlocked = focusAsset && theirPlayerIds.has(String(focusPid)) && partnerProtected[String(focusPid)];
+                if (candidates.length < 3 && !focusBlocked) {
                     theirPlayers.slice(0, 14).forEach(target => addAcquireTarget(target, myPlayers, myPicks.length ? myPicks : allMyPicks, 'Fallback board: '));
                 }
             } else if (mode === 'shop' || mode === 'sellSurplus' || mode === 'picks') {
@@ -3068,7 +3079,7 @@
                         picks: pickAssetsForOwner(a.ownerId),
                     };
                 }).filter(Boolean);
-                return window.WrGmTradeEngine.build({
+                const eng = window.WrGmTradeEngine.build({
                     myRosterId,
                     rosterPositions: currentLeague?.roster_positions || [],
                     teams: gmTeams,
@@ -3078,7 +3089,9 @@
                     primeYearsLeft: a => primeYearsRemaining(a.pos, playerAge(playersData[a.pid])),
                     rules: [qbTradeRules, eliteSkillRules].filter(Boolean),
                 });
-            } catch (e) { if (window.wrLog) window.wrLog('trade.gmEngine', e); return null; }
+                try { window._wrGmEngine = eng; window._wrGmEngineErr = null; } catch (e0) { }
+                return eng;
+            } catch (e) { try { window._wrGmEngineErr = String(e && e.stack || e); } catch (e1) { } if (window.wrLog) window.wrLog('trade.gmEngine', e); return null; }
         }, [finderDataEpoch, finderTuningHash, myRosterId]);
         const gmDealsByPartner = useMemo(() => {
             const map = {};
@@ -3114,6 +3127,21 @@
 
         // Typed finder query → generation inputs (moved from renderDealHQ).
         const focusR = resolveFinderFocus(finderQuery.focus);
+        // Scarcity verdict for a focused rival player the partner can't afford
+        // to lose — the finder explains WHY the board is empty instead of
+        // leaving a generic shrug.
+        const focusScarcityNote = useMemo(() => {
+            try {
+                const f = focusR;
+                if (!f || f.kind !== 'player' || f.rosterId == null || String(f.rosterId) === String(myRosterId)) return null;
+                const led = gmEngine && gmEngine.ledger(f.rosterId);
+                if (led && led.protectedPids[String(f.id)]) {
+                    return (f.label || 'That player') + ' isn’t realistically available — ' + (led.team.teamName || 'his owner')
+                        + ' has no spare quality behind him at the position, so no fair package gets this done. The finder won’t pitch a raid the owner would never accept. Build it yourself below if you want to try anyway.';
+                }
+            } catch (e) { }
+            return null;
+        }, [focusR?.id, focusR?.rosterId, gmEngine]);
         const focusPlayerPid = focusR?.kind === 'player' ? focusR.id : null;
         // Resolved pick focus (carries .pickAsset) — only routed when the pick still
         // exists in the pool; a stale seed degrades to the plain mode branches.
@@ -3219,6 +3247,24 @@
             if (!selectedPartner) return [];
             return evalPartnerDeals(selectedPartner, effMode, focusPlayerPid, focusPickR).map(({ _sig, _core, ...deal }) => deal);
         }, [finderActive, finderPoolOn, finderPool, selectedPartner, effMode, focusPlayerPid, focusPickR?.id, finderDataEpoch, finderTuningHash]);
+        // Auto-reveal (owner ruling 2026-09-02: results rendered below the fold
+        // and "if you don't know to look for it, you'll never find it"): when a
+        // player/pick is focused, scroll the finder's results — the deal cards,
+        // or the verdict note when the board is empty — into view.
+        const finderResultsRef = useRef(null);
+        const finderStageRef = useRef(null);
+        const _focusRevealKey = finderQuery.focus ? finderQuery.focus.kind + ':' + finderQuery.focus.id : null;
+        useEffect(() => {
+            if (!_focusRevealKey) return undefined;
+            const t = setTimeout(() => {
+                try {
+                    const el = finderStageRef.current || finderResultsRef.current;
+                    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } catch (e) { }
+            }, 400);
+            return () => clearTimeout(t);
+        }, [_focusRevealKey, finderDeals.length > 0]);
+
         const finderActionable = finderDeals.filter(deal => deal.likelihood >= finderActionFloor);
         const finderMoonshotCount = Math.max(0, finderDeals.length - finderActionable.length);
         const finderVisibleDeals = showAllDeals ? finderDeals : finderActionable.slice(0, finderPoolOn ? 8 : 6);
@@ -3331,6 +3377,7 @@
                 : selectedPartner ? `vs ${selectedPartner.ownerName}` : 'no partner scored yet';
             const assetBrowserSorts = [
                 { key:'dhq', label:'DHQ' },
+                { key:'pos', label:'Position' },
                 { key:'age', label:'Age' },
                 { key:'owner', label:'Owned Team' },
                 { key:'points', label:'Last FP' },
@@ -3347,7 +3394,12 @@
                 const assessment = assessments.find(a => String(a.rosterId) === String(roster?.roster_id));
                 return assessment?.teamName || ownerNameForRosterId(roster?.roster_id) || `Team ${roster?.roster_id || '?'}`;
             };
-            const assetBrowserRows = (assetBrowserOpen ? assetBrowserRosters : []).flatMap(roster => assetsForRoster(roster)
+            const assetBrowserRows = (assetBrowserOpen ? assetBrowserRosters : []).flatMap(roster => {
+                // Rival rosters: mark the players their own ledger protects —
+                // the scarcity rule means no fair package pries them loose.
+                let _prot = {};
+                if (!browsingMyRoster) { try { const led = gmEngine && gmEngine.ledger(roster.roster_id); if (led) _prot = led.protectedPids || {}; } catch (e) { } }
+                return assetsForRoster(roster)
                 .filter(p => !browsingMyRoster || !isUntouchableAsset(p, focusTuning))
                 .map(asset => {
                     const player = playersData[asset.pid] || {};
@@ -3361,8 +3413,10 @@
                         ownerId: roster.owner_id,
                         rosterId: roster.roster_id,
                         ownerLabel: rosterLabel(roster),
+                        held: !browsingMyRoster && !!_prot[String(asset.pid)],
                     };
-                }));
+                });
+            });
             // Flex-group chips (league-derived) + group-aware predicate (c73cc40) —
             // optional-chained so the browser degrades to plain positions until the
             // window.App flex-group helpers land.
@@ -3374,13 +3428,16 @@
                 .filter(row => _dtPosMatch(row.pos, assetBrowserPos))
                 .filter(row => !assetBrowserRookieOnly || !!tcRookieInfoFor(row.pid))
                 .sort((a, b) => {
+                    if (assetBrowserSort === 'pos') return (TC_POS_ORDER[a.pos] ?? 99) - (TC_POS_ORDER[b.pos] ?? 99) || b.value - a.value;
                     if (assetBrowserSort === 'age') return (a.age || 99) - (b.age || 99) || b.value - a.value;
                     if (assetBrowserSort === 'owner') return a.ownerLabel.localeCompare(b.ownerLabel) || b.value - a.value;
                     if (assetBrowserSort === 'points') return b.lastPoints - a.lastPoints || b.value - a.value;
                     if (assetBrowserSort === 'prime') return (b.primeYears || 0) - (a.primeYears || 0) || b.value - a.value;
                     return b.value - a.value;
                 })
-                .slice(0, 28);
+                // Single-owner scope (an owner tapped in League Teams) shows his
+                // WHOLE roster, not a value-capped slice.
+                .slice(0, assetBrowserRosters.length === 1 ? 80 : 28);
 
             // ── Focus typeahead sources — players (mine AND league-wide), picks, owners ──
             // Built inline per keystroke (only when 2+ chars typed); no memo needed at
@@ -3647,9 +3704,14 @@
                                         <span>Last FP</span>
                                         <span>Prime</span>
                                     </div>
-                                    {visibleAssetRows.length ? visibleAssetRows.map(row => (
-                                        <button key={`${row.rosterId}-${row.pid}`} type="button" role="row" className={`tc-dhq-asset-row${focusPlayerPid != null && String(focusPlayerPid) === String(row.pid) ? ' is-active' : ''}`} onClick={() => selectAssetFocus(row)}>
-                                            <span title={row.name}>{row.name}{(() => {
+                                    {visibleAssetRows.length ? visibleAssetRows.map((row, _ri) => (<React.Fragment key={`${row.rosterId}-${row.pid}`}>
+                                        {assetBrowserSort === 'pos' && (_ri === 0 || visibleAssetRows[_ri - 1].pos !== row.pos) && (
+                                            <div role="row" style={{ padding: '5px 10px 3px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.08em', color: posColor(row.pos), borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
+                                                {({ QB: 'QUARTERBACKS', RB: 'RUNNING BACKS', WR: 'WIDE RECEIVERS', TE: 'TIGHT ENDS', K: 'KICKERS', DL: 'DEFENSIVE LINE', LB: 'LINEBACKERS', DB: 'DEFENSIVE BACKS' })[row.pos] || row.pos}
+                                            </div>
+                                        )}
+                                        <button type="button" role="row" className={`tc-dhq-asset-row${focusPlayerPid != null && String(focusPlayerPid) === String(row.pid) ? ' is-active' : ''}`} onClick={() => selectAssetFocus(row)}>
+                                            <span title={row.held ? row.name + ' — his owner has no spare quality behind him; the finder won’t propose a raid' : row.name}>{row.name}{row.held && <em style={{ fontStyle: 'normal', marginLeft: '6px', padding: '1px 5px', fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--silver)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 'var(--card-radius-xs, 5px)', opacity: 0.75 }}>CORE</em>}{(() => {
                                                 const rf = tcRookieInfoFor(row.pid);
                                                 if (!rf) return null;
                                                 const bits = [rf.college, rf.draftSlot || (rf.isUDFA ? 'UDFA' : ''), rf.tierLabel].filter(Boolean);
@@ -3663,23 +3725,25 @@
                                             <span>{row.lastPoints ? row.lastPoints.toLocaleString() : '--'}</span>
                                             <span>{row.primeYears != null ? row.primeYears : '--'}</span>
                                         </button>
-                                    )) : <div className="tc-dhq-empty">{assetBrowserRookieOnly ? (tcRookieIndex.size === 0 ? 'Rookie data still loading…' : 'No tradeable rookies match this filter (rookies with no trade value yet are hidden).') : 'No assets match this position filter.'}</div>}
+                                    </React.Fragment>)) : <div className="tc-dhq-empty">{assetBrowserRookieOnly ? (tcRookieIndex.size === 0 ? 'Rookie data still loading…' : 'No tradeable rookies match this filter (rookies with no trade value yet are hidden).') : 'No assets match this position filter.'}</div>}
                                 </div>
                             </div>
                         ) : <div className="tc-dhq-empty">No tradeable assets to browse for this scope.</div>)}
 
                         {deals.length
-                            ? <div className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'} hidden` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
+                            ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'} hidden` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
                             : finderPoolOn && !finderPool.done
-                                ? <div className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
-                                : <div className="tc-dhq-empty">{(effMode === 'engine' || effMode === 'engine-picks')
-                                    ? 'No trades worth making right now — nothing on the league market clears your GM bar. That\'s a verdict, not an error. Focus a player or partner to explore specific ideas, or build your own below.'
-                                    : 'No package found for this intent. Try another partner chip, clear the focus, or open the builder below.'}</div>}
+                                ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
+                                : <div ref={finderResultsRef} className="tc-dhq-empty">{focusScarcityNote
+                                    ? focusScarcityNote
+                                    : (effMode === 'engine' || effMode === 'engine-picks')
+                                        ? 'No trades worth making right now — nothing on the league market clears your GM bar. That\'s a verdict, not an error. Focus a player or partner to explore specific ideas, or build your own below.'
+                                        : 'No package found for this intent. Try another partner chip, clear the focus, or open the builder below.'}</div>}
                     </div>
                 </section>
 
                 {deals.length > 0 && (
-                    <section className="tc-dhq-panel tc-dhq-deal-stage">
+                    <section ref={finderStageRef} className="tc-dhq-panel tc-dhq-deal-stage">
                         <div className="tc-dhq-panel-head">
                             <span>Finder Rows</span>
                             <em>{showAllDeals ? deals.length : actionableDeals.length} idea{(showAllDeals ? deals.length : actionableDeals.length) === 1 ? '' : 's'} · {finderPoolOn ? 'league-wide' : selectedPartner ? selectedPartner.ownerName : 'Select a partner'}</em>
@@ -3724,13 +3788,25 @@
                         const needs = (a.needs || []).slice(0, 5);
                         const has = (a.strengths || []).slice(0, 6);
                         const openDna = () => { setExpandedDnaOwner(a.rosterId); setTcTab('dna'); };
+                        // Owner ruling 2026-09-02: tapping a team opens that
+                        // owner's ROSTER (grouped by position) right in the
+                        // finder's asset browser; Owner DNA moved to its own
+                        // small button on the card.
+                        const openScout = () => {
+                            setTcTab('desk');
+                            setFinderQuery({ intent: 'best', focus: null, partnerFilter: a.ownerId });
+                            setAssetBrowserOpen(true);
+                            setAssetBrowserPos('ALL');
+                            setAssetBrowserSort('pos');
+                            setShowAllDeals(false);
+                        };
                         return (
                             // A <div role=button>, not <button>: Safari/WebKit collapses block
                             // children inside a <button>, which mashed the card rows together.
                             <div key={a.rosterId} role="button" tabIndex={0} className="tc-lt-card"
-                                title={'Open ' + a.ownerName + '’s Owner DNA'}
-                                onClick={openDna}
-                                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDna(); } }}>
+                                title={'Open ' + a.ownerName + '’s roster in the finder'}
+                                onClick={openScout}
+                                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openScout(); } }}>
                                 <div className="tc-lt-top">
                                     {/* Inline sizing so a stale cached stylesheet can't render the
                                         avatar at its full ~100px natural size. */}
@@ -3749,7 +3825,13 @@
                                 </div>
                                 {needs.length > 0 && <div className="tc-lt-row"><span className="tc-lt-lbl">Needs</span>{needs.map(n => <span key={n.pos} className="tc-lt-chip" style={{ color: POSHEX[n.pos] || 'var(--silver)', borderColor: (POSHEX[n.pos] || '#BDB8AD') + '66', background: (POSHEX[n.pos] || '#BDB8AD') + '18' }}>{n.pos}</span>)}</div>}
                                 {has.length > 0 && <div className="tc-lt-row"><span className="tc-lt-lbl">Has</span>{has.map(p => <span key={p} className="tc-lt-chip tc-lt-has">+{p}</span>)}</div>}
-                                {item.dnaKey && item.dnaKey !== 'NONE' && item.dna && <div className="tc-lt-arch" style={{ color: item.dna.color }}>{item.dna.label}</div>}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {item.dnaKey && item.dnaKey !== 'NONE' && item.dna && <div className="tc-lt-arch" style={{ color: item.dna.color, marginTop: 0 }}>{item.dna.label}</div>}
+                                    <button type="button"
+                                        style={{ marginLeft: 'auto', padding: '2px 8px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '0.66rem', letterSpacing: '0.06em', color: 'var(--gold)', background: 'transparent', border: '1px solid rgba(212,175,55,0.35)', borderRadius: 'var(--card-radius-xs, 5px)', cursor: 'pointer' }}
+                                        title={'Open ' + a.ownerName + '’s Owner DNA'}
+                                        onClick={e => { e.stopPropagation(); openDna(); }}>DNA →</button>
+                                </div>
                             </div>
                         );
                     });
@@ -3757,7 +3839,7 @@
                 <div className="tc-dhq-panel tc-rail-card tc-lt-panel">
                     <div className="tc-dhq-panel-head">
                         <span>League Teams</span>
-                        <em>{_pro && partnerBoard.length ? partnerBoard.length + ' rivals · tap → DNA' : 'Scout the field'}</em>
+                        <em>{_pro && partnerBoard.length ? partnerBoard.length + ' rivals · tap → roster' : 'Scout the field'}</em>
                     </div>
                     <div className="tc-dhq-panel-body">
                         <div className="tc-lt-scroll">{body}</div>

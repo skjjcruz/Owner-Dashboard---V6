@@ -1296,6 +1296,8 @@ group('account surface (billing + legal requirements)');
     ok(recs.every(d => !d.givePlayers.some(p => led.protectedPids[p.pid])), 'no protected player appears as payment');
     ok(recs.some(d => d.receivePlayers.some(p => p.pos === 'RB')), 'the deal addresses the flagged RB need');
     ok(recs.every(d => d.lineupDelta >= 150 || d.capitalDelta > 0), 'every deal clears the benefit gate');
+    const led2 = eng.ledger(2);
+    ok(recs.every(d => d.receivePlayers.every(p => !led2.protectedPids[p.pid])), 'seller-side scarcity: the partner\'s protected players are never proposed as acquisitions');
     const eng2 = g.WrGmTradeEngine.build({ myRosterId: 2, rosterPositions: ['QB', 'RB', 'WR', 'FLEX', 'BN'], teams, liquidity: () => 1, isElite: () => false });
     ok(Array.isArray(eng2.recommend()), 'the partner board runs clean too');
   });
