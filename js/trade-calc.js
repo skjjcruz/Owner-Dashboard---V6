@@ -715,24 +715,8 @@
             return Math.round(ppgs[Math.floor(ppgs.length / 2)] * 1.05);
         }
 
-        function calcNflStarterSet() {
-            const scoring = currentLeague.scoring_settings;
-            const byPos = {};
-            for (const [id, p] of Object.entries(playersData)) {
-                const pos = normPos(p.position);
-                if (!pos || !(pos in NFL_STARTER_POOL)) continue;
-                if (!p.team) continue;
-                if (!byPos[pos]) byPos[pos] = [];
-                const score = calcSeasonPts(id, scoring);
-                if (score > 0) byPos[pos].push({ id, score });
-            }
-            const result = {};
-            for (const [pos, players] of Object.entries(byPos)) {
-                const poolSize = NFL_STARTER_POOL[pos];
-                result[pos] = new Set(players.sort((a,b) => b.score - a.score).slice(0, poolSize).map(p => p.id));
-            }
-            return result;
-        }
+        // calcNflStarterSet retired with the local assessor (2026-09-02) —
+        // the shared engine builds its own starter pool with the ESPN door.
 
         function getPlayerValue(pid) {
             if (window.App?.PlayerValue?.getValue) {
@@ -879,126 +863,24 @@
             return picksByOwner;
         }
 
-        function assessTeamLocal(roster, nflStarterSet, ownerPicks, skipCurrentSeason) {
-            // Try shared assessor first
+        // ── One brain (owner ruling 2026-09-02) ─────────────────────────
+        // The Trade Room reads the SAME shared assessment as every other
+        // surface — needs, strengths, tier, panic, window all come from
+        // DHQ-Shared/team-assess.js. The 120-line local duplicate (static
+        // one-size bars, points-based quality, tier-from-weekly-points, the
+        // old adequacy strengths rule) is retired: it only ever fired in
+        // half-loaded windows and fed the finder advice that contradicted
+        // the dashboard. When the shared pass isn't ready yet we return
+        // null and the tab's existing loading states cover the gap. The
+        // IDP/K market-liquidity discounts are NOT part of this and are
+        // deliberately unchanged (owner ruling: the market genuinely pays
+        // less for IDP/K, even in IDP-heavy leagues).
+        function assessTeamLocal(roster) {
             if (window.assessTeamFromGlobal) {
                 const result = window.assessTeamFromGlobal(roster.roster_id);
                 if (result) return result;
             }
-            const scoring = currentLeague.scoring_settings;
-            const rosterPos = currentLeague.roster_positions || [];
-            const users = currentLeague.users || [];
-            const user = users.find(u => u.user_id === roster.owner_id);
-            const teamName = user?.metadata?.team_name || user?.display_name || `Team ${roster.roster_id}`;
-            const ownerName = user?.display_name || `Owner ${roster.roster_id}`;
-            const avatar = user?.avatar || null;
-            const wins = roster.settings?.wins || 0;
-            const losses = roster.settings?.losses || 0;
-            const ties = roster.settings?.ties || 0;
-            const pf = Number(roster.settings?.fpts || 0) + Number(roster.settings?.fpts_decimal || 0) / 100;
-            const waiverBudget = Number(currentLeague.settings?.waiver_budget || 1000);
-            const waiverUsed = Number(roster.settings?.waiver_budget_used || 0);
-            const faabRemaining = Math.max(0, waiverBudget - waiverUsed);
-
-            const posGroups = {};
-            for (const id of (roster.players || [])) {
-                const np = normPos(playersData[id]?.position); if (!np) continue;
-                if (!posGroups[np]) posGroups[np] = [];
-                posGroups[np].push(id);
-            }
-
-            const posAssessment = {};
-            for (const [pos, ideal] of Object.entries(IDEAL_ROSTER)) {
-                const playerIds = posGroups[pos] || [];
-                const startingReq = MIN_STARTER_QUALITY[pos] ?? LINEUP_STARTERS[pos] ?? 1;
-                const ptTarget = POS_PT_TARGETS[pos] || 8;
-                const withPPG = playerIds.map(id => ({ id, ppg: calcPPG(id, scoring) })).sort((a,b) => b.ppg - a.ppg);
-                const projectedPts = withPPG.slice(0, startingReq).reduce((s, p) => s + p.ppg, 0);
-                const posStarters = nflStarterSet[pos] || new Set();
-                const nflStarterIds = playerIds.filter(id => posStarters.has(id));
-                const nflStarters = nflStarterIds.length;
-                const actual = playerIds.length;
-                const diff = actual - ideal;
-                const minQuality = MIN_STARTER_QUALITY[pos] || startingReq;
-
-                let status;
-                if (nflStarters === 0) status = 'deficit';
-                else if (nflStarters < minQuality) status = 'thin';
-                else if (actual >= ideal) status = 'surplus';
-                else status = 'ok';
-                if ((status === 'ok' || status === 'surplus') && actual < ideal) status = 'thin';
-
-                const sortedIds = [...playerIds].map(id => ({ id, score: calcSeasonPts(id, scoring) })).sort((a,b) => b.score - a.score).map(p => p.id);
-                posAssessment[pos] = { actual, ideal, diff, nflStarters, nflStarterIds, sortedIds, startingReq, minQuality, ptTarget, projectedPts, status };
-            }
-
-            const leagueSeason = parseInt(currentLeague.season || new Date().getFullYear());
-            const pickYears = pickWindowYears(leagueSeason, skipCurrentSeason).map(String);
-            // League-specific rounds (not the hardcoded constant) so pick-capital
-            // status reflects this league's actual draft size.
-            const aRounds = Math.max(1, Number(tcDraftRounds) || DRAFT_ROUNDS);
-            const aIdeal = aRounds * PICK_HORIZON;
-            const pickCountByRound = {}; const pickCountByYear = {}; const pickCountByYearRound = {};
-            for (let r = 1; r <= aRounds; r++) pickCountByRound[r] = 0;
-            for (const year of pickYears) { pickCountByYear[year] = 0; pickCountByYearRound[year] = {}; for (let r = 1; r <= aRounds; r++) pickCountByYearRound[year][r] = 0; }
-            for (const { year, round } of (ownerPicks || [])) {
-                const y = String(year); if (!pickYears.includes(y)) continue;
-                if (round < 1 || round > aRounds) continue;
-                pickCountByRound[round]++; pickCountByYear[y]++; pickCountByYearRound[y][round]++;
-            }
-            const totalPicks = Object.values(pickCountByRound).reduce((a, b) => a + b, 0);
-            let picksStatus;
-            if (totalPicks === 0) picksStatus = 'deficit';
-            else if (totalPicks < aIdeal) picksStatus = 'thin';
-            else if (totalPicks === aIdeal) picksStatus = 'ok';
-            else picksStatus = 'surplus';
-            const picksAssessment = { pickCountByRound, pickCountByYear, pickCountByYearRound, totalPicks, draftRounds: aRounds, idealTotal: aIdeal, pickYears, status: picksStatus };
-
-            const weeklyPts = calcOptimalLineup(roster.players || [], roster.reserve || [], roster.taxi || [], scoring, rosterPos);
-            const scoringScore = Math.min(60, (weeklyPts / WEEKLY_TARGET) * 60);
-            let coverageScore = 0;
-            const hasValueData = Object.keys(nflStarterSet).length > 0;
-            for (const [pos, data] of Object.entries(posAssessment)) {
-                const ratio = hasValueData ? Math.min(1, data.nflStarters / (data.minQuality || data.startingReq || 1)) : Math.min(1, data.actual / data.ideal);
-                coverageScore += ratio * ((POS_WEIGHTS[pos]||0) / TOTAL_WEIGHT) * 40;
-            }
-            const projBonus = weeklyPts > WEEKLY_TARGET + 10 ? 3 : weeklyPts >= WEEKLY_TARGET ? 1 : 0;
-            const healthScore = Math.min(100, Math.round(scoringScore + coverageScore + projBonus));
-
-            let tier, tierColor, tierBg;
-            if (weeklyPts > 0) {
-                if (weeklyPts > WEEKLY_TARGET + 10) { tier='ELITE'; tierColor='var(--gold)'; tierBg='var(--acc-fill3, rgba(212,175,55,0.15))'; }
-                else if (weeklyPts >= WEEKLY_TARGET - 15) { tier='CONTENDER'; tierColor='var(--good)'; tierBg='rgba(46,204,113,0.12)'; }
-                else if (weeklyPts >= WEEKLY_TARGET * 0.85) { tier='CROSSROADS'; tierColor='var(--warn)'; tierBg='rgba(240,165,0,0.12)'; }
-                else { tier='REBUILDING'; tierColor='var(--bad)'; tierBg='rgba(231,76,60,0.12)'; }
-            } else {
-                if (coverageScore >= 36) { tier='CONTENDER'; tierColor='var(--good)'; tierBg='rgba(46,204,113,0.12)'; }
-                else if (coverageScore >= 26) { tier='CROSSROADS'; tierColor='var(--warn)'; tierBg='rgba(240,165,0,0.12)'; }
-                else { tier='REBUILDING'; tierColor='var(--bad)'; tierBg='rgba(231,76,60,0.12)'; }
-            }
-
-            let panic = 0;
-            if (weeklyPts > 0 && weeklyPts < WEEKLY_TARGET * 0.85) panic += 2;
-            else if (weeklyPts > 0 && weeklyPts < WEEKLY_TARGET) panic += 1;
-            const criticals = Object.values(posAssessment).filter(p => p.status === 'deficit').length;
-            if (criticals >= 3) panic += 2; else if (criticals >= 1) panic += 1;
-            const played = wins + losses + ties;
-            if (played > 0 && losses / played > 0.6) panic += 1;
-            panic = Math.min(5, panic);
-
-            let tradeWindow;
-            if (tier === 'ELITE' || (tier === 'CONTENDER' && panic <= 1)) tradeWindow = 'CONTENDING';
-            else if (tier === 'REBUILDING') tradeWindow = 'REBUILDING';
-            else tradeWindow = 'TRANSITIONING';
-
-            const needs = Object.entries(posAssessment).filter(([,v]) => v.status === 'deficit' || v.status === 'thin')
-                .sort((a,b) => { const aGap = a[1].nflStarters - a[1].startingReq; const bGap = b[1].nflStarters - b[1].startingReq; return aGap !== bGap ? aGap - bGap : a[1].diff - b[1].diff; })
-                .map(([pos,v]) => ({ pos, urgency: v.status }));
-            const strengths = Object.entries(posAssessment).filter(([,v]) => v.status === 'surplus').map(([pos]) => pos);
-
-            return { rosterId:roster.roster_id, ownerId:roster.owner_id, teamName, ownerName, avatar, wins, losses, ties, pf,
-                     posGroups, posAssessment, picksAssessment, weeklyPts, healthScore, tier, tierColor, tierBg, panic, window: tradeWindow, needs, strengths,
-                     faabRemaining, waiverBudget };
+            return null;
         }
 
         const calcComplementarity = window.App?.TradeEngine?.calcComplementarity || function(mine, theirs) { if (!mine || !theirs) return 0; let score = 0; for (const n of mine.needs) { const t = theirs.posAssessment[n.pos]; if (t?.status === 'surplus') score += n.urgency === 'deficit' ? 25 : 12; else if (t?.status === 'ok' && n.urgency === 'deficit') score += 6; } for (const n of theirs.needs) { const m = mine.posAssessment[n.pos]; if (m?.status === 'surplus') score += n.urgency === 'deficit' ? 25 : 12; else if (m?.status === 'ok' && n.urgency === 'deficit') score += 6; } if (mine.window !== theirs.window) score += 15; return Math.min(100, score); };
@@ -1464,11 +1346,8 @@
             if (window.DraftHistory?.syncDraftDNA) window.DraftHistory.syncDraftDNA(leagueId).then(map => setOwnerDraftDna(map || {})).catch(err => window.wrLog('tradecalc.syncDraftDNA', err));
         }, [leagueId]);
 
-        // Compute assessments
-        const nflStarterSet = useMemo(() => {
-            if (!Object.keys(playersData).length || !Object.keys(statsData).length) return {};
-            return calcNflStarterSet();
-        }, [playersData, statsData]);
+        // Compute assessments — shared engine only; entries are absent while
+        // the shared pass is still loading (existing loading states cover it).
 
         const tradedPicks = useMemo(() => window.S?.tradedPicks || [], [currentLeague]);
 
@@ -1522,11 +1401,8 @@
 
         const assessments = useMemo(() => {
             if (!allRosters.length || !Object.keys(playersData).length) return [];
-            return allRosters.map(r => {
-                const ownerPicks = picksByOwner[String(r.owner_id)] || [];
-                return assessTeamLocal(r, nflStarterSet, ownerPicks, currentDraftComplete);
-            });
-        }, [allRosters, playersData, statsData, nflStarterSet, picksByOwner, timeRecomputeTs, leagueDraftRounds, currentDraftComplete]);
+            return allRosters.map(r => assessTeamLocal(r)).filter(Boolean);
+        }, [allRosters, playersData, statsData, picksByOwner, timeRecomputeTs, leagueDraftRounds, currentDraftComplete]);
 
         const myRosterId = myRoster?.roster_id;
         const rosterState = window.App?.getRosterDataState?.({ roster: myRoster, currentLeague, rosters: allRosters, leagueSkin: resolvedLeagueSkin }) || { isUsable: true };
@@ -1992,6 +1868,13 @@
             const formatReadout = formatReadoutForDeal(givePlayers, receivePlayers);
             const behaviorReadout = behaviorFit?.framing || behaviorProfile?.observedFacts?.[0]?.detail || '';
             const caution = [];
+            // Market transparency (owner ruling 2026-09-02): the IDP/K
+            // liquidity discount is intentional — but when it materially
+            // shaped this deal's matching, the card says so instead of
+            // letting a market-priced package read as a lopsided offer.
+            const _giveDisc = give.total > 0 && give.market < give.total * 0.85;
+            const _recvDisc = receive.total > 0 && receive.market < receive.total * 0.85;
+            if (_giveDisc || _recvDisc) caution.push('Priced at market — IDP/K trade discount applied');
             if (likelihood < 40) caution.push('Low acceptance odds');
             if (posture.key === 'LOCKED') caution.push('Locked roster');
             if (userGain < -Math.max(500, receive.total * 0.12)) caution.push('Meaningful overpay');
