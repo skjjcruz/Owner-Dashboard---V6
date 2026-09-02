@@ -88,7 +88,18 @@
                 let cliffT = -1;
                 for (let t = 0; t < horizon; t++) { if (primeShares[t] < 0.5) { cliffT = t; break; } }
                 const wAge = totalDhq > 0 ? players.reduce((s, p) => s + p.age * p.dhq, 0) / totalDhq : 0;
-                const sellBy = players.filter(p => p.age >= peakEnd - 1 && p.age <= declineEnd && p.dhq >= 2000);
+                // One voice (audit 2026-09-02): the age-band candidate list is
+                // filtered through the shared verdict — a player the engine
+                // holds (IDP starter shield, GM untouchable, manual call) must
+                // never be named on a SELL-BY list this widget invented alone.
+                const sellBy = players.filter(p => {
+                    if (!(p.age >= peakEnd - 1 && p.age <= declineEnd && p.dhq >= 2000)) return false;
+                    try {
+                        const pa = window.App?.getPlayerAction?.(p.pid);
+                        if (pa && !/^SELL/.test(pa.action || '')) return false;
+                    } catch (e) { /* engine optional — keep the age read */ }
+                    return true;
+                });
                 return { pos, players, totalDhq, primeShares, cliffT, wAge, peakEnd, declineEnd, sellBy };
             }).sort((a, b) => {
                 const at = a.cliffT === -1 ? horizon : a.cliffT;

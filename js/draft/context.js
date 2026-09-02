@@ -422,7 +422,13 @@
             }
         } catch (e) {}
         try {
-            if (window.GMStrategy?.getStrategy) strategy = window.GMStrategy.getStrategy() || null;
+            // Per-league resolution (audit 2026-09-02): the old no-arg
+            // getStrategy() returned a DEFAULT object when this league had
+            // no saved plan, which short-circuited the per-league store read
+            // below — the draft board could sort by another league's plan.
+            // GmMode.resolveStrategy carries the documented precedence guard.
+            if (window.WR?.GmMode?.resolveStrategy) strategy = window.WR.GmMode.resolveStrategy(leagueId) || null;
+            else if (window.GMStrategy?.getStrategy) strategy = window.GMStrategy.getStrategy(leagueId) || null;
         } catch (e) {}
         try {
             const keys = window.App?.WR_KEYS;

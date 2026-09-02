@@ -425,6 +425,7 @@
         onChange,
         acceptanceFloorFor,
         effects,
+        resolveStrategy,
         useGmEffects,
         promptData,
         promptBlock,

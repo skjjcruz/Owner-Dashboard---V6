@@ -116,6 +116,13 @@
             topNeeds: (assess.needs || []).slice(0, 3).map(n => `${n.pos} (${n.urgency})`),
             surpluses: (assess.strengths || []).slice(0, 4),
         };
+        // The GM plan grounds the digest too (audit 2026-09-02): without it,
+        // a saved Rebuild plan kept getting win-now advice from a cache that
+        // never noticed the strategy changed.
+        try {
+            const eff = window.WR?.GmMode?.effects?.(league.league_id || league.id);
+            if (eff && eff.hasStrategy) out.gmPlan = { mode: eff.mode || '', targets: [...(eff.targetPositions || [])], sells: [...(eff.sellPositions || [])] };
+        } catch (_) { /* gm-mode optional */ }
         const qb = assess.posAssessment?.QB;
         if (fmt.isSuperFlex && qb) {
             out.qbRoom = {
@@ -205,6 +212,7 @@
             s.leagueId, s.record, s.tier || '',
             (s.topNeeds || []).join('+'), (s.surpluses || []).join('+'),
             s.qbRoom ? `${s.qbRoom.startable}/${s.qbRoom.required}:${s.qbRoom.status}` : '',
+            s.gmPlan ? `${s.gmPlan.mode}:${(s.gmPlan.targets || []).join('.')}:${(s.gmPlan.sells || []).join('.')}` : '',
             s.faab ? `${s.faab.mine}r${s.faab.rank}` : '',
             s.preDraft ? 'pre' : '', s.seasonPhase || '',
         ].join(':')).join('|'));

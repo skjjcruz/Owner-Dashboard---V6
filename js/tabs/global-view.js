@@ -1087,6 +1087,15 @@ function buildEmpireMoves(input) {
         // SELL lanes — my post-window or over-exposed assets → a buyer who needs that position.
         (model.assets || [])
             .filter(as => as.leagueId === leagueId && as.dhq > 0 && (as.agePhase === 'post' || as.exposureCount >= exposureCut))
+            // One voice (audit 2026-09-02): never build a "Sell X" card for a
+            // player the shared engine holds — untouchables, manual calls and
+            // the IDP-starter shield all live in getPlayerAction.
+            .filter(as => {
+                try {
+                    const pa = window.App?.getPlayerAction?.(as.pid);
+                    return !pa || /^SELL/.test(pa.action || '');
+                } catch (e) { return true; }
+            })
             .sort((a, b) => b.dhq - a.dhq)
             .slice(0, 2)
             .forEach(asset => {

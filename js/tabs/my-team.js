@@ -1718,8 +1718,10 @@ function MyTeamTab({
           const actionClass = _recLower === 'sell now' || _recLower === 'sell' ? 'wr-row-sell' :
             _recLower === 'sell high' ? 'wr-row-sell-high' :
             _recLower === 'hold core' || _recLower === 'build around' ? 'wr-row-core' : '';
-          const untouchables = (window._wrGmStrategy?.untouchable || []);
-          const isUntouchable = untouchables.includes(r.pid);
+          // One untouchable read (2026-09-02): r.gmIsUntouchable comes from
+          // GmMode.effects (string-normalized, store-precedence aware) — the
+          // old raw window._wrGmStrategy read could disagree with the row 🛡.
+          const isUntouchable = !!r.gmIsUntouchable;
 
           return (
             <React.Fragment key={r.pid}>

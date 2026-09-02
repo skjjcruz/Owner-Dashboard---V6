@@ -2248,9 +2248,17 @@
                     return { budget, spent, remaining: Math.max(0, budget - spent), isFAAB, minBid };
                 };
                 window.loadMentality = () => {
-                    const gm = window._wrGmStrategy || {};
-                    const modeMap = { contend: 'winnow', rebuild: 'rebuild', balanced: 'balanced' };
-                    return { mentality: modeMap[gm.mode] || 'balanced', neverDrop: (gm.untouchable || []).map(pid => _p[pid]?.full_name || pid).join(', '), notes: gm.notes || '' };
+                    // Resolve through GmMode when present (store-precedence aware)
+                    // and cover the CANONICAL mode ids — the old map only knew
+                    // 'contend', so win_now/compete fell through to 'balanced'
+                    // and the AI was told the owner is balanced in the same
+                    // prompt whose GM block said WIN NOW (audit 2026-09-02).
+                    const eff = (window.WR?.GmMode?.effects?.(league?.league_id || league?.id)) || null;
+                    const gm = (eff && eff.hasStrategy && eff.strategy) || window._wrGmStrategy || {};
+                    const mode = (eff && eff.mode) || gm.mode;
+                    const modeMap = { contend: 'winnow', compete: 'winnow', win_now: 'winnow', winnow: 'winnow', rebuild: 'rebuild', balanced: 'balanced' };
+                    const untouchableIds = (eff && eff.untouchable) ? [...eff.untouchable] : (gm.untouchable || []);
+                    return { mentality: modeMap[mode] || 'balanced', neverDrop: untouchableIds.map(pid => _p[pid]?.full_name || pid).join(', '), notes: gm.notes || '' };
                 };
                 window.App.myR = window.myR;
                 window.App.pName = window.pName;

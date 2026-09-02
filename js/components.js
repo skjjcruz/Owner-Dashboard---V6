@@ -99,7 +99,10 @@
         const trend = meta.trend || 0;
         // Use shared getPlayerAction if available (ownership-aware)
         const pa = typeof window.getPlayerAction === 'function' ? window.getPlayerAction(pid) : null;
-        const rec = pa ? pa.label.toUpperCase() : !age ? 'HOLD' : (peakYrs <= 0 && trend <= -10 ? 'SELL NOW' : peakYrs <= 0 ? 'SELL' : peakYrs <= 2 ? 'SELL' : dhq >= 7000 && peakYrs >= 3 ? 'HOLD CORE' : 'HOLD');
+        // Fallback harmonized with compare.js/player-card.js (audit 2026-09-02):
+        // the old peakYrs<=2 → SELL made the app's most-seen chip its harshest
+        // voice — the engine HOLDS at 2 peak years with starter value.
+        const rec = pa ? pa.label.toUpperCase() : !age ? 'HOLD' : (peakYrs <= 0 && trend <= -10 ? 'SELL NOW' : peakYrs <= 0 ? 'SELL' : peakYrs <= 1 ? 'SELL' : dhq >= 7000 && peakYrs >= 3 ? 'HOLD CORE' : 'HOLD');
         const recCol = rec.includes('SELL') ? 'var(--k-e74c3c, #e74c3c)' : rec.includes('BUY') ? 'var(--k-2ecc71, #2ecc71)' : 'var(--k-d4af37, #d4af37)';
         // Verdict chip is Pro at this render seam; getPlayerAction itself stays
         // callable for engine logic. Fail-open when pro-gate.js isn't loaded.

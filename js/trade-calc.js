@@ -1737,7 +1737,17 @@
         }
 
         function isUntouchableAsset(asset, tuning) {
-            return !!asset?.pid && tuning?.untouchable?.has(String(asset.pid));
+            if (!asset?.pid) return false;
+            if (tuning?.untouchable?.has(String(asset.pid))) return true;
+            // The owner's manual call travels here too (ruling 2026-09-02):
+            // a player tagged Untouchable on the roster tab must never be
+            // shopped by the finder, GM Strategy list or not.
+            try {
+                if (window._playerTags?.[String(asset.pid)] === 'untouchable') return true;
+                const mc = window.App?.manualCallFor?.(asset.pid, window.S || window.App?.S);
+                if (mc && mc.label === 'Untouchable') return true;
+            } catch (e) { /* manual stores optional */ }
+            return false;
         }
 
         function scoreDealRecommendation(deal, tuning) {
