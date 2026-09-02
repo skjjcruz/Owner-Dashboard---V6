@@ -3526,6 +3526,12 @@
                 setFinderSearch('');
                 setFinderTypeaheadIdx(0);
                 setShowAllDeals(false);
+                // Typing an owner's name shows his roster too — same as the chips.
+                if (item.kind === 'owner') {
+                    setAssetBrowserOpen(true);
+                    setAssetBrowserPos('ALL');
+                    setAssetBrowserSort('pos');
+                }
             }
 
             function clearFinderFocus() {
@@ -3543,6 +3549,19 @@
                 );
                 setFinderQuery(qr => ({ ...qr, partnerFilter: ownerId, focus: pinsOtherOwner ? null : qr.focus }));
                 setShowAllDeals(false);
+                // Owner ruling 2026-09-02: pinning an owner SHOWS his roster —
+                // open the browser grouped by position automatically, no extra
+                // "Browse assets" click. AUTO (ownerId null) closes it again.
+                if (ownerId != null) {
+                    setAssetBrowserOpen(true);
+                    setAssetBrowserPos('ALL');
+                    setAssetBrowserSort('pos');
+                    setTimeout(() => {
+                        try { document.querySelector('.tc-dhq-asset-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { }
+                    }, 450);
+                } else {
+                    setAssetBrowserOpen(false);
+                }
             }
 
             function selectAssetFocus(row) {
