@@ -13,7 +13,9 @@
 //
 // A qualifying package (the side going TO the QB's owner) needs ANY of:
 //   ELITE/MID QB:
-//     • a 1st-round pick
+//     • a 1st-round pick — but an ELITE-badge QB (owner ruling 2026-09-02)
+//       never moves for a single bare 1st: two 1sts, or a 1st plus a
+//       starter-quality player or elite IDP
 //     • a startable-QB swap PLUS extras (a pick, or a starter-quality player)
 //     • an elite offensive player (QB/RB/WR/TE)
 //     • an elite IDP plus at least one draft pick
@@ -98,7 +100,21 @@
                 return false;
             };
             if (tier === 'elitemid') {
-                if (hasRound(1)) return true;
+                // Owner ruling 2026-09-02: an ELITE-badge QB never moves for
+                // a single bare 1st. Two 1sts pay; a single 1st needs a real
+                // piece (starter-quality player or elite IDP) beside it. Mid
+                // QBs keep the single-1st door.
+                var firsts = 0;
+                for (var f = 0; f < picks.length; f++) { if ((Number(picks[f].round) || 99) === 1) firsts++; }
+                var badgeElite = false;
+                try { badgeElite = !!isElite(String(qbPid)); } catch (e0) { /* badge optional */ }
+                if (firsts >= (badgeElite ? 2 : 1)) return true;
+                if (badgeElite && firsts >= 1) {
+                    for (var f2 = 0; f2 < others.length; f2++) {
+                        if (isStarterQuality(others[f2])) return true;
+                        if (IDP_POS[others[f2].pos] && isElite(others[f2].pid)) return true;
+                    }
+                }
                 var qbValue = scores[String(qbPid)] || 0;
                 for (var s = 0; s < others.length; s++) {
                     var x = others[s];

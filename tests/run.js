@@ -1135,7 +1135,7 @@ group('account surface (billing + legal requirements)');
   for (let i = 0; i < 28; i++) playersData['fq' + i] = P('QB');
   const rules = g.WrQbTradeRules.build({
     scores, playersData, rosterPositions: ['QB', 'SUPER_FLEX', 'RB', 'WR', 'TE'], teams: 16,
-    isElite: (pid) => pid === 'wr1' || pid === 'dl1', starterRole: () => null,
+    isElite: (pid) => pid === 'wr1' || pid === 'dl1' || pid === 'fq0', starterRole: () => null,
     normPos: (x) => ({ DE: 'DL' }[String(x || '').toUpperCase()] || String(x || '').toUpperCase()),
   });
   const A = (pid) => ({ pid, pos: ({ QB: 'QB', TE: 'TE', WR: 'WR', DE: 'DL', RB: 'RB' })[playersData[pid].position], value: scores[pid] });
@@ -1157,6 +1157,12 @@ group('account surface (billing + legal requirements)');
     ok(rules.violates(D({ receivePlayers: [A('fq26')], givePicks: [{ round: 3 }] })), 'a 3rd alone does not pay for a low-tier QB');
     ok(!rules.violates(D({ receivePlayers: [A('fq26')], givePlayers: [A('rb1')] })), 'a starter-quality skill player pays for a low-tier QB');
     ok(!rules.violates(D({ receivePlayers: [A('bqb')], givePlayers: [] })), 'true backups are exempt from all rules');
+  });
+  test('QB trade rules: elite-badge QBs never move for a single bare 1st', () => {
+    ok(rules.violates(D({ givePlayers: [A('fq0')], receivePicks: [{ round: 1 }] })), 'a single bare 1st for an elite-badge QB is always rejected');
+    ok(!rules.violates(D({ givePlayers: [A('fq0')], receivePicks: [{ round: 1 }, { round: 1 }] })), 'two 1sts pay for an elite-badge QB');
+    ok(!rules.violates(D({ givePlayers: [A('fq0')], receivePicks: [{ round: 1 }], receivePlayers: [A('te1')] })), 'a 1st + a starter-quality player pays for an elite-badge QB');
+    ok(!rules.violates(D({ givePlayers: [A('qb1')], receivePicks: [{ round: 1 }] })), 'a mid (non-badge) QB still moves for a single 1st');
   });
 }
 
