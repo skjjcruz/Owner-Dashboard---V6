@@ -60,6 +60,35 @@
         }).catch(function (e) { window.wrLog?.('briefPulse.cloudLoad', e); });
     }
 
+    // How long an acknowledged change keeps headlining the brief. The lead
+    // line literally promises a 24-hour read — before this hold existed, a
+    // rank move showed for ONE render (milliseconds): the ack-save fired on
+    // first paint and every re-render then diffed against the just-saved
+    // snapshot, so the owner only ever saw "No change" (report 2026-09-02).
+    var HOLD_MS = 24 * 60 * 60 * 1000;
+
+    // Acknowledge a material change: save the diffed snapshot AND the line it
+    // produced, so quiet renders (and the other surface, via the cloud copy)
+    // keep showing the change for HOLD_MS instead of instantly forgetting it.
+    function acknowledge(leagueId, curr, change) {
+        if (!curr) return;
+        saveSnapshot(leagueId, {
+            fingerprint: curr.fingerprint, players: curr.players, record: curr.record,
+            tier: curr.tier, draftPhase: curr.draftPhase, rank: curr.rank,
+            lastLine: (change && change.line) || null,
+            lastLineTs: (change && change.line) ? Date.now() : null,
+            lastEyes: !!(change && change.eyes),
+        });
+    }
+
+    // The held line from the saved snapshot, or null once it ages out.
+    function heldLine(leagueId) {
+        var snap = loadSnapshot(leagueId);
+        if (!snap || !snap.lastLine || !snap.lastLineTs) return null;
+        if (Date.now() - snap.lastLineTs > HOLD_MS) return null;
+        return { line: snap.lastLine, eyes: !!snap.lastEyes };
+    }
+
     // The minimal snapshot we diff on, distilled from a Situation Room state.
     function snapshotFromState(state) {
         if (!state) return null;
@@ -437,10 +466,9 @@
             var alive = true;
             // Show the deterministic line immediately.
             setLine(change.line);
-            // Save the snapshot so this change is "acknowledged" — next visit
-            // diffs from here (the roster/rank diff flashes once per real change;
-            // a fresh league trade keeps showing until it ages out of the window).
-            saveSnapshot(leagueId, { fingerprint: curr.fingerprint, players: curr.players, record: curr.record, tier: curr.tier, draftPhase: curr.draftPhase, rank: curr.rank });
+            // Acknowledge with the line INCLUDED so quiet re-renders (and the
+            // other surface, via the cloud copy) hold this change for 24h.
+            acknowledge(leagueId, curr, change);
             // AI enhancement: cached per fingerprint+trade, best-effort.
             var cacheKey = curr.fingerprint + (_tradeId ? ('|' + _tradeId) : '');
             var cached = loadCachedLine(cacheKey);
@@ -454,10 +482,19 @@
             return function () { alive = false; };
         }, [active, curr && curr.fingerprint, _tradeId]);
 
-        // No material change: normally render nothing. In `quiet` mode (used
-        // as the Intelligence Brief's lead line) render a muted "nothing moved"
-        // status instead, so the brief always opens with its 24-hour read.
-        if (!active || !change.material || !line) {
+        // No NEW change: an acknowledged one under 24h old keeps its banner
+        // (this is what makes the "past 24 hours" promise true — the old
+        // behavior forgot a change on the very next render).
+        var _held = (!change.material && active && leagueId) ? heldLine(leagueId) : null;
+        if (_held && !line) {
+            line = _held.line;
+            icon = '👀';
+        }
+
+        // No material change and nothing held: normally render nothing. In
+        // `quiet` mode (the Intelligence Brief's lead line) render a muted
+        // "nothing moved" status so the brief always opens with its 24h read.
+        if (!active || (!change.material && !_held) || !line) {
             if (!active || !props || !props.quiet) return null;
             return h('div', {
                 style: {
@@ -507,6 +544,12 @@
             var change = computeChange(loadSnapshot(leagueId), curr, playersData);
             out.material = change.material; out.line = change.line; out.eyes = !!change.eyes;
             out.curr = curr; out.leagueId = leagueId;
+            // Nothing NEW — but an already-acknowledged change under 24h old
+            // keeps headlining (held: show it, don't re-acknowledge it).
+            if (!out.material) {
+                var held = heldLine(leagueId);
+                if (held) { out.held = true; out.line = held.line; out.eyes = held.eyes; }
+            }
         } catch (_) { /* degrade to non-material */ }
         return out;
     }
@@ -514,6 +557,8 @@
     window.WR.BriefPulse = {
         loadSnapshot: loadSnapshot,
         saveSnapshot: saveSnapshot,
+        acknowledge: acknowledge,
+        heldLine: heldLine,
         snapshotFromState: snapshotFromState,
         computeChange: computeChange,
         recentLeagueTrade: recentLeagueTrade,

@@ -491,19 +491,24 @@ function IntelligenceBriefWidget({
     // once and then settles back to the steady line. Mirrors BriefPulse.Line's
     // internals, but lets us render line 1 as a full bullet like the others.
     let leadChangeText = 'No change in League rankings or posture over the past 24 hours.';
-    let _leadCurr = null, _leadLeagueId = null, _leadMaterial = false, _leadEyes = false;
+    let _leadCurr = null, _leadLeagueId = null, _leadMaterial = false, _leadEyes = false, _leadHot = false, _leadLine = '';
     try {
         if (window.WR && window.WR.SituationRoom && typeof window.WR.SituationRoom.enabled === 'function' && window.WR.SituationRoom.enabled() && window.WR.BriefPulse && window.WR.BriefPulse.readNow && rosterState.isUsable && currentLeague && myRoster) {
             // readNow attaches the league-trade radar (a rival blockbuster the
             // roster-only diff can't see) before diffing against last visit.
             const rd = window.WR.BriefPulse.readNow(currentLeague, myRoster, playersData);
             _leadCurr = rd.curr; _leadLeagueId = rd.leagueId;
-            if (rd.material && rd.line) { leadChangeText = rd.line; _leadMaterial = true; _leadEyes = !!rd.eyes; }
+            if (rd.material && rd.line) { leadChangeText = rd.line; _leadLine = rd.line; _leadMaterial = true; _leadEyes = !!rd.eyes; _leadHot = true; }
+            // Held: an already-acknowledged change under 24h old keeps
+            // headlining (the old behavior forgot it on the next render, so
+            // the lead never left "No change" — owner report 2026-09-02).
+            else if (rd.held && rd.line) { leadChangeText = rd.line; _leadEyes = !!rd.eyes; _leadHot = true; }
         }
     } catch (e) { /* keep the steady no-change line */ }
     useEffect(() => {
-        if (!_leadMaterial || !_leadCurr || !(window.WR && window.WR.BriefPulse && window.WR.BriefPulse.saveSnapshot)) return;
-        try { window.WR.BriefPulse.saveSnapshot(_leadLeagueId, { fingerprint: _leadCurr.fingerprint, players: _leadCurr.players, record: _leadCurr.record, tier: _leadCurr.tier, draftPhase: _leadCurr.draftPhase, rank: _leadCurr.rank }); } catch (e) {}
+        if (!_leadMaterial || !_leadCurr || !(window.WR && window.WR.BriefPulse && window.WR.BriefPulse.acknowledge)) return;
+        // Acknowledge with the line included so it holds for 24h on both surfaces.
+        try { window.WR.BriefPulse.acknowledge(_leadLeagueId, _leadCurr, { line: _leadLine, eyes: _leadEyes }); } catch (e) {}
     }, [_leadMaterial, _leadCurr && _leadCurr.fingerprint]);
 
     // ── Structured "living brief" body (owner's template) ───────────
@@ -538,7 +543,7 @@ function IntelligenceBriefWidget({
         const lines = [];
         // Line 1 — 24-hour lead read. A fresh league trade links to the
         // Transaction Ticker; otherwise it scrolls to Power Rankings.
-        lines.push({ key: 'lead', icon: _leadMaterial ? '👀' : '📰', pr: !_leadEyes, txn: _leadEyes, src: _leadEyes ? 'Transaction Ticker' : 'Power Rankings', body: [leadChangeText] });
+        lines.push({ key: 'lead', icon: _leadHot ? '👀' : '📰', pr: !_leadEyes, txn: _leadEyes, src: _leadEyes ? 'Transaction Ticker' : 'Power Rankings', body: [leadChangeText] });
         // Line 2 — rank + health → Analytics tab.
         if (myRank > 0 && tier !== 'UNKNOWN') {
             lines.push({ key: 'rank', icon: '🎯', target: 'analytics', src: 'Analytics',

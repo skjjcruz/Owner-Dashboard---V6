@@ -2971,7 +2971,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- AI Conductor foundation — one shared team-state + change-fingerprint (window.WR.SituationRoom). Additive + flagged off; nothing consumes it yet. -->
 <script src="js/shared/situation-room.js?v=20260715sr3"></script>
 <!-- AI Conductor Phase 2 — the command brief's "what changed" line (window.WR.BriefPulse), flag-gated. -->
-<script src="js/shared/brief-pulse.js?v=20260714bp1"></script>
+<script src="js/shared/brief-pulse.js?v=20260902hold1"></script>
 <!-- AI Conductor Phase 3 — the reusable "explain this screen" line (window.WR.SurfaceRead), flag-gated. -->
 <script src="js/shared/surface-read.js?v=20260715sr1"></script>
 <!-- Player Brief Phase 1 — the DHQ Composer: a written summary for EVERY player card (window.WR.PlayerBrief). -->
@@ -3053,7 +3053,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- League Calendar widget — depends on window.WrCalendar (js/tabs/calendar.js) -->
 <script type="text/babel" src="js/widgets/league-calendar.js?v=20260827cal4"></script>
 <script type="text/babel" src="js/tabs/dashboard.js?v=20260828tick2"></script>
-<script type="text/babel" src="js/tabs/flash-brief.js?v=20260613gm1"></script>
+<script type="text/babel" src="js/tabs/flash-brief.js?v=20260902hold1"></script>
 <!-- Group "analysis": analytics.js embeds LeagueMapTab, so both defer together
      (league-map.js first — DOM order is execution order within a group). -->
 <script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20260824cols15"></script>
@@ -3149,7 +3149,7 @@ window.addEventListener('appinstalled', () => {
 <!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
      owner can read back exactly which version his device is running before
      testing — kills the stale-cache guessing game. Bump the code every deploy. -->
-<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b72</div>
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b73</div>
 </body>
 </html>
 <!-- build 1774212614 -->
