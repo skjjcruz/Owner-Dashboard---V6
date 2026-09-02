@@ -1250,6 +1250,19 @@ group('account surface (billing + legal requirements)');
     ok(!R.violates(D({ givePlayers: [A('q30')], receivePicks: [P2], receivePlayers: [A('wr2')] })), 'Bottom for 2nd + starter pays');
     ok(R.violates(D({ givePlayers: [A('q32')], receivePicks: [P3] })), 'the Rodgers-rule QB never moves for a bare 3rd');
   });
+  test('QB v2: scarcity bump — an irreplaceable QB prices one tier up', () => {
+    const R2 = g.WrQbTradeRulesV2.build({
+      scores, playersData: pd, rosterPositions: ['QB', 'SUPER_FLEX', 'RB', 'WR'], teams: 16,
+      isElite: pid => pid === 'wr1' || pid === 'dl1',
+      starterRole: p => (p && roleFlags[Object.keys(pd).find(k => pd[k] === p)]) ? 'S1' : null,
+      normPos: x => String(x || '').toUpperCase(),
+      ageOf: pid => pd[pid] ? pd[pid].age : null,
+      isScarce: pid => pid === 'q15',
+    });
+    eq(R2.tierOf('q15'), 'mid+', 'a protected Mid QB prices at Mid+');
+    ok(R2.violates(D({ givePlayers: [A('q15')], receivePicks: [P1] })), 'a bare 1st no longer buys an irreplaceable QB');
+    ok(!R2.violates(D({ givePlayers: [A('q15')], receivePicks: [P1, P2] })), '1st + 2nd pays the bumped price');
+  });
   test('QB v2: swap bridges by tier distance', () => {
     ok(!R.violates(D({ givePlayers: [A('q5')], receivePlayers: [A('q6')] })), 'same-tier swap passes even');
     ok(R.violates(D({ givePlayers: [A('q5')], receivePlayers: [A('q10')] })), 'one tier down bare is rejected');

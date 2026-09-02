@@ -439,14 +439,13 @@
                                 <strong style={{ color:deal.windowImpact.color }}>{deal.windowImpact.label.replace(/^Window\s*/i, '')}</strong>
                             </div>
                         </div>
+                        {/* Owner ruling 2026-09-02: two short lines + the caution
+                            chips. Swing/Format/Behavior prose and the grey
+                            evidence chips are retired — too much verbiage. */}
                         <div className="tc-dhq-readout">
                             <div><b>Accept:</b><span>{deal.whyAccept}</span></div>
                             <div><b>You:</b><span>{deal.whyYou}</span></div>
-                            <div><b>Swing:</b><span>{deal.swing}</span></div>
-                            {deal.formatReadout && <div><b>Format:</b><span>{deal.formatReadout}</span></div>}
-                            {deal.behaviorReadout && <div><b>Behavior:</b><span>{deal.behaviorReadout}</span></div>}
                         </div>
-                        {whyLines.length > 0 && <div className="tc-dhq-evidence">{whyLines.slice(0, 4).map(line => <span key={line}>{line}</span>)}</div>}
                         {deal.caution.length > 0 && <div className="tc-dhq-cautions">{deal.caution.slice(0, 3).map(c => <span key={c}>{c}</span>)}</div>}
                     </div>}
                 </div>;
@@ -1717,6 +1716,12 @@
         // A finder-only gate built from the pure module. The manual Trade
         // Builder is untouched and shows no warnings by design: whatever
         // an owner hand-builds is on the owner.
+        // Scarcity set (late-binding): every player HIS OWN team's ledger
+        // protects. The QB rules read it at violate-time via this ref — a
+        // scarcity-protected QB prices one tier up (owner ruling: a bare 1st
+        // never buys an irreplaceable QB). Populated once the GM engine
+        // builds, further down this component.
+        const gmScarceRef = useRef(new Set());
         const qbTradeRules = useMemo(() => {
             try {
                 if (!window.WrQbTradeRulesV2?.build) return null;
@@ -1729,6 +1734,7 @@
                     starterRole: p => window.App?.NflRoles?.starterRole?.(p) || null,
                     normPos,
                     ageOf: pid => (playersData[pid] && playersData[pid].age) || null,
+                    isScarce: pid => gmScarceRef.current.has(String(pid)),
                 });
             } catch (e) { return null; }
         }, [playersData, currentLeague, allRosters, timeRecomputeTs]);
@@ -2307,11 +2313,11 @@
                                 ? (() => {
                                     const pa = (partner.posAssessment || {})[target.pos] || {};
                                     const room = pa.nflStarters != null && pa.minQuality != null
-                                        ? `${(partner.teamName || partner.ownerName || 'His owner')} needs ${pa.minQuality} startable ${target.pos}${pa.minQuality === 1 ? '' : 's'} every week and rosters only ${pa.nflStarters} — trading ${target.name} leaves a hole he can't fill. `
-                                        : `${(partner.teamName || partner.ownerName || 'His owner')} has no spare quality behind ${target.name}. `;
+                                        ? `starts ${pa.minQuality} ${target.pos}${pa.minQuality === 1 ? '' : 's'} weekly, rosters only ${pa.nflStarters}`
+                                        : `has nothing behind him`;
                                     let tierBit = '';
-                                    try { const t = target.pos === 'QB' && qbTradeRules?.tierOf?.(String(target.pid)); if (t) tierBit = `As a ${String(t).toUpperCase()}-tier QB the composition rules set his entry price on top. `; } catch (e) { }
-                                    return `Why the price is steep: ${room}${tierBit}On the open market he's a ${targetMkt.toLocaleString()} player — prying him from a room that thin costs a 30%+ scarcity premium (${Math.round(targetMkt * 1.3).toLocaleString()}+), and this package pays that real price.`;
+                                    try { const t = target.pos === 'QB' && qbTradeRules?.tierOf?.(String(target.pid)); if (t) tierBit = ` — priced a tier up (${String(t).toUpperCase()}) by rule`; } catch (e) { }
+                                    return `His owner ${room}. Market ${targetMkt.toLocaleString()} + 30% scarcity premium = ${Math.round(targetMkt * 1.3).toLocaleString()}+${tierBit}.`;
                                 })()
                                 : myNeedPos.includes(target.pos)
                                     ? `You address ${target.pos} while keeping the offer inside your GM Office risk band.`
@@ -3168,6 +3174,18 @@
                 return led ? new Set(Object.keys(led.protectedPids)) : new Set();
             } catch (e) { return new Set(); }
         }, [gmEngine, myRosterId]);
+        // League-wide scarcity: each player judged by HIS OWN team's ledger.
+        useMemo(() => {
+            const s = new Set();
+            try {
+                if (gmEngine) assessments.forEach(a => {
+                    const led = gmEngine.ledger(a.rosterId);
+                    if (led) Object.keys(led.protectedPids).forEach(pid => s.add(String(pid)));
+                });
+            } catch (e) { }
+            gmScarceRef.current = s;
+            return s;
+        }, [gmEngine]);
 
         const partnerBoard = useMemo(() => computePartnerBoard(), [finderDataEpoch]);
         // Per-(partner, mode, focus) deal cache, invalidated wholesale on tuning/data
@@ -3410,8 +3428,8 @@
                     id: 'asking_' + String(focusR.id),
                     givePlayers, givePicks, receivePlayers: [target], giveFaab: focusAskingPrice.faab || 0,
                     extraCaution: ['Asking price — your current pieces can\'t assemble this package'],
-                    whyAccept: `${focusAskingPrice.teamName} ${focusAskingPrice.roomLine} — only this level of overpay opens the conversation.`,
-                    whyYou: `Why the price is so high: his market price is ${focusAskingPrice.mkt.toLocaleString()} — the rest is the scarcity premium for forcing an owner to open a hole in his own lineup. It will take ${focusAskingPrice.reqText}.`,
+                    whyAccept: `${focusAskingPrice.teamName} ${focusAskingPrice.roomLine} — only an overpay opens the conversation.`,
+                    whyYou: `Market ${focusAskingPrice.mkt.toLocaleString()} + scarcity premium = ${focusAskingPrice.floor.toLocaleString()}+. It takes ${focusAskingPrice.reqText}.`,
                 });
                 return d ? { ...d, _asking: true } : null;
             } catch (e) { return null; }

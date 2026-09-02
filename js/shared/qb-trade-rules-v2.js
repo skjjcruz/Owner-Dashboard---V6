@@ -52,6 +52,7 @@
         var starterRole = (ctx && ctx.starterRole) || function () { return null; };
         var normPos = (ctx && ctx.normPos) || function (p) { return String(p || '').toUpperCase(); };
         var ageOf = (ctx && ctx.ageOf) || function (pid) { var p = playersData[pid]; return (p && p.age) || null; };
+        var isScarce = (ctx && ctx.isScarce) || function () { return false; };
 
         var qbHard = 0, sfSlots = 0;
         for (var i = 0; i < rp.length; i++) {
@@ -102,6 +103,15 @@
             var age = null;
             try { age = ageOf(String(pid)); } catch (e2) { }
             if (age != null && age >= 40 && TIER_IDX[tier] < TIER_IDX.mid) tier = 'mid';
+            // Scarcity bump (owner ruling 2026-09-02): a QB his own roster
+            // can't cover losing prices ONE TIER UP — a bare 1st never buys
+            // an irreplaceable mid QB.
+            try {
+                if (isScarce(String(pid))) {
+                    var TIERS = ['elite+', 'elite', 'mid+', 'mid', 'low', 'bottom'];
+                    tier = TIERS[Math.max(0, TIER_IDX[tier] - 1)];
+                }
+            } catch (e3) { }
             return tier;
         }
 
