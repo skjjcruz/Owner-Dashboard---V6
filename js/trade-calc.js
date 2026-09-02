@@ -1711,6 +1711,25 @@
         // aggression or the floor — only tradePriority.positions survives, as an
         // additive shopping hint unioned into targetPositions. The opponent's
         // displayed acceptance % is computed elsewhere and is never touched here.
+        // QB trade composition rules (owner ruling 2026-09-02) — a
+        // finder-only gate built from the shared pure module. The manual
+        // Trade Builder is untouched and shows no warnings by design:
+        // whatever an owner hand-builds is on the owner.
+        const qbTradeRules = useMemo(() => {
+            try {
+                if (!window.WrQbTradeRules?.build) return null;
+                return window.WrQbTradeRules.build({
+                    scores: window.App?.LI?.playerScores || {},
+                    playersData,
+                    rosterPositions: currentLeague?.roster_positions || [],
+                    teams: allRosters.length || 16,
+                    isElite: pid => (typeof window.App?.isElitePlayer === 'function') ? window.App.isElitePlayer(pid) : ((window.App?.LI?.playerScores?.[pid] || 0) >= 7000),
+                    starterRole: p => window.App?.NflRoles?.starterRole?.(p) || null,
+                    normPos,
+                });
+            } catch (e) { return null; }
+        }, [playersData, currentLeague, allRosters, timeRecomputeTs]);
+
         function getDealHqTuning(alexSettings = {}) {
             const eff = window.WR?.GmMode?.effects?.(leagueId) || {};
             const aggression = clampNum(eff.aggression, 0.2, 0.92, 0.52);
@@ -2007,6 +2026,9 @@
 
         function addCandidate(candidates, partner, input) {
             if (crossClassUnrealistic(input)) return;
+            // Startable-QB packages must satisfy the owner's composition
+            // rules (1sts / QB swaps / elite pieces / multi-starter bundles).
+            if (qbTradeRules && qbTradeRules.violates(input)) return;
             const deal = buildDeal(partner, input);
             if (!deal) return;
             // _core — the deal's IDEA identity (owner ruling: the board kept

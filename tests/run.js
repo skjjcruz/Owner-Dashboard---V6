@@ -1123,6 +1123,44 @@ group('account surface (billing + legal requirements)');
 }
 
 // ══════════════════════════════════════════════════════════════════
+// QB trade composition rules (owner ruling 2026-09-02) — functional
+// ══════════════════════════════════════════════════════════════════
+{
+  const g = {};
+  new Function('window', fs.readFileSync('js/shared/qb-trade-rules.js', 'utf8'))(g);
+  const scores = { qb1: 5000, qb2: 3300, te1: 2600, bqb: 1400, wr1: 4300, dl1: 3500, rb1: 2400 };
+  for (let i = 0; i < 28; i++) scores['fq' + i] = 5200 - i * 110;
+  const P = (pos) => ({ position: pos });
+  const playersData = { qb1: P('QB'), qb2: P('QB'), bqb: P('QB'), te1: P('TE'), wr1: P('WR'), dl1: P('DE'), rb1: P('RB') };
+  for (let i = 0; i < 28; i++) playersData['fq' + i] = P('QB');
+  const rules = g.WrQbTradeRules.build({
+    scores, playersData, rosterPositions: ['QB', 'SUPER_FLEX', 'RB', 'WR', 'TE'], teams: 16,
+    isElite: (pid) => pid === 'wr1' || pid === 'dl1', starterRole: () => null,
+    normPos: (x) => ({ DE: 'DL' }[String(x || '').toUpperCase()] || String(x || '').toUpperCase()),
+  });
+  const A = (pid) => ({ pid, pos: ({ QB: 'QB', TE: 'TE', WR: 'WR', DE: 'DL', RB: 'RB' })[playersData[pid].position], value: scores[pid] });
+  const D = (o) => ({ receivePlayers: [], givePlayers: [], givePicks: [], receivePicks: [], ...o });
+  test('QB trade rules: elite/mid QB package requirements', () => {
+    ok(rules.violates(D({ givePlayers: [A('qb1')], receivePlayers: [A('te1'), A('bqb')] })), 'a mid QB for a TE + backup QB must be rejected');
+    ok(!rules.violates(D({ givePlayers: [A('qb1')], receivePicks: [{ round: 1 }] })), 'a 1st pays for an elite/mid QB');
+    ok(!rules.violates(D({ givePlayers: [A('qb1')], receivePlayers: [A('wr1')] })), 'an elite offensive player pays');
+    ok(rules.violates(D({ givePlayers: [A('qb1')], receivePlayers: [A('dl1')] })), 'an elite IDP alone does NOT pay');
+    ok(!rules.violates(D({ givePlayers: [A('qb1')], receivePlayers: [A('dl1')], receivePicks: [{ round: 3 }] })), 'elite IDP + a pick pays');
+    ok(!rules.violates(D({ givePlayers: [A('qb1')], receivePlayers: [A('te1'), A('rb1')] })), 'two starter-quality players pay');
+    ok(rules.violates(D({ receivePlayers: [A('qb1')] })), 'FAAB-only never pays for a startable QB');
+  });
+  test('QB trade rules: swaps, low tier, and exemptions', () => {
+    ok(rules.violates(D({ receivePlayers: [A('qb2')], givePlayers: [A('qb1')] })), 'a bare unequal QB swap violates — the better QB side got no extras');
+    ok(!rules.violates(D({ receivePlayers: [A('qb2')], givePlayers: [A('qb1')], receivePicks: [{ round: 4 }] })), 'lesser QB + a pick balances the swap');
+    ok(!rules.violates(D({ receivePlayers: [A('qb1')], givePlayers: [A('qb2'), A('te1')] })), 'lesser QB + a starter-quality player pays');
+    ok(!rules.violates(D({ receivePlayers: [A('fq26')], givePicks: [{ round: 2 }] })), 'a 2nd pays for a low-tier QB');
+    ok(rules.violates(D({ receivePlayers: [A('fq26')], givePicks: [{ round: 3 }] })), 'a 3rd alone does not pay for a low-tier QB');
+    ok(!rules.violates(D({ receivePlayers: [A('fq26')], givePlayers: [A('rb1')] })), 'a starter-quality skill player pays for a low-tier QB');
+    ok(!rules.violates(D({ receivePlayers: [A('bqb')], givePlayers: [] })), 'true backups are exempt from all rules');
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Summary
 // ══════════════════════════════════════════════════════════════════
 console.log('\n');
