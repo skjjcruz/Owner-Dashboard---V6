@@ -241,6 +241,19 @@
         } catch (_) { return null; }
     }
 
+    // ── League mover radar (owner build 2026-09-02) ──────────────────
+    // The biggest OTHER-team power-rank swing since yesterday, from the
+    // WR.RankHistory day tables. Needs a real move (2+ spots) to headline;
+    // one-spot wobbles stay quiet. null degrades to "no mover".
+    function biggestMover(leagueId, roster) {
+        try {
+            if (!(window.WR && window.WR.RankHistory)) return null;
+            var myRid = roster && (roster.roster_id != null ? roster.roster_id : roster.rosterId);
+            var mv = window.WR.RankHistory.movers(leagueId, { excludeRosterId: myRid });
+            return (mv && mv.length && Math.abs(mv[0].delta) >= 2) ? mv[0] : null;
+        } catch (_) { return null; }
+    }
+
     // ── Deterministic diff (the floor) ───────────────────────────────
     function _name(id, playersData) {
         try {
@@ -296,6 +309,20 @@
             var tr = curr._trade;
             var lead = (tr.involvesMe ? 'Big trade ' : 'Huge trade ') + tr.when;
             changes.push({ type: 'trade', eyes: true, text: lead + ' — ' + tr.headline });
+        }
+
+        // League mover (owner build 2026-09-02): a rival's big power-rank swing
+        // headlines like a trade — league environment, notable right now, fresh
+        // even on a first-ever visit.
+        if (curr._mover) {
+            eyes = true;
+            var mv = curr._mover;
+            var spots = Math.abs(mv.delta);
+            changes.push({
+                type: 'mover', eyes: true,
+                text: mv.name + (mv.delta > 0 ? ' climbed ' : ' slipped ') + spots + (spots === 1 ? ' spot' : ' spots')
+                    + ' to #' + mv.to + ' in the power rankings',
+            });
         }
 
         // Roster / record / tier / draft all diff against the last visit — with
@@ -433,9 +460,10 @@
                 var got = window.WR.SituationRoom.get(league, roster);
                 curr = snapshotFromState(got && got.state);
                 leagueId = (got && got.state && got.state.leagueId) || null;
-                // League-trade radar — the environment-awareness a roster diff
-                // can't see. Read-only, cached-only; null when nothing's fresh.
+                // League-trade + league-mover radar — the environment-awareness
+                // a roster diff can't see. Read-only; null when nothing's fresh.
                 if (curr) curr._trade = recentLeagueTrade(league, roster, playersData);
+                if (curr) curr._mover = biggestMover(leagueId, roster);
                 var prev = loadSnapshot(leagueId);
                 change = computeChange(prev, curr, playersData);
                 // The state carries needs for the AI context.
@@ -540,6 +568,7 @@
             if (!curr) return out;
             var leagueId = (got && got.state && got.state.leagueId) || null;
             curr._trade = recentLeagueTrade(league, roster, playersData);
+            curr._mover = biggestMover(leagueId, roster);
             if (got && got.state) curr._needs = got.state.needs;
             var change = computeChange(loadSnapshot(leagueId), curr, playersData);
             out.material = change.material; out.line = change.line; out.eyes = !!change.eyes;

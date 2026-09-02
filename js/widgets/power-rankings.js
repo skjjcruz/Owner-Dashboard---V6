@@ -107,6 +107,30 @@
         cur.data.forEach((t, i) => { rankByView.blended[t.rosterId] = i + 1; });
         const aboveMe = myIndex > 0 ? cur.data[myIndex - 1] : null;
         const belowMe = myIndex >= 0 && myIndex < total - 1 ? cur.data[myIndex + 1] : null;
+
+        // ── Rank memory + move arrow (owner ask 2026-09-02) ──────────
+        // Record today's full rank table into WR.RankHistory (feeds the brief's
+        // "COVIDFaceMasks climbed 2 spots" radar) and adopt the cloud copy from
+        // the other surface; a merge bumps the tick so the arrow appears
+        // without a reload. The arrow shows YOUR move vs the previous recorded
+        // day — green up, red down, nothing when flat or history is one day deep.
+        const rhLeagueId = currentLeague?.league_id || currentLeague?.id || null;
+        const [histTick, setHistTick] = React.useState(0);
+        React.useEffect(() => {
+            if (!rhLeagueId || !window.WR?.RankHistory) return;
+            try { window.WR.RankHistory.record(rhLeagueId, assessments); } catch (e) { /* memory is a bonus */ }
+            try { window.WR.RankHistory.sync(rhLeagueId, () => setHistTick(t => t + 1)); } catch (e) { /* offline */ }
+        }, [rhLeagueId, assessments]);
+        const myMove = React.useMemo(() => {
+            if (!rhLeagueId || !myTeam || !window.WR?.RankHistory) return null;
+            try { return window.WR.RankHistory.myDelta(rhLeagueId, myTeam.rosterId); } catch (e) { return null; }
+        }, [rhLeagueId, myTeam && myTeam.rosterId, histTick, myRank]);
+        const rankArrow = (fs) => (myMove && myMove.delta !== 0)
+            ? React.createElement('span', {
+                title: (myMove.delta > 0 ? 'Up from #' : 'Down from #') + myMove.prevRank + ' (previous ranking day)',
+                style: { fontSize: fs || '0.55em', fontWeight: 900, marginLeft: '4px', verticalAlign: 'middle', color: myMove.delta > 0 ? 'var(--good, #2ecc71)' : 'var(--bad, #e74c3c)' },
+            }, myMove.delta > 0 ? '▲' : '▼')
+            : null;
         const tiers = cur.data.reduce((acc, t, i) => {
             const key = i < 3 ? 'front' : i < Math.ceil(total * 0.5) ? 'middle' : 'chase';
             acc[key] += 1;
@@ -341,7 +365,7 @@
                 React.createElement(Header, { compact: true, showTabs: false }),
                 React.createElement('div', { style: { textAlign: 'center', padding: '2px 0' } },
                     React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.7 } }, cur.label + ' Rank'),
-                    React.createElement('div', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '2.15rem', lineHeight: 1, fontWeight: 900, color } }, myRank ? '#' + myRank : '\u2014'),
+                    React.createElement('div', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '2.15rem', lineHeight: 1, fontWeight: 900, color } }, myRank ? '#' + myRank : '\u2014', myRank ? rankArrow('0.42em') : null),
                     React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.72, marginTop: '6px' } }, total ? 'of ' + total + ' teams' : 'No teams')
                 ),
                 React.createElement('div', { style: { height: '7px', borderRadius: '7px', background: 'var(--ov-4, rgba(255,255,255,0.07))', overflow: 'hidden' } },
@@ -367,7 +391,7 @@
                         }
                     },
                         React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.72 } }, 'You'),
-                        React.createElement('div', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '1.8rem', lineHeight: 1, fontWeight: 900, color, marginTop: '4px' } }, myRank ? '#' + myRank : '\u2014'),
+                        React.createElement('div', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '1.8rem', lineHeight: 1, fontWeight: 900, color, marginTop: '4px' } }, myRank ? '#' + myRank : '\u2014', myRank ? rankArrow('0.45em') : null),
                         React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.65, marginTop: '5px' } }, cur.fmtFn(myVal) + ' ' + metricLabel(view).toLowerCase())
                     ),
                     React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '7px', minWidth: 0 } },
@@ -474,7 +498,7 @@
                         compact: true,
                         inline: true,
                         label: 'Your Rank',
-                        value: myRank ? '#' + myRank : '\u2014',
+                        value: myRank ? React.createElement('span', null, '#' + myRank, rankArrow('0.6em')) : '\u2014',
                         sub: myTeam ? cur.fmtFn(myVal) + ' ' + tallUnit : 'not found',
                         // Owner wants the personal rank called out in red.
                         tone: TONE.weak,
@@ -670,7 +694,7 @@
             },
                 React.createElement('div', { style: { background: TONE.panel, borderRadius: '8px', padding: '8px 10px' } },
                     React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.66, textTransform: 'uppercase' } }, 'Your Rank'),
-                    React.createElement('div', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '1.25rem', fontWeight: 900, color: myRank ? rankTone(myRank) : TONE.middle } }, myRank ? '#' + myRank : '\u2014')
+                    React.createElement('div', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '1.25rem', fontWeight: 900, color: myRank ? rankTone(myRank) : TONE.middle } }, myRank ? '#' + myRank : '\u2014', myRank ? rankArrow('0.55em') : null)
                 ),
                 React.createElement('div', { style: { background: TONE.panel, borderRadius: '8px', padding: '8px 10px' } },
                     React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.66, textTransform: 'uppercase' } }, 'Leader'),
