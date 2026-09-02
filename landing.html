@@ -1889,12 +1889,19 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
       try { return document.referrer ? new URL(document.referrer).hostname : null; }
       catch { return null; }
     }
+    // Returns a promise that settles when the insert lands (or after 900ms,
+    // whichever is first) so critical-path callers can await it BEFORE
+    // navigating away. Fire-and-forget callers are unaffected. Without this,
+    // signup_succeeded died in flight when the OAuth callback immediately
+    // redirected to the connect page — a REAL Apple signup on 9/1 landed an
+    // account at 14:20:52 and the funnel still read "Signup succeeded: 0"
+    // (owner deep dive 2026-09-02).
     function trackLandingEvent(eventName, metadata = {}) {
       try {
-        if (LANDING_EDITOR_PREVIEW) return;
+        if (LANDING_EDITOR_PREVIEW) return Promise.resolve();
         const db = getSbClient();
-        if (!db || !eventName) return;
-        db.from('analytics_events').insert([{
+        if (!db || !eventName) return Promise.resolve();
+        const insert = db.from('analytics_events').insert([{
           event_id: 'evt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10),
           username: null,
           league_id: null,
@@ -1908,7 +1915,8 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
           entity_id: metadata.entityId || null,
           metadata: safeLandingMeta(metadata),
         }]).then(() => {}).catch(() => {});
-      } catch {}
+        return Promise.race([insert, new Promise(r => setTimeout(r, 900))]);
+      } catch { return Promise.resolve(); }
     }
     trackLandingEvent('landing_viewed', {
       referrerHost: safeReferrerHost(),
@@ -2100,11 +2108,31 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
     (async function handleOAuthCallback() {
       try {
         if (LANDING_EDITOR_PREVIEW || FORCE_SIGNOUT || STAY_HOME) { dropOAuthOverlay(); return; }
+        // A provider bounced us back with an error in the URL — this used to
+        // fall through in complete silence (owner deep dive 2026-09-02:
+        // "Signup submitted… then nothing"). Now it reports itself.
+        const _urlErr = ((window.location.hash || '') + (window.location.search || '')).match(/[#?&]error(?:_description)?=([^&]+)/);
+        if (_urlErr) {
+          dropOAuthOverlay();
+          trackLandingEvent('oauth_returned_error', { detail: decodeURIComponent(_urlErr[1]).slice(0, 120) });
+          showAlert('error', 'Sign-in was cancelled or blocked by the provider. Please try again — or use email.');
+          return;
+        }
         const db = getSbClient();
         if (!db) { dropOAuthOverlay(); return; }
         const { data } = await db.auth.getSession();
-        if (!data?.session) { dropOAuthOverlay(); return; }
+        if (!data?.session) {
+          dropOAuthOverlay();
+          // Only a fresh OAuth return with no resulting session is a failure
+          // worth reporting — a plain landing view with no session is normal.
+          if (FRESH_OAUTH_RETURN) {
+            trackLandingEvent('oauth_no_session', {});
+            showAlert('error', 'Sign-in didn’t finish — the provider sent us back without a session. Please try again.');
+          }
+          return;
+        }
         const user = data.session.user;
+        const oauthProvider = user.app_metadata?.provider || 'oauth';
         const fallbackName = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
         const existing = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
         let appSession = null;
@@ -2142,14 +2170,18 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
             // tier — the exact shape that locked Google sign-ins to Scout.
             // Stay here so the user can retry.
             dropOAuthOverlay();
-            trackLandingEvent('oauth_sync_failed', { provider: 'google' });
+            trackLandingEvent('oauth_sync_failed', { provider: oauthProvider });
             showAlert('error', 'Sign-in hit a snag finishing your account setup. Please try again in a moment.');
             return;
           }
         }
         const oauthIsNew = !!(appSession && appSession.isNew === true);
-        trackLandingEvent('oauth_succeeded', { provider: 'google', isNew: oauthIsNew });
-        trackLandingEvent(oauthIsNew ? 'signup_succeeded' : 'signin_succeeded', { method: 'oauth' });
+        // AWAITED so the success reaches the server before we navigate away —
+        // otherwise a successful signup reads as a funnel dropout.
+        await Promise.all([
+          trackLandingEvent('oauth_succeeded', { provider: oauthProvider, isNew: oauthIsNew }),
+          trackLandingEvent(oauthIsNew ? 'signup_succeeded' : 'signin_succeeded', { method: oauthProvider }),
+        ]);
         // First-ever sign-in (fw-oauth-sync just created the account): route
         // to the connect-your-leagues page instead of straight in.
         if (appSession && appSession.isNew === true) {
@@ -2158,7 +2190,11 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
         } else {
           window.location.href = nextAfterAuth();
         }
-      } catch (e) { dropOAuthOverlay(); console.warn('[WR] OAuth callback error:', e); }
+      } catch (e) {
+        dropOAuthOverlay();
+        console.warn('[WR] OAuth callback error:', e);
+        trackLandingEvent('oauth_callback_error', { detail: String(e && e.message || e).slice(0, 120) });
+      }
     })();
 
     // \u2500\u2500 Forgot password \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
