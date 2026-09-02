@@ -1698,8 +1698,9 @@ function LeagueMapTab({
         // Sort by health within each tier
         Object.values(tiers).forEach(arr => arr.sort((a, b) => b.healthScore - a.healthScore));
 
-        // Health rankings (all teams sorted)
-        const ranked = [...allAssessments].sort((a, b) => b.healthScore - a.healthScore);
+        // Power order (2026-09-02: blended powerScore, one rank everywhere —
+        // this feeds the 'Power balance' radar so it must match the rankings)
+        const ranked = [...allAssessments].sort((a, b) => (b.powerScore || 0) - (a.powerScore || 0) || (b.totalDHQ || 0) - (a.totalDHQ || 0));
 
         // Phase 8 deferred: tradeTargets computation removed along with the Top Trade Targets card.
 
@@ -1752,8 +1753,16 @@ function LeagueMapTab({
                 return { ...t, totalDhq };
               }).sort((a, b) => b.totalDhq - a.totalDhq);
 
+              // One rank (2026-09-02): 'Blended' is the actual blended power
+              // score, matching the Power Rankings widget — it used to sort by
+              // healthScore while wearing the same name.
+              const blendedRanked = [...allAssessments].sort((a, b) => {
+                if ((b.powerScore || 0) !== (a.powerScore || 0)) return (b.powerScore || 0) - (a.powerScore || 0);
+                if ((b.totalDHQ || 0) !== (a.totalDHQ || 0)) return (b.totalDHQ || 0) - (a.totalDHQ || 0);
+                return String(a.rosterId).localeCompare(String(b.rosterId));
+              });
               const views = [
-                { key: 'blended', label: 'Blended', data: ranked, valFn: t => t.healthScore, fmtFn: v => v, colFn: v => v >= 90 ? 'var(--gold)' : v >= 80 ? 'var(--good)' : v >= 70 ? 'var(--warn)' : 'var(--bad)', subFn: t => t.tier },
+                { key: 'blended', label: 'Blended', data: blendedRanked, valFn: t => t.powerScore, fmtFn: v => v, colFn: v => v >= 90 ? 'var(--gold)' : v >= 80 ? 'var(--good)' : v >= 70 ? 'var(--warn)' : 'var(--bad)', subFn: t => t.tier },
                 { key: 'contender', label: 'Contender', data: contenderRanked, valFn: t => t.ppg, fmtFn: v => v > 0 ? v.toFixed(1) : '\u2014', colFn: (v, i) => i < 3 ? 'var(--good)' : i < 8 ? 'var(--silver)' : 'var(--bad)', subFn: t => (t.ppg > 0 ? t.ppg.toFixed(1) + ' PPG' : '') },
                 { key: 'dynasty', label: 'Dynasty', data: dynastyRanked, valFn: t => t.totalDhq, fmtFn: v => v > 0 ? (v/1000).toFixed(1)+'K' : '\u2014', colFn: (v, i) => i < 3 ? 'var(--good)' : i < 8 ? 'var(--silver)' : 'var(--bad)', subFn: t => (t.totalDhq > 0 ? t.totalDhq.toLocaleString() + ' DHQ' : '') },
               ];

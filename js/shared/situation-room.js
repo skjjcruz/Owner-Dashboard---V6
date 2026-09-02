@@ -104,7 +104,12 @@
             var games = (settings.wins || 0) + (settings.losses || 0) + (settings.ties || 0);
             // A roster that has never played and holds no players reads pre-draft.
             var hasPlayers = !!(roster && roster.players && roster.players.length);
-            out.phase = (!games && !hasPlayers) ? 'pre' : (!games ? 'drafted' : 'in-season');
+            // Prefer the platform's own word when present (audit 2026-09-02):
+            // Sleeper says pre_draft/drafting outright — inferring from games
+            // and roster emptiness disagreed with the digest's read.
+            var ls = String((league && league.status) || '');
+            if (ls === 'pre_draft' || ls === 'drafting') out.phase = 'pre';
+            else out.phase = (!games && !hasPlayers) ? 'pre' : (!games ? 'drafted' : 'in-season');
             var did = (league && (league.draft_id || league.draftId)) || '';
             if (did) out.draftId = String(did);
         } catch (_) { /* non-fatal */ }
@@ -151,6 +156,10 @@
             state.window = (assessment && (assessment.window || assessment.tradeWindow)) || '';
             state.healthScore = (assessment && assessment.healthScore) || 0;
             state.needs = (assessment && Array.isArray(assessment.needs)) ? assessment.needs : [];
+            // The surplus side of the story (audit 2026-09-02): the Room carried
+            // needs but never strengths, so brief/read surfaces couldn't see
+            // what the UI calls tradeable excess.
+            state.strengths = (assessment && Array.isArray(assessment.strengths)) ? assessment.strengths : [];
             // Blended power rank (same engine every surface reads) — lets the brief
             // say "you're now #8" and catch a rank drop after a league shakeup.
             state.rank = (assessment && assessment.powerRank) || null;
@@ -210,6 +219,10 @@
             state.nflWeek || '',
             (state.draft && state.draft.phase) || '',
             state.rank || '',
+            // healthScore + strengths joined the print (audit 2026-09-02) so a
+            // health or surplus swing refreshes cached surface reads.
+            String(state.healthScore || ''),
+            (state.strengths || []).join('+'),
         ];
         return _hash(parts.join('|'));
     }

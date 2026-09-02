@@ -638,14 +638,25 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
         return pos;
     };
 
-    // calcPosGrades — league-relative position group grades
-    // Sums DHQ per position for every team, ranks, and assigns A-F.
+    // calcPosGrades — position group grades, ONE grading system (2026-09-02).
+    // The LETTER comes from the shared engine's posAssessment (quality
+    // starters vs this league's weekly requirement — the same read that
+    // drives weakness chips and strengths), so a grade can never contradict
+    // them again: the old pure DHQ-sum quintile graded a surplus superflex
+    // QB room 'D' next to 'QB trade leverage', force-failed 20% of teams at
+    // every position, and graded IDP slots leagues don't even roster. The
+    // league RANK (#N/16, by positional DHQ sum) stays as context.
     // Returns [{ pos, rank, totalTeams, mySum, grade, col, pct }]
     window.App.calcPosGrades = window.App.calcPosGrades || function calcPosGrades(myRosterId, rosters, playersData) {
         const scores = window.App?.LI?.playerScores || {};
         const normPos = window.App.normPos || (p => p);
-        const posOrder = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
         const totalTeams = (rosters || []).length || 1;
+        let assess = null;
+        try { assess = window.assessTeamFromGlobal ? window.assessTeamFromGlobal(myRosterId) : null; } catch (e) { assess = null; }
+        const pa = assess?.posAssessment || null;
+        const posOrder = pa ? ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'].filter(p => pa[p])
+            : ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
+        const COLS = { A: 'var(--k-2ecc71, #2ecc71)', B: 'var(--k-d4af37, #d4af37)', C: 'var(--k-f0a500, #f0a500)', D: 'var(--k-f0a500, #f0a500)', F: 'var(--k-e74c3c, #e74c3c)' };
         return posOrder.map(pos => {
             const byTeam = (rosters || []).map(r => {
                 const sum = (r.players || []).reduce((s, pid) => {
@@ -657,14 +668,24 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
             }).sort((a, b) => b.sum - a.sum);
             const mySum = byTeam.find(t => t.rosterId === myRosterId)?.sum || 0;
             const rank = byTeam.findIndex(t => t.rosterId === myRosterId) + 1;
-            let grade, col;
             const pct = totalTeams > 1 ? Math.round((1 - (rank - 1) / totalTeams) * 100) : 50;
-            if (rank <= Math.ceil(totalTeams * 0.2)) { grade = 'A'; col = 'var(--k-2ecc71, #2ecc71)'; }
-            else if (rank <= Math.ceil(totalTeams * 0.4)) { grade = 'B'; col = 'var(--k-d4af37, #d4af37)'; }
-            else if (rank <= Math.ceil(totalTeams * 0.6)) { grade = 'C'; col = 'var(--k-f0a500, #f0a500)'; }
-            else if (rank <= Math.ceil(totalTeams * 0.8)) { grade = 'D'; col = 'var(--k-f0a500, #f0a500)'; }
-            else { grade = 'F'; col = 'var(--k-e74c3c, #e74c3c)'; }
-            return { pos, rank, totalTeams, mySum, grade, col, pct };
+            let grade;
+            const d = pa && pa[pos];
+            if (d) {
+                const bar = d.minQuality || d.startingReq || 1;
+                const q = d.nflStarters || 0;
+                if (d.status === 'deficit') grade = 'F';
+                else if (d.status === 'thin') grade = q >= bar - 1 ? 'C' : 'D';
+                else if (d.status === 'surplus') grade = (q - bar) >= 2 ? 'A' : 'B';
+                else grade = 'B';
+            } else {
+                // Engine unavailable — fall back to the league quintile.
+                grade = rank <= Math.ceil(totalTeams * 0.2) ? 'A'
+                    : rank <= Math.ceil(totalTeams * 0.4) ? 'B'
+                    : rank <= Math.ceil(totalTeams * 0.6) ? 'C'
+                    : rank <= Math.ceil(totalTeams * 0.8) ? 'D' : 'F';
+            }
+            return { pos, rank, totalTeams, mySum, grade, col: COLS[grade], pct };
         });
     };
 

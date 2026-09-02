@@ -1322,8 +1322,9 @@ function DashboardPanel({
                             if (isOffseason) {
                                 const ra = currentLeague?.rosters?.find(r => r.owner_id === a.userId);
                                 const rb = currentLeague?.rosters?.find(r => r.owner_id === b.userId);
-                                const ha = window.assessTeamFromGlobal?.(ra?.roster_id)?.healthScore || 0;
-                                const hb = window.assessTeamFromGlobal?.(rb?.roster_id)?.healthScore || 0;
+                                // One rank (2026-09-02): offseason order = blended power.
+                                const ha = window.assessTeamFromGlobal?.(ra?.roster_id)?.powerScore || 0;
+                                const hb = window.assessTeamFromGlobal?.(rb?.roster_id)?.powerScore || 0;
                                 return hb !== ha ? hb - ha : b.pointsFor - a.pointsFor;
                             }
                             if (b.wins !== a.wins) return b.wins - a.wins;

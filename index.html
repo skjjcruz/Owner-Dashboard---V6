@@ -2916,7 +2916,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 
 <!-- War Room modules — loaded in dependency order by Babel standalone -->
 <!-- 1. Core: tier system, React hooks, fetch helpers (everything depends on this) -->
-<script type="text/babel" src="js/core.js?v=20260827jan1"></script>
+<script type="text/babel" src="js/core.js?v=20260902onemsg1"></script>
 <!-- 1a. Central data-sync manager — window.WR.Sync — stale-while-revalidate on tab return + in-season interval (plain JS) -->
 <script src="js/shared/sync-manager.js?v=20260706sync1"></script>
 <!-- 1a2. Shared viewport seam — WR.useViewport() hook + WR.viewport() snapshot (plain JS; must precede components.js and all tab files) -->
@@ -2969,7 +2969,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      Regenerate with scripts/build-draft-profile.cjs. -->
 <script src="js/shared/draft-profile-data.js?v=20260712draft1"></script>
 <!-- AI Conductor foundation — one shared team-state + change-fingerprint (window.WR.SituationRoom). Additive + flagged off; nothing consumes it yet. -->
-<script src="js/shared/situation-room.js?v=20260715sr3"></script>
+<script src="js/shared/situation-room.js?v=20260902onemsg1"></script>
 <!-- AI Conductor Phase 2 — the command brief's "what changed" line (window.WR.BriefPulse), flag-gated. -->
 <script src="js/shared/rank-history.js?v=20260902mv1"></script>
 <script src="js/shared/brief-pulse.js?v=20260902mv1"></script>
@@ -3038,8 +3038,8 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/widgets/roster-pulse.js?v=20260613gm1"></script>
 <script type="text/babel" src="js/widgets/lineup-check.js?v=20260615ss1"></script>
 <script type="text/babel" src="js/widgets/window-forecast.js?v=20260902voice1"></script>
-<script type="text/babel" src="js/widgets/gap-plan.js?v=20260613gm1"></script>
-<script type="text/babel" src="js/widgets/league-landscape.js?v=20260613gm1"></script>
+<script type="text/babel" src="js/widgets/gap-plan.js?v=20260902onemsg1"></script>
+<script type="text/babel" src="js/widgets/league-landscape.js?v=20260902onemsg1"></script>
 <script type="text/babel" src="js/widgets/txn-ticker.js?v=20260828tick2"></script>
 <script type="text/babel" src="js/widgets/market-radar.js?v=20260613gm1"></script>
 <script type="text/babel" src="js/widgets/faab-command.js?v=20260816fw1"></script>
@@ -3047,28 +3047,28 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- SI-3: Tag-driven widgets (Trade Block / Cut Candidates / Waiver Targets) -->
 <script type="text/babel" src="js/widgets/player-tags.js?v=20260516liveclick1"></script>
 <!-- Phase 3: League intel widgets (Competitive Tiers, Power Rankings) — ex-League Map -->
-<script type="text/babel" src="js/widgets/competitive-tiers.js?v=20260613gm1"></script>
+<script type="text/babel" src="js/widgets/competitive-tiers.js?v=20260902onemsg1"></script>
 <script type="text/babel" src="js/widgets/power-rankings.js?v=20260902mv1"></script>
 <!-- Phase 9: My Trophies widget -->
 <script type="text/babel" src="js/widgets/my-trophies.js?v=20260611kpifix1"></script>
 <!-- League Calendar widget — depends on window.WrCalendar (js/tabs/calendar.js) -->
 <script type="text/babel" src="js/widgets/league-calendar.js?v=20260827cal4"></script>
-<script type="text/babel" src="js/tabs/dashboard.js?v=20260828tick2"></script>
+<script type="text/babel" src="js/tabs/dashboard.js?v=20260902onemsg1"></script>
 <script type="text/babel" src="js/tabs/flash-brief.js?v=20260902hold1"></script>
 <!-- Group "analysis": analytics.js embeds LeagueMapTab, so both defer together
      (league-map.js first — DOM order is execution order within a group). -->
-<script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20260824cols15"></script>
+<script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20260902onemsg1"></script>
 <script type="text/babel" data-wr-defer="myteam" src="js/tabs/my-team.js?v=20260902voice1"></script>
 <!-- Compare: extracted from My Roster's former sub-view, now a top-level ROSTER-group tab. -->
 <script type="text/babel" data-wr-defer="compare" src="js/tabs/compare.js?v=20260827slot1"></script>
-<script type="text/babel" data-wr-defer="analysis" src="js/tabs/analytics.js?v=20260824prev1"></script>
+<script type="text/babel" data-wr-defer="analysis" src="js/tabs/analytics.js?v=20260902onemsg1"></script>
 <script type="text/babel" data-wr-defer="trophies" src="js/tabs/trophy-room.js?v=20260619cal1"></script>
 <script type="text/babel" src="js/tabs/calendar.js?v=20260827cal4"></script>
 <!-- Alex Insights (Option A): top-level tab for behavioral analysis + AI settings -->
 <script type="text/babel" data-wr-defer="alex" src="js/tabs/alex-insights.js?v=20260613strip1"></script>
 <!-- Group "empire": hub-level Empire Dashboard (Pro mode), loaded by app.js when
      Pro mode activates — also provides window.App.buildEmpireDna etc. -->
-<script type="text/babel" data-wr-defer="empire" src="js/tabs/global-view.js?v=20260902voice1"></script>
+<script type="text/babel" data-wr-defer="empire" src="js/tabs/global-view.js?v=20260902onemsg1"></script>
 <script src="js/tutorial.js?v=20260503tutorial1"></script>
 <!-- 6. Strategy editor: calls shared GMStrategy API, no logic duplication.
      Only consumed by alex-insights' Strategy sub-view, so it rides the same
@@ -3150,7 +3150,7 @@ window.addEventListener('appinstalled', () => {
 <!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
      owner can read back exactly which version his device is running before
      testing — kills the stale-cache guessing game. Bump the code every deploy. -->
-<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b77</div>
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b78</div>
 </body>
 </html>
 <!-- build 1774212614 -->

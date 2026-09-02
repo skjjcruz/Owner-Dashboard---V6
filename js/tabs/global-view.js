@@ -116,7 +116,12 @@ function buildEmpirePortfolioModel(input) {
             const bv = (b.players || []).reduce((sum, pid) => sum + (scores[pid] || 0), 0);
             return bv - av;
         });
-        const powerRank = ranked.findIndex(r => sameId(r.roster_id, myRoster.roster_id)) + 1;
+        // One rank (2026-09-02): the shared blended powerRank when the empire
+        // assessment pass has it — the old sort here was pure asset value
+        // wearing the name powerRank, so Empire could say #2 while the brief
+        // said #8. Asset order stays as the engine-less fallback.
+        const _ea = (league?.empireAssessments || []).find(a => sameId(a.rosterId, myRoster.roster_id));
+        const powerRank = (_ea && _ea.powerRank) || (ranked.findIndex(r => sameId(r.roster_id, myRoster.roster_id)) + 1);
         const province = {
             id: leagueId(league),
             name: league?.name || 'League',

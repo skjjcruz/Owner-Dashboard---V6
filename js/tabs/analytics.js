@@ -640,18 +640,32 @@ function AnalyticsPanel({
                     .filter(pid => posOf(pid) === pos)
                     .map(pid => rankOf(pos, playerScores[pid] || 0))
                     .sort((a, b) => a - b);
-                const have = mine.filter(rk => rk <= threshold).length; // quality starters
                 const bestRank = mine.length ? mine[0] : Infinity;
-                const grade =
-                    have >= slotsInt + Math.ceil(slotsInt / 2) ? 'A' :
-                    have >= slotsInt ? 'B' :
-                    have >= 1 ? 'C' :
-                    bestRank <= threshold * 2 ? 'D' : 'F';
+                // One grading system (2026-09-02): when the shared assessment
+                // is loaded, quality counts and the letter come from the SAME
+                // engine that drives weakness chips and strengths — including
+                // the ESPN depth-chart door and the elite-concentration guard
+                // this local model never had. The local rank math stays as the
+                // engine-less fallback.
+                const pa = assessment?.posAssessment?.[pos] || null;
+                const have = pa ? (pa.nflStarters || 0) : mine.filter(rk => rk <= threshold).length;
+                const bar = pa ? (pa.minQuality || pa.startingReq || slotsInt) : slotsInt;
+                const grade = pa
+                    ? (pa.status === 'deficit' ? 'F'
+                        : pa.status === 'thin' ? (have >= bar - 1 ? 'C' : 'D')
+                        : pa.status === 'surplus' ? ((have - bar) >= 2 ? 'A' : 'B')
+                        : 'B')
+                    : (have >= slotsInt + Math.ceil(slotsInt / 2) ? 'A' :
+                        have >= slotsInt ? 'B' :
+                        have >= 1 ? 'C' :
+                        bestRank <= threshold * 2 ? 'D' : 'F');
                 const tone = (grade === 'A' || grade === 'B') ? 'good' : grade === 'F' ? 'bad' : 'neutral';
                 const color = (grade === 'A' || grade === 'B') ? goodColor : grade === 'C' ? warnColor : badColor;
                 let severity = grade === 'F' ? 'critical' : grade === 'D' ? 'high' : grade === 'C' ? 'medium' : null;
                 if (severity && STREAM_POS.has(pos)) severity = demoteSev[severity];
-                coverageByPos[pos] = { pos, slotsInt, threshold, have, bestRank, grade, tone, color, severity };
+                // Display denominator = the engine's requirement when available,
+                // so the card reads quality-vs-need (5/3), not quality-vs-slots.
+                coverageByPos[pos] = { pos, slotsInt: pa ? bar : slotsInt, threshold, have, bestRank, grade, tone, color, severity };
             });
             const coveragePosList = Object.keys(coverageByPos);
 
@@ -743,14 +757,19 @@ function AnalyticsPanel({
             // fallback off the robust tier/window/cliff signals; only lean on noisy
             // winner-template deltas when the champion sample is trustworthy (winnerN >= 2).
             let tierModeLabel, tierModeColor, rosterStrategy;
+            // One message (2026-09-02): the inferred posture must not tell a
+            // team the engine calls CONTENDING to 'sell aging veterans'. The
+            // engine's trade window gates the sell-flavored labels.
+            const _engineWindow = assessment?.window || assessment?.tradeWindow || '';
             if (winnerN < 2) {
                 if (tier === 'REBUILDING') { tierModeLabel = 'REBUILD'; tierModeColor = warnColor; rosterStrategy = 'accumulate youth and picks — you are early in the build (champion benchmark unavailable)'; }
+                else if (_engineWindow === 'CONTENDING') { tierModeLabel = 'WIN-NOW'; tierModeColor = goodColor; rosterStrategy = 'press your open window — surgical upgrades at your weakest starter rooms'; }
                 else { tierModeLabel = 'RETOOL'; tierModeColor = warnColor; rosterStrategy = 'target your weakest starter rooms (champion benchmark unavailable for template comparison)'; }
             } else if (tier === 'REBUILDING' || compYears <= 1) {
                 tierModeLabel = 'REBUILD'; tierModeColor = badColor; rosterStrategy = 'sell aging veterans for youth and picks — your window is closing';
             } else if (rosterCliffPct >= 25 && compYears <= 2) {
                 tierModeLabel = 'WIN-NOW'; tierModeColor = warnColor; rosterStrategy = 'win now — cash aging value before the cliff while your window is open';
-            } else if (ageDiffDiag > 1.5 && dhqGap < 0) {
+            } else if (ageDiffDiag > 1.5 && dhqGap < 0 && _engineWindow !== 'CONTENDING') {
                 tierModeLabel = 'RETOOL'; tierModeColor = warnColor; rosterStrategy = 'sell aging veterans and acquire young elites';
             } else if (eliteDiffDiag < -1) {
                 tierModeLabel = 'RELOAD'; tierModeColor = warnColor; rosterStrategy = 'buy young elite players to close the talent gap';

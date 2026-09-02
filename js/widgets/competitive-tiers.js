@@ -262,7 +262,12 @@
         // ── Closest competitors helper (used in tall + xxl) ────────
         // Returns the N teams immediately above the user + N below in power ranking
         function getClosestCompetitors(n) {
-            const ranked = [...assessments].sort((a, b) => (b.healthScore || 0) - (a.healthScore || 0));
+            // One rank (2026-09-02): blended powerScore, engine tiebreak.
+            const ranked = [...assessments].sort((a, b) => {
+                if ((b.powerScore || 0) !== (a.powerScore || 0)) return (b.powerScore || 0) - (a.powerScore || 0);
+                if ((b.totalDHQ || 0) !== (a.totalDHQ || 0)) return (b.totalDHQ || 0) - (a.totalDHQ || 0);
+                return String(a.rosterId).localeCompare(String(b.rosterId));
+            });
             const myIdx = ranked.findIndex(a => a.ownerId === sleeperUserId);
             if (myIdx === -1) return { above: [], below: [], myRank: null };
             const myRank = myIdx + 1;

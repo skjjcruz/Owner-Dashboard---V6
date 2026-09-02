@@ -64,7 +64,7 @@
             if (!entries.length) return [];
             let eliteTeams = allAssess.filter(a => a.tier === 'ELITE' || a.tier === 'CONTENDER');
             if (!eliteTeams.length) {
-                eliteTeams = [...allAssess].sort((a, b) => (b.healthScore || 0) - (a.healthScore || 0)).slice(0, Math.max(1, Math.ceil(allAssess.length / 4)));
+                eliteTeams = [...allAssess].sort((a, b) => (b.powerScore || 0) - (a.powerScore || 0)).slice(0, Math.max(1, Math.ceil(allAssess.length / 4)));
             }
             const urgencyRank = { deficit: 0, thin: 1, ok: 2, surplus: 3 };
             return entries.map(([pos, v]) => {

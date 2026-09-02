@@ -61,7 +61,14 @@
         }, []);
 
         const powerRanked = React.useMemo(() => {
-            return [...allAssess].sort((a, b) => (b.healthScore || 0) - (a.healthScore || 0));
+            // One rank (2026-09-02): blended powerScore with the engine's own
+            // tiebreak — this widget said "power rankings" but sorted by
+            // healthScore, disagreeing with the Power Rankings widget beside it.
+            return [...allAssess].sort((a, b) => {
+                if ((b.powerScore || 0) !== (a.powerScore || 0)) return (b.powerScore || 0) - (a.powerScore || 0);
+                if ((b.totalDHQ || 0) !== (a.totalDHQ || 0)) return (b.totalDHQ || 0) - (a.totalDHQ || 0);
+                return String(a.rosterId).localeCompare(String(b.rosterId));
+            });
         }, [allAssess]);
 
         const currentRoster = (currentLeague?.rosters || []).find(r => String(r.owner_id) === String(sleeperUserId));
