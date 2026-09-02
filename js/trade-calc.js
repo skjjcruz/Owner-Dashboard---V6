@@ -2191,6 +2191,7 @@
             // price. No focus exception: their roster isn't ours to raid.
             let partnerProtected = {};
             try { const pl = gmEngine && gmEngine.ledger(partner.rosterId); if (pl) partnerProtected = pl.protectedPids || {}; } catch (e) { }
+            try { window._wrDbgProt = { p: String(partner.rosterId), mode, focusPid: focusPid != null ? String(focusPid) : null, n: Object.keys(partnerProtected).length, eng: !!gmEngine, t: Date.now() }; } catch (e) { }
             const theirPlayers = assetsForRoster(theirRosterObj)
                 .filter(p => !partnerProtected[String(p.pid)])
                 .filter(p => (p.value || 0) >= 1500); // no-junk standard, their side too
@@ -2443,7 +2444,12 @@
                 // finderEffectivePartnerId pins the pick's owner; guard stays silent.
             } else if (mode === 'acquire' || mode === 'fillNeed') {
                 const givePool = myChips.length ? myChips : myPlayers;
-                targetPool.slice(0, 8).forEach(target => addAcquireTarget(target, givePool, myPicks, '', { scarcity: !!partnerProtected[String(target.pid)] }));
+                // An explicit price question (a focused player) checks the WHOLE
+                // wallet — every legal player and every pick — even when Alex
+                // pick-year priorities narrow the automatic boards.
+                const pricePool = focusAsset ? myPlayers : givePool;
+                const pricePicks = focusAsset ? (allMyPicks.length ? allMyPicks : myPicks) : myPicks;
+                targetPool.slice(0, 8).forEach(target => addAcquireTarget(target, pricePool, pricePicks, '', { scarcity: !!partnerProtected[String(target.pid)] }));
                 // When the FOCUSED player is scarcity-blocked (his owner can't
                 // afford to lose him), the honest answer is the verdict note —
                 // never a fallback board of his teammates burying it.
