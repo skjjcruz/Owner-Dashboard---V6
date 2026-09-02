@@ -2568,6 +2568,18 @@
 
         function loadDealIntoBuilder(deal) {
             if (!deal) return;
+            // An asking-price card carries HYPOTHETICAL payment slots — load
+            // the real target on their side and leave yours empty to fill.
+            if (deal._asking) {
+                setTradeOwner({ A: myAssessment?.ownerId || null, B: deal.partnerOwnerId || null });
+                setTradeIds({ A: [], B: (deal.receivePlayers || []).map(p => p.pid || p.id) });
+                setTradePickIds({ A: [], B: [] });
+                setTradeFaab({ A: 0, B: 0 });
+                setSearchText({ A: '', B: '' });
+                setTcTab('desk');
+                setBuilderExpanded(true);
+                return;
+            }
             setTradeOwner({ A: myAssessment?.ownerId || null, B: deal.partnerOwnerId || null });
             setTradeIds({
                 A: (deal.givePlayers || []).map(p => p.pid || p.id),
@@ -3380,6 +3392,32 @@
             if (first && first.type === 'Scarcity premium') setExpandedDealId(first.id);
         }, [_focusRevealKey, finderDeals[0]?.id]);
 
+        // THE ASKING PRICE as a real finder card (owner ruling: "exactly like
+        // this") — a synthetic deal pushed through buildDeal so it renders in
+        // the SAME card as every other row: YOU SEND / YOU GET, grade,
+        // accept %, DHQ delta, Why. Shown only when no affordable package
+        // exists; builder-load brings the target and leaves your side empty.
+        const askingDeal = useMemo(() => {
+            if (!focusAskingPrice || finderDeals.length || !selectedPartner) return null;
+            try {
+                const target = playerAsset(focusR.id);
+                if (!target) return null;
+                const yr = (parseInt(currentLeague?.season) || new Date().getFullYear()) + 1;
+                const givePlayers = focusAskingPrice.rows.filter(r => r.kind === 'player').map((r, i) => ({ type: 'player', pid: 'ask-p' + i, id: 'ask-p' + i, name: r.label, pos: 'ANY', team: '', value: r.value }));
+                const givePicks = focusAskingPrice.rows.filter(r => r.kind === 'pick').map((r, i) => ({ type: 'pick', id: 'ask-k' + i, year: yr, round: r.round, label: r.label, value: r.value }));
+                const d = buildDeal(selectedPartner, {
+                    mode: 'acquire', type: 'Asking price',
+                    id: 'asking_' + String(focusR.id),
+                    givePlayers, givePicks, receivePlayers: [target], giveFaab: focusAskingPrice.faab || 0,
+                    extraCaution: ['Asking price — your current pieces can\'t assemble this package'],
+                    whyAccept: `${focusAskingPrice.teamName} ${focusAskingPrice.roomLine} — only this level of overpay opens the conversation.`,
+                    whyYou: `Why the price is so high: his market price is ${focusAskingPrice.mkt.toLocaleString()} — the rest is the scarcity premium for forcing an owner to open a hole in his own lineup. It will take ${focusAskingPrice.reqText}.`,
+                });
+                return d ? { ...d, _asking: true } : null;
+            } catch (e) { return null; }
+        }, [focusAskingPrice, finderDeals.length, selectedPartner?.rosterId]);
+        useEffect(() => { if (askingDeal) setExpandedDealId(askingDeal.id); }, [askingDeal?.id]);
+
         const finderActionable = finderDeals.filter(deal => deal.likelihood >= finderActionFloor);
         const finderMoonshotCount = Math.max(0, finderDeals.length - finderActionable.length);
         const finderVisibleDeals = showAllDeals ? finderDeals : finderActionable.slice(0, finderPoolOn ? 8 : 6);
@@ -3872,6 +3910,10 @@
                             ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'} hidden` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
                             : finderPoolOn && !finderPool.done
                                 ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
+                                : askingDeal
+                                    ? <div ref={finderResultsRef} style={{ margin: '10px 0 4px' }}>
+                                        <TcDealCard deal={askingDeal} idx={0} actionFloor={actionFloor} expandedDealId={expandedDealId} setExpandedDealId={setExpandedDealId} loadDealIntoBuilder={loadDealIntoBuilder} saveDeal={saveDeal} sideSummary={sideSummary} />
+                                    </div>
                                 : focusAskingPrice
                                     ? <div ref={finderResultsRef} style={{ border: '1px solid rgba(212,175,55,0.35)', borderRadius: 'var(--card-radius, 10px)', padding: '14px 16px', margin: '10px 0 4px', textAlign: 'left' }}>
                                         <div style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, letterSpacing: '0.08em', fontSize: '0.8rem', color: 'var(--gold)', marginBottom: '10px' }}>THE ASKING PRICE</div>
