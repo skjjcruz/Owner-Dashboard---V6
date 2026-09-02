@@ -4979,7 +4979,6 @@
                             <div style={{ marginTop: '8px', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                 <div style={{ fontSize: '0.74rem', color: 'var(--silver)', lineHeight: 1.5 }}><b style={{ color: 'var(--white)' }}>Accept:</b> {deal.whyAccept}</div>
                                 <div style={{ fontSize: '0.74rem', color: 'var(--silver)', lineHeight: 1.5 }}><b style={{ color: 'var(--white)' }}>You:</b> {deal.whyYou}</div>
-                                <div style={{ fontSize: '0.74rem', color: 'var(--silver)', lineHeight: 1.5 }}><b style={{ color: 'var(--white)' }}>Swing:</b> {deal.swing}</div>
                                 {(deal.caution || []).length > 0 && <div style={{ fontSize: MICRO, color: 'var(--warn)', fontFamily: MONO }}>{deal.caution.slice(0, 3).join(' · ')}</div>}
                             </div>
                         )}
