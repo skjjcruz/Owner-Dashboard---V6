@@ -1730,6 +1730,22 @@
             } catch (e) { return null; }
         }, [playersData, currentLeague, allRosters, timeRecomputeTs]);
 
+        // Elite RB/WR/TE package rules (owner ruling 2026-09-02: "Elite
+        // Offensive Players require top dollar" — a single bare 1st is
+        // always rejected, junk IDP filler never counts as payment).
+        // Finder-only, same posture as the QB rules above.
+        const eliteSkillRules = useMemo(() => {
+            try {
+                if (!window.WrEliteSkillRules?.build) return null;
+                return window.WrEliteSkillRules.build({
+                    scores: window.App?.LI?.playerScores || {},
+                    playersData,
+                    isElite: pid => (typeof window.App?.isElitePlayer === 'function') ? window.App.isElitePlayer(pid) : ((window.App?.LI?.playerScores?.[pid] || 0) >= 7000),
+                    starterRole: p => window.App?.NflRoles?.starterRole?.(p) || null,
+                });
+            } catch (e) { return null; }
+        }, [playersData, currentLeague, allRosters, timeRecomputeTs]);
+
         function getDealHqTuning(alexSettings = {}) {
             const eff = window.WR?.GmMode?.effects?.(leagueId) || {};
             const aggression = clampNum(eff.aggression, 0.2, 0.92, 0.52);
@@ -2038,6 +2054,8 @@
             // Startable-QB packages must satisfy the owner's composition
             // rules (1sts / QB swaps / elite pieces / multi-starter bundles).
             if (qbTradeRules && qbTradeRules.violates(input)) return;
+            // Elite RB/WR/TE need top-dollar packages — same posture, own module.
+            if (eliteSkillRules && eliteSkillRules.violates(input)) return;
             const deal = buildDeal(partner, input);
             if (!deal) return;
             // _core — the deal's IDEA identity (owner ruling: the board kept

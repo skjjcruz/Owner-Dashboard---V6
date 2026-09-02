@@ -1161,6 +1161,41 @@ group('account surface (billing + legal requirements)');
 }
 
 // ══════════════════════════════════════════════════════════════════
+// Elite RB/WR/TE package rules (owner ruling 2026-09-02) — functional
+// ══════════════════════════════════════════════════════════════════
+{
+  const g = {};
+  new Function('window', fs.readFileSync('js/shared/elite-skill-trade-rules.js', 'utf8'))(g);
+  const scores = { jt: 8200, wr9: 7500, db20: 2100, dl5: 4000, wrsq: 3100, rbsq: 2500, rbmid: 4500, telow: 900 };
+  const P = (pos) => ({ position: pos });
+  const playersData = { jt: P('RB'), wr9: P('WR'), db20: P('DB'), dl5: P('DE'), wrsq: P('WR'), rbsq: P('RB'), rbmid: P('RB'), telow: P('TE') };
+  const rules = g.WrEliteSkillRules.build({
+    scores, playersData,
+    isElite: (pid) => pid === 'jt' || pid === 'wr9' || pid === 'dl5',
+    starterRole: () => null,
+  });
+  const A = (pid) => ({ pid, pos: ({ RB: 'RB', WR: 'WR', DB: 'DB', DE: 'DL', TE: 'TE' })[playersData[pid].position], value: scores[pid] });
+  const D = (o) => ({ receivePlayers: [], givePlayers: [], givePicks: [], receivePicks: [], ...o });
+  test('elite skill rules: top dollar or no deal', () => {
+    ok(rules.violates(D({ givePlayers: [A('jt')], receivePicks: [{ round: 1 }] })), 'a single bare 1st for an elite RB is always rejected');
+    ok(rules.violates(D({ givePlayers: [A('jt')], receivePicks: [{ round: 1 }], receivePlayers: [A('db20')] })), 'a 1st + a non-elite DB is rejected — junk IDP is decoration, not payment');
+    ok(!rules.violates(D({ givePlayers: [A('jt')], receivePicks: [{ round: 1 }, { round: 1 }] })), 'two 1sts pay for an elite RB');
+    ok(!rules.violates(D({ givePlayers: [A('jt')], receivePicks: [{ round: 1 }], receivePlayers: [A('wrsq')] })), 'a 1st + a starter-quality offensive player pays');
+    ok(!rules.violates(D({ givePlayers: [A('jt')], receivePicks: [{ round: 1 }], receivePlayers: [A('dl5')] })), 'a 1st + an elite IDP pays');
+    ok(!rules.violates(D({ givePlayers: [A('jt')], receivePlayers: [A('wr9')] })), 'an elite offensive player pays outright — star-for-star');
+    ok(!rules.violates(D({ givePlayers: [A('jt')], receivePlayers: [A('wrsq'), A('rbsq')], receivePicks: [{ round: 3 }] })), 'two starter-quality offensive players + a pick pay');
+    ok(rules.violates(D({ givePlayers: [A('jt')], receivePlayers: [A('wrsq'), A('rbsq')] })), 'two starter-quality players WITHOUT a pick do not pay');
+    ok(rules.violates(D({ givePlayers: [A('jt')] })), 'an empty/FAAB-only return never pays for an elite player');
+  });
+  test('elite skill rules: scope and directions', () => {
+    ok(!rules.violates(D({ givePlayers: [A('rbmid')], receivePicks: [{ round: 2 }] })), 'non-elite players are not gated — plain value trading stands');
+    ok(rules.violates(D({ receivePlayers: [A('jt')], givePicks: [{ round: 1 }], givePlayers: [A('db20')] })), 'acquiring an elite RB is gated the same as selling one');
+    ok(!rules.violates(D({ receivePlayers: [A('jt')], givePicks: [{ round: 1 }], givePlayers: [A('rbsq')] })), 'acquiring with a 1st + starter-quality RB passes');
+    ok(!rules.violates(null), 'rules fail open on missing input');
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Summary
 // ══════════════════════════════════════════════════════════════════
 console.log('\n');
