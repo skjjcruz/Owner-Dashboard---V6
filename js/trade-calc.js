@@ -2300,8 +2300,19 @@
                                 : theirNeedPos.some(pos => givePos.includes(pos))
                                     ? `${reasonPrefix}They get ${givePos.filter(pos => theirNeedPos.includes(pos)).join('/')} help in a value-balanced package.`
                                     : `${reasonPrefix}The value band is close enough to start a real negotiation.`,
+                            // Owner ruling 2026-09-02: the narrative explains WHY
+                            // the price tag is so high — room depth, the rules
+                            // floor, and the premium math, in plain words.
                             whyYou: opts.scarcity
-                                ? `The real cost: ${target.name} prices at ${targetMkt.toLocaleString()} on the open market, but his owner has no depth behind him — this package pays the scarcity premium it would actually take. Cost-prohibitive is the honest answer.`
+                                ? (() => {
+                                    const pa = (partner.posAssessment || {})[target.pos] || {};
+                                    const room = pa.nflStarters != null && pa.minQuality != null
+                                        ? `${(partner.teamName || partner.ownerName || 'His owner')} needs ${pa.minQuality} startable ${target.pos}${pa.minQuality === 1 ? '' : 's'} every week and rosters only ${pa.nflStarters} — trading ${target.name} leaves a hole he can't fill. `
+                                        : `${(partner.teamName || partner.ownerName || 'His owner')} has no spare quality behind ${target.name}. `;
+                                    let tierBit = '';
+                                    try { const t = target.pos === 'QB' && qbTradeRules?.tierOf?.(String(target.pid)); if (t) tierBit = `As a ${String(t).toUpperCase()}-tier QB the composition rules set his entry price on top. `; } catch (e) { }
+                                    return `Why the price is steep: ${room}${tierBit}On the open market he's a ${targetMkt.toLocaleString()} player — prying him from a room that thin costs a 30%+ scarcity premium (${Math.round(targetMkt * 1.3).toLocaleString()}+), and this package pays that real price.`;
+                                })()
                                 : myNeedPos.includes(target.pos)
                                     ? `You address ${target.pos} while keeping the offer inside your GM Office risk band.`
                                     : `You consolidate assets into a preferred ${target.pos} target without making it a pure lowball.`,
@@ -3196,7 +3207,14 @@
                         reqText = 'two 1sts, or a 1st plus a starter-quality offensive player, or a 1st plus an elite IDP, or an elite player straight up — elite-player rules';
                     }
                 } catch (e2) { }
-                return { name: asset.name, pos: asset.pos, teamName: led.team.teamName || 'his owner', value: asset.value, mkt, floor, reqText };
+                let roomLine = 'has no spare quality behind him';
+                try {
+                    const pa = (led.team.assessment?.posAssessment || {})[asset.pos] || {};
+                    if (pa.nflStarters != null && pa.minQuality != null) {
+                        roomLine = `needs ${pa.minQuality} startable ${asset.pos}${pa.minQuality === 1 ? '' : 's'} every week and rosters only ${pa.nflStarters} — trading him leaves a hole they can't fill`;
+                    }
+                } catch (e3) { }
+                return { name: asset.name, pos: asset.pos, teamName: led.team.teamName || 'his owner', value: asset.value, mkt, floor, reqText, roomLine };
             } catch (e) { }
             return null;
         }, [focusR?.id, focusR?.rosterId, gmEngine, qbTradeRules, eliteSkillRules]);
@@ -3322,6 +3340,13 @@
             }, 400);
             return () => clearTimeout(t);
         }, [_focusRevealKey, finderDeals.length > 0]);
+        // Scarcity cards open their WHY automatically — the price explanation
+        // is the point of the card (owner ruling 2026-09-02).
+        useEffect(() => {
+            if (!_focusRevealKey) return;
+            const first = finderDeals[0];
+            if (first && first.type === 'Scarcity premium') setExpandedDealId(first.id);
+        }, [_focusRevealKey, finderDeals[0]?.id]);
 
         const finderActionable = finderDeals.filter(deal => deal.likelihood >= finderActionFloor);
         const finderMoonshotCount = Math.max(0, finderDeals.length - finderActionable.length);
@@ -3821,7 +3846,7 @@
                                             THE ASKING PRICE — {focusAskingPrice.name} <span style={{ color: posColor(focusAskingPrice.pos) }}>{focusAskingPrice.pos}</span> · {focusAskingPrice.value.toLocaleString()} DHQ
                                         </div>
                                         <div style={{ fontSize: '0.82rem', lineHeight: 1.5, marginBottom: '6px' }}><b>It will take:</b> {focusAskingPrice.reqText}.</div>
-                                        <div style={{ fontSize: '0.82rem', lineHeight: 1.5, marginBottom: '6px' }}><b>Scarcity premium:</b> {focusAskingPrice.teamName} has no spare quality behind him — expect the package to total <b>{focusAskingPrice.floor.toLocaleString()}+ DHQ</b> against his {focusAskingPrice.mkt.toLocaleString()} market price.</div>
+                                        <div style={{ fontSize: '0.82rem', lineHeight: 1.5, marginBottom: '6px' }}><b>Why the price is so high:</b> {focusAskingPrice.teamName} {focusAskingPrice.roomLine}. Expect the package to total <b>{focusAskingPrice.floor.toLocaleString()}+ DHQ</b> against his {focusAskingPrice.mkt.toLocaleString()} market price — the scarcity premium is the cost of forcing an owner to open a hole in his own lineup.</div>
                                         <div style={{ fontSize: '0.78rem', lineHeight: 1.5, opacity: 0.75 }}>Your current tradeable pieces can't assemble that package — cost-prohibitive is the honest answer. Load the Trade Builder below if you want to force the question.</div>
                                     </div>
                                     : <div ref={finderResultsRef} className="tc-dhq-empty">{(effMode === 'engine' || effMode === 'engine-picks')
