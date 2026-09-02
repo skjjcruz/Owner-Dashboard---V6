@@ -83,7 +83,15 @@
 
         function tierOf(pid) {
             var rank = rankMap[String(pid)];
-            if (!rank || rank > pool) return null;
+            if (!rank || rank > pool) {
+                // A QB holding a LIVE NFL starting job never falls out of the
+                // ladder (owner ruling: Rodgers must trip it). Ranked below
+                // the pool, he enters at Bottom — priced, not free.
+                if (rank) {
+                    try { if (starterRole(playersData[pid])) return 'bottom'; } catch (e0) { }
+                }
+                return null;
+            }
             var startable = (scores[pid] || 0) >= 2000;
             if (!startable) {
                 try { startable = !!starterRole(playersData[pid]); } catch (e) { /* roles optional */ }
