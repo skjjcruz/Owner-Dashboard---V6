@@ -1929,6 +1929,7 @@
             const _giveDisc = give.total > 0 && give.market < give.total * 0.85;
             const _recvDisc = receive.total > 0 && receive.market < receive.total * 0.85;
             if (_giveDisc || _recvDisc) caution.push('Priced at market — IDP/K trade discount applied');
+            if (Array.isArray(input.extraCaution)) caution.push(...input.extraCaution);
             if (likelihood < 40) caution.push('Low acceptance odds');
             if (posture.key === 'LOCKED') caution.push('Locked roster');
             if (userGain < -Math.max(500, receive.total * 0.12)) caution.push('Meaningful overpay');
@@ -2178,7 +2179,11 @@
             // prices), not silence.
             const myPlayers = assetsForRoster(myRosterObj)
                 .filter(p => !isUntouchableAsset(p, tuning))
-                .filter(p => !gmProtectedPids.has(String(p.pid)) || String(p.pid) === String(focusPid || ''));
+                .filter(p => !gmProtectedPids.has(String(p.pid)) || String(p.pid) === String(focusPid || ''))
+                // No-junk standard (engine parity — rules apply to EVERY trade):
+                // sub-$1500 pieces are never payment; the focused player himself
+                // is exempt so an owner can still shop his own depth guy.
+                .filter(p => (p.value || 0) >= 1500 || String(p.pid) === String(focusPid || ''));
             // Seller-side scarcity (owner ruling 2026-09-02: "BigLoco only has
             // two QBs, he's not going to give one away"): a player the PARTNER's
             // own ledger protects is not realistically available — he never
@@ -2186,7 +2191,9 @@
             // price. No focus exception: their roster isn't ours to raid.
             let partnerProtected = {};
             try { const pl = gmEngine && gmEngine.ledger(partner.rosterId); if (pl) partnerProtected = pl.protectedPids || {}; } catch (e) { }
-            const theirPlayers = assetsForRoster(theirRosterObj).filter(p => !partnerProtected[String(p.pid)]);
+            const theirPlayers = assetsForRoster(theirRosterObj)
+                .filter(p => !partnerProtected[String(p.pid)])
+                .filter(p => (p.value || 0) >= 1500); // no-junk standard, their side too
             const myChips = myPlayers.filter(p =>
                 tuning.sellPositions.has(p.pos)
                 || mySurplusPos.includes(p.pos)
@@ -2202,7 +2209,7 @@
             const theirPlayerIds = new Set([...(theirRosterObj.players || []), ...(theirRosterObj.reserve || []), ...(theirRosterObj.taxi || [])].map(String));
             const myPlayerIds = new Set([...(myRosterObj.players || []), ...(myRosterObj.reserve || []), ...(myRosterObj.taxi || [])].map(String));
             const targetPool = focusAsset && theirPlayerIds.has(String(focusPid))
-                ? [focusAsset].filter(p => !partnerProtected[String(p.pid)]) // focused or not, a protected man stays home
+                ? [focusAsset] // a protected focus stays IN — priced at a scarcity premium below
                 : theirPlayers.filter(p => {
                     if (mode === 'fillNeed') return effectiveNeedPos.length ? effectiveNeedPos.includes(p.pos) : true;
                     if (mode === 'acquire') return priPos.length || tuning.targetPositions.size ? effectiveNeedPos.includes(p.pos) : true;
@@ -2254,28 +2261,41 @@
                 return combos.sort((a, b) => Math.abs(a.market - targetValue) - Math.abs(b.market - targetValue) || a.pieces - b.pieces || b.market - a.market);
             }
 
-            function addAcquireTarget(target, playerPool, pickPool, reasonPrefix = '') {
+            function addAcquireTarget(target, playerPool, pickPool, reasonPrefix = '', opts = {}) {
                 const targetMkt = assetMarketValue(target);
-                const packages = sideCombos(playerPool, pickPool, targetMkt, { allowPickOnly: true });
+                // Scarcity premium (owner ruling 2026-09-02: "suggest a trade
+                // even if the cost is high — in the trade box, explain the
+                // cost"): a partner-PROTECTED target is priced, not refused.
+                // The package must run 30–75% OVER his market value — that's
+                // what prying a player out of a room with nothing behind him
+                // actually costs. Composition rules still gate underneath.
+                const low = opts.scarcity ? 1.30 : lowRatio;
+                const high = opts.scarcity ? 1.75 : highRatio;
+                const packages = sideCombos(playerPool, pickPool, targetMkt * (opts.scarcity ? 1.45 : 1), { allowPickOnly: true });
                 packages
-                    .filter(pkg => pkg.market >= targetMkt * lowRatio && pkg.market <= targetMkt * highRatio)
+                    .filter(pkg => pkg.market >= targetMkt * low && pkg.market <= targetMkt * high)
                     .slice(0, 4)
                     .forEach(pkg => {
                         const faab = balanceFaab(partner, pkg.players, [target], pkg.picks, []);
                         const givePos = [...new Set(pkg.players.map(p => p.pos))];
                         addCandidate(candidates, partner, {
                             mode,
-                            type: !pkg.players.length ? 'Pick package' : pkg.players.length > 1 ? 'Consolidation' : pkg.picks.length ? 'Player + pick' : (pkg.players[0]?.pos === target.pos ? 'Lateral upgrade' : 'Need fill'),
+                            type: opts.scarcity ? 'Scarcity premium' : !pkg.players.length ? 'Pick package' : pkg.players.length > 1 ? 'Consolidation' : pkg.picks.length ? 'Player + pick' : (pkg.players[0]?.pos === target.pos ? 'Lateral upgrade' : 'Need fill'),
                             givePlayers: pkg.players,
                             givePicks: pkg.picks,
                             receivePlayers: [target],
                             ...faab,
-                            whyAccept: theirNeedPos.some(pos => givePos.includes(pos))
-                                ? `${reasonPrefix}They get ${givePos.filter(pos => theirNeedPos.includes(pos)).join('/')} help in a value-balanced package.`
-                                : `${reasonPrefix}The value band is close enough to start a real negotiation.`,
-                            whyYou: myNeedPos.includes(target.pos)
-                                ? `You address ${target.pos} while keeping the offer inside your GM Office risk band.`
-                                : `You consolidate assets into a preferred ${target.pos} target without making it a pure lowball.`,
+                            extraCaution: opts.scarcity ? ['Scarcity premium — priced 30%+ over market'] : undefined,
+                            whyAccept: opts.scarcity
+                                ? `${(partner.teamName || partner.ownerName || 'They')} can't cover ${target.pos} without ${target.name} — only a clear overpay makes thinning that room worth discussing.`
+                                : theirNeedPos.some(pos => givePos.includes(pos))
+                                    ? `${reasonPrefix}They get ${givePos.filter(pos => theirNeedPos.includes(pos)).join('/')} help in a value-balanced package.`
+                                    : `${reasonPrefix}The value band is close enough to start a real negotiation.`,
+                            whyYou: opts.scarcity
+                                ? `The real cost: ${target.name} prices at ${targetMkt.toLocaleString()} on the open market, but his owner has no depth behind him — this package pays the scarcity premium it would actually take. Cost-prohibitive is the honest answer.`
+                                : myNeedPos.includes(target.pos)
+                                    ? `You address ${target.pos} while keeping the offer inside your GM Office risk band.`
+                                    : `You consolidate assets into a preferred ${target.pos} target without making it a pure lowball.`,
                         });
                     });
             }
@@ -2415,7 +2435,7 @@
                 // finderEffectivePartnerId pins the pick's owner; guard stays silent.
             } else if (mode === 'acquire' || mode === 'fillNeed') {
                 const givePool = myChips.length ? myChips : myPlayers;
-                targetPool.slice(0, 8).forEach(target => addAcquireTarget(target, givePool, myPicks));
+                targetPool.slice(0, 8).forEach(target => addAcquireTarget(target, givePool, myPicks, '', { scarcity: !!partnerProtected[String(target.pid)] }));
                 // When the FOCUSED player is scarcity-blocked (his owner can't
                 // afford to lose him), the honest answer is the verdict note —
                 // never a fallback board of his teammates burying it.
@@ -3130,14 +3150,20 @@
         // Scarcity verdict for a focused rival player the partner can't afford
         // to lose — the finder explains WHY the board is empty instead of
         // leaving a generic shrug.
+        // Shown only when even PREMIUM packages couldn't be built — the cost
+        // exists, but this roster's tradeable pieces can't reach it.
         const focusScarcityNote = useMemo(() => {
             try {
                 const f = focusR;
                 if (!f || f.kind !== 'player' || f.rosterId == null || String(f.rosterId) === String(myRosterId)) return null;
                 const led = gmEngine && gmEngine.ledger(f.rosterId);
                 if (led && led.protectedPids[String(f.id)]) {
-                    return (f.label || 'That player') + ' isn’t realistically available — ' + (led.team.teamName || 'his owner')
-                        + ' has no spare quality behind him at the position, so no fair package gets this done. The finder won’t pitch a raid the owner would never accept. Build it yourself below if you want to try anyway.';
+                    const asset = playerAsset(f.id);
+                    const mkt = asset ? assetMarketValue(asset) : 0;
+                    const floor = mkt ? Math.round(mkt * 1.3) : 0;
+                    return (f.label || 'That player') + ' is ' + (led.team.teamName || 'his owner') + '’s protected core — no spare quality behind him. '
+                        + (mkt ? 'Prying him loose runs a scarcity premium: think ' + floor.toLocaleString() + '+ DHQ against his ' + mkt.toLocaleString() + ' market price, plus the composition rules. ' : '')
+                        + 'Your tradeable pieces can’t reach that price right now. Build it manually below if you want to force the question.';
                 }
             } catch (e) { }
             return null;
@@ -3371,6 +3397,10 @@
                 : effMode === 'shop' ? `shopping ${focusR?.label || 'your asset'}`
                 : effMode === 'picks' ? 'hunting pick capital'
                 : effMode === 'sellSurplus' ? 'shopping your surplus'
+                : effMode === 'engine' || effMode === 'engine-picks'
+                    ? ((myAssessment?.needs || []).length
+                        ? 'GM engine · filling ' + myAssessment.needs.slice(0, 3).map(n => n.pos).join('/')
+                        : 'GM engine · no roster gaps, holding value')
                 : 'filling roster needs');
             const finderScopeLabel = finderPoolOn
                 ? (finderPool.done ? 'league-wide scan' : `scanning ${finderPool.scanned}/${finderPool.total}…`)
@@ -3711,7 +3741,7 @@
                                             </div>
                                         )}
                                         <button type="button" role="row" className={`tc-dhq-asset-row${focusPlayerPid != null && String(focusPlayerPid) === String(row.pid) ? ' is-active' : ''}`} onClick={() => selectAssetFocus(row)}>
-                                            <span title={row.held ? row.name + ' — his owner has no spare quality behind him; the finder won’t propose a raid' : row.name}>{row.name}{row.held && <em style={{ fontStyle: 'normal', marginLeft: '6px', padding: '1px 5px', fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--silver)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 'var(--card-radius-xs, 5px)', opacity: 0.75 }}>CORE</em>}{(() => {
+                                            <span title={row.held ? row.name + ' — his owner has no spare quality behind him; expect a scarcity premium. Tap for the real price.' : row.name}>{row.name}{row.held && <em style={{ fontStyle: 'normal', marginLeft: '6px', padding: '1px 5px', fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--silver)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 'var(--card-radius-xs, 5px)', opacity: 0.75 }}>CORE</em>}{(() => {
                                                 const rf = tcRookieInfoFor(row.pid);
                                                 if (!rf) return null;
                                                 const bits = [rf.college, rf.draftSlot || (rf.isUDFA ? 'UDFA' : ''), rf.tierLabel].filter(Boolean);
@@ -3737,7 +3767,9 @@
                                 : <div ref={finderResultsRef} className="tc-dhq-empty">{focusScarcityNote
                                     ? focusScarcityNote
                                     : (effMode === 'engine' || effMode === 'engine-picks')
-                                        ? 'No trades worth making right now — nothing on the league market clears your GM bar. That\'s a verdict, not an error. Focus a player or partner to explore specific ideas, or build your own below.'
+                                        ? (selectedPartner && !finderPoolOn
+                                            ? `No trades worth making with ${selectedPartner.teamName || selectedPartner.ownerName} right now — nothing on their shelf upgrades you, and your window doesn't call for what they need. That's a verdict, not an error. Tap a player on their roster for a specific price, or build your own below.`
+                                            : 'No trades worth making right now — nothing on the league market clears your GM bar. That\'s a verdict, not an error. Focus a player or partner to explore specific ideas, or build your own below.')
                                         : 'No package found for this intent. Try another partner chip, clear the focus, or open the builder below.'}</div>}
                     </div>
                 </section>
@@ -3799,6 +3831,11 @@
                             setAssetBrowserPos('ALL');
                             setAssetBrowserSort('pos');
                             setShowAllDeals(false);
+                            // Visible feedback (owner report: "nothing happening") —
+                            // carry the eye to the roster that just opened.
+                            setTimeout(() => {
+                                try { document.querySelector('.tc-dhq-asset-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { }
+                            }, 450);
                         };
                         return (
                             // A <div role=button>, not <button>: Safari/WebKit collapses block
