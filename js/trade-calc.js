@@ -439,13 +439,14 @@
                                 <strong style={{ color:deal.windowImpact.color }}>{deal.windowImpact.label.replace(/^Window\s*/i, '')}</strong>
                             </div>
                         </div>
-                        {/* Owner ruling 2026-09-02: two short lines + the caution
-                            chips. Swing/Format/Behavior prose and the grey
-                            evidence chips are retired — too much verbiage. */}
                         <div className="tc-dhq-readout">
                             <div><b>Accept:</b><span>{deal.whyAccept}</span></div>
                             <div><b>You:</b><span>{deal.whyYou}</span></div>
+                            <div><b>Swing:</b><span>{deal.swing}</span></div>
+                            {deal.formatReadout && <div><b>Format:</b><span>{deal.formatReadout}</span></div>}
+                            {deal.behaviorReadout && <div><b>Behavior:</b><span>{deal.behaviorReadout}</span></div>}
                         </div>
+                        {whyLines.length > 0 && <div className="tc-dhq-evidence">{whyLines.slice(0, 4).map(line => <span key={line}>{line}</span>)}</div>}
                         {deal.caution.length > 0 && <div className="tc-dhq-cautions">{deal.caution.slice(0, 3).map(c => <span key={c}>{c}</span>)}</div>}
                     </div>}
                 </div>;
@@ -1710,22 +1711,14 @@
         // aggression or the floor — only tradePriority.positions survives, as an
         // additive shopping hint unioned into targetPositions. The opponent's
         // displayed acceptance % is computed elsewhere and is never touched here.
-        // QB trade composition rules — six-tier v2 (owner rulings
-        // 2026-09-02: Elite+/Elite/Mid+/Mid/Low/Bottom ladder, the 40+
-        // age rule, live-NFL-starter floor, tier-distance swap bridges).
-        // A finder-only gate built from the pure module. The manual Trade
-        // Builder is untouched and shows no warnings by design: whatever
-        // an owner hand-builds is on the owner.
-        // Scarcity set (late-binding): every player HIS OWN team's ledger
-        // protects. The QB rules read it at violate-time via this ref — a
-        // scarcity-protected QB prices one tier up (owner ruling: a bare 1st
-        // never buys an irreplaceable QB). Populated once the GM engine
-        // builds, further down this component.
-        const gmScarceRef = useRef(new Set());
+        // QB trade composition rules (owner ruling 2026-09-02) — a
+        // finder-only gate built from the shared pure module. The manual
+        // Trade Builder is untouched and shows no warnings by design:
+        // whatever an owner hand-builds is on the owner.
         const qbTradeRules = useMemo(() => {
             try {
-                if (!window.WrQbTradeRulesV2?.build) return null;
-                return window.WrQbTradeRulesV2.build({
+                if (!window.WrQbTradeRules?.build) return null;
+                return window.WrQbTradeRules.build({
                     scores: window.App?.LI?.playerScores || {},
                     playersData,
                     rosterPositions: currentLeague?.roster_positions || [],
@@ -1733,8 +1726,6 @@
                     isElite: pid => (typeof window.App?.isElitePlayer === 'function') ? window.App.isElitePlayer(pid) : ((window.App?.LI?.playerScores?.[pid] || 0) >= 7000),
                     starterRole: p => window.App?.NflRoles?.starterRole?.(p) || null,
                     normPos,
-                    ageOf: pid => (playersData[pid] && playersData[pid].age) || null,
-                    isScarce: pid => gmScarceRef.current.has(String(pid)),
                 });
             } catch (e) { return null; }
         }, [playersData, currentLeague, allRosters, timeRecomputeTs]);
@@ -1912,13 +1903,7 @@
                     userGain,
                 })
                 : null;
-            // GM-engine deals carry the acceptance the engine DECIDED on
-            // (plain value + need fit — DNA/psych taxes stay on the manual
-            // builder by owner ruling); legacy focused paths keep the
-            // psych-taxed number.
-            const likelihood = input.likelihoodOverride != null
-                ? Math.round(Math.max(5, Math.min(95, input.likelihoodOverride)))
-                : Math.round(Math.max(5, Math.min(95, baseLikelihood + (behaviorFit?.acceptanceDelta || 0))));
+            const likelihood = Math.round(Math.max(5, Math.min(95, baseLikelihood + (behaviorFit?.acceptanceDelta || 0))));
             const fit = myAssessment ? calcComplementarity(myAssessment, partner) : 0;
             const valueScore = Math.max(0, Math.min(100, 50 + (userGain / Math.max(give.total, receive.total, 1)) * 120));
             const confidenceScore = Math.round(Math.max(0, Math.min(100, likelihood * 0.45 + fit * 0.25 + valueScore * 0.30 + (behaviorFit?.scoreDelta || 0))));
@@ -1935,7 +1920,6 @@
             const _giveDisc = give.total > 0 && give.market < give.total * 0.85;
             const _recvDisc = receive.total > 0 && receive.market < receive.total * 0.85;
             if (_giveDisc || _recvDisc) caution.push('Priced at market — IDP/K trade discount applied');
-            if (Array.isArray(input.extraCaution)) caution.push(...input.extraCaution);
             if (likelihood < 40) caution.push('Low acceptance odds');
             if (posture.key === 'LOCKED') caution.push('Locked roster');
             if (userGain < -Math.max(500, receive.total * 0.12)) caution.push('Meaningful overpay');
@@ -2018,8 +2002,7 @@
                 behaviorReadout,
                 windowImpact,
                 caution,
-                rank: input.rankOverride != null ? input.rankOverride : Math.round(likelihood * 1.2 + fit * 0.8 + valueScore + (confidenceScore / 2)),
-                rankOverride: input.rankOverride != null ? input.rankOverride : undefined,
+                rank: Math.round(likelihood * 1.2 + fit * 0.8 + valueScore + (confidenceScore / 2)),
                 createdAt: input.createdAt || new Date().toISOString(),
                 status: input.status || 'idea',
             };
@@ -2067,16 +2050,14 @@
         }
 
         function addCandidate(candidates, partner, input) {
-            const _g = window._wrDbgGate = window._wrDbgGate || { cross: 0, qb: 0, elite: 0, nullDeal: 0, built: 0 };
-            if (crossClassUnrealistic(input)) { _g.cross++; return; }
+            if (crossClassUnrealistic(input)) return;
             // Startable-QB packages must satisfy the owner's composition
             // rules (1sts / QB swaps / elite pieces / multi-starter bundles).
-            if (qbTradeRules && qbTradeRules.violates(input)) { _g.qb++; return; }
+            if (qbTradeRules && qbTradeRules.violates(input)) return;
             // Elite RB/WR/TE need top-dollar packages — same posture, own module.
-            if (eliteSkillRules && eliteSkillRules.violates(input)) { _g.elite++; return; }
+            if (eliteSkillRules && eliteSkillRules.violates(input)) return;
             const deal = buildDeal(partner, input);
-            if (!deal) { _g.nullDeal++; return; }
-            _g.built++;
+            if (!deal) return;
             // _core — the deal's IDEA identity (owner ruling: the board kept
             // showing the same trade over and over with only the payment
             // shuffled — "Oluokun → Hines-Allen" three times with R6/R7/FAAB
@@ -2154,11 +2135,10 @@
             const theirs = isAsset && f.rosterId != null && !mine;
             if (f?.kind === 'pick') return mine ? 'shop' : theirs ? 'acquire' : (query.intent === 'picks' ? 'picks' : 'fillNeed');
             if (theirs) return 'acquire';
-            if (query.intent === 'picks') return mine ? 'picks' : 'engine-picks';
+            if (query.intent === 'picks') return 'picks';
             if (mine) return 'shop';
-            // Every unfocused intent runs the GM engine (owner surgery): the
-            // legacy dual scan / sellSurplus wall-throwing is retired.
-            return 'engine';
+            if (query.intent === 'shop') return 'sellSurplus';
+            return 'fillNeed'; // 'best' (league-wide dual scan when unpinned) and 'help'
         }
 
         function generateDealsForPartner(partner, mode, focusPid, opts = {}) {
@@ -2181,28 +2161,8 @@
             const effectiveNeedPos = [...new Set([...myNeedPos, ...priPos, ...tuning.targetPositions])];
             const mySurplusPos = myAssessment?.strengths || [];
             const theirNeedPos = (partner.needs || []).map(n => n.pos);
-            // Engine-protected starters are never PAYMENT in any deal. The one
-            // exception: the focused player himself — an owner explicitly
-            // shopping his own starter gets an answer (at full composition
-            // prices), not silence.
-            const myPlayers = assetsForRoster(myRosterObj)
-                .filter(p => !isUntouchableAsset(p, tuning))
-                .filter(p => !gmProtectedPids.has(String(p.pid)) || String(p.pid) === String(focusPid || ''))
-                // No-junk standard (engine parity — rules apply to EVERY trade):
-                // sub-$1500 pieces are never payment; the focused player himself
-                // is exempt so an owner can still shop his own depth guy.
-                .filter(p => (p.value || 0) >= 1500 || String(p.pid) === String(focusPid || ''));
-            // Seller-side scarcity (owner ruling 2026-09-02: "BigLoco only has
-            // two QBs, he's not going to give one away"): a player the PARTNER's
-            // own ledger protects is not realistically available — he never
-            // appears as an acquire target or a shop return, no matter the
-            // price. No focus exception: their roster isn't ours to raid.
-            let partnerProtected = {};
-            try { const pl = gmEngine && gmEngine.ledger(partner.rosterId); if (pl) partnerProtected = pl.protectedPids || {}; } catch (e) { }
-            try { window._wrDbgProt = { p: String(partner.rosterId), mode, focusPid: focusPid != null ? String(focusPid) : null, n: Object.keys(partnerProtected).length, eng: !!gmEngine, t: Date.now() }; } catch (e) { }
-            const theirPlayers = assetsForRoster(theirRosterObj)
-                .filter(p => !partnerProtected[String(p.pid)])
-                .filter(p => (p.value || 0) >= 1500); // no-junk standard, their side too
+            const myPlayers = assetsForRoster(myRosterObj).filter(p => !isUntouchableAsset(p, tuning));
+            const theirPlayers = assetsForRoster(theirRosterObj);
             const myChips = myPlayers.filter(p =>
                 tuning.sellPositions.has(p.pos)
                 || mySurplusPos.includes(p.pos)
@@ -2218,7 +2178,7 @@
             const theirPlayerIds = new Set([...(theirRosterObj.players || []), ...(theirRosterObj.reserve || []), ...(theirRosterObj.taxi || [])].map(String));
             const myPlayerIds = new Set([...(myRosterObj.players || []), ...(myRosterObj.reserve || []), ...(myRosterObj.taxi || [])].map(String));
             const targetPool = focusAsset && theirPlayerIds.has(String(focusPid))
-                ? [focusAsset] // a protected focus stays IN — priced at a scarcity premium below
+                ? [focusAsset]
                 : theirPlayers.filter(p => {
                     if (mode === 'fillNeed') return effectiveNeedPos.length ? effectiveNeedPos.includes(p.pos) : true;
                     if (mode === 'acquire') return priPos.length || tuning.targetPositions.size ? effectiveNeedPos.includes(p.pos) : true;
@@ -2261,14 +2221,6 @@
                     }
                 }
                 playerPool.slice(0, 9).forEach(p => pickPool.slice(0, 6).forEach(pk => push([p], [pk])));
-                // Player + TWO picks — the shape the Elite+/Elite QB ladder
-                // demands (two 1sts + a starter). Without it those prices were
-                // quoted but never constructible.
-                for (let a = 0; a < Math.min(playerPool.length, 6); a++) {
-                    for (let i = 0; i < Math.min(pickPool.length, 4); i++) {
-                        for (let j = i + 1; j < Math.min(pickPool.length, 4); j++) push([playerPool[a]], [pickPool[i], pickPool[j]]);
-                    }
-                }
                 if (opts.allowPickOnly) {
                     pickPool.forEach(pk => push([], [pk]));
                     for (let i = 0; i < Math.min(pickPool.length, 5); i++) {
@@ -2278,56 +2230,28 @@
                 return combos.sort((a, b) => Math.abs(a.market - targetValue) - Math.abs(b.market - targetValue) || a.pieces - b.pieces || b.market - a.market);
             }
 
-            function addAcquireTarget(target, playerPool, pickPool, reasonPrefix = '', opts = {}) {
+            function addAcquireTarget(target, playerPool, pickPool, reasonPrefix = '') {
                 const targetMkt = assetMarketValue(target);
-                // Scarcity premium (owner ruling 2026-09-02: "suggest a trade
-                // even if the cost is high — in the trade box, explain the
-                // cost"): a partner-PROTECTED target is priced, not refused.
-                // The package must run 30–75% OVER his market value — that's
-                // what prying a player out of a room with nothing behind him
-                // actually costs. Composition rules still gate underneath.
-                // No upper cap on an explicit price question: if the only REAL
-                // packages overshoot, show them as the overpay they are — the
-                // finder NEVER invents assets the owner doesn't hold.
-                const low = opts.floorless ? 0 : opts.scarcity ? 1.30 : lowRatio;
-                const high = opts.scarcity ? Infinity : highRatio;
-                const packages = sideCombos(playerPool, pickPool, targetMkt * (opts.scarcity ? 1.45 : 1), { allowPickOnly: true });
-                if (opts.scarcity) { try { window._wrDbgGate = { cross: 0, qb: 0, elite: 0, nullDeal: 0, built: 0 }; window._wrDbgAsk = { t: target.name, mkt: targetMkt, players: playerPool.length, picks: pickPool.map(k => k.label + ':' + k.value), combos: packages.length, inBand: packages.filter(pkg => pkg.market >= targetMkt * low).length }; } catch (e0) { } }
+                const packages = sideCombos(playerPool, pickPool, targetMkt, { allowPickOnly: true });
                 packages
-                    .filter(pkg => pkg.market >= targetMkt * low && pkg.market <= targetMkt * high)
+                    .filter(pkg => pkg.market >= targetMkt * lowRatio && pkg.market <= targetMkt * highRatio)
                     .slice(0, 4)
                     .forEach(pkg => {
                         const faab = balanceFaab(partner, pkg.players, [target], pkg.picks, []);
                         const givePos = [...new Set(pkg.players.map(p => p.pos))];
                         addCandidate(candidates, partner, {
                             mode,
-                            type: opts.scarcity ? 'Scarcity premium' : !pkg.players.length ? 'Pick package' : pkg.players.length > 1 ? 'Consolidation' : pkg.picks.length ? 'Player + pick' : (pkg.players[0]?.pos === target.pos ? 'Lateral upgrade' : 'Need fill'),
+                            type: !pkg.players.length ? 'Pick package' : pkg.players.length > 1 ? 'Consolidation' : pkg.picks.length ? 'Player + pick' : (pkg.players[0]?.pos === target.pos ? 'Lateral upgrade' : 'Need fill'),
                             givePlayers: pkg.players,
                             givePicks: pkg.picks,
                             receivePlayers: [target],
                             ...faab,
-                            extraCaution: opts.floorless ? ['Below his real asking price — expect a no without a sweetener'] : opts.scarcity ? ['Scarcity premium — priced 30%+ over market'] : undefined,
-                            whyAccept: opts.scarcity
-                                ? `${(partner.teamName || partner.ownerName || 'They')} can't cover ${target.pos} without ${target.name} — only a clear overpay makes thinning that room worth discussing.`
-                                : theirNeedPos.some(pos => givePos.includes(pos))
-                                    ? `${reasonPrefix}They get ${givePos.filter(pos => theirNeedPos.includes(pos)).join('/')} help in a value-balanced package.`
-                                    : `${reasonPrefix}The value band is close enough to start a real negotiation.`,
-                            // Owner ruling 2026-09-02: the narrative explains WHY
-                            // the price tag is so high — room depth, the rules
-                            // floor, and the premium math, in plain words.
-                            whyYou: opts.scarcity
-                                ? (() => {
-                                    const pa = (partner.posAssessment || {})[target.pos] || {};
-                                    const room = pa.nflStarters != null && pa.minQuality != null
-                                        ? `starts ${pa.minQuality} ${target.pos}${pa.minQuality === 1 ? '' : 's'} weekly, rosters only ${pa.nflStarters}`
-                                        : `has nothing behind him`;
-                                    let tierBit = '';
-                                    try { const t = target.pos === 'QB' && qbTradeRules?.tierOf?.(String(target.pid)); if (t) tierBit = ` — priced a tier up (${String(t).toUpperCase()}) by rule`; } catch (e) { }
-                                    return `His owner ${room}. Market ${targetMkt.toLocaleString()} + 30% scarcity premium = ${Math.round(targetMkt * 1.3).toLocaleString()}+${tierBit}.`;
-                                })()
-                                : myNeedPos.includes(target.pos)
-                                    ? `You address ${target.pos} while keeping the offer inside your GM Office risk band.`
-                                    : `You consolidate assets into a preferred ${target.pos} target without making it a pure lowball.`,
+                            whyAccept: theirNeedPos.some(pos => givePos.includes(pos))
+                                ? `${reasonPrefix}They get ${givePos.filter(pos => theirNeedPos.includes(pos)).join('/')} help in a value-balanced package.`
+                                : `${reasonPrefix}The value band is close enough to start a real negotiation.`,
+                            whyYou: myNeedPos.includes(target.pos)
+                                ? `You address ${target.pos} while keeping the offer inside your GM Office risk band.`
+                                : `You consolidate assets into a preferred ${target.pos} target without making it a pure lowball.`,
                         });
                     });
             }
@@ -2365,7 +2289,7 @@
 
             function addShopPickAsset(pick, returnPlayers, returnPicks, reasonPrefix = '') {
                 const returns = sideCombos(returnPlayers, returnPicks, pick.value, { allowPickOnly: true });
-                const returnLow = 0.90; // owner surgery: no 72-cent pick sales either
+                const returnLow = 0.72 - aggression * 0.08;
                 const returnHigh = 1.04 + aggression * 0.18;
                 returns
                     .filter(pkg => pkg.market >= pick.value * returnLow && pkg.market <= pick.value * returnHigh)
@@ -2390,11 +2314,7 @@
             function addShopAsset(asset, returnPlayers, returnPicks, reasonPrefix = '') {
                 const assetMkt = assetMarketValue(asset);
                 const returns = sideCombos(returnPlayers, returnPicks, assetMkt, { allowPickOnly: true });
-                // Owner surgery: the finder never endorses selling a player at
-                // 72 cents on the dollar. Returns start at 90% of his market
-                // value (85% when the owner explicitly asks for pick-only
-                // returns — draft capital runs a thin structural discount).
-                const returnLow = mode === 'picks' ? 0.85 : 0.90;
+                const returnLow = mode === 'picks' ? 0.50 : 0.72 - aggression * 0.08;
                 const returnHigh = 1.04 + aggression * 0.18;
                 returns
                     .filter(pkg => pkg.market >= assetMkt * returnLow && pkg.market <= assetMkt * returnHigh)
@@ -2420,32 +2340,6 @@
                     });
             }
 
-            // ── GM engine modes (all unfocused boards) ──────────────────
-            // The engine already ran every lane league-wide; here we take
-            // THIS partner's slice and wrap each deal through addCandidate →
-            // buildDeal so cards, dedupe, and the rules gates stay uniform.
-            // No FAAB is appended: engine packages are exact.
-            if (mode === 'engine' || mode === 'engine-picks') {
-                (gmDealsByPartner[String(partner.rosterId)] || [])
-                    .filter(d => mode !== 'engine-picks' || (d.givePicks || []).length || (d.receivePicks || []).length)
-                    .forEach(d => addCandidate(candidates, partner, {
-                        mode,
-                        type: d.purpose,
-                        givePlayers: d.givePlayers, givePicks: d.givePicks,
-                        receivePlayers: d.receivePlayers, receivePicks: d.receivePicks,
-                        rankOverride: 100000 + Math.round(d.score || 0),
-                        likelihoodOverride: d.acceptance,
-                        whyYou: (d.why || '') + ' Your starting lineup moves ' + (d.lineupDelta >= 0 ? '+' : '') + d.lineupDelta + ' DHQ.',
-                    }));
-                const seenCoreE = new Set();
-                const rankedE = candidates
-                    .map(deal => ({ ...deal, recommendationScore: deal.rank, viability: dealViability(deal, tuning) }))
-                    .sort((a, b) => b.rank - a.rank)
-                    .filter(deal => { if (seenCoreE.has(deal._core)) return false; seenCoreE.add(deal._core); return true; })
-                    .slice(0, 8);
-                return opts.keepSig ? rankedE : rankedE.map(({ _sig, _core, ...deal }) => deal);
-            }
-
             // Pick focus dominates the mode branches: the focused pick is the deal's
             // anchor (my pick → shop it to this partner; their pick → bid on it).
             const focusPick = opts.focusPick && opts.focusPick.pickAsset ? opts.focusPick : null;
@@ -2467,30 +2361,8 @@
                 // finderEffectivePartnerId pins the pick's owner; guard stays silent.
             } else if (mode === 'acquire' || mode === 'fillNeed') {
                 const givePool = myChips.length ? myChips : myPlayers;
-                // An explicit price question (a focused player) checks the WHOLE
-                // wallet — every legal player and every pick — even when Alex
-                // pick-year priorities narrow the automatic boards.
-                const pricePool = focusAsset ? myPlayers : givePool;
-                const pricePicks = focusAsset ? (allMyPicks.length ? allMyPicks : myPicks) : myPicks;
-                targetPool.slice(0, 8).forEach(target => addAcquireTarget(target, pricePool, pricePicks, '', { scarcity: !!partnerProtected[String(target.pid)] }));
-                // PROOF-BY-CONSTRUCTION (owner ruling 2026-09-02: never claim
-                // "can't reach" unless it's literally true): if the premium
-                // floor produced nothing for a focused protected target, retry
-                // FLOORLESS — same real assets, same composition rules. Only
-                // when composition itself is impossible does the verdict line
-                // earn the right to render; and that zero gets logged so the
-                // failure is diagnosable from any device.
-                if (!candidates.length && focusAsset && partnerProtected[String(focusPid)]) {
-                    addAcquireTarget(focusAsset, pricePool, pricePicks, '', { scarcity: true, floorless: true });
-                    if (!candidates.length) {
-                        try { window.DHQBugCapture?.captureMessage?.('trade.askZero ' + JSON.stringify({ ask: window._wrDbgAsk, gate: window._wrDbgGate }).slice(0, 400), 'warning'); } catch (e0) { }
-                    }
-                }
-                // When the FOCUSED player is scarcity-blocked (his owner can't
-                // afford to lose him), the honest answer is the verdict note —
-                // never a fallback board of his teammates burying it.
-                const focusBlocked = focusAsset && theirPlayerIds.has(String(focusPid)) && partnerProtected[String(focusPid)];
-                if (candidates.length < 3 && !focusBlocked) {
+                targetPool.slice(0, 8).forEach(target => addAcquireTarget(target, givePool, myPicks));
+                if (candidates.length < 3) {
                     theirPlayers.slice(0, 14).forEach(target => addAcquireTarget(target, myPlayers, myPicks.length ? myPicks : allMyPicks, 'Fallback board: '));
                 }
             } else if (mode === 'shop' || mode === 'sellSurplus' || mode === 'picks') {
@@ -2505,9 +2377,7 @@
             const seenCore = new Set();
             const ranked = candidates
                 .map(deal => {
-                    // Engine deals rank by the GM engine's benefit-first score;
-                    // legacy focused deals keep the recommendation scorer.
-                    const rank = deal.rankOverride != null ? deal.rankOverride : scoreDealRecommendation(deal, tuning);
+                    const rank = scoreDealRecommendation(deal, tuning);
                     return { ...deal, rank, recommendationScore: rank, viability: dealViability(deal, tuning) };
                 })
                 .sort((a, b) => b.rank - a.rank || b.likelihood - a.likelihood || b.fit - a.fit)
@@ -3126,74 +2996,6 @@
             () => ++finderEpochRef.current,
             [assessments, ownerDna, grudges, ownerBehaviorByRosterId, teamContextByRosterId, picksByOwner, draftSlotMaps, leagueDraftRounds]
         );
-        // ── GM trade engine (owner surgery 2026-09-03) ──────────────────
-        // The five-step GM brain drives every UNFOCUSED board: health-report
-        // ledger → cost-benefit lineup gate → complementary-market shopping →
-        // packages under the composition rules → recommend-or-stay-silent.
-        // Focused queries (a clicked player/pick/partner) keep the legacy
-        // combo generator but pay from engine-approved chips only. Owner DNA
-        // taxes are deliberately NOT in this chain (they stay on the manual
-        // builder); buildDeal wraps engine deals for card display.
-        const gmEngine = useMemo(() => {
-            try {
-                if (!window.WrGmTradeEngine?.build || !assessments.length) return null;
-                const gmTeams = assessments.map(a => {
-                    const roster = allRosters.find(r => String(r.roster_id) === String(a.rosterId));
-                    if (!roster) return null;
-                    return {
-                        rosterId: a.rosterId,
-                        ownerId: a.ownerId,
-                        teamName: a.teamName || a.ownerName,
-                        assessment: a,
-                        players: assetsForRoster(roster),
-                        picks: pickAssetsForOwner(a.ownerId),
-                    };
-                }).filter(Boolean);
-                const eng = window.WrGmTradeEngine.build({
-                    myRosterId,
-                    rosterPositions: currentLeague?.roster_positions || [],
-                    teams: gmTeams,
-                    liquidity: tradeLiquidity,
-                    isElite: pid => (typeof window.App?.isElitePlayer === 'function') ? window.App.isElitePlayer(pid) : ((window.App?.LI?.playerScores?.[pid] || 0) >= 7000),
-                    isUntouchable: pid => isUntouchableAsset({ pid: String(pid) }, finderTuning),
-                    primeYearsLeft: a => primeYearsRemaining(a.pos, playerAge(playersData[a.pid])),
-                    rules: [qbTradeRules, eliteSkillRules].filter(Boolean),
-                });
-                try { window._wrGmEngine = eng; window._wrGmEngineErr = null; } catch (e0) { }
-                return eng;
-            } catch (e) { try { window._wrGmEngineErr = String(e && e.stack || e); } catch (e1) { } if (window.wrLog) window.wrLog('trade.gmEngine', e); return null; }
-        }, [finderDataEpoch, finderTuningHash, myRosterId]);
-        const gmDealsByPartner = useMemo(() => {
-            const map = {};
-            try {
-                (gmEngine ? gmEngine.recommend() : []).forEach(d => {
-                    (map[String(d.partnerRosterId)] = map[String(d.partnerRosterId)] || []).push(d);
-                });
-            } catch (e) { if (window.wrLog) window.wrLog('trade.gmRecommend', e); }
-            return map;
-        }, [gmEngine]);
-        // My protected list (engine ledger): starters the finder must never
-        // spend as payment — a focused query may still SHOP the focused
-        // player himself (the owner asked), but never pays with protected men.
-        const gmProtectedPids = useMemo(() => {
-            try {
-                const led = gmEngine && gmEngine.ledger(myRosterId);
-                return led ? new Set(Object.keys(led.protectedPids)) : new Set();
-            } catch (e) { return new Set(); }
-        }, [gmEngine, myRosterId]);
-        // League-wide scarcity: each player judged by HIS OWN team's ledger.
-        useMemo(() => {
-            const s = new Set();
-            try {
-                if (gmEngine) assessments.forEach(a => {
-                    const led = gmEngine.ledger(a.rosterId);
-                    if (led) Object.keys(led.protectedPids).forEach(pid => s.add(String(pid)));
-                });
-            } catch (e) { }
-            gmScarceRef.current = s;
-            return s;
-        }, [gmEngine]);
-
         const partnerBoard = useMemo(() => computePartnerBoard(), [finderDataEpoch]);
         // Per-(partner, mode, focus) deal cache, invalidated wholesale on tuning/data
         // change. Deals are kept WITH _sig for cross-partner/mode dedupe in the pool.
@@ -3209,84 +3011,6 @@
 
         // Typed finder query → generation inputs (moved from renderDealHQ).
         const focusR = resolveFinderFocus(finderQuery.focus);
-        // Scarcity verdict for a focused rival player the partner can't afford
-        // to lose — the finder explains WHY the board is empty instead of
-        // leaving a generic shrug.
-        // The ASKING PRICE (owner ruling 2026-09-02: "show the standard trade
-        // box with players and draft picks that it will take") — rendered when
-        // even PREMIUM packages couldn't be built from this roster's pieces.
-        // The requirement text comes from the ACTUAL rule ladders, so the box
-        // always names concrete players-and-picks shapes, never a shrug.
-        const focusAskingPrice = useMemo(() => {
-            try {
-                const f = focusR;
-                if (!f || f.kind !== 'player' || f.rosterId == null || String(f.rosterId) === String(myRosterId)) return null;
-                const led = gmEngine && gmEngine.ledger(f.rosterId);
-                if (!led || !led.protectedPids[String(f.id)]) return null;
-                const asset = playerAsset(f.id);
-                if (!asset) return null;
-                const mkt = assetMarketValue(asset);
-                const floor = Math.round(mkt * 1.3);
-                let reqText = 'a rule-legal package — no piece under $1,500';
-                try {
-                    if (asset.pos === 'QB' && qbTradeRules?.tierOf) {
-                        const REQ = {
-                            'elite+': 'two 1st-round picks PLUS a starter-quality player, or a 1st plus an elite offensive player',
-                            'elite': 'two 1st-round picks, or a 1st plus an elite offensive player, or a 1st plus an elite IDP plus another pick',
-                            'mid+': 'a 1st plus a starting offensive skill player, or a 1st plus an elite IDP, or a 1st plus a 2nd',
-                            'mid': 'a 1st-round pick, or a starting offensive skill player plus a 2nd, or an elite IDP plus a 2nd',
-                            'low': 'a 1st-round pick, or a 2nd plus a starter (offense or defense)',
-                            'bottom': 'a 2nd-round pick plus a starter (offense or defense)',
-                        };
-                        const tier = qbTradeRules.tierOf(String(f.id));
-                        if (tier && REQ[tier]) reqText = REQ[tier] + ' — he prices as a ' + tier.toUpperCase() + ' tier QB';
-                    } else if (eliteSkillRules?.isEliteSkill?.(String(f.id))) {
-                        reqText = 'two 1sts, or a 1st plus a starter-quality offensive player, or a 1st plus an elite IDP, or an elite player straight up — elite-player rules';
-                    }
-                } catch (e2) { }
-                let roomLine = 'has no spare quality behind him';
-                try {
-                    const pa = (led.team.assessment?.posAssessment || {})[asset.pos] || {};
-                    if (pa.nflStarters != null && pa.minQuality != null) {
-                        roomLine = `needs ${pa.minQuality} startable ${asset.pos}${pa.minQuality === 1 ? '' : 's'} every week and rosters only ${pa.nflStarters} — trading him leaves a hole they can't fill`;
-                    }
-                } catch (e3) { }
-                // The price as CONCRETE assets (owner ruling: the standard trade
-                // box — players/picks/FAAB — never prose). Primary tier shape,
-                // priced with this league's real pick values, FAAB topping off
-                // the premium floor in clean $25 steps (never token amounts).
-                const teamsN = allRosters.length || 16;
-                const yr = (parseInt(currentLeague?.season) || new Date().getFullYear()) + 1;
-                const pv = rd => { try { return window.App?.PlayerValue?.getPickValue?.(yr, rd, teamsN) || 0; } catch (e4) { return 0; } };
-                const first = () => ({ label: `${yr} 1st-round pick`, value: pv(1), kind: 'pick', round: 1 });
-                const second = () => ({ label: `${yr} 2nd-round pick`, value: pv(2), kind: 'pick', round: 2 });
-                const sq = label => ({ label, value: 2000, kind: 'player', approx: true });
-                let rows = null;
-                try {
-                    if (asset.pos === 'QB' && qbTradeRules?.tierOf) {
-                        const tier = qbTradeRules.tierOf(String(f.id));
-                        rows = tier === 'elite+' ? [first(), first(), sq('Starter-quality player')]
-                            : tier === 'elite' ? [first(), first()]
-                            : tier === 'mid+' ? [first(), second()]
-                            : tier === 'mid' ? [first()]
-                            : tier === 'low' || tier === 'bottom' ? [second(), sq('Starter (offense or defense)')]
-                            : null;
-                    } else if (eliteSkillRules?.isEliteSkill?.(String(f.id))) {
-                        rows = [first(), sq('Starter-quality offensive player')];
-                    }
-                } catch (e5) { }
-                if (!rows) rows = [{ label: 'Value package (no piece under $1,500)', value: floor, kind: 'player', approx: true }];
-                let sum = rows.reduce((s, r) => s + r.value, 0);
-                let faab = 0;
-                if (sum < floor) {
-                    const gapDollars = Math.ceil((floor - sum) / FAAB_RATE / 25) * 25;
-                    if (gapDollars <= 300) { faab = gapDollars; sum += Math.round(faab * FAAB_RATE); }
-                    else rows.push({ label: 'Additional value', value: floor - sum, kind: 'player', approx: true });
-                }
-                return { name: asset.name, pos: asset.pos, team: asset.team, teamName: led.team.teamName || 'his owner', value: asset.value, mkt, floor, reqText, roomLine, rows, faab, total: Math.max(sum, floor) };
-            } catch (e) { }
-            return null;
-        }, [focusR?.id, focusR?.rosterId, gmEngine, qbTradeRules, eliteSkillRules]);
         const focusPlayerPid = focusR?.kind === 'player' ? focusR.id : null;
         // Resolved pick focus (carries .pickAsset) — only routed when the pick still
         // exists in the pool; a stale seed degrades to the plain mode branches.
@@ -3323,9 +3047,7 @@
             // each slice re-publishes the pool for progressive row reveal.
             let cancelled = false;
             const partners = partnerBoard;
-            // Engine modes never dual-scan — the GM engine already runs every
-            // lane (fill-need, upgrade swap, consolidate, picks, window moves).
-            const modes = (effMode === 'engine' || effMode === 'engine-picks' || !finderDualBest) ? [effMode] : ['fillNeed', 'sellSurplus'];
+            const modes = finderDualBest ? ['fillNeed', 'sellSurplus'] : [effMode];
             const minPartners = finderDualBest ? Math.min(6, partners.length) : partners.length;
             const pooled = [];
             const seen = new Set();
@@ -3392,36 +3114,6 @@
             if (!selectedPartner) return [];
             return evalPartnerDeals(selectedPartner, effMode, focusPlayerPid, focusPickR).map(({ _sig, _core, ...deal }) => deal);
         }, [finderActive, finderPoolOn, finderPool, selectedPartner, effMode, focusPlayerPid, focusPickR?.id, finderDataEpoch, finderTuningHash]);
-        // Auto-reveal (owner ruling 2026-09-02: results rendered below the fold
-        // and "if you don't know to look for it, you'll never find it"): when a
-        // player/pick is focused, scroll the finder's results — the deal cards,
-        // or the verdict note when the board is empty — into view.
-        const finderResultsRef = useRef(null);
-        const finderStageRef = useRef(null);
-        const _focusRevealKey = finderQuery.focus ? finderQuery.focus.kind + ':' + finderQuery.focus.id : null;
-        useEffect(() => {
-            if (!_focusRevealKey) return undefined;
-            const t = setTimeout(() => {
-                try {
-                    const el = finderStageRef.current || finderResultsRef.current;
-                    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                } catch (e) { }
-            }, 400);
-            return () => clearTimeout(t);
-        }, [_focusRevealKey, finderDeals.length > 0]);
-        // Scarcity cards open their WHY automatically — the price explanation
-        // is the point of the card (owner ruling 2026-09-02).
-        useEffect(() => {
-            if (!_focusRevealKey) return;
-            const first = finderDeals[0];
-            if (first && first.type === 'Scarcity premium') setExpandedDealId(first.id);
-        }, [_focusRevealKey, finderDeals[0]?.id]);
-
-        // RETIRED (owner ruling 2026-09-02: "do I even have a 2027 1st? No.
-        // Then why am I offering it up"): the synthetic asking-price deal is
-        // dead. The finder shows packages built ONLY from assets the owner
-        // actually holds — with no upper price cap on an explicit question —
-        // or a one-line verdict. It never invents assets.
         const finderActionable = finderDeals.filter(deal => deal.likelihood >= finderActionFloor);
         const finderMoonshotCount = Math.max(0, finderDeals.length - finderActionable.length);
         const finderVisibleDeals = showAllDeals ? finderDeals : finderActionable.slice(0, finderPoolOn ? 8 : 6);
@@ -3528,17 +3220,12 @@
                 : effMode === 'shop' ? `shopping ${focusR?.label || 'your asset'}`
                 : effMode === 'picks' ? 'hunting pick capital'
                 : effMode === 'sellSurplus' ? 'shopping your surplus'
-                : effMode === 'engine' || effMode === 'engine-picks'
-                    ? ((myAssessment?.needs || []).length
-                        ? 'GM engine · filling ' + myAssessment.needs.slice(0, 3).map(n => n.pos).join('/')
-                        : 'GM engine · no roster gaps, holding value')
                 : 'filling roster needs');
             const finderScopeLabel = finderPoolOn
                 ? (finderPool.done ? 'league-wide scan' : `scanning ${finderPool.scanned}/${finderPool.total}…`)
                 : selectedPartner ? `vs ${selectedPartner.ownerName}` : 'no partner scored yet';
             const assetBrowserSorts = [
                 { key:'dhq', label:'DHQ' },
-                { key:'pos', label:'Position' },
                 { key:'age', label:'Age' },
                 { key:'owner', label:'Owned Team' },
                 { key:'points', label:'Last FP' },
@@ -3555,12 +3242,7 @@
                 const assessment = assessments.find(a => String(a.rosterId) === String(roster?.roster_id));
                 return assessment?.teamName || ownerNameForRosterId(roster?.roster_id) || `Team ${roster?.roster_id || '?'}`;
             };
-            const assetBrowserRows = (assetBrowserOpen ? assetBrowserRosters : []).flatMap(roster => {
-                // Rival rosters: mark the players their own ledger protects —
-                // the scarcity rule means no fair package pries them loose.
-                let _prot = {};
-                if (!browsingMyRoster) { try { const led = gmEngine && gmEngine.ledger(roster.roster_id); if (led) _prot = led.protectedPids || {}; } catch (e) { } }
-                return assetsForRoster(roster)
+            const assetBrowserRows = (assetBrowserOpen ? assetBrowserRosters : []).flatMap(roster => assetsForRoster(roster)
                 .filter(p => !browsingMyRoster || !isUntouchableAsset(p, focusTuning))
                 .map(asset => {
                     const player = playersData[asset.pid] || {};
@@ -3574,10 +3256,8 @@
                         ownerId: roster.owner_id,
                         rosterId: roster.roster_id,
                         ownerLabel: rosterLabel(roster),
-                        held: !browsingMyRoster && !!_prot[String(asset.pid)],
                     };
-                });
-            });
+                }));
             // Flex-group chips (league-derived) + group-aware predicate (c73cc40) —
             // optional-chained so the browser degrades to plain positions until the
             // window.App flex-group helpers land.
@@ -3589,16 +3269,13 @@
                 .filter(row => _dtPosMatch(row.pos, assetBrowserPos))
                 .filter(row => !assetBrowserRookieOnly || !!tcRookieInfoFor(row.pid))
                 .sort((a, b) => {
-                    if (assetBrowserSort === 'pos') return (TC_POS_ORDER[a.pos] ?? 99) - (TC_POS_ORDER[b.pos] ?? 99) || b.value - a.value;
                     if (assetBrowserSort === 'age') return (a.age || 99) - (b.age || 99) || b.value - a.value;
                     if (assetBrowserSort === 'owner') return a.ownerLabel.localeCompare(b.ownerLabel) || b.value - a.value;
                     if (assetBrowserSort === 'points') return b.lastPoints - a.lastPoints || b.value - a.value;
                     if (assetBrowserSort === 'prime') return (b.primeYears || 0) - (a.primeYears || 0) || b.value - a.value;
                     return b.value - a.value;
                 })
-                // Single-owner scope (an owner tapped in League Teams) shows his
-                // WHOLE roster, not a value-capped slice.
-                .slice(0, assetBrowserRosters.length === 1 ? 80 : 28);
+                .slice(0, 28);
 
             // ── Focus typeahead sources — players (mine AND league-wide), picks, owners ──
             // Built inline per keystroke (only when 2+ chars typed); no memo needed at
@@ -3657,12 +3334,6 @@
                 setFinderSearch('');
                 setFinderTypeaheadIdx(0);
                 setShowAllDeals(false);
-                // Typing an owner's name shows his roster too — same as the chips.
-                if (item.kind === 'owner') {
-                    setAssetBrowserOpen(true);
-                    setAssetBrowserPos('ALL');
-                    setAssetBrowserSort('pos');
-                }
             }
 
             function clearFinderFocus() {
@@ -3680,19 +3351,6 @@
                 );
                 setFinderQuery(qr => ({ ...qr, partnerFilter: ownerId, focus: pinsOtherOwner ? null : qr.focus }));
                 setShowAllDeals(false);
-                // Owner ruling 2026-09-02: pinning an owner SHOWS his roster —
-                // open the browser grouped by position automatically, no extra
-                // "Browse assets" click. AUTO (ownerId null) closes it again.
-                if (ownerId != null) {
-                    setAssetBrowserOpen(true);
-                    setAssetBrowserPos('ALL');
-                    setAssetBrowserSort('pos');
-                    setTimeout(() => {
-                        try { document.querySelector('.tc-dhq-asset-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { }
-                    }, 450);
-                } else {
-                    setAssetBrowserOpen(false);
-                }
             }
 
             function selectAssetFocus(row) {
@@ -3884,14 +3542,9 @@
                                         <span>Last FP</span>
                                         <span>Prime</span>
                                     </div>
-                                    {visibleAssetRows.length ? visibleAssetRows.map((row, _ri) => (<React.Fragment key={`${row.rosterId}-${row.pid}`}>
-                                        {assetBrowserSort === 'pos' && (_ri === 0 || visibleAssetRows[_ri - 1].pos !== row.pos) && (
-                                            <div role="row" style={{ padding: '5px 10px 3px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.08em', color: posColor(row.pos), borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
-                                                {({ QB: 'QUARTERBACKS', RB: 'RUNNING BACKS', WR: 'WIDE RECEIVERS', TE: 'TIGHT ENDS', K: 'KICKERS', DL: 'DEFENSIVE LINE', LB: 'LINEBACKERS', DB: 'DEFENSIVE BACKS' })[row.pos] || row.pos}
-                                            </div>
-                                        )}
-                                        <button type="button" role="row" className={`tc-dhq-asset-row${focusPlayerPid != null && String(focusPlayerPid) === String(row.pid) ? ' is-active' : ''}`} onClick={() => selectAssetFocus(row)}>
-                                            <span title={row.held ? row.name + ' — his owner has no spare quality behind him; expect a scarcity premium. Tap for the real price.' : row.name}>{row.name}{row.held && <em style={{ fontStyle: 'normal', marginLeft: '6px', padding: '1px 5px', fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--silver)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 'var(--card-radius-xs, 5px)', opacity: 0.75 }}>CORE</em>}{(() => {
+                                    {visibleAssetRows.length ? visibleAssetRows.map(row => (
+                                        <button key={`${row.rosterId}-${row.pid}`} type="button" role="row" className={`tc-dhq-asset-row${focusPlayerPid != null && String(focusPlayerPid) === String(row.pid) ? ' is-active' : ''}`} onClick={() => selectAssetFocus(row)}>
+                                            <span title={row.name}>{row.name}{(() => {
                                                 const rf = tcRookieInfoFor(row.pid);
                                                 if (!rf) return null;
                                                 const bits = [rf.college, rf.draftSlot || (rf.isUDFA ? 'UDFA' : ''), rf.tierLabel].filter(Boolean);
@@ -3905,27 +3558,21 @@
                                             <span>{row.lastPoints ? row.lastPoints.toLocaleString() : '--'}</span>
                                             <span>{row.primeYears != null ? row.primeYears : '--'}</span>
                                         </button>
-                                    </React.Fragment>)) : <div className="tc-dhq-empty">{assetBrowserRookieOnly ? (tcRookieIndex.size === 0 ? 'Rookie data still loading…' : 'No tradeable rookies match this filter (rookies with no trade value yet are hidden).') : 'No assets match this position filter.'}</div>}
+                                    )) : <div className="tc-dhq-empty">{assetBrowserRookieOnly ? (tcRookieIndex.size === 0 ? 'Rookie data still loading…' : 'No tradeable rookies match this filter (rookies with no trade value yet are hidden).') : 'No assets match this position filter.'}</div>}
                                 </div>
                             </div>
                         ) : <div className="tc-dhq-empty">No tradeable assets to browse for this scope.</div>)}
 
                         {deals.length
-                            ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'} hidden` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
+                            ? <div className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'} hidden` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
                             : finderPoolOn && !finderPool.done
-                                ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
-                                : focusAskingPrice
-                                    ? <div ref={finderResultsRef} className="tc-dhq-empty">{`${focusAskingPrice.name} prices at ${focusAskingPrice.floor.toLocaleString()}+ DHQ — ${focusAskingPrice.teamName} ${focusAskingPrice.roomLine}. Your tradeable assets can't reach that. Build your own offer below.`}</div>
-                                    : <div ref={finderResultsRef} className="tc-dhq-empty">{(effMode === 'engine' || effMode === 'engine-picks')
-                                        ? (selectedPartner && !finderPoolOn
-                                            ? `No trades worth making with ${selectedPartner.teamName || selectedPartner.ownerName} right now — nothing on their shelf upgrades you, and your window doesn't call for what they need. That's a verdict, not an error. Tap a player on their roster for a specific price, or build your own below.`
-                                            : 'No trades worth making right now — nothing on the league market clears your GM bar. That\'s a verdict, not an error. Focus a player or partner to explore specific ideas, or build your own below.')
-                                        : 'No package found for this intent. Try another partner chip, clear the focus, or open the builder below.'}</div>}
+                                ? <div className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
+                                : <div className="tc-dhq-empty">No package found for this intent. Try another partner chip, clear the focus, or open the builder below.</div>}
                     </div>
                 </section>
 
                 {deals.length > 0 && (
-                    <section ref={finderStageRef} className="tc-dhq-panel tc-dhq-deal-stage">
+                    <section className="tc-dhq-panel tc-dhq-deal-stage">
                         <div className="tc-dhq-panel-head">
                             <span>Finder Rows</span>
                             <em>{showAllDeals ? deals.length : actionableDeals.length} idea{(showAllDeals ? deals.length : actionableDeals.length) === 1 ? '' : 's'} · {finderPoolOn ? 'league-wide' : selectedPartner ? selectedPartner.ownerName : 'Select a partner'}</em>
@@ -3970,30 +3617,13 @@
                         const needs = (a.needs || []).slice(0, 5);
                         const has = (a.strengths || []).slice(0, 6);
                         const openDna = () => { setExpandedDnaOwner(a.rosterId); setTcTab('dna'); };
-                        // Owner ruling 2026-09-02: tapping a team opens that
-                        // owner's ROSTER (grouped by position) right in the
-                        // finder's asset browser; Owner DNA moved to its own
-                        // small button on the card.
-                        const openScout = () => {
-                            setTcTab('desk');
-                            setFinderQuery({ intent: 'best', focus: null, partnerFilter: a.ownerId });
-                            setAssetBrowserOpen(true);
-                            setAssetBrowserPos('ALL');
-                            setAssetBrowserSort('pos');
-                            setShowAllDeals(false);
-                            // Visible feedback (owner report: "nothing happening") —
-                            // carry the eye to the roster that just opened.
-                            setTimeout(() => {
-                                try { document.querySelector('.tc-dhq-asset-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { }
-                            }, 450);
-                        };
                         return (
                             // A <div role=button>, not <button>: Safari/WebKit collapses block
                             // children inside a <button>, which mashed the card rows together.
                             <div key={a.rosterId} role="button" tabIndex={0} className="tc-lt-card"
-                                title={'Open ' + a.ownerName + '’s roster in the finder'}
-                                onClick={openScout}
-                                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openScout(); } }}>
+                                title={'Open ' + a.ownerName + '’s Owner DNA'}
+                                onClick={openDna}
+                                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDna(); } }}>
                                 <div className="tc-lt-top">
                                     {/* Inline sizing so a stale cached stylesheet can't render the
                                         avatar at its full ~100px natural size. */}
@@ -4012,13 +3642,7 @@
                                 </div>
                                 {needs.length > 0 && <div className="tc-lt-row"><span className="tc-lt-lbl">Needs</span>{needs.map(n => <span key={n.pos} className="tc-lt-chip" style={{ color: POSHEX[n.pos] || 'var(--silver)', borderColor: (POSHEX[n.pos] || '#BDB8AD') + '66', background: (POSHEX[n.pos] || '#BDB8AD') + '18' }}>{n.pos}</span>)}</div>}
                                 {has.length > 0 && <div className="tc-lt-row"><span className="tc-lt-lbl">Has</span>{has.map(p => <span key={p} className="tc-lt-chip tc-lt-has">+{p}</span>)}</div>}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    {item.dnaKey && item.dnaKey !== 'NONE' && item.dna && <div className="tc-lt-arch" style={{ color: item.dna.color, marginTop: 0 }}>{item.dna.label}</div>}
-                                    <button type="button"
-                                        style={{ marginLeft: 'auto', padding: '2px 8px', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '0.66rem', letterSpacing: '0.06em', color: 'var(--gold)', background: 'transparent', border: '1px solid rgba(212,175,55,0.35)', borderRadius: 'var(--card-radius-xs, 5px)', cursor: 'pointer' }}
-                                        title={'Open ' + a.ownerName + '’s Owner DNA'}
-                                        onClick={e => { e.stopPropagation(); openDna(); }}>DNA →</button>
-                                </div>
+                                {item.dnaKey && item.dnaKey !== 'NONE' && item.dna && <div className="tc-lt-arch" style={{ color: item.dna.color }}>{item.dna.label}</div>}
                             </div>
                         );
                     });
@@ -4026,7 +3650,7 @@
                 <div className="tc-dhq-panel tc-rail-card tc-lt-panel">
                     <div className="tc-dhq-panel-head">
                         <span>League Teams</span>
-                        <em>{_pro && partnerBoard.length ? partnerBoard.length + ' rivals · tap → roster' : 'Scout the field'}</em>
+                        <em>{_pro && partnerBoard.length ? partnerBoard.length + ' rivals · tap → DNA' : 'Scout the field'}</em>
                     </div>
                     <div className="tc-dhq-panel-body">
                         <div className="tc-lt-scroll">{body}</div>
@@ -4932,6 +4556,7 @@
                             <div style={{ marginTop: '8px', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                 <div style={{ fontSize: '0.74rem', color: 'var(--silver)', lineHeight: 1.5 }}><b style={{ color: 'var(--white)' }}>Accept:</b> {deal.whyAccept}</div>
                                 <div style={{ fontSize: '0.74rem', color: 'var(--silver)', lineHeight: 1.5 }}><b style={{ color: 'var(--white)' }}>You:</b> {deal.whyYou}</div>
+                                <div style={{ fontSize: '0.74rem', color: 'var(--silver)', lineHeight: 1.5 }}><b style={{ color: 'var(--white)' }}>Swing:</b> {deal.swing}</div>
                                 {(deal.caution || []).length > 0 && <div style={{ fontSize: MICRO, color: 'var(--warn)', fontFamily: MONO }}>{deal.caution.slice(0, 3).join(' · ')}</div>}
                             </div>
                         )}
