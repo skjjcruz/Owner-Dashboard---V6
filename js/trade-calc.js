@@ -2284,8 +2284,11 @@
                 // The package must run 30–75% OVER his market value — that's
                 // what prying a player out of a room with nothing behind him
                 // actually costs. Composition rules still gate underneath.
+                // No upper cap on an explicit price question: if the only REAL
+                // packages overshoot, show them as the overpay they are — the
+                // finder NEVER invents assets the owner doesn't hold.
                 const low = opts.scarcity ? 1.30 : lowRatio;
-                const high = opts.scarcity ? 1.75 : highRatio;
+                const high = opts.scarcity ? Infinity : highRatio;
                 const packages = sideCombos(playerPool, pickPool, targetMkt * (opts.scarcity ? 1.45 : 1), { allowPickOnly: true });
                 packages
                     .filter(pkg => pkg.market >= targetMkt * low && pkg.market <= targetMkt * high)
@@ -2574,18 +2577,6 @@
 
         function loadDealIntoBuilder(deal) {
             if (!deal) return;
-            // An asking-price card carries HYPOTHETICAL payment slots — load
-            // the real target on their side and leave yours empty to fill.
-            if (deal._asking) {
-                setTradeOwner({ A: myAssessment?.ownerId || null, B: deal.partnerOwnerId || null });
-                setTradeIds({ A: [], B: (deal.receivePlayers || []).map(p => p.pid || p.id) });
-                setTradePickIds({ A: [], B: [] });
-                setTradeFaab({ A: 0, B: 0 });
-                setSearchText({ A: '', B: '' });
-                setTcTab('desk');
-                setBuilderExpanded(true);
-                return;
-            }
             setTradeOwner({ A: myAssessment?.ownerId || null, B: deal.partnerOwnerId || null });
             setTradeIds({
                 A: (deal.givePlayers || []).map(p => p.pid || p.id),
@@ -3410,32 +3401,11 @@
             if (first && first.type === 'Scarcity premium') setExpandedDealId(first.id);
         }, [_focusRevealKey, finderDeals[0]?.id]);
 
-        // THE ASKING PRICE as a real finder card (owner ruling: "exactly like
-        // this") — a synthetic deal pushed through buildDeal so it renders in
-        // the SAME card as every other row: YOU SEND / YOU GET, grade,
-        // accept %, DHQ delta, Why. Shown only when no affordable package
-        // exists; builder-load brings the target and leaves your side empty.
-        const askingDeal = useMemo(() => {
-            if (!focusAskingPrice || finderDeals.length || !selectedPartner) return null;
-            try {
-                const target = playerAsset(focusR.id);
-                if (!target) return null;
-                const yr = (parseInt(currentLeague?.season) || new Date().getFullYear()) + 1;
-                const givePlayers = focusAskingPrice.rows.filter(r => r.kind === 'player').map((r, i) => ({ type: 'player', pid: 'ask-p' + i, id: 'ask-p' + i, name: r.label, pos: 'ANY', team: '', value: r.value }));
-                const givePicks = focusAskingPrice.rows.filter(r => r.kind === 'pick').map((r, i) => ({ type: 'pick', id: 'ask-k' + i, year: yr, round: r.round, label: r.label, value: r.value }));
-                const d = buildDeal(selectedPartner, {
-                    mode: 'acquire', type: 'Asking price',
-                    id: 'asking_' + String(focusR.id),
-                    givePlayers, givePicks, receivePlayers: [target], giveFaab: focusAskingPrice.faab || 0,
-                    extraCaution: ['Asking price — your current pieces can\'t assemble this package'],
-                    whyAccept: `${focusAskingPrice.teamName} ${focusAskingPrice.roomLine} — only an overpay opens the conversation.`,
-                    whyYou: `Market ${focusAskingPrice.mkt.toLocaleString()} + scarcity premium = ${focusAskingPrice.floor.toLocaleString()}+. It takes ${focusAskingPrice.reqText}.`,
-                });
-                return d ? { ...d, _asking: true } : null;
-            } catch (e) { return null; }
-        }, [focusAskingPrice, finderDeals.length, selectedPartner?.rosterId]);
-        useEffect(() => { if (askingDeal) setExpandedDealId(askingDeal.id); }, [askingDeal?.id]);
-
+        // RETIRED (owner ruling 2026-09-02: "do I even have a 2027 1st? No.
+        // Then why am I offering it up"): the synthetic asking-price deal is
+        // dead. The finder shows packages built ONLY from assets the owner
+        // actually holds — with no upper price cap on an explicit question —
+        // or a one-line verdict. It never invents assets.
         const finderActionable = finderDeals.filter(deal => deal.likelihood >= finderActionFloor);
         const finderMoonshotCount = Math.max(0, finderDeals.length - finderActionable.length);
         const finderVisibleDeals = showAllDeals ? finderDeals : finderActionable.slice(0, finderPoolOn ? 8 : 6);
@@ -3928,41 +3898,8 @@
                             ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'} hidden` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
                             : finderPoolOn && !finderPool.done
                                 ? <div ref={finderResultsRef} className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
-                                : askingDeal
-                                    ? <div ref={finderResultsRef} style={{ margin: '10px 0 4px' }}>
-                                        <TcDealCard deal={askingDeal} idx={0} actionFloor={actionFloor} expandedDealId={expandedDealId} setExpandedDealId={setExpandedDealId} loadDealIntoBuilder={loadDealIntoBuilder} saveDeal={saveDeal} sideSummary={sideSummary} />
-                                    </div>
                                 : focusAskingPrice
-                                    ? <div ref={finderResultsRef} style={{ border: '1px solid rgba(212,175,55,0.35)', borderRadius: 'var(--card-radius, 10px)', padding: '14px 16px', margin: '10px 0 4px', textAlign: 'left' }}>
-                                        <div style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, letterSpacing: '0.08em', fontSize: '0.8rem', color: 'var(--gold)', marginBottom: '10px' }}>THE ASKING PRICE</div>
-                                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                                            <div style={{ flex: 1, minWidth: '220px' }}>
-                                                <div style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--silver)', opacity: 0.8, marginBottom: '6px' }}>YOU GET</div>
-                                                <div className="tc-dhq-asset">
-                                                    <span className="tc-dhq-asset-dot" style={{ background: posColor(focusAskingPrice.pos) }} />
-                                                    <span>{focusAskingPrice.name} <em>{focusAskingPrice.pos} {focusAskingPrice.team}</em></span>
-                                                    <strong>{focusAskingPrice.value.toLocaleString()}</strong>
-                                                </div>
-                                            </div>
-                                            <div style={{ flex: 1, minWidth: '220px', borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '16px' }}>
-                                                <div style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--silver)', opacity: 0.8, marginBottom: '6px' }}>IT WILL TAKE · {focusAskingPrice.total.toLocaleString()}+ DHQ</div>
-                                                {focusAskingPrice.rows.map((r, i) => (
-                                                    <div key={i} className="tc-dhq-asset">
-                                                        <span className="tc-dhq-asset-dot" style={{ background: r.kind === 'pick' ? (PICK_COLORS[r.round] || 'var(--gold)') : 'var(--silver)' }} />
-                                                        <span>{r.label}</span>
-                                                        <strong>{r.approx ? '≈' : ''}{r.value.toLocaleString()}{r.approx ? '+' : ''}</strong>
-                                                    </div>
-                                                ))}
-                                                <div className="tc-dhq-asset">
-                                                    <span className="tc-dhq-asset-dot" style={{ background: 'var(--win-green, #2ecc71)' }} />
-                                                    <span>FAAB</span>
-                                                    <strong>${focusAskingPrice.faab}</strong>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div style={{ fontSize: '0.8rem', lineHeight: 1.5, marginTop: '10px' }}><b>Why the price is so high:</b> {focusAskingPrice.teamName} {focusAskingPrice.roomLine}. His market price is {focusAskingPrice.mkt.toLocaleString()} — the rest is the scarcity premium for forcing an owner to open a hole in his own lineup.</div>
-                                        <div style={{ fontSize: '0.76rem', lineHeight: 1.5, marginTop: '4px', opacity: 0.72 }}>Your current tradeable pieces can't assemble this package. Load the Trade Builder below to force the question.</div>
-                                    </div>
+                                    ? <div ref={finderResultsRef} className="tc-dhq-empty">{`${focusAskingPrice.name} prices at ${focusAskingPrice.floor.toLocaleString()}+ DHQ — ${focusAskingPrice.teamName} ${focusAskingPrice.roomLine}. Your tradeable assets can't reach that. Build your own offer below.`}</div>
                                     : <div ref={finderResultsRef} className="tc-dhq-empty">{(effMode === 'engine' || effMode === 'engine-picks')
                                         ? (selectedPartner && !finderPoolOn
                                             ? `No trades worth making with ${selectedPartner.teamName || selectedPartner.ownerName} right now — nothing on their shelf upgrades you, and your window doesn't call for what they need. That's a verdict, not an error. Tap a player on their roster for a specific price, or build your own below.`
