@@ -24,9 +24,7 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(ROOT, 'dist-deploy');
 
 // Every HTML entry point that loads @babel/standalone + type="text/babel" scripts.
-// trade-lab.html is the owner's gated terrain model — regenerated from index.html
-// below (build-trade-lab.cjs) BEFORE processing so the mirror can never drift.
-const ENTRIES = ['index.html', 'draft-warroom.html', 'free-agency.html', 'trade-calculator.html', 'trade-lab.html'];
+const ENTRIES = ['index.html', 'draft-warroom.html', 'free-agency.html', 'trade-calculator.html'];
 
 const compiled = new Set(); // source pathnames already compiled (dedupe across entries)
 const assetHash = new Map(); // pathname -> content hash of the compiled output
@@ -184,12 +182,6 @@ function stampSharedLoaderVersion() {
 function build() {
   fs.rmSync(OUT_DIR, { recursive: true, force: true });
   ensureDir(OUT_DIR);
-  // Regenerate the Trade Lab mirror from the current index.html so every deploy
-  // ships a lab that matches production exactly (see build-trade-lab.cjs).
-  const labBuilder = path.join(__dirname, 'build-trade-lab.cjs');
-  if (fs.existsSync(labBuilder)) {
-    require('child_process').execFileSync(process.execPath, [labBuilder], { stdio: 'inherit' });
-  }
   stampSharedLoaderVersion();
   for (const e of ENTRIES) processEntry(e);
   console.log(`[build-deploy] compiled ${compiledCount} unique Babel sources across ${ENTRIES.length} entries -> ${path.relative(ROOT, OUT_DIR)}/`);

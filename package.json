@@ -4,7 +4,7 @@
   "description": "Dynasty HQ web app (web-only) \u2014 draft war room, earnings tracking, free agent targets",
   "main": "index.html",
   "scripts": {
-    "test": "node tests/run.js && node tests/season-odds-engines.js && node tests/faab-engine.js && node tests/chopped.js && node tests/chop-odds.js && node tests/trade-lab.js",
+    "test": "node tests/run.js && node tests/season-odds-engines.js && node tests/faab-engine.js && node tests/chopped.js && node tests/chop-odds.js",
     "test:core": "node tests/run.js",
     "sync:shared": "node scripts/sync-reconai-shared.cjs",
     "build:preview": "npm run sync:shared && node scripts/build-preview.cjs",
