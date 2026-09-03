@@ -2067,14 +2067,16 @@
         }
 
         function addCandidate(candidates, partner, input) {
-            if (crossClassUnrealistic(input)) return;
+            const _g = window._wrDbgGate = window._wrDbgGate || { cross: 0, qb: 0, elite: 0, nullDeal: 0, built: 0 };
+            if (crossClassUnrealistic(input)) { _g.cross++; return; }
             // Startable-QB packages must satisfy the owner's composition
             // rules (1sts / QB swaps / elite pieces / multi-starter bundles).
-            if (qbTradeRules && qbTradeRules.violates(input)) return;
+            if (qbTradeRules && qbTradeRules.violates(input)) { _g.qb++; return; }
             // Elite RB/WR/TE need top-dollar packages — same posture, own module.
-            if (eliteSkillRules && eliteSkillRules.violates(input)) return;
+            if (eliteSkillRules && eliteSkillRules.violates(input)) { _g.elite++; return; }
             const deal = buildDeal(partner, input);
-            if (!deal) return;
+            if (!deal) { _g.nullDeal++; return; }
+            _g.built++;
             // _core — the deal's IDEA identity (owner ruling: the board kept
             // showing the same trade over and over with only the payment
             // shuffled — "Oluokun → Hines-Allen" three times with R6/R7/FAAB
@@ -2287,9 +2289,10 @@
                 // No upper cap on an explicit price question: if the only REAL
                 // packages overshoot, show them as the overpay they are — the
                 // finder NEVER invents assets the owner doesn't hold.
-                const low = opts.scarcity ? 1.30 : lowRatio;
+                const low = opts.floorless ? 0 : opts.scarcity ? 1.30 : lowRatio;
                 const high = opts.scarcity ? Infinity : highRatio;
                 const packages = sideCombos(playerPool, pickPool, targetMkt * (opts.scarcity ? 1.45 : 1), { allowPickOnly: true });
+                if (opts.scarcity) { try { window._wrDbgGate = { cross: 0, qb: 0, elite: 0, nullDeal: 0, built: 0 }; window._wrDbgAsk = { t: target.name, mkt: targetMkt, players: playerPool.length, picks: pickPool.map(k => k.label + ':' + k.value), combos: packages.length, inBand: packages.filter(pkg => pkg.market >= targetMkt * low).length }; } catch (e0) { } }
                 packages
                     .filter(pkg => pkg.market >= targetMkt * low && pkg.market <= targetMkt * high)
                     .slice(0, 4)
@@ -2303,7 +2306,7 @@
                             givePicks: pkg.picks,
                             receivePlayers: [target],
                             ...faab,
-                            extraCaution: opts.scarcity ? ['Scarcity premium — priced 30%+ over market'] : undefined,
+                            extraCaution: opts.floorless ? ['Below his real asking price — expect a no without a sweetener'] : opts.scarcity ? ['Scarcity premium — priced 30%+ over market'] : undefined,
                             whyAccept: opts.scarcity
                                 ? `${(partner.teamName || partner.ownerName || 'They')} can't cover ${target.pos} without ${target.name} — only a clear overpay makes thinning that room worth discussing.`
                                 : theirNeedPos.some(pos => givePos.includes(pos))
@@ -2470,6 +2473,19 @@
                 const pricePool = focusAsset ? myPlayers : givePool;
                 const pricePicks = focusAsset ? (allMyPicks.length ? allMyPicks : myPicks) : myPicks;
                 targetPool.slice(0, 8).forEach(target => addAcquireTarget(target, pricePool, pricePicks, '', { scarcity: !!partnerProtected[String(target.pid)] }));
+                // PROOF-BY-CONSTRUCTION (owner ruling 2026-09-02: never claim
+                // "can't reach" unless it's literally true): if the premium
+                // floor produced nothing for a focused protected target, retry
+                // FLOORLESS — same real assets, same composition rules. Only
+                // when composition itself is impossible does the verdict line
+                // earn the right to render; and that zero gets logged so the
+                // failure is diagnosable from any device.
+                if (!candidates.length && focusAsset && partnerProtected[String(focusPid)]) {
+                    addAcquireTarget(focusAsset, pricePool, pricePicks, '', { scarcity: true, floorless: true });
+                    if (!candidates.length) {
+                        try { window.DHQBugCapture?.captureMessage?.('trade.askZero ' + JSON.stringify({ ask: window._wrDbgAsk, gate: window._wrDbgGate }).slice(0, 400), 'warning'); } catch (e0) { }
+                    }
+                }
                 // When the FOCUSED player is scarcity-blocked (his owner can't
                 // afford to lose him), the honest answer is the verdict note —
                 // never a fallback board of his teammates burying it.
