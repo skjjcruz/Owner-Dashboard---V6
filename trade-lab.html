@@ -2,8 +2,25 @@
 
 <html lang="en">
 <head>
+    <!-- TRADE LAB GATE: this page renders only for the owner's logins. -->
+    <script>
+    (function () {
+      try {
+        var a = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
+        var u = ((a && (a.sleeperUsername || a.username)) || '').toLowerCase();
+        if (u !== 'skjjcruz' && u !== 'bigloco') {
+          document.documentElement.style.display = 'none';
+          window.location.replace('index.html');
+        }
+      } catch (e) {
+        document.documentElement.style.display = 'none';
+        window.location.replace('index.html');
+      }
+    })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex,nofollow">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://api.sleeper.app https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://site.web.api.espn.com https://fantasysports.yahooapis.com https://api.fantasycalc.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
 
     <!-- Early auth gate: bounce signed-out visitors to the sign-in page BEFORE the
@@ -2974,6 +2991,10 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script src="js/shared/rank-history.js?v=20260902mv1"></script>
 <script src="js/shared/qb-trade-rules.js?v=20260902qbr2"></script>
 <script src="js/shared/elite-skill-trade-rules.js?v=20260902esr1"></script>
+<script src="js/shared/qb-trade-rules-v2.js?v=20260903lab1"></script>
+<script src="js/shared/gm-trade-engine.js?v=20260903lab1"></script>
+<script src="js/lab/points-ledger.js?v=20260903lab1"></script>
+<script src="js/lab/intent-reads.js?v=20260903lab1"></script>
 <script src="js/shared/brief-pulse.js?v=20260902mv1"></script>
 <!-- AI Conductor Phase 3 — the reusable "explain this screen" line (window.WR.SurfaceRead), flag-gated. -->
 <script src="js/shared/surface-read.js?v=20260715sr1"></script>
@@ -2997,7 +3018,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      group, when the owning surface first calls wrLoadModuleGroup('<group>'). -->
 <script src="js/module-loader.js?v=20260612modlazy1"></script>
 <script type="text/babel" src="js/settings.js?v=20260902intel1"></script>
-<script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20260903rb1"></script>
+<script type="text/babel" data-wr-defer="trade" src="js/trade-calc-lab.js?v=20260903lab1"></script>
 <script type="text/babel" src="js/post-draft.js?v=20260609postdraft1"></script>
 <script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260828tick4"></script>
 <!-- Season Odds panel loads with Game Day (owner ruling 2026-07-30) — must
@@ -3152,7 +3173,7 @@ window.addEventListener('appinstalled', () => {
 <!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
      owner can read back exactly which version his device is running before
      testing — kills the stale-cache guessing game. Bump the code every deploy. -->
-<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b99</div>
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(212,175,55,0.55);pointer-events:none;user-select:none;">LAB</div>
 </body>
 </html>
 <!-- build 1774212614 -->
