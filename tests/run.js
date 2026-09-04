@@ -1317,6 +1317,59 @@ group('account surface (billing + legal requirements)');
 }
 
 // ══════════════════════════════════════════════════════════════════
+// Rank history contamination guard (bug 2026-09-04) — functional
+// ══════════════════════════════════════════════════════════════════
+{
+  const store = {};
+  const g = {
+    localStorage: {
+      getItem: k => (k in store ? store[k] : null),
+      setItem: (k, v) => { store[k] = String(v); },
+      removeItem: k => { delete store[k]; },
+    },
+  };
+  new Function('window', 'localStorage', fs.readFileSync('js/shared/rank-history.js', 'utf8'))(g, g.localStorage);
+  const RH = g.WR.RankHistory;
+  const LID = 'L16';
+  // Reproduce the owner's exact 2026-09-04 corruption: two days of a 12-team
+  // league's table filed under the 16-team league, then today's real table.
+  const alien = { date: '2026-09-03', names: { 1: 'The Benghazi Bullies' }, ranks: {} };
+  for (let i = 1; i <= 12; i++) alien.ranks[String(i)] = i === 1 ? 1 : (i <= 9 ? i + 3 : i - 8);
+  const real = { date: '2026-09-04', names: { 1: 'Pontiac Aztek Racing Club', 13: 'Dirty Mike and the Boys' }, ranks: {} };
+  const realOrder = [15, 11, 8, 2, 6, 7, 4, 13, 9, 12, 16, 3, 10, 5, 1, 14];
+  for (let i = 1; i <= 16; i++) real.ranks[String(i)] = realOrder[i - 1];
+  store['dhq_rank_hist_v1:' + LID] = JSON.stringify({ days: [alien, real] });
+
+  test('mismatched days are never compared — no fabricated 14-spot slide', () => {
+    ok(RH.movers(LID).length === 0, 'movers stays silent across a cross-league day pair');
+    ok(RH.myDelta(LID, 13) === null, 'myDelta refuses the cross-league comparison too');
+  });
+
+  const mkAssessments = (n, bump) => Array.from({ length: n }, (_, i) => ({
+    rosterId: i + 1, powerRank: ((i + (bump || 0)) % n) + 1, teamName: 'T' + (i + 1),
+  }));
+  test('record refuses a table from the wrong league', () => {
+    const expected16 = Array.from({ length: 16 }, (_, i) => String(i + 1));
+    RH.record(LID, mkAssessments(12), { expectedRosterIds: expected16 });
+    const days = JSON.parse(store['dhq_rank_hist_v1:' + LID]).days;
+    ok(days.every(d => Object.keys(d.ranks).length !== 12 || d.date === '2026-09-03'),
+      'a 12-team table never lands under the 16-team league');
+  });
+  test('a legitimate record self-prunes alien days and history heals', () => {
+    RH.record(LID, mkAssessments(16), { expectedRosterIds: Array.from({ length: 16 }, (_, i) => String(i + 1)) });
+    const days = JSON.parse(store['dhq_rank_hist_v1:' + LID]).days;
+    ok(days.every(d => Object.keys(d.ranks).length === 16), 'the poisoned 12-team days are pruned on the next real record');
+    // Simulate tomorrow: a second same-set day makes comparisons honest again.
+    days[days.length - 1].date = '2026-09-05';
+    store['dhq_rank_hist_v1:' + LID] = JSON.stringify({ days });
+    RH.record(LID, mkAssessments(16, 2), { expectedRosterIds: Array.from({ length: 16 }, (_, i) => String(i + 1)) });
+    ok(RH.movers(LID).length > 0, 'same-league day pairs still produce movers');
+    const md = RH.myDelta(LID, 3);
+    ok(md && typeof md.delta === 'number', 'myDelta works again on clean same-league history');
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Summary
 // ══════════════════════════════════════════════════════════════════
 console.log('\n');

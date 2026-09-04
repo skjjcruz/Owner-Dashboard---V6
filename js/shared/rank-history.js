@@ -41,8 +41,25 @@
         try { window.OD?.saveLeagueDoc?.(leagueId || '_', 'rankhist', hist); } catch (_) { /* non-fatal */ }
     }
 
+    // The sorted roster-id set of a rank table — the league's fingerprint.
+    // Two tables belong to the same league only when these match.
+    function _ridSet(ranks) {
+        return Object.keys(ranks || {}).sort().join(',');
+    }
+
     // Save (or refresh) today's table from a finished assessment pass.
-    function record(leagueId, assessments) {
+    //
+    // CONTAMINATION GUARD (bug 2026-09-04): on a league switch the widget can
+    // briefly hold the NEW league's id with the OLD league's assessments, and
+    // this function happily filed a 12-team league's table under the 16-team
+    // league's key. The next morning's brief then compared the two and
+    // invented "Pontiac Aztek slipped 14 spots". Two defenses:
+    //   1. opts.expectedRosterIds — the caller says which roster ids the
+    //      league actually has; a table with a different set is refused.
+    //   2. Self-pruning — any stored day whose roster set differs from the
+    //      table being recorded is dropped, so history already poisoned
+    //      cleans itself on the next legitimate record.
+    function record(leagueId, assessments, opts) {
         try {
             if (!leagueId || !Array.isArray(assessments) || assessments.length < 4) return;
             var ranks = {}, names = {}, complete = true;
@@ -52,12 +69,21 @@
                 names[String(a.rosterId)] = a.teamName || a.ownerName || ('Team ' + a.rosterId);
             });
             if (!complete || !Object.keys(ranks).length) return;
+            var set = _ridSet(ranks);
+            var expected = opts && Array.isArray(opts.expectedRosterIds) && opts.expectedRosterIds.length
+                ? opts.expectedRosterIds.map(String).sort().join(',')
+                : null;
+            if (expected && set !== expected) return; // not this league's table — refuse
             var today = _today();
             if (!today) return;
             var hist = _load(leagueId);
+            // Self-prune: drop stored days from a different roster set.
+            var before = hist.days.length;
+            hist.days = hist.days.filter(function (d) { return d && _ridSet(d.ranks) === set; });
+            var pruned = before !== hist.days.length;
             var last = hist.days[hist.days.length - 1];
             if (last && last.date === today) {
-                if (JSON.stringify(last.ranks) === JSON.stringify(ranks)) return; // unchanged
+                if (!pruned && JSON.stringify(last.ranks) === JSON.stringify(ranks)) return; // unchanged
                 last.ranks = ranks; last.names = names;                            // intraday refresh
             } else {
                 hist.days.push({ date: today, ranks: ranks, names: names });
@@ -90,11 +116,16 @@
     }
 
     // The two most recent DIFFERENT days, newest first. null when history is
-    // a single day deep — there is nothing honest to compare yet.
+    // a single day deep — there is nothing honest to compare yet. Days whose
+    // roster set differs from the latest day are never compared (same
+    // contamination guard as record: cross-league days say nothing honest).
     function _lastTwoDays(leagueId) {
         var hist = _load(leagueId);
         if (hist.days.length < 2) return null;
-        return { curr: hist.days[hist.days.length - 1], prev: hist.days[hist.days.length - 2] };
+        var curr = hist.days[hist.days.length - 1];
+        var prev = hist.days[hist.days.length - 2];
+        if (_ridSet(curr.ranks) !== _ridSet(prev.ranks)) return null;
+        return { curr: curr, prev: prev };
     }
 
     // Your own move since the previous recorded day. delta > 0 = climbed.

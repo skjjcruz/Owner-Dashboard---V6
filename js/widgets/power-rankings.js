@@ -118,7 +118,12 @@
         const [histTick, setHistTick] = React.useState(0);
         React.useEffect(() => {
             if (!rhLeagueId || !window.WR?.RankHistory) return;
-            try { window.WR.RankHistory.record(rhLeagueId, assessments); } catch (e) { /* memory is a bonus */ }
+            // Contamination guard (bug 2026-09-04): on a league switch this
+            // effect can fire with the NEW league's id and the OLD league's
+            // assessments still in the prop. Tell the recorder which roster
+            // ids this league actually has so a foreign table is refused.
+            const expectedRosterIds = (currentLeague?.rosters || []).map(r => String(r.roster_id));
+            try { window.WR.RankHistory.record(rhLeagueId, assessments, { expectedRosterIds }); } catch (e) { /* memory is a bonus */ }
             try { window.WR.RankHistory.sync(rhLeagueId, () => setHistTick(t => t + 1)); } catch (e) { /* offline */ }
         }, [rhLeagueId, assessments]);
         const myMove = React.useMemo(() => {
