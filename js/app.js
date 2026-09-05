@@ -1276,13 +1276,16 @@
             isNavigatingRef.current = true;
             setActiveLeagueId(league.id);
             setSelectedLeague(league);
-            setActiveTab(route.tab || 'dashboard');
+            // Deep links with an explicit tab are honored; a bare league link
+            // takes the league's entry default (Draft Room until drafted).
+            const routeEntryTab = route.tab || defaultTabForLeague(league);
+            setActiveTab(routeEntryTab);
             AppStorage.set(APP_WR_KEYS.LAST_LEAGUE_ID, league.id);
             AppStorage.set(APP_WR_KEYS.LAST_LEAGUE_NAME, league.name);
             history.replaceState(
-                { view: 'league', leagueId: league.id, tab: route.tab || 'dashboard' },
+                { view: 'league', leagueId: league.id, tab: routeEntryTab },
                 '',
-                routeUrl(buildHash(league.id, route.tab || 'dashboard'))
+                routeUrl(buildHash(league.id, routeEntryTab))
             );
             setTimeout(() => { isNavigatingRef.current = false; }, 0);
         }, [loading, sleeperLeagues, espnLeagues, mflLeagues]);
@@ -1808,12 +1811,23 @@
         function handleSelectLeague(league) {
             setActiveLeagueId(league.id);
             setSelectedLeague(league);
-            setActiveTab('dashboard');
+            const entryTab = defaultTabForLeague(league);
+            setActiveTab(entryTab);
             AppStorage.set(APP_WR_KEYS.LAST_LEAGUE_ID, league.id);
             AppStorage.set(APP_WR_KEYS.LAST_LEAGUE_NAME, league.name);
             if (!isNavigatingRef.current) {
-                history.pushState({ view: 'league', leagueId: league.id, tab: 'dashboard' }, '', routeUrl(buildHash(league.id, 'dashboard')));
+                history.pushState({ view: 'league', leagueId: league.id, tab: entryTab }, '', routeUrl(buildHash(league.id, entryTab)));
             }
+        }
+
+        // A league that hasn't drafted yet opens in the Draft Room (owner
+        // order 2026-09-05: new users join for draft help — meet them there).
+        // Once its draft completes the default shifts back to Home. Only
+        // DEFAULTS route through this — explicit tab choices in deep links
+        // and back/forward history are always honored as-is.
+        function defaultTabForLeague(league) {
+            const st = league?.status;
+            return (st === 'pre_draft' || st === 'drafting') ? 'draft' : 'dashboard';
         }
 
         function handleTabChange(tab) {
