@@ -1,5 +1,15 @@
 // ══════════════════════════════════════════════════════════════════
 // trade-calc.js — TradeCalcTab: Trade Desk (finder + builder), Owner DNA, Trade Log
+//
+// GRAFT PHASE 4 (owner-approved plan, 2026-09-05): this is the lab's
+// behavioral trade room, promoted to production. It carries the
+// ratified laws — sell/handcuff/at-template protection, the
+// net-points gate scaled by the GM plan, the picks-pay currency law,
+// RB-first need priority, owner-DNA taxes on price and acceptance,
+// the Starter Grip — plus the board's voice: the procurement header,
+// Net Pts/Wk on every card, and the amber GM button. It reads the
+// v2 engine store and the one-brain via the shared modules
+// (points-ledger / one-brain / values-v2 / intent-reads).
 // ══════════════════════════════════════════════════════════════════
     // ══════════════════════════════════════════════════════════════════════════
     // TRADE CALCULATOR TAB — migrated from trade-calculator.html
@@ -435,6 +445,10 @@
                                 <strong style={{ color:deal.viability === 'Moonshot' ? 'var(--bad)' : deal.viability === 'Negotiable' ? 'var(--warn)' : 'var(--good)' }}>{deal.viability || deal.windowImpact.label.replace(/^Window\s*/i, '')}</strong>
                             </div>
                             <div className="tc-dhq-stat">
+                                <span>Net Pts/Wk</span>
+                                <strong style={{ color: (deal.netPts ?? 0) > 0.05 ? 'var(--good)' : (deal.netPts ?? 0) < -0.05 ? 'var(--bad)' : 'var(--silver)' }}>{deal.netPts == null ? '—' : `${deal.netPts >= 0 ? '+' : ''}${deal.netPts.toFixed(1)}`}</strong>
+                            </div>
+                            <div className="tc-dhq-stat">
                                 <span>Window</span>
                                 <strong style={{ color:deal.windowImpact.color }}>{deal.windowImpact.label.replace(/^Window\s*/i, '')}</strong>
                             </div>
@@ -719,6 +733,9 @@
         // the shared engine builds its own starter pool with the ESPN door.
 
         function getPlayerValue(pid) {
+            // LAB: no special-casing here — the lab's shared engine copy
+            // computes the ratified v2 formula natively into LI.playerScores,
+            // so the normal resolution chain below IS the v2 price.
             if (window.App?.PlayerValue?.getValue) {
                 const v = window.App.PlayerValue.getValue(pid, { skin: resolvedLeagueSkin });
                 if (v > 0) {
@@ -1325,22 +1342,35 @@
         // Load DNA + grudges on mount
         useEffect(() => {
             if (!leagueId) return;
-            if (window.OD?.loadDNA) {
-                window.OD.loadDNA(leagueId).then(d => {
-                    const dnaMap = d || {};
-                    // Auto-apply AI DNA recommendations for owners without saved DNA
-                    if (allRosters.length && typeof computeWeightedDNA === 'function') {
-                        allRosters.forEach(r => {
-                            const rid = r.roster_id;
-                            if (!dnaMap[r.owner_id]) {
-                                const aiDna = computeWeightedDNA(rid);
-                                if (aiDna) dnaMap[r.owner_id] = aiDna.key;
-                            }
-                        });
-                    }
-                    setOwnerDna(dnaMap);
-                }).catch(() => setOwnerDna({}));
-            }
+            // LAB18 (owner report 2026-09-05: "MangaMaw is tagged as an
+            // acceptor" — and the lab couldn't see it): the site's cloud
+            // owner_dna store sits behind the owner's login (RLS), which the
+            // delinked lab doesn't have. The owner's designations ride in as
+            // a lab snapshot instead — snapshot first, then any local lab
+            // edits on top (his latest word wins), then the app's own read
+            // fills whoever is left untagged.
+            // Production: the owner's designations come from the cloud +
+            // local store (OD.loadDNA); the lab's snapshot file is a
+            // lab-only bridge and is not fetched here.
+            const snapLoad = Promise.resolve(null);
+            const localLoad = window.OD?.loadDNA
+                ? window.OD.loadDNA(leagueId).catch(() => ({}))
+                : Promise.resolve({});
+            Promise.all([snapLoad, localLoad]).then(([snap, local]) => {
+                const snapMap = (snap && String(snap.league) === String(leagueId)) ? (snap.map || {}) : {};
+                const dnaMap = { ...snapMap, ...(local || {}) };
+                // Auto-apply AI DNA recommendations for owners without saved DNA
+                if (allRosters.length && typeof computeWeightedDNA === 'function') {
+                    allRosters.forEach(r => {
+                        const rid = r.roster_id;
+                        if (!dnaMap[r.owner_id]) {
+                            const aiDna = computeWeightedDNA(rid);
+                            if (aiDna) dnaMap[r.owner_id] = aiDna.key;
+                        }
+                    });
+                }
+                setOwnerDna(dnaMap);
+            }).catch(() => setOwnerDna({}));
             setGrudges(loadGrudges(leagueId));
             if (window.DraftHistory?.loadDraftDNA) setOwnerDraftDna(window.DraftHistory.loadDraftDNA(leagueId) || {});
             if (window.DraftHistory?.syncDraftDNA) window.DraftHistory.syncDraftDNA(leagueId).then(map => setOwnerDraftDna(map || {})).catch(err => window.wrLog('tradecalc.syncDraftDNA', err));
@@ -1399,10 +1429,103 @@
             return buildPicksByOwner(allRosters, tradedPicks, leagueSeason, tcDraftRounds, currentDraftComplete);
         }, [allRosters, tradedPicks, tcDraftRounds, currentDraftComplete]);
 
+        // ── LAB one brain (ratified spec 2026-09-04) ────────────────────
+        // The ledger loads here (moved above the assessments memo it feeds);
+        // WrLabOneBrain then computes the ruled team truth every lab surface
+        // reads: health = 60 pace + 25 starter quality + 15 draft picks,
+        // power = pace preseason / record-then-points in season, elites
+        // count as one, quality-starter-or-player only.
+        const [labModel, setLabModel] = useState({ ledger: null, intent: null });
+        useEffect(() => {
+            let dead = false;
+            // The currentLeague prop is DHQ-shaped (`.id`); the model modules
+            // want the raw Sleeper league object (league_id / season /
+            // previous_league_id / settings), so prefer the S-state entry and
+            // patch the prop's fields over it as a fallback.
+            const rawLg = (window.S?.leagues || []).find(l => String(l.league_id) === String(leagueId));
+            const labLeague = { ...(currentLeague || {}), ...(rawLg || {}), league_id: leagueId };
+            // Owner device 2026-09-04: the tab can mount before the player DB
+            // arrives — posOf then returns null for everyone, the optimal fill
+            // goes empty, and a zero-point ledger got cached for the session
+            // (every team read REBUILDING, no pts line). Wait for the DB; the
+            // playersData dep below re-fires the load once it lands.
+            if (!leagueId || !labLeague?.scoring_settings || !allRosters.length || !window.WrLabPointsLedger) return undefined;
+            if (!Object.keys(playersData || {}).length) return undefined;
+            window._labDbg = { started: Date.now() };
+            window.WrLabPointsLedger.load({
+                league: labLeague,
+                rosters: allRosters,
+                posOf: pid => playerAsset(pid)?.pos || null,
+            }).then(ledger => {
+                if (dead) return;
+                window._labDbg.ledger = Date.now();
+                setLabModel(m => ({ ...m, ledger }));
+                if (window.WrLabIntentReads) {
+                    window.WrLabIntentReads.read({ league: labLeague, rosters: allRosters, ledger })
+                        .then(intent => { if (!dead) { window._labDbg.intent = Date.now(); setLabModel(m => ({ ...m, intent })); } })
+                        .catch(e => { window._labDbg.intentErr = String(e); if (window.wrLog) window.wrLog('lab.intent', e); });
+                }
+            }).catch(e => { window._labDbg.ledgerErr = String(e); if (window.wrLog) window.wrLog('lab.ledger', e); });
+            return () => { dead = true; };
+        }, [leagueId, allRosters.length, Object.keys(playersData || {}).length > 0]);
+
+        // LAB: values v2 needs no loader here — the lab's shared engine copy
+        // (reconai-shared/dhq-engine.js) computes the ratified formula as its
+        // own value step, so LI.playerScores is v2 from birth on this page.
+
+        const labBrain = useMemo(() => {
+            if (!labModel.ledger || !allRosters.length || !window.WrLabOneBrain) return null;
+            const rawLg = (window.S?.leagues || []).find(l => String(l.league_id) === String(leagueId));
+            const labLeague = { ...(currentLeague || {}), ...(rawLg || {}), league_id: leagueId };
+            try {
+                const brain = window.WrLabOneBrain.compute({
+                    ledger: labModel.ledger,
+                    leagueInfo: labLeague,
+                    rosters: allRosters,
+                    posOf: pid => playersData?.[pid]?.position || null,
+                    picksByOwner,
+                });
+                window._labDbg && (window._labDbg.brain = Date.now());
+                return brain;
+            } catch (e) { if (window.wrLog) window.wrLog('lab.brain', e); return null; }
+        }, [labModel.ledger, allRosters, playersData, picksByOwner]);
+
         const assessments = useMemo(() => {
             if (!allRosters.length || !Object.keys(playersData).length) return [];
-            return allRosters.map(r => assessTeamLocal(r)).filter(Boolean);
-        }, [allRosters, playersData, statsData, picksByOwner, timeRecomputeTs, leagueDraftRounds, currentDraftComplete]);
+            return allRosters.map(r => {
+                const a = assessTeamLocal(r);
+                if (!a) return null;
+                const ob = labBrain?.byRosterId?.[String(r.roster_id)];
+                if (!ob) return a;
+                // Overlay the one brain's ruled fields on the app assessment.
+                // Fields the rulings didn't touch (panic, DNA inputs, record)
+                // stay exactly as the app computed them.
+                const needs = ob.needs.map(n => ({
+                    ...((a.needs || []).find(x => x.pos === n.pos) || {}),
+                    pos: n.pos, urgency: n.urgency, have: n.have, need: n.need,
+                }));
+                const strengths = ob.strengths.map(s => s.pos);
+                const posAssessment = { ...(a.posAssessment || {}) };
+                Object.keys(labBrain.template).forEach(pos => {
+                    const st = ob.qualityCount[pos] < labBrain.template[pos] ? 'need'
+                        : ob.qualityCount[pos] > labBrain.template[pos] ? 'surplus' : 'ok';
+                    posAssessment[pos] = { ...(posAssessment[pos] || {}), status: st };
+                });
+                const brainWindow = (ob.tier === 'ELITE' || ob.tier === 'CONTENDER') ? 'CONTENDING'
+                    : ob.tier === 'REBUILDING' ? 'REBUILDING' : 'TRANSITIONING';
+                return {
+                    ...a,
+                    healthScore: ob.health,
+                    tier: ob.tier, tierColor: ob.tierColor, tierBg: ob.tierBg,
+                    window: brainWindow,
+                    weeklyPts: ob.weeklyPts,
+                    targetPts: ob.barTotal,
+                    powerScore: ob.powerScore, powerRank: ob.powerRank,
+                    needs, strengths, posAssessment,
+                    oneBrain: ob,
+                };
+            }).filter(Boolean);
+        }, [allRosters, playersData, statsData, picksByOwner, timeRecomputeTs, leagueDraftRounds, currentDraftComplete, labBrain]);
 
         const myRosterId = myRoster?.roster_id;
         const rosterState = window.App?.getRosterDataState?.({ roster: myRoster, currentLeague, rosters: allRosters, leagueSkin: resolvedLeagueSkin }) || { isUsable: true };
@@ -1471,7 +1594,10 @@
         const sortedAssessments = useMemo(() => {
             let list = [...assessments];
             if (tierFilter !== 'ALL') list = list.filter(a => a.tier === tierFilter);
-            if (sortMode === 'health') list.sort((a,b) => b.healthScore - a.healthScore);
+            // LAB: the owners list is labeled "sorted by power" — under the one
+            // brain that means the ruled power rank (pace preseason, record +
+            // points in season), with health as the tiebreak.
+            if (sortMode === 'health') list.sort((a,b) => (a.powerRank || 99) - (b.powerRank || 99) || b.healthScore - a.healthScore);
             else if (sortMode === 'panic') list.sort((a,b) => b.panic - a.panic);
             else if (sortMode === 'record') list.sort((a,b) => b.wins - a.wins || b.pf - a.pf);
             return list;
@@ -1715,10 +1841,269 @@
         // finder-only gate built from the shared pure module. The manual
         // Trade Builder is untouched and shows no warnings by design:
         // whatever an owner hand-builds is on the owner.
+        // LAB: behavioral model state. Loads once per league; any failure
+        // leaves the piece null and every consumer falls back to exact b98
+        // behavior — the board must never go empty because a feed hiccuped
+        // (owner ruling: a populated board beats a perfect empty one).
+        // LAB one brain: labModel + the ledger load moved ABOVE the assessments
+        // memo (they now feed it). The state lives up there; the Why helpers
+        // below keep reading the same labModel.
+
+        // LAB: two-line Whys in pace language (owner rulings: the Why is the
+        // championship pace; two short lines max; relative rank, never absolute
+        // point gaps; no banners, no system vocabulary — plain football talk).
+        function labOrdinal(n) { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+
+        // ═══ LAB15 (ratified 2026-09-05): THE NET-POINTS TEST ═══════════
+        // A trade is judged by what it does to my OPTIMAL LINEUP's weekly
+        // points — a full refill, so a traded starter's slot backfilling
+        // from the bench is priced exactly ("does it result in more points
+        // for the team? If no, the trade is bad").
+        const labShape = useMemo(() => {
+            const rawLg = (window.S?.leagues || []).find(l => String(l.league_id) === String(leagueId));
+            const rp = (rawLg || currentLeague || {}).roster_positions || [];
+            return window.WrLabPointsLedger?._slotShape ? window.WrLabPointsLedger._slotShape(rp) : null;
+        }, [leagueId]);
+        const labLineupPts = React.useCallback(pids => {
+            const led = labModel.ledger;
+            if (!led || !labShape) return 0;
+            const FLEX_OK = { RB: 1, WR: 1, TE: 1 }, SF_OK = { QB: 1, RB: 1, WR: 1, TE: 1 }, IDP_OK = { DL: 1, LB: 1, DB: 1 };
+            const pool = pids.map(pid => ({ pid: String(pid), pos: normPos(playersData[pid]?.position), ppg: led.playersPpg[String(pid)] || 0 }))
+                .sort((a, b) => b.ppg - a.ppg);
+            const taken = {}; let total = 0;
+            const take = p => { taken[p.pid] = 1; total += p.ppg; };
+            Object.entries(labShape.dedicated || {}).forEach(([pos, need]) => { let n = need; for (const p of pool) { if (n <= 0) break; if (!taken[p.pid] && p.pos === pos) { take(p); n--; } } });
+            const fillSlots = (n, ok) => { for (const p of pool) { if (n <= 0) break; if (!taken[p.pid] && ok[p.pos]) { take(p); n--; } } };
+            fillSlots(labShape.flexN, FLEX_OK); fillSlots(labShape.sfN, SF_OK); fillSlots(labShape.idpN, IDP_OK);
+            return total;
+        }, [labModel.ledger, labShape, playersData]);
+        const labMyPids = useMemo(() => (allRosters.find(r => r.roster_id === myRosterId)?.players || []).map(String), [allRosters, myRosterId]);
+        const labBasePts = useMemo(() => labLineupPts(labMyPids), [labLineupPts, labMyPids]);
+        function labNetPts(givePlayers, receivePlayers) {
+            if (!labModel.ledger || !labShape) return null;
+            const out = new Set((givePlayers || []).map(p => String(p.pid)));
+            const after = labMyPids.filter(pid => !out.has(pid)).concat((receivePlayers || []).map(p => String(p.pid)));
+            return labLineupPts(after) - labBasePts;
+        }
+        // LAB20: the amber GM button — one tap from the finder chips to GM's
+        // Office, because the plan set there steers every law on this board.
+        // The Trade tab gets no tab-switcher prop, so the button drives the
+        // app's own side-menu item (click bubbles to its handler).
+        function labOpenGmOffice() {
+            try {
+                const hits = Array.from(document.querySelectorAll('button, a, [role="button"], [role="menuitem"], li, span, div'))
+                    .filter(el => {
+                        const t = (el.textContent || '').trim();
+                        return t === "GM's Office" || t === 'GM’s Office';
+                    });
+                if (hits.length) hits[hits.length - 1].click(); // innermost match
+            } catch (e) { /* no-op */ }
+        }
+
+        // GM-strategy polarity (ratified): the declared plan decides which
+        // way the gate faces; no declared plan (or custom) falls back to the
+        // one brain's window read, and the board says so out loud.
+        function labPolarity() {
+            const declared = !!(window.WR?.GmMode?.getMode?.(leagueId));
+            const mode = finderTuning?.mode || 'compete';
+            if (declared && mode !== 'custom') return { pol: mode, declared: true };
+            const tier = labBrain?.byRosterId?.[String(myRosterId)]?.tier;
+            const pol = tier === 'REBUILDING' ? 'rebuild' : tier === 'CROSSROADS' ? 'retool' : 'compete';
+            return { pol, declared: false };
+        }
+
+        // LAB v2: how much would this player raise MY lineup, and where?
+        // Compares his projected PPG against my weakest starter in every
+        // group his position can fill; the best positive gap is the lift.
+        // This is the thesis's needs-first heart: a player who starts for
+        // me outranks a bigger name who'd ride my bench.
+        function labLiftInfo(p) {
+            const led = labModel.ledger;
+            const my = led?.teams?.[myRosterId];
+            if (!my || !led.playersPpg || !p?.pid) return { lift: 0, group: null };
+            const ppg = led.playersPpg[String(p.pid)] || 0;
+            const gpos = window.WrLabPointsLedger?.GROUP_POSITIONS || {};
+            let best = { lift: 0, group: null };
+            Object.keys(my.weakestStarter || {}).forEach(g => {
+                if (!(gpos[g] || []).includes(p.pos)) return;
+                const gap = ppg - (my.weakestStarter[g]?.ppg || 0);
+                if (gap > best.lift) best = { lift: gap, group: g };
+            });
+            return best;
+        }
+
+        // LAB3: age discounts the lift (thesis Pillar 1, shelf-life). A 34-year-
+        // old's projection is real THIS season and gone the next — the board
+        // stopped chasing Adams/Clowney types once lift carried an age haircut.
+        function labAgeFactor(p) {
+            // Asset objects don't always carry age — resolve from the player
+            // database (the gap that let a 33-year-old through the wall).
+            const age = Number(p?.age != null ? p.age : playersData?.[p?.pid]?.age) || 0;
+            if (!age) return 1;
+            const pos = p?.pos;
+            if (pos === 'QB') return age >= 38 ? 0.6 : 1;
+            if (pos === 'RB') return age >= 30 ? 0.25 : age >= 28 ? 0.5 : 1;
+            // WR/TE/K and all IDP age on roughly the same cliff.
+            return age >= 33 ? 0.15 : age >= 32 ? 0.25 : age >= 30 ? 0.5 : 1;
+        }
+        function labEffLift(p) {
+            const li = labLiftInfo(p);
+            return { lift: li.lift * labAgeFactor(p), group: li.group, rawLift: li.lift };
+        }
+
+        // LAB3: what my lineup LOSES when a starter walks — his PPG minus the
+        // best bench replacement eligible for his group. Bench pieces cost 0.
+        function labGiveLoss(p) {
+            const led = labModel.ledger;
+            const my = led?.teams?.[myRosterId];
+            if (!my || !led.playersPpg || !p?.pid) return 0;
+            const pid = String(p.pid);
+            if (!(my.starterPids || []).includes(pid)) return 0;
+            const gpos = window.WrLabPointsLedger?.GROUP_POSITIONS || {};
+            // Which group does he start in?
+            let group = null;
+            Object.keys(my.starters || {}).forEach(g => {
+                if ((my.starters[g] || []).some(s => s.pid === pid)) group = g;
+            });
+            if (!group) return 0;
+            const ppg = led.playersPpg[pid] || 0;
+            // Best bench replacement eligible for that group, from my roster.
+            const myRosterObjL = allRosters.find(r => r.roster_id === myRosterId);
+            let replacement = 0;
+            [...(myRosterObjL?.players || [])].map(String).forEach(bpid => {
+                if ((my.starterPids || []).includes(bpid)) return;
+                const bp = playerAsset(bpid);
+                if (!bp || !(gpos[group] || []).includes(bp.pos)) return;
+                replacement = Math.max(replacement, led.playersPpg[bpid] || 0);
+            });
+            return Math.max(0, ppg - replacement);
+        }
+
+        // LAB4 — the roster-shape law (thesis: Ideal Active Roster
+        // Composition). Points say how GOOD a group is; counts say whether
+        // it's SHORT or STACKED. A shortage position never pays for a trade,
+        // and a surplus position is never bought into — its fix is
+        // two-for-one within the position (fewer bodies, better starter).
+        const LAB_IDEAL_IDP_SF = { QB: 3, RB: 7, WR: 7, TE: 4, K: 2, DL: 7, LB: 6, DB: 6 };
+        function labComposition() {
+            if (!labModel.ledger) return null;
+            const rp = currentLeague?.roster_positions || [];
+            const hasIdp = rp.some(sl => ['DL', 'LB', 'DB', 'IDP_FLEX', 'IDP'].includes(sl));
+            const hasSf = rp.includes('SUPER_FLEX') || rp.includes('OP');
+            if (!hasIdp || !hasSf) return null; // thesis table is for this format; other formats stay lawless for now
+            const myR = allRosters.find(r => r.roster_id === myRosterId);
+            const counts = {};
+            [...(myR?.players || [])].forEach(pid => { const a = playerAsset(pid); if (a?.pos) counts[a.pos] = (counts[a.pos] || 0) + 1; });
+            const shortage = new Set(), surplus = new Set();
+            Object.keys(LAB_IDEAL_IDP_SF).forEach(pos => {
+                const c = counts[pos] || 0;
+                if (c < LAB_IDEAL_IDP_SF[pos]) shortage.add(pos);
+                else if (c > LAB_IDEAL_IDP_SF[pos]) surplus.add(pos);
+            });
+            return { counts, ideal: LAB_IDEAL_IDP_SF, shortage, surplus };
+        }
+
+        // LAB4 — a rebuilding owner does not sell his young building blocks
+        // for ordinary capital (walked trade 2026-09-04: a star rookie TE for
+        // a bare 3rd). Their eyes are on the future — these ARE the future.
+        function labUntouchableForPartner(partner, p) {
+            const read = labModel.intent?.byRosterId?.[partner?.rosterId];
+            if (read?.cls !== 'rebuilding') return false;
+            const age = Number(p?.age != null ? p.age : playersData?.[p?.pid]?.age) || 99;
+            if (age > 24) return false;
+            const ppg = labModel.ledger?.playersPpg?.[String(p?.pid)] || 0;
+            let role = null;
+            try { role = window.App?.NflRoles?.starterRole?.(playersData?.[p.pid]); } catch (e) { }
+            return !!role || ppg >= 8;
+        }
+
+        // LAB4 — fringe players are not currency (owner walk-through
+        // 2026-09-04: "Vidal is a backup and Carter is on a practice squad").
+        // No NFL role + negligible projection = no human trades for you,
+        // whatever the sticker value says. Not payment, not a target.
+        function labIsFringe(p) {
+            if (!p?.pid) return false;
+            if ((p.value || 0) >= 1500) return false;
+            try { if (window.App?.NflRoles?.starterRole?.(playersData?.[p.pid])) return false; } catch (e) { }
+            return (labModel.ledger?.playersPpg?.[String(p.pid)] || 0) < 6;
+        }
+
+        // LAB3: the deal's NET effect on my lineup — what comes in minus what
+        // walks out. The board's original sin was counting only the incoming
+        // half (Garrett-plus-cash for a linebacker "helped" the LB slot).
+        function labNetDelta(givePlayers, receivePlayers) {
+            const inLift = (receivePlayers || []).reduce((s, p) => s + labEffLift(p).lift, 0);
+            const outLoss = (givePlayers || []).reduce((s, p) => s + labGiveLoss(p), 0);
+            return inLift - outLoss;
+        }
+        function labWhyForDeal(partner, input) {
+            const led = labModel.ledger;
+            const my = led?.teams?.[myRosterId];
+            if (!my) return null;
+            const gl = window.WrLabPointsLedger?.GROUP_LABEL || {};
+            const gpos = window.WrLabPointsLedger?.GROUP_POSITIONS || {};
+            const recv = input.receivePlayers || [];
+            const give = input.givePlayers || [];
+            // LAB v2: consolidation cards get their own two lines — the roster
+            // spot is the story, and the partner's read flavors the accept.
+            if (input.type === 'Consolidation' && recv.length === 1 && give.length === 2) {
+                const li = labEffLift(recv[0]);
+                const readC = labModel.intent?.byRosterId?.[partner.rosterId];
+                const youC = li.group
+                    ? `Two-for-one: ${recv[0].name} raises your ${gl[li.group] || li.group} and frees a roster spot.`
+                    : `Two-for-one: consolidates depth into a starter and frees a roster spot.`;
+                const acceptC = readC?.cls === 'rebuilding'
+                    ? 'Two pieces for one vet fits a team building for later.'
+                    : readC?.cls === 'win_now'
+                        ? 'They turn one player into two lineup-ready bodies for the push.'
+                        : 'They add depth at two spots for the price of one.';
+                return { you: youC, accept: acceptC };
+            }
+            let you = null;
+            for (const sd of (my.softDetail || [])) {
+                const hit = recv.find(p => (gpos[sd.group] || []).includes(p.pos));
+                const verb = window.WrLabPointsLedger?.GROUP_PLURAL?.[sd.group] ? 'rank' : 'ranks';
+                if (hit) { you = `Your ${gl[sd.group] || sd.group} ${verb} ${labOrdinal(sd.rank)} of ${sd.of} — ${hit.name} lifts it.`; break; }
+            }
+            // LAB v2: needs-first targets can lift a group outside the top-2
+            // soft spots — still tell the true story: he starts for you.
+            if (!you && recv.length) {
+                for (const p of recv) {
+                    const li = labLiftInfo(p);
+                    if (li.lift >= 1) { you = `${p.name} starts for you — a clear upgrade in your ${gl[li.group] || li.group}.`; break; }
+                }
+            }
+            if (!you && give.length && !recv.length) {
+                const fromDepth = give.find(p => (my.strong || []).some(g => (gpos[g] || []).includes(p.pos)));
+                if (fromDepth) you = `You're dealing from depth — ${fromDepth.name} comes from a group you already win.`;
+            }
+            const read = labModel.intent?.byRosterId?.[partner.rosterId];
+            const their = led?.teams?.[partner.rosterId];
+            let accept = null;
+            if (read?.cls === 'rebuilding') {
+                accept = (input.givePicks || []).length
+                    ? 'Their eyes are on the future — picks are the language they speak.'
+                    : 'They are building for later, so proven veterans cost them extra.';
+            } else if (read?.cls === 'win_now') {
+                const helps = their ? (their.softDetail || []).find(sd => give.some(p => (gpos[sd.group] || []).includes(p.pos))) : null;
+                accept = helps
+                    ? `They are pushing to win now and their ${gl[helps.group] || helps.group} needs the help.`
+                    : 'They are pushing to win now — pieces that play this week land.';
+            } else if (read?.cls === 'caretaker') {
+                accept = 'They have been quiet — keep it simple and clean to get an answer.';
+            } else if (read) {
+                accept = 'They are active but unsettled — a fair-value offer gets a real look.';
+            }
+            return (you || accept) ? { you, accept } : null;
+        }
+
+        // LAB: six-tier QB rules v2 replace v1 as the finder's QB gate — the
+        // ruled ladder (Elite+ 1-5 ... Bottom 31-32), the 40+ age rule, the
+        // Rodgers rule, and the seller-scarcity bump (a roster holding ≤2 QBs
+        // prices its QBs one tier up). Falls back to v1 if v2 didn't load.
         const qbTradeRules = useMemo(() => {
             try {
-                if (!window.WrQbTradeRules?.build) return null;
-                return window.WrQbTradeRules.build({
+                const rulesCtx = {
                     scores: window.App?.LI?.playerScores || {},
                     playersData,
                     rosterPositions: currentLeague?.roster_positions || [],
@@ -1726,7 +2111,24 @@
                     isElite: pid => (typeof window.App?.isElitePlayer === 'function') ? window.App.isElitePlayer(pid) : ((window.App?.LI?.playerScores?.[pid] || 0) >= 7000),
                     starterRole: p => window.App?.NflRoles?.starterRole?.(p) || null,
                     normPos,
-                });
+                };
+                if (window.WrQbTradeRulesV2?.build) {
+                    const qbCountByRoster = {};
+                    allRosters.forEach(r => {
+                        qbCountByRoster[r.roster_id] = [...(r.players || []), ...(r.reserve || []), ...(r.taxi || [])]
+                            .filter(pid => playerAsset(pid)?.pos === 'QB').length;
+                    });
+                    return window.WrQbTradeRulesV2.build({
+                        ...rulesCtx,
+                        ageOf: pid => playersData[pid]?.age || null,
+                        isScarce: pid => {
+                            const r = allRosters.find(x => [...(x.players || []), ...(x.reserve || []), ...(x.taxi || [])].map(String).includes(String(pid)));
+                            return r ? (qbCountByRoster[r.roster_id] || 0) <= 2 : false;
+                        },
+                    });
+                }
+                if (!window.WrQbTradeRules?.build) return null;
+                return window.WrQbTradeRules.build(rulesCtx);
             } catch (e) { return null; }
         }, [playersData, currentLeague, allRosters, timeRecomputeTs]);
 
@@ -1794,11 +2196,17 @@
             const overpayPenalty = Math.max(0, Math.abs(Math.min(0, userGainPct)) - (tuning.maxOverpayPct || 0.12)) * 125;
             const cautionPenalty = (deal.caution || []).length * 3;
             const fairValueBonus = Math.max(0, 18 - Math.abs(userGainPct) * 55);
+            // LAB v2: a deal that raises my actual starting lineup outranks a
+            // pure value swap; consolidation gets a nudge for freeing a spot.
+            const labLiftBonus = Math.min(30, (deal.receivePlayers || []).reduce((s, p) => s + labEffLift(p).lift, 0) * 6);
+            const labConsolidationBonus = deal.type === 'Consolidation' ? 6 : 0;
             return Math.round(
                 deal.likelihood * 1.4
                 + deal.fit * 0.42
                 + deal.confidenceScore * 0.46
                 + fairValueBonus
+                + labLiftBonus
+                + labConsolidationBonus
                 - lowAcceptancePenalty
                 - greedPenalty
                 - overpayPenalty
@@ -1865,16 +2273,49 @@
             return 'Draft capital and FAAB shape the deal more than roster fit.';
         }
 
+        // ═══ LAB17 — OWNER DNA TAXES DRIVE THE DEAL (owner order 2026-09-05) ═══
+        // The designation that counts is the owner's: his manual input when he
+        // set one, the app's weighted read from trade history when he didn't.
+        // The taxes then hit BOTH dials — acceptance (psych taxes, as before,
+        // now on the effective DNA) and PRICE: a Fleecer or Dominator inflates
+        // the ask on everything he owns until many deals are cost-prohibitive
+        // ("dealing with Fleecers or Dominators, you never win"), while the
+        // Desperate, Stalwarts and Acceptors are the rooms worth working.
+        // conf scales how hard the tax bites: a manual designation is the
+        // owner's word — full weight. The app's read carries its own
+        // confidence (22-92), so a thin two-trade hunch taxes lightly and a
+        // proven pattern taxes in full.
+        function labEffDna(partner) {
+            const manual = ownerDna[partner?.ownerId];
+            if (manual && manual !== 'NONE') return { key: manual, conf: 1 };
+            try {
+                const ai = computeWeightedDNA(partner?.rosterId);
+                if (ai?.key) return { key: ai.key, conf: Math.max(0, Math.min(1, (ai.confidence || 0) / 100)) };
+            } catch (e) { /* no read */ }
+            return { key: 'NONE', conf: 0 };
+        }
+        function labEffDnaKey(partner) { return labEffDna(partner).key; }
+        // ask = what buying from this room really costs (his tax inflates the
+        // sticker); bid = what he'll really pay for my assets. Sell-side bids
+        // below fair are never modeled — I don't take less, his acceptance
+        // taxes kill the row instead.
+        const LAB17_DNA_PRICE = {
+            FLEECER: { ask: 1.18, bid: 0.85 },
+            DOMINATOR: { ask: 1.25, bid: 0.82 },
+            STALWART: { ask: 1.06, bid: 0.97 },
+            ACCEPTOR: { ask: 0.95, bid: 1.05 },
+            DESPERATE: { ask: 0.95, bid: 1.08 },
+            NONE: { ask: 1.0, bid: 1.0 },
+        };
+
         function buildDeal(partner, input) {
             if (!partner || !myAssessment) return null;
-            const dnaKey = ownerDna[partner.ownerId] || 'NONE';
+            const labDnaRead = labEffDna(partner);
+            const dnaKey = labDnaRead.key;
             const dna = DNA_TYPES[dnaKey] || DNA_TYPES.NONE;
             const posture = calcOwnerPosture(partner, dnaKey);
-            const taxes = calcPsychTaxes(myAssessment, partner, dnaKey, posture);
+            const psychTaxesBase = calcPsychTaxes(myAssessment, partner, dnaKey, posture);
             const grudge = calcGrudgeTax(myAssessment.ownerId, partner.ownerId, grudges, dnaKey);
-            const acceptanceTaxes = grudge.total
-                ? [...taxes, { name:'Grudge Tax', impact:grudge.total, type: grudge.total > 0 ? 'BONUS' : 'TAX' }]
-                : taxes;
             const givePlayers = input.givePlayers || [];
             const receivePlayers = input.receivePlayers || [];
             const givePicks = input.givePicks || [];
@@ -1884,6 +2325,54 @@
             const give = sideBreakdown(givePlayers, givePicks, giveFaab);
             const receive = sideBreakdown(receivePlayers, receivePicks, receiveFaab);
             if (give.total <= 0 || receive.total <= 0) return null;
+            // ═══ LAB21 — DNA TAXES ACTIVATED IN ACCEPTANCE (owner order
+            // 2026-09-05: "address the Owner DNA taxes and activate them in
+            // the chances-of-acceptance process"). The old engine's fleecer
+            // endowment was a token -5; these bite at designation strength
+            // (conf 1.0 for the owner's own tags, scaled for app reads).
+            const labDnaTaxes = [];
+            const _c21 = labDnaRead.conf;
+            if (_c21 > 0) {
+                const ppgOf = pid => labModel.ledger?.playersPpg?.[String(pid)] || 0;
+                if (dnaKey === 'FLEECER') labDnaTaxes.push({ name: 'Fleecer Premium', impact: -Math.round(20 * _c21), type: 'TAX', desc: 'Only accepts when he is clearly winning the deal.' });
+                if (dnaKey === 'DOMINATOR') labDnaTaxes.push({ name: 'Dominator Ego', impact: -Math.round(25 * _c21), type: 'TAX', desc: 'Must visibly win the trade or he walks.' });
+                if (dnaKey === 'STALWART' && receivePlayers.length) labDnaTaxes.push({ name: 'Stalwart Attachment', impact: -Math.round(10 * _c21), type: 'TAX', desc: 'Emotionally slow to move his own players.' });
+                if (dnaKey === 'ACCEPTOR' && (givePicks.length || givePlayers.some(p => (Number(p.age ?? playersData?.[p.pid]?.age) || 99) <= 25))) {
+                    labDnaTaxes.push({ name: 'Acceptor Appetite', impact: Math.round(10 * _c21), type: 'BONUS', desc: 'Happily converts current assets into picks and youth.' });
+                }
+                if (dnaKey === 'DESPERATE' && givePlayers.some(p => ppgOf(p.pid) >= 8)) {
+                    labDnaTaxes.push({ name: 'Desperation Buy', impact: Math.round(15 * _c21), type: 'BONUS', desc: 'Overpays for immediate starters.' });
+                }
+            }
+            // Starter Grip (the Hendrickson law): no owner hands over one of
+            // his QUALITY STARTERS for change — the return must carry a
+            // near-starter-caliber player or a premium pick (round 1-2).
+            // Fleecers and dominators grip hardest; sellers loosen, never let go.
+            const obTheirs21 = labBrain?.byRosterId?.[String(partner.rosterId)];
+            const theirQualSet21 = new Set(Object.values(obTheirs21?.qualityPids || {}).flat().map(String));
+            const gripStarters = receivePlayers.filter(p => theirQualSet21.has(String(p.pid)));
+            let gripTax = null;
+            if (gripStarters.length) {
+                const topGrip = Math.max(...gripStarters.map(p => p.value || 0));
+                const starterCaliberBack = givePlayers.some(p => (p.value || 0) >= topGrip * 0.8)
+                    || givePicks.some(pk => (pk.round || 9) <= 2);
+                if (!starterCaliberBack) {
+                    const gripMult = (dnaKey === 'FLEECER' || dnaKey === 'DOMINATOR') ? 1.3
+                        : dnaKey === 'STALWART' ? 1.15
+                        : dnaKey === 'ACCEPTOR' ? 0.5
+                        : dnaKey === 'DESPERATE' ? 0.6 : 1.0;
+                    gripTax = { name: 'Starter Grip', impact: -Math.round(25 * gripMult), type: 'TAX', desc: `They'd be handing over a starting ${gripStarters[0].pos} without a starter-caliber player or premium pick back.` };
+                    labDnaTaxes.push(gripTax);
+                }
+            }
+            // The lab DNA taxes bite AFTER the base formula (see below), not
+            // inside it — the base likelihood clamps at 95, so a deep
+            // value-overpay saturates it and swallows any tax fed in early
+            // (the Hendrickson-at-95% bug). Display still lists every tax.
+            const taxes = [...psychTaxesBase, ...labDnaTaxes];
+            const acceptanceTaxes = grudge.total
+                ? [...psychTaxesBase, { name:'Grudge Tax', impact:grudge.total, type: grudge.total > 0 ? 'BONUS' : 'TAX' }]
+                : psychTaxesBase;
             const pieceCount = givePlayers.length + receivePlayers.length + givePicks.length + receivePicks.length;
             // Acceptance is priced on MARKET totals (liquidity-adjusted): a side
             // stuffed with mid-tier IDP value doesn't buy what raw DHQ says it does.
@@ -1903,7 +2392,10 @@
                     userGain,
                 })
                 : null;
-            const likelihood = Math.round(Math.max(5, Math.min(95, baseLikelihood + (behaviorFit?.acceptanceDelta || 0))));
+            // LAB21: DNA taxes land at full designation strength on the FINAL
+            // number — "the Fleecer tax alone would kill the deal."
+            const labDnaTaxTotal = labDnaTaxes.reduce((s, t) => s + (Number(t.impact) || 0), 0);
+            const likelihood = Math.round(Math.max(3, Math.min(95, Math.max(5, Math.min(95, baseLikelihood + (behaviorFit?.acceptanceDelta || 0))) + labDnaTaxTotal)));
             const fit = myAssessment ? calcComplementarity(myAssessment, partner) : 0;
             const valueScore = Math.max(0, Math.min(100, 50 + (userGain / Math.max(give.total, receive.total, 1)) * 120));
             const confidenceScore = Math.round(Math.max(0, Math.min(100, likelihood * 0.45 + fit * 0.25 + valueScore * 0.30 + (behaviorFit?.scoreDelta || 0))));
@@ -1921,6 +2413,13 @@
             const _recvDisc = receive.total > 0 && receive.market < receive.total * 0.85;
             if (_giveDisc || _recvDisc) caution.push('Priced at market — IDP/K trade discount applied');
             if (likelihood < 40) caution.push('Low acceptance odds');
+            // LAB21: the grip is named on the card — this is the Hendrickson
+            // rule made visible.
+            if (gripTax) caution.push(`They'd be giving up a starting ${gripStarters[0].pos} — ${dnaKey === 'FLEECER' || dnaKey === 'DOMINATOR' ? `${dna.label.replace('The ', '')} rooms don't do that cheap` : 'that costs real assets, not change'}`);
+            // LAB17: the tax is named on the card — an owner should see WHY
+            // this room runs expensive before he opens negotiations.
+            if (dnaKey === 'FLEECER') caution.push(`Fleecer room — ask priced +${Math.round(18 * labDnaRead.conf)}%, you rarely win here`);
+            if (dnaKey === 'DOMINATOR') caution.push(`Dominator room — ask priced +${Math.round(25 * labDnaRead.conf)}%, he has to "win" the deal`);
             if (posture.key === 'LOCKED') caution.push('Locked roster');
             if (userGain < -Math.max(500, receive.total * 0.12)) caution.push('Meaningful overpay');
             if (!swing.includes('need') && !swing.includes('gap')) caution.push('Weak roster-fit signal');
@@ -1928,10 +2427,49 @@
             if (behaviorProfile?.inferences?.includes('low-liquidity')) caution.push('Low-liquidity partner');
             const mktGap = side => side.total > 0 ? (side.total - (side.market ?? side.total)) / side.total : 0;
             if (mktGap(give) > 0.15 || mktGap(receive) > 0.15) caution.push('IDP/K priced to market, not points');
-            const whyAccept = input.whyAccept || (partner.needs?.length
+            // LAB: pace-language Whys OUTRANK the finder's canned lines — the
+            // add* generators stuff generic copy into input.whyAccept, and the
+            // whole point of the lab is that the Why speaks the pace and the
+            // partner's behavior. With no model loaded, exact b98 copy renders.
+            const labWhy = labWhyForDeal(partner, input) || {};
+            const whyAccept = labWhy.accept || input.whyAccept || (partner.needs?.length
                 ? `They need ${partner.needs.slice(0, 2).map(n => n.pos).join('/')} and this gives them usable assets.`
                 : `Their ${posture.label.toLowerCase()} posture keeps them open to a clean value offer.`);
-            const whyYou = input.whyYou || (userGain >= 0
+            // ═══ LAB15 GATE: strategy-scaled net-points law ═══
+            const _net = labNetPts(givePlayers, receivePlayers);
+            const _sellForPicks = !(receivePlayers || []).length && (input.receivePicks || []).length > 0;
+            const _lp = labPolarity();
+            if (_net != null) {
+                const youngBack = (receivePlayers || []).some(p => (Number(p.age ?? playersData?.[p.pid]?.age) || 99) <= 25)
+                    || (input.receivePicks || []).some(pk => (pk.round || 9) <= 2);
+                if (_lp.pol === 'win_now') {
+                    if (_sellForPicks) return; // a win-now team never sells starters for futures
+                    if ((receivePlayers || []).length && _net <= 0.05) return; // must ADD points
+                } else if (_lp.pol === 'compete') {
+                    if ((receivePlayers || []).length && _net <= 0.05) return; // the ruled hard gate
+                } else if (_lp.pol === 'retool') {
+                    if ((receivePlayers || []).length && _net <= 0.05 && !youngBack) return;
+                } else if (_lp.pol === 'rebuild') {
+                    const allAging = (receivePlayers || []).length && (receivePlayers || []).every(p => (Number(p.age ?? playersData?.[p.pid]?.age) || 0) >= 27);
+                    if (allAging) return; // rebuilders don't buy aging vets
+                }
+            }
+            // ═══ LAB16 CURRENCY LAW (owner ruling 2026-09-05): "my number
+            // one rule is don't give away players — give away draft picks."
+            // On a win-now or compete plan, a skilled offensive player never
+            // leaves for defenders unless EVERY defender coming back is
+            // absolutely elite (the Parsons/Garrett top-5 tier the market
+            // already prices at face). Defense gets bought with picks, FAAB,
+            // and defensive surplus — the offense is not the wallet.
+            if (_lp.pol === 'win_now' || _lp.pol === 'compete') {
+                const _offP = p => p && (p.pos === 'QB' || p.pos === 'RB' || p.pos === 'WR' || p.pos === 'TE');
+                const _defP = p => p && (p.pos === 'DL' || p.pos === 'LB' || p.pos === 'DB');
+                const _recvDef = (receivePlayers || []).filter(_defP);
+                if ((givePlayers || []).some(_offP) && _recvDef.length && !(receivePlayers || []).some(_offP)) {
+                    if (!_recvDef.every(p => (idpRankByPid.get(String(p.pid)) || 999) <= 5)) return;
+                }
+            }
+            const whyYou = labWhy.you || input.whyYou || (userGain >= 0
                 ? `You gain ${Math.abs(Math.round(userGain)).toLocaleString()} DHQ while improving deal fit.`
                 : `You pay ${Math.abs(Math.round(userGain)).toLocaleString()} DHQ for a roster or window upgrade.`);
             const dealId = input.id || `deal_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -1978,6 +2516,7 @@
                 givePicks,
                 receivePicks,
                 giveFaab,
+                netPts: _net, sellForPicks: _sellForPicks, polarity: _lp.pol,
                 receiveFaab,
                 totals: { give, receive },
                 userGain,
@@ -2017,7 +2556,9 @@
             // remaining budget can't cover the whole thing the deal carries no
             // FAAB at all — never clipped down to a token $37 sweetener.
             const faabFor = (g, budget) => {
-                if (g <= 100 || g > 600) return 0;
+                // LAB12: FAAB rides only when it closes a REAL gap — the $100
+                // confetti on every card (owner note 2026-09-05) is retired.
+                if (g < 150 || g > 600) return 0;
                 const amt = Math.ceil(g / FAAB_RATE / 25) * 25;
                 return amt <= Math.min(budget || 0, 300) ? amt : 0;
             };
@@ -2051,6 +2592,48 @@
 
         function addCandidate(candidates, partner, input) {
             if (crossClassUnrealistic(input)) return;
+            // LAB3 deal-sanity gate. Picks COUNT in the math now — a mid
+            // pick riding along no longer smuggles a bad swap past the rules
+            // (Garrett-for-a-safety "plus a 4th" is still Garrett for a safety).
+            if (labModel.ledger && ((input.givePlayers || []).length || ((input.givePicks || []).length && (input.receivePlayers || []).length))) {
+                const rPl = input.receivePlayers || [], gPl = input.givePlayers || [];
+                const rPk = input.receivePicks || [], gPk = input.givePicks || [];
+                const inVal = rPl.reduce((t, p) => t + (p.value || 0), 0) + rPk.reduce((t, p) => t + (p.value || 0), 0) + (input.receiveFaab || 0);
+                const outVal = gPl.reduce((t, p) => t + (p.value || 0), 0) + gPk.reduce((t, p) => t + (p.value || 0), 0) + (input.giveFaab || 0);
+                const clearValueWin = inVal > outVal * 1.15;
+                const bestGive = Math.max(0, ...gPl.map(p => p.value || 0));
+                const bestRecvPlayer = Math.max(0, ...rPl.map(p => p.value || 0));
+                const bestRecvPick = Math.max(0, ...rPk.map(p => p.value || 0));
+                if (!clearValueWin) {
+                    if (rPl.length) {
+                        // Shelf-life rule (thesis Pillar 1): at fair price the
+                        // incoming side must include somebody with a future.
+                        // Kills every "two pieces for a 33-year-old" variant,
+                        // whichever lane built it.
+                        if (rPl.every(p => p.pos !== 'QB' && labAgeFactor(p) <= 0.25)) return;
+                        // Star parity: the incoming headliner (player or a
+                        // premium pick) must be in my best piece's class.
+                        const headliner = Math.max(bestRecvPlayer, bestRecvPick);
+                        if (bestGive >= 2500 && headliner < bestGive * 0.9) return;
+                        // Elite law: an elite piece only moves for near-elite
+                        // return — lineup math never justifies Garrett for a
+                        // good safety, whatever the spreadsheet says.
+                        if (bestGive >= 3400 && Math.max(bestRecvPlayer, bestRecvPick) < bestGive * 0.95) return;
+                        // Superflex law: a startable QB never leaves without a
+                        // QB or a premium pick coming back.
+                        const qbOut = gPl.some(p => p.pos === 'QB' && (p.value || 0) >= 1500);
+                        const qbBack = rPl.some(p => p.pos === 'QB') || bestRecvPick >= 1000;
+                        if (qbOut && !qbBack) return;
+                        // FAAB on top of a swap demands a substantial gain.
+                        const need = (input.giveFaab || 0) > 0 ? 2.0 : 0.5;
+                        if (labNetDelta(gPl, rPl) < need) return;
+                    } else if (bestGive >= 3400 && bestRecvPick < 1000) {
+                        // Selling an elite for change — only a premium pick
+                        // headline makes that a real conversation.
+                        return;
+                    }
+                }
+            }
             // Startable-QB packages must satisfy the owner's composition
             // rules (1sts / QB swaps / elite pieces / multi-starter bundles).
             if (qbTradeRules && qbTradeRules.violates(input)) return;
@@ -2152,22 +2735,75 @@
             const lowRatio = 0.90 - aggression * 0.18;
             const highRatio = 1.08 + aggression * 0.24;
 
+            // LAB17: this partner's DNA sets the real exchange rate. Buying
+            // from him costs sticker × ask (a Fleecer's +18% and a Dominator's
+            // +25% price many rooms out entirely); selling to him fetches
+            // sticker × bid, but never below fair — I don't model taking less,
+            // his acceptance taxes bury those rows instead.
+            const labDna17 = labEffDna(partner);
+            const labDnaPrice17 = LAB17_DNA_PRICE[labDna17.key] || LAB17_DNA_PRICE.NONE;
+            const labDnaAsk = 1 + (labDnaPrice17.ask - 1) * labDna17.conf;
+            const labDnaBid = Math.max(1, 1 + (labDnaPrice17.bid - 1) * labDna17.conf);
+
             const tp = alexSettings.tradePriority || {};
             const priPos = Object.entries(tp.positions || {}).filter(([, v]) => v).map(([k]) => k);
             const priPickYears = Object.entries(tp.picks || {}).filter(([, v]) => v).map(([k]) => k);
             const priFaab = tp.faab !== false;
 
             const myNeedPos = (myAssessment?.needs || []).map(n => n.pos);
-            const effectiveNeedPos = [...new Set([...myNeedPos, ...priPos, ...tuning.targetPositions])];
+            // LAB: the ledger's soft groups join the shopping list — the finder
+            // hunts what my optimal lineup is actually thin in (rank vs the
+            // league), alongside the legacy value-count needs read.
+            const labSoftPos = (labModel.ledger?.teams?.[myRosterId]?.softDetail || [])
+                .flatMap(sd => window.WrLabPointsLedger?.GROUP_POSITIONS?.[sd.group] || []);
+            const effectiveNeedPos = [...new Set([...myNeedPos, ...priPos, ...tuning.targetPositions, ...labSoftPos])];
+            // LAB16 need-priority law (owner ruling 2026-09-05): when needs
+            // tie — say DL and RB — the offensive hole gets hunted first,
+            // every time. Defensive needs stay on the list; they wait their
+            // turn and get paid in picks and FAAB, not offense.
+            const LAB16_OFF = new Set(['QB', 'RB', 'WR', 'TE']);
+            const labNeedRank = pos => {
+                const i = effectiveNeedPos.indexOf(pos);
+                return i < 0 ? 99 : (LAB16_OFF.has(pos) ? 0 : 40) + i;
+            };
             const mySurplusPos = myAssessment?.strengths || [];
             const theirNeedPos = (partner.needs || []).map(n => n.pos);
             const myPlayers = assetsForRoster(myRosterObj).filter(p => !isUntouchableAsset(p, tuning));
             const theirPlayers = assetsForRoster(theirRosterObj);
-            const myChips = myPlayers.filter(p =>
+            // LAB12 one-brain sell law (owner order 2026-09-05): a position
+            // where MY quality-starter count is short never pays for a trade
+            // and never gets shopped — whatever the partner needs. That kills
+            // the Henry-for-a-2nd and Andrews sales the points-rank voice
+            // used to propose while the quality voice said RB/TE were thin.
+            const obMine = labBrain?.byRosterId?.[String(myRosterId)] || null;
+            const labNeedSet = new Set((obMine?.needs || []).map(n => n.pos));
+            // LAB12 handcuff law: my own starter's direct backup is insurance,
+            // not currency (the Justice Hill rule — the formula prices him ON
+            // the fact he backs up my RB1; selling him defeats the point).
+            const labIsMyHandcuff = p => {
+                if (p.pos !== 'RB' && p.pos !== 'QB') return false;
+                const pd = playersData[p.pid];
+                if (!pd || Number(pd.depth_chart_order) !== 2 || !pd.team) return false;
+                return (myRosterObj?.players || []).some(sid => {
+                    const sp = playersData[sid];
+                    return sp && sp.team === pd.team && normPos(sp.position) === p.pos && Number(sp.depth_chart_order) === 1;
+                });
+            };
+            // LAB12b: a QUALITY STARTER only sells from true surplus — at a
+            // room sitting exactly at its template need, selling him CREATES
+            // the shortage (the Andrews/TE and Humphrey/DB leak). Depth
+            // pieces at those rooms still trade fine.
+            const labQualPids = obMine?.qualityPids || {};
+            const labQualCnt = obMine?.qualityCount || {};
+            const labTmpl = labBrain?.template || {};
+            const labIsQualityStarter = p => (labQualPids[p.pos] || []).includes(String(p.pid));
+            const labSellOk = p => !labNeedSet.has(p.pos) && !labIsMyHandcuff(p)
+                && !(labIsQualityStarter(p) && (labQualCnt[p.pos] || 0) <= (labTmpl[p.pos] || 0));
+            const myChips = myPlayers.filter(p => labSellOk(p) && (
                 tuning.sellPositions.has(p.pos)
                 || mySurplusPos.includes(p.pos)
                 || !myNeedPos.includes(p.pos)
-            );
+            ));
             const allTheirPicks = pickAssetsForOwner(partner.ownerId);
             const allMyPicks = pickAssetsForOwner(myAssessment?.ownerId);
             const theirPicks = priPickYears.length ? allTheirPicks.filter(pk => priPickYears.some(yr => pk.label?.includes(yr))) : allTheirPicks;
@@ -2177,16 +2813,21 @@
             const focusAsset = focusPid ? playerAsset(focusPid) : null;
             const theirPlayerIds = new Set([...(theirRosterObj.players || []), ...(theirRosterObj.reserve || []), ...(theirRosterObj.taxi || [])].map(String));
             const myPlayerIds = new Set([...(myRosterObj.players || []), ...(myRosterObj.reserve || []), ...(myRosterObj.taxi || [])].map(String));
+            // LAB v2 (needs-first): candidates are ranked by how much they'd
+            // raise MY lineup (lift over my weakest starter in a group they
+            // fill), with sticker value only breaking ties. A mid-value LB who
+            // starts for me now outranks a shiny name who'd ride the bench.
             const targetPool = focusAsset && theirPlayerIds.has(String(focusPid))
                 ? [focusAsset]
                 : theirPlayers.filter(p => {
                     if (mode === 'fillNeed') return effectiveNeedPos.length ? effectiveNeedPos.includes(p.pos) : true;
                     if (mode === 'acquire') return priPos.length || tuning.targetPositions.size ? effectiveNeedPos.includes(p.pos) : true;
                     return true;
-                }).slice(0, 12);
+                }).sort((a, b) => labNeedRank(a.pos) - labNeedRank(b.pos) || labEffLift(b).lift - labEffLift(a).lift || (b.value || 0) - (a.value || 0)).slice(0, 12);
             const shopPool = focusAsset && myPlayerIds.has(String(focusPid)) && !isUntouchableAsset(focusAsset, tuning)
                 ? [focusAsset]
                 : myPlayers.filter(p => {
+                    if (!labSellOk(p)) return false; // LAB12: need positions + my handcuffs never shop
                     if (mode === 'sellSurplus' || mode === 'shop' || mode === 'picks') {
                         return tuning.sellPositions.has(p.pos) || mySurplusPos.includes(p.pos) || theirNeedPos.includes(p.pos);
                     }
@@ -2226,15 +2867,36 @@
                     for (let i = 0; i < Math.min(pickPool.length, 5); i++) {
                         for (let j = i + 1; j < Math.min(pickPool.length, 5); j++) push([], [pickPool[i], pickPool[j]]);
                     }
+                    // LAB16: "multiple picks if necessary" — three-pick
+                    // packages reach a real starter's price without a
+                    // single player leaving the roster.
+                    if (opts.deepPicks) {
+                        const pn = Math.min(pickPool.length, 6);
+                        for (let i = 0; i < pn; i++) for (let j = i + 1; j < pn; j++) for (let k = j + 1; k < pn; k++) {
+                            push([], [pickPool[i], pickPool[j], pickPool[k]]);
+                        }
+                    }
                 }
                 return combos.sort((a, b) => Math.abs(a.market - targetValue) - Math.abs(b.market - targetValue) || a.pieces - b.pieces || b.market - a.market);
             }
 
             function addAcquireTarget(target, playerPool, pickPool, reasonPrefix = '') {
-                const targetMkt = assetMarketValue(target);
-                const packages = sideCombos(playerPool, pickPool, targetMkt, { allowPickOnly: true });
-                packages
-                    .filter(pkg => pkg.market >= targetMkt * lowRatio && pkg.market <= targetMkt * highRatio)
+                const targetMkt = assetMarketValue(target) * labDnaAsk; // LAB17: his tax is in the price
+                const packages = sideCombos(playerPool, pickPool, targetMkt, { allowPickOnly: true, deepPicks: true });
+                const banded = packages
+                    .filter(pkg => pkg.market >= targetMkt * lowRatio && pkg.market <= targetMkt * highRatio);
+                // LAB16 (owner ruling 2026-09-05): "don't give away players —
+                // give away draft picks." On a win-now/compete plan, fair
+                // packages re-rank picks-first: pick-only offers lead,
+                // pick-heavy next, paying with players is the last resort.
+                const _pol16 = labPolarity().pol;
+                if (_pol16 === 'win_now' || _pol16 === 'compete') {
+                    const pickShare = pkg => pkg.market > 0 ? pkg.picks.reduce((s, pk) => s + (pk.value || 0), 0) / pkg.market : 0;
+                    banded.sort((a, b) => ((b.players.length === 0) - (a.players.length === 0))
+                        || pickShare(b) - pickShare(a)
+                        || Math.abs(a.market - targetMkt) - Math.abs(b.market - targetMkt));
+                }
+                banded
                     .slice(0, 4)
                     .forEach(pkg => {
                         const faab = balanceFaab(partner, pkg.players, [target], pkg.picks, []);
@@ -2262,9 +2924,10 @@
             // from builder totals, print "undefined" in copy, and invert the
             // pick-collector/spender acceptance deltas in evaluateBehaviorTradeFit.
             function addAcquirePickTarget(pick, playerPool, pickPool, reasonPrefix = '') {
-                const packages = sideCombos(playerPool, pickPool, pick.value, { allowPickOnly: true });
+                const pickAskVal = pick.value * labDnaAsk; // LAB17: his tax is in the price
+                const packages = sideCombos(playerPool, pickPool, pickAskVal, { allowPickOnly: true });
                 packages
-                    .filter(pkg => pkg.market >= pick.value * lowRatio && pkg.market <= pick.value * highRatio)
+                    .filter(pkg => pkg.market >= pickAskVal * lowRatio && pkg.market <= pickAskVal * highRatio)
                     .slice(0, 4)
                     .forEach(pkg => {
                         const faab = balanceFaab(partner, pkg.players, [], pkg.picks, [pick]);
@@ -2288,11 +2951,12 @@
             }
 
             function addShopPickAsset(pick, returnPlayers, returnPicks, reasonPrefix = '') {
-                const returns = sideCombos(returnPlayers, returnPicks, pick.value, { allowPickOnly: true });
+                const pickBidVal = pick.value * labDnaBid; // LAB17: a desperate/acceptor buyer pays up
+                const returns = sideCombos(returnPlayers, returnPicks, pickBidVal, { allowPickOnly: true });
                 const returnLow = 0.72 - aggression * 0.08;
                 const returnHigh = 1.04 + aggression * 0.18;
                 returns
-                    .filter(pkg => pkg.market >= pick.value * returnLow && pkg.market <= pick.value * returnHigh)
+                    .filter(pkg => pkg.market >= pickBidVal * returnLow && pkg.market <= pickBidVal * returnHigh)
                     .slice(0, 4)
                     .forEach(pkg => {
                         const faab = balanceFaab(partner, [], pkg.players, [pick], pkg.picks);
@@ -2312,7 +2976,7 @@
             }
 
             function addShopAsset(asset, returnPlayers, returnPicks, reasonPrefix = '') {
-                const assetMkt = assetMarketValue(asset);
+                const assetMkt = assetMarketValue(asset) * labDnaBid; // LAB17: a desperate/acceptor buyer pays up
                 const returns = sideCombos(returnPlayers, returnPicks, assetMkt, { allowPickOnly: true });
                 const returnLow = mode === 'picks' ? 0.50 : 0.72 - aggression * 0.08;
                 const returnHigh = 1.04 + aggression * 0.18;
@@ -2360,15 +3024,97 @@
                 // Third-party pick vs a different pinned partner can't happen —
                 // finderEffectivePartnerId pins the pick's owner; guard stays silent.
             } else if (mode === 'acquire' || mode === 'fillNeed') {
-                const givePool = myChips.length ? myChips : myPlayers;
-                targetPool.slice(0, 8).forEach(target => addAcquireTarget(target, givePool, myPicks));
+                // LAB v2: payment comes from what I can spare — bench pieces
+                // (outside my optimal lineup) lead, then chips from groups I
+                // already win. Starters in thin groups pay last.
+                const labComp = labComposition();
+                // LAB4 give law: fringe bodies and shortage positions never pay.
+                // LAB12: the one brain's quality-count needs (and my own
+                // starters' handcuffs) join the wall — the blueprint count
+                // alone let thin-by-quality rooms keep paying.
+                const labGiveOk = p => !labIsFringe(p) && !(labComp?.shortage?.has(p.pos)) && labSellOk(p);
+                const labMy = labModel.ledger?.teams?.[myRosterId];
+                const labBenchFirst = (a, b) => {
+                    const sp = labMy?.starterPids || [];
+                    const aB = sp.includes(String(a.pid)) ? 1 : 0;
+                    const bB = sp.includes(String(b.pid)) ? 1 : 0;
+                    if (aB !== bB) return aB - bB; // bench (0) before starters (1)
+                    return (b.value || 0) - (a.value || 0);
+                };
+                const givePool = (myChips.length ? myChips : myPlayers).filter(labGiveOk).sort(labBenchFirst);
+                // LAB3: never pay with a bigger star than the player coming
+                // back — Garrett can't be change for a linebacker. Per target,
+                // payment pieces are capped near the target's own value; if
+                // nothing fits, picks do the talking.
+                // LAB4 buy law: no fringe targets, and no buying MORE bodies
+                // at a position I'm already stacked at — that group's fix is
+                // the same-position two-for-one below.
+                // LAB16: a one-brain NEED position stays buyable even when the
+                // body count reads "stacked" — I own 8 RB bodies but only 2 of
+                // 3 quality starters, and the ratified spec says quality is
+                // the voice that counts. Count-surplus only blocks positions
+                // the brain does NOT need.
+                targetPool.filter(t => t.pos !== 'K' && !labIsFringe(t) && !(labComp?.surplus?.has(t.pos) && !labNeedSet.has(t.pos)) && !labUntouchableForPartner(partner, t)).slice(0, 8).forEach(target => {
+                    const tvCap = ((target.value || 0)) * 1.05;
+                    addAcquireTarget(target, givePool.filter(p => (p.value || 0) <= tvCap), myPicks);
+                });
+                // LAB v2 consolidation lane: two of my bench pieces for one
+                // player who genuinely upgrades a starting slot. The price
+                // carries a quantity premium — the partner is absorbing a
+                // roster spot (the thesis's consolidation penalty), so my two
+                // pieces must out-value the one coming back.
+                if (labMy && labModel.ledger?.playersPpg) {
+                    const bench = givePool.filter(p => !(labMy.starterPids || []).includes(String(p.pid)));
+                    theirPlayers
+                        .filter(p => p.pos !== 'K' && !labIsFringe(p) && !labUntouchableForPartner(partner, p))
+                        .filter(p => p.pos === 'QB' || !(Number(p.age != null ? p.age : playersData?.[p.pid]?.age) >= 31))
+                        .map(p => ({ p, li: labEffLift(p) }))
+                        .filter(x => x.li.lift >= 2.5)
+                        .sort((a, b) => b.li.lift - a.li.lift)
+                        .slice(0, 6)
+                        .forEach(({ p: target }) => {
+                            // LAB4: at a surplus position the ONLY legal buy is
+                            // the same-position two-for-one — count goes down,
+                            // the starter gets better (the LB-room play).
+                            const samePosOnly = labComp?.surplus?.has(target.pos);
+                            // LAB3: price on RAW value — the partner values his
+                            // starter at sticker, not at the IDP trade discount
+                            // (junk was "affording" Hendrickson at market).
+                            const tv = target.value ?? 0;
+                            if (tv <= 0) return;
+                            // In-kind 2-for-1s trade depth the partner can use
+                            // at the same spot — near-even is honest there.
+                            const lo = tv * (samePosOnly ? 0.95 : 1.02), hi = tv * (1.25 + aggression * 0.15);
+                            let best = null;
+                            // Real pieces only — no throw-ins under 350, and a
+                            // surplus-position target is paid in kind.
+                            const cred = bench.filter(p => (p.value || 0) >= 350 && (!samePosOnly || p.pos === target.pos));
+                            const n = Math.min(cred.length, 14);
+                            for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+                                const sum = (cred[i].value || 0) + (cred[j].value || 0);
+                                if (sum < lo || sum > hi) continue;
+                                if (!best || sum < best.sum) best = { a: cred[i], b: cred[j], sum };
+                            }
+                            if (!best) return;
+                            addCandidate(candidates, partner, {
+                                mode: 'consolidate', type: 'Consolidation',
+                                givePlayers: [best.a, best.b], receivePlayers: [target],
+                                givePicks: [], receivePicks: [], giveFaab: 0, receiveFaab: 0,
+                            });
+                        });
+                }
                 if (candidates.length < 3) {
-                    theirPlayers.slice(0, 14).forEach(target => addAcquireTarget(target, myPlayers, myPicks.length ? myPicks : allMyPicks, 'Fallback board: '));
+                    // LAB3: the fallback board shops by lift too — raw value
+                    // order made a thin partner's aging headliner the default
+                    // target (the Davante Adams fossil).
+                    theirPlayers.filter(t => t.pos !== 'K' && !labIsFringe(t) && !(labComp?.surplus?.has(t.pos) && !labNeedSet.has(t.pos)) && !labUntouchableForPartner(partner, t))
+                        .sort((a, b) => labNeedRank(a.pos) - labNeedRank(b.pos) || labEffLift(b).lift - labEffLift(a).lift || (b.value || 0) - (a.value || 0))
+                        .slice(0, 14).forEach(target => addAcquireTarget(target, myPlayers.filter(labGiveOk), myPicks.length ? myPicks : allMyPicks, 'Fallback board: '));
                 }
             } else if (mode === 'shop' || mode === 'sellSurplus' || mode === 'picks') {
                 shopPool.slice(0, 8).forEach(asset => addShopAsset(asset, theirPlayers, theirPicks));
                 if (candidates.length < 3) {
-                    myPlayers.slice(0, 12).forEach(asset => addShopAsset(asset, theirPlayers, allTheirPicks, 'Fallback board: '));
+                    myPlayers.filter(labSellOk).slice(0, 12).forEach(asset => addShopAsset(asset, theirPlayers, allTheirPicks, 'Fallback board: '));
                 }
             }
 
@@ -2935,7 +3681,10 @@
             return assessments
                 .filter(a => a.rosterId !== myRosterId)
                 .map(a => {
-                    const dnaKey = ownerDna[a.ownerId] || 'NONE';
+                    // LAB17: the board runs on the effective designation —
+                    // the owner's input, else the app's weighted read.
+                    const dnaRead = labEffDna(a);
+                    const dnaKey = dnaRead.key;
                     const dna = DNA_TYPES[dnaKey] || DNA_TYPES.NONE;
                     const posture = calcOwnerPosture(a, dnaKey);
                     const compat = calcComplementarity(myAssessment, a);
@@ -2957,20 +3706,56 @@
                         : 0;
                     const panicScore = Math.min(8, (a.panic || 0) * 2);
                     const pickCapitalScore = Math.min(5, Math.round(pickCapital / 4200));
-                    const rawScore = compat * 0.62 + mutualNeedFit * 13 + theyHaveNeed * 10 + panicScore + pickCapitalScore + Math.min(7, tradeVol) + behaviorScore + (posture.key === 'LOCKED' ? -18 : 0);
+                    // LAB: timeline fit — a team pushing to win buys best from a
+                    // seller building for later, and vice versa; quiet owners
+                    // rarely answer. MY side of the fit comes from my declared
+                    // GM strategy (declaration wins), the rival's from behavior.
+                    const labRead = labModel.intent?.byRosterId?.[a.rosterId] || null;
+                    const labMyMode = (window.WR?.GmMode?.effects?.(leagueId) || {}).mode || 'compete';
+                    const labFit = !labRead ? 0
+                        : labRead.cls === 'caretaker' ? -10
+                        : ((labMyMode === 'win_now' || labMyMode === 'compete') && labRead.cls === 'rebuilding') ? 14
+                        : (labMyMode === 'rebuild' && labRead.cls === 'win_now') ? 14
+                        : 3;
+                    // LAB17 (owner ruling): "dealing with Fleecers or Dominators,
+                    // you never win — it's all about desperate, stalwarts or
+                    // acceptors." The DNA read moves the partner score directly.
+                    const labDnaScore = ({ FLEECER: -15, DOMINATOR: -18, STALWART: 4, ACCEPTOR: 8, DESPERATE: 10 }[dnaKey] || 0) * dnaRead.conf;
+                    const rawScore = compat * 0.62 + mutualNeedFit * 13 + theyHaveNeed * 10 + panicScore + pickCapitalScore + Math.min(7, tradeVol) + behaviorScore + labFit + labDnaScore + (posture.key === 'LOCKED' ? -18 : 0);
                     const fitCap = compat >= 80 ? 99 : compat >= 65 ? 94 : compat >= 50 ? 88 : compat >= 35 ? 78 : 68;
                     const score = Math.round(clampNum(rawScore, 0, fitCap, 0));
                     const tag = score >= 85 ? 'Attack' : score >= 68 ? 'Prime' : score >= 48 ? 'Possible' : a.panic >= 3 ? 'Monitor' : 'Long shot';
                     const tagColor = tag === 'Attack' || tag === 'Prime' ? 'var(--good)' : tag === 'Possible' ? 'var(--warn)' : tag === 'Monitor' ? 'var(--k-bb8fce, #bb8fce)' : 'var(--silver)';
                     const scoreReasons = [];
+                    const dnaSrc = ownerDna[a.ownerId] && ownerDna[a.ownerId] !== 'NONE' ? 'your designation' : `app read, ${Math.round(dnaRead.conf * 100)}% sure`;
+                    if (dnaKey === 'FLEECER' || dnaKey === 'DOMINATOR') scoreReasons.push(`${dna.label.replace('The ', '').toLowerCase()} (${dnaSrc}) — his tax makes every deal expensive`);
+                    else if (dnaKey === 'DESPERATE') scoreReasons.push(`desperate (${dnaSrc}) — overpays for immediate help`);
+                    else if (dnaKey === 'ACCEPTOR') scoreReasons.push(`acceptor (${dnaSrc}) — sells current assets for futures`);
+                    else if (dnaKey === 'STALWART') scoreReasons.push(`stalwart (${dnaSrc}) — slow but honest on fair value`);
                     if (mutualNeedFit > 0) scoreReasons.push(`your surplus matches ${mutualNeedFit} need${mutualNeedFit === 1 ? '' : 's'}`);
                     if (compat >= 60) scoreReasons.push(`${compat}% roster fit`);
                     if (behaviorTags.has('active-trader')) scoreReasons.push('active trader');
                     if (posture.key === 'LOCKED') scoreReasons.push('locked roster drag');
+                    // LAB (soft intent display, ruling C1): plain behavioral
+                    // phrasing only — never a class label, never a banner. It
+                    // LEADS the reasons line (the card shows only the first 3).
+                    if (labRead?.softLine) scoreReasons.unshift(labRead.softLine);
                     if (!scoreReasons.length) scoreReasons.push('limited roster-fit signal');
-                    return { assessment:a, dnaKey, dna, posture, compat, mutualNeedFit, theyHaveNeed, pickAssets, pickCapital, profile, behaviorProfile, behaviorScore, score, tag, tagColor, scoreReasons };
+                    return { assessment:a, dnaKey, dnaConf: dnaRead.conf, dna, posture, compat, mutualNeedFit, theyHaveNeed, pickAssets, pickCapital, profile, behaviorProfile, behaviorScore, score, tag, tagColor, scoreReasons };
                 })
-                .sort((a, b) => b.score - a.score || b.compat - a.compat);
+                .sort((a, b) => b.score - a.score || b.compat - a.compat)
+                .map((row, i, arr) => {
+                    // LAB17 debug tap: the effective DNA read per rival, so the
+                    // rig (and a curious owner in the console) can audit which
+                    // designation taxed each room.
+                    if (i === arr.length - 1) {
+                        try {
+                            window._labDbg = window._labDbg || {};
+                            window._labDbg.dnaReads = arr.map(r => ({ name: r.assessment.ownerName, dna: r.dnaKey, conf: Math.round((r.dnaConf || 0) * 100), score: r.score, tag: r.tag }));
+                        } catch (e) { /* no-op */ }
+                    }
+                    return row;
+                });
         }
 
         // ── Finder results (Phase 4b) — memoized per-partner eval + league-wide loop ──
@@ -2994,7 +3779,10 @@
         const finderEpochRef = useRef(0);
         const finderDataEpoch = useMemo(
             () => ++finderEpochRef.current,
-            [assessments, ownerDna, grudges, ownerBehaviorByRosterId, teamContextByRosterId, picksByOwner, draftSlotMaps, leagueDraftRounds]
+            // LAB: labModel joins the epoch — when the ledger or intent reads
+            // land, the partner board, deal cache and pooled scan all refresh
+            // so Whys/ordering pick the model up without a manual reload.
+            [assessments, ownerDna, grudges, ownerBehaviorByRosterId, teamContextByRosterId, picksByOwner, draftSlotMaps, leagueDraftRounds, labModel]
         );
         const partnerBoard = useMemo(() => computePartnerBoard(), [finderDataEpoch]);
         // Per-(partner, mode, focus) deal cache, invalidated wholesale on tuning/data
@@ -3116,7 +3904,10 @@
         }, [finderActive, finderPoolOn, finderPool, selectedPartner, effMode, focusPlayerPid, focusPickR?.id, finderDataEpoch, finderTuningHash]);
         const finderActionable = finderDeals.filter(deal => deal.likelihood >= finderActionFloor);
         const finderMoonshotCount = Math.max(0, finderDeals.length - finderActionable.length);
-        const finderVisibleDeals = showAllDeals ? finderDeals : finderActionable.slice(0, finderPoolOn ? 8 : 6);
+        // LAB (owner report 2026-09-05): every actionable package renders — the
+        // old top-8 cap made "14 actionable" a lie you couldn't scroll to.
+        // Moonshots alone stay behind the toggle.
+        const finderVisibleDeals = showAllDeals ? finderDeals : finderActionable;
         // Alex rec feed — once per finder-result change (pooled scans publish on
         // completion with partner:null), never as a render side effect.
         const finderPublishKey = finderActive && (!finderPoolOn || finderPool.done)
@@ -3418,12 +4209,18 @@
                             <span>Trade Finder</span>
                             <div className="tc-dhq-modebar" role="group" aria-label="Finder intent">
                                 {finderIntents.map(i => <button key={i.key} type="button" className={finderQuery.intent === i.key ? 'is-active' : ''} onClick={() => { setFinderQuery(qr => ({ ...qr, intent: i.key })); setAssetBrowserPos('ALL'); setShowAllDeals(false); }}>{i.label}</button>)}
+                                {/* LAB20: amber GM button (owner order 2026-09-05) — the plan steers the board */}
+                                <button key="gm" type="button" onClick={labOpenGmOffice} title="Open GM's Office — your plan steers this board" style={{ background: 'rgba(255,179,0,0.16)', border: '1px solid #ffb300', color: '#ffb300', fontWeight: 700 }}>GM</button>
                             </div>
                         </div>
                         <em>{intentLabel} · {finderScopeLabel}</em>
                     </div>
                     <div className="tc-dhq-panel-body" style={{ overflow: 'visible', paddingRight: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <div style={{ position: 'relative', minWidth: 0 }}>
+                        {/* LAB22 (owner order 2026-09-05): Focus shrinks to half
+                            width with the asset browser toggle beside it — one
+                            row instead of two, so Ready + Finder Rows move up. */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', minWidth: 0 }}>
+                        <div style={{ position: 'relative', minWidth: 0, flex: _vp.isPhone ? '1 1 100%' : '0 1 50%' }}>
                             <input
                                 type="text"
                                 value={finderSearch}
@@ -3480,6 +4277,8 @@
                                 </div>
                             )}
                         </div>
+                        <button type="button" className="tc-dhq-detail-toggle" style={{ minHeight: _vp.isPhone ? '44px' : '38px' }} onClick={() => setAssetBrowserOpen(v => !v)}>{assetBrowserOpen ? 'Hide asset browser ▴' : 'Browse assets ▾'}</button>
+                        </div>
 
                         {focusR && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -3508,9 +4307,6 @@
                             })}
                         </div>
 
-                        <div>
-                            <button type="button" className="tc-dhq-detail-toggle" onClick={() => setAssetBrowserOpen(v => !v)}>{assetBrowserOpen ? 'Hide asset browser ▴' : 'Browse assets ▾'}</button>
-                        </div>
                         {assetBrowserOpen && (assetBrowserRows.length > 0 ? (
                             <div className="tc-dhq-asset-browser">
                                 <div className="tc-dhq-browser-head">
@@ -3579,7 +4375,83 @@
                         </div>
                         <div className="tc-dhq-deal-stage-body">
                             {visibleDeals.length
-                                ? visibleDeals.map((deal, idx) => <TcDealCard key={deal.id} deal={deal} idx={idx} actionFloor={actionFloor} expandedDealId={expandedDealId} setExpandedDealId={setExpandedDealId} loadDealIntoBuilder={loadDealIntoBuilder} saveDeal={saveDeal} sideSummary={sideSummary} />)
+                                ? (() => {
+                                    // LAB13 (owner request 2026-09-05): the board explains
+                                    // itself. Shortfall-fixing trades lead under a header
+                                    // written from the one brain's own reads; everything
+                                    // else follows under its own header, so an owner can
+                                    // see HOW the app is thinking, not just what it says.
+                                    const obMe = labBrain?.byRosterId?.[String(myRosterId)];
+                                    const needPos = new Set((obMe?.needs || []).map(n => n.pos));
+                                    // LAB15: polarity decides what "the priority" MEANS —
+                                    // contenders lead with shortfall fixes, rebuilders lead
+                                    // with veterans-into-futures conversions.
+                                    const lp = labPolarity();
+                                    const isPriority = lp.pol === 'rebuild'
+                                        ? d => d.sellForPicks || (d.givePlayers || []).some(p => (Number(p.age ?? playersData?.[p.pid]?.age) || 0) >= 28)
+                                        : d => (d.receivePlayers || []).some(p => needPos.has(p.pos));
+                                    const priority = obMe ? visibleDeals.filter(isPriority) : [];
+                                    const rest = obMe ? visibleDeals.filter(d => !isPriority(d)) : visibleDeals;
+                                    // LAB14 (owner ruling 2026-09-05): offense sells the
+                                    // board — within each section, deals BRINGING BACK a
+                                    // skill player lead, deals shipping skill names out
+                                    // for picks come next, pure trench/kicker traffic
+                                    // last. Stable sort keeps the finder's rank order
+                                    // inside each class.
+                                    const OFF_SKILL = new Set(['QB', 'RB', 'WR', 'TE']);
+                                    const offRank = d => (d.receivePlayers || []).some(p => OFF_SKILL.has(p.pos)) ? 0
+                                        : (d.givePlayers || []).some(p => OFF_SKILL.has(p.pos)) ? 1 : 2;
+                                    priority.sort((a, b) => offRank(a) - offRank(b));
+                                    rest.sort((a, b) => offRank(a) - offRank(b));
+                                    // LAB16: needs speak in priority order — offense
+                                    // out front, defense named as the picks-and-FAAB
+                                    // errand it now is.
+                                    const offNeeds = (obMe?.needs || []).filter(n => OFF_SKILL.has(n.pos));
+                                    const defNeeds = (obMe?.needs || []).filter(n => !OFF_SKILL.has(n.pos));
+                                    const fmtNeeds = list => list.map(n => `${n.pos} (${n.have} of ${n.need} starters)`).join(' and ');
+                                    const needTxt = fmtNeeds([...offNeeds, ...defNeeds]);
+                                    const strTxt = (obMe?.strengths || []).map(s => s.pos || s).join(' and ');
+                                    const lensTxt = focusTuning?.modeLabel || '';
+                                    const focusHeader = (label, body) => (
+                                        <div key={label} className="tc-lab-focus-header" style={{ margin: '2px 0 10px', padding: '10px 14px', background: 'var(--acc-fill1, rgba(212,175,55,0.06))', borderLeft: '3px solid var(--gold)', borderRadius: '8px', color: 'var(--silver)', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                                            <strong style={{ color: 'var(--gold)', letterSpacing: '0.03em' }}>{label} </strong>{body}
+                                        </div>
+                                    );
+                                    const renderCards = (list, base) => list.map((deal, i) => <TcDealCard key={deal.id} deal={deal} idx={base + i} actionFloor={actionFloor} expandedDealId={expandedDealId} setExpandedDealId={setExpandedDealId} loadDealIntoBuilder={loadDealIntoBuilder} saveDeal={saveDeal} sideSummary={sideSummary} />);
+                                    // Header copy per polarity; an undeclared plan says so
+                                    // out loud and points at GM's Office (the nudge).
+                                    const winTxt = obMe?.tier === 'REBUILDING' ? 'REBUILDING' : obMe?.tier === 'CROSSROADS' ? 'at a CROSSROADS' : 'CONTENDING';
+                                    const nudgePre = lp.declared ? '' : `you haven't set a GM plan — your roster reads as ${winTxt}, so `;
+                                    const nudgePost = lp.declared ? '' : ` Set your plan in GM's Office to steer this.`;
+                                    // LAB19 header (owner wording 2026-09-05): the
+                                    // header reads like a procurement brief — the
+                                    // priority list first (offense ahead of defense,
+                                    // per the need-priority law), resources second.
+                                    const orderedNeeds = [...offNeeds, ...defNeeds];
+                                    const rankTxt = i => i === 1 ? '2nd' : i === 2 ? '3rd' : `${i + 1}th`;
+                                    const priList = orderedNeeds
+                                        .map((n, i) => `${n.pos} (${n.have} of ${n.need} starters) is ${i === 0 ? 'at the top of the list for procurement' : `${rankTxt(i)} in priority`}`)
+                                        .join('. ');
+                                    const priFocus = orderedNeeds.length
+                                        ? `${priList}. Resources used to acquire are Draft Picks and FAAB`
+                                        : `no starter shortfalls — the board hunts value adds with Draft Picks and FAAB`;
+                                    const priBody = lp.pol === 'rebuild'
+                                        ? `${nudgePre}the board leads with converting veterans and surplus into picks and youth. Points today don't drive a rebuild — the future does.${nudgePost}`
+                                        : lp.declared && lensTxt
+                                            ? `Based on your ${lensTxt} Strategy and roster shortfalls, ${priFocus}.`
+                                            : `${nudgePre}based on your roster shortfalls, ${priFocus}.${nudgePost}`;
+                                    const restBody = lp.pol === 'rebuild'
+                                        ? `win-now adds and depth moves — shown for completeness; they spend the future a rebuild is trying to bank.`
+                                        : lp.pol === 'win_now'
+                                            ? `depth and value plays. Sell-for-futures moves are off this board entirely — your plan says win now.`
+                                            : `${priority.length ? 'other moves the board likes — ' : ''}converting surplus into draft capital (each states what it costs your lineup per week) and value plays outside the shortfall focus.`;
+                                    return <>
+                                        {priority.length > 0 && focusHeader('The priority:', priBody)}
+                                        {renderCards(priority, 0)}
+                                        {rest.length > 0 && focusHeader(lp.pol === 'rebuild' ? 'Outside the rebuild:' : 'Beyond the shortfall:', restBody)}
+                                        {renderCards(rest, priority.length)}
+                                    </>;
+                                })()
                                 : <div className="tc-dhq-empty">No actionable package clears {actionFloor}% acceptance. Use moonshots only if you want long-shot leverage ideas.</div>}
                         </div>
                         {(deals.length > visibleDeals.length || showAllDeals) && <button className="tc-dhq-show-more" onClick={() => setShowAllDeals(!showAllDeals)}>{showAllDeals ? 'Hide moonshots' : moonshotCount ? `Show ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'}` : `Show ${deals.length - visibleDeals.length} more`}</button>}
@@ -4554,6 +5426,7 @@
                         </div>
                         {expanded && (
                             <div style={{ marginTop: '8px', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                <div style={{ fontSize: '0.74rem', color: 'var(--silver)', lineHeight: 1.5 }}><b style={{ color: 'var(--white)' }}>Net pts/wk:</b> <b style={{ color: (deal.netPts ?? 0) > 0.05 ? 'var(--good)' : (deal.netPts ?? 0) < -0.05 ? 'var(--bad)' : 'var(--silver)' }}>{deal.netPts == null ? '—' : `${deal.netPts >= 0 ? '+' : ''}${deal.netPts.toFixed(1)}`}</b></div>
                                 <div style={{ fontSize: '0.74rem', color: 'var(--silver)', lineHeight: 1.5 }}><b style={{ color: 'var(--white)' }}>Accept:</b> {deal.whyAccept}</div>
                                 <div style={{ fontSize: '0.74rem', color: 'var(--silver)', lineHeight: 1.5 }}><b style={{ color: 'var(--white)' }}>You:</b> {deal.whyYou}</div>
                                 <div style={{ fontSize: '0.74rem', color: 'var(--silver)', lineHeight: 1.5 }}><b style={{ color: 'var(--white)' }}>Swing:</b> {deal.swing}</div>
@@ -4634,6 +5507,8 @@
                             <button key={i.key} type="button" className={finderQuery.intent === i.key ? 'is-on' : ''}
                                 onClick={() => { setFinderQuery(qr => ({ ...qr, intent: i.key })); setAssetBrowserPos('ALL'); setShowAllDeals(false); setPhFinderPanel(null); }}>{i.label}</button>
                         ))}
+                        {/* LAB20: amber GM button (owner order 2026-09-05) — same door on the phone deck */}
+                        <button key="gm" type="button" onClick={() => { setPhFinderPanel(null); labOpenGmOffice(); }} style={{ background: 'rgba(255,179,0,0.16)', border: '1px solid #ffb300', color: '#ffb300', fontWeight: 700 }}>GM</button>
                     </div>
                 );
             } else if (_pro && rosterState.isUsable && phFinderPanel === 'partner') {

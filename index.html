@@ -108,6 +108,12 @@ if (_isLocalDev) {
     },
   };
 }
+// ═══ GRAFT PHASE 4 (owner-approved, 2026-09-05): the behavioral-model
+// engine is ON for this site. Sleeper leagues price through values-v2
+// and assess through the one brain; non-Sleeper leagues automatically
+// stay on the original engine (the switch is per-provider inside
+// dhq-engine.js). Rollback: set this to false — one line.
+window.__DHQ_ENGINE_V2 = true;
 const WR_SHARED_FILES = [
   'app-config.js',
   'bug-capture.js',
@@ -123,6 +129,11 @@ const WR_SHARED_FILES = [
   'dhq-providers.js',
   'dhq-core.js',
   'intelligence-context.js',
+  'points-ledger.js',
+  'one-brain.js',
+  'values-v2.js',
+  'pff-snapshot.js',
+  'intent-reads.js',
   'dhq-engine.js',
   'nfl-fit.js',
   'nfl-roles.js',
@@ -2997,7 +3008,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      group, when the owning surface first calls wrLoadModuleGroup('<group>'). -->
 <script src="js/module-loader.js?v=20260612modlazy1"></script>
 <script type="text/babel" src="js/settings.js?v=20260902intel1"></script>
-<script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20260903rb1"></script>
+<script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20260905graft4"></script>
 <script type="text/babel" src="js/post-draft.js?v=20260609postdraft1"></script>
 <script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260828tick4"></script>
 <!-- Season Odds panel loads with Game Day (owner ruling 2026-07-30) — must
@@ -3152,7 +3163,7 @@ window.addEventListener('appinstalled', () => {
 <!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
      owner can read back exactly which version his device is running before
      testing — kills the stale-cache guessing game. Bump the code every deploy. -->
-<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b102</div>
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b103</div>
 </body>
 </html>
 <!-- build 1774212614 -->
