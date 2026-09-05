@@ -4371,10 +4371,10 @@
                     <section className="tc-dhq-panel tc-dhq-deal-stage">
                         <div className="tc-dhq-panel-head">
                             <span>Finder Rows</span>
-                            <em>{showAllDeals ? deals.length : actionableDeals.length} idea{(showAllDeals ? deals.length : actionableDeals.length) === 1 ? '' : 's'} · {finderPoolOn ? 'league-wide' : selectedPartner ? selectedPartner.ownerName : 'Select a partner'}</em>
+                            <em>{(() => { const n = showAllDeals ? deals.length : Math.min(deals.length, Math.max(actionableDeals.length, actionableDeals.length < 4 ? Math.min(6, deals.length) : 0)); return `${n} idea${n === 1 ? '' : 's'}`; })()} · {finderPoolOn ? 'league-wide' : selectedPartner ? selectedPartner.ownerName : 'Select a partner'}</em>
                         </div>
                         <div className="tc-dhq-deal-stage-body">
-                            {visibleDeals.length
+                            {(visibleDeals.length || deals.length)
                                 ? (() => {
                                     // LAB13 (owner request 2026-09-05): the board explains
                                     // itself. Shortfall-fixing trades lead under a header
@@ -4413,7 +4413,7 @@
                                     const strTxt = (obMe?.strengths || []).map(s => s.pos || s).join(' and ');
                                     const lensTxt = focusTuning?.modeLabel || '';
                                     const focusHeader = (label, body) => (
-                                        <div key={label} className="tc-lab-focus-header" style={{ margin: '2px 0 10px', padding: '10px 14px', background: 'var(--acc-fill1, rgba(212,175,55,0.06))', borderLeft: '3px solid var(--gold)', borderRadius: '8px', color: 'var(--silver)', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                                        <div key={label} className="tc-lab-focus-header" style={{ gridColumn: '1 / -1', margin: '2px 0 4px', padding: '10px 14px', background: 'var(--acc-fill1, rgba(212,175,55,0.06))', borderLeft: '3px solid var(--gold)', borderRadius: '8px', color: 'var(--silver)', fontSize: '0.82rem', lineHeight: 1.55 }}>
                                             <strong style={{ color: 'var(--gold)', letterSpacing: '0.03em' }}>{label} </strong>{body}
                                         </div>
                                     );
@@ -4445,11 +4445,22 @@
                                         : lp.pol === 'win_now'
                                             ? `depth and value plays. Sell-for-futures moves are off this board entirely — your plan says win now.`
                                             : `${priority.length ? 'other moves the board likes — ' : ''}converting surplus into draft capital (each states what it costs your lineup per week) and value plays outside the shortfall focus.`;
+                                    // Starved-board law (owner report 2026-09-05, b103): when the
+                                    // gates leave fewer than four actionable rows, the board shows
+                                    // the best of what they rejected under an honest header — the
+                                    // market stays visible, the taxes stay named, nothing hides
+                                    // behind a button on an empty page.
+                                    const longshots = (!showAllDeals && visibleDeals.length < 4)
+                                        ? deals.filter(d => !visibleDeals.includes(d)).slice(0, 6 - visibleDeals.length)
+                                        : [];
+                                    const longBody = `priced out by the rules — the DNA taxes, the Starter Grip, or your ${lensTxt || 'GM'} plan put their acceptance below the ${actionFloor}% bar. Shown so you can still see the market; treat them as negotiation starters, not recommendations.`;
                                     return <>
                                         {priority.length > 0 && focusHeader('The priority:', priBody)}
                                         {renderCards(priority, 0)}
                                         {rest.length > 0 && focusHeader(lp.pol === 'rebuild' ? 'Outside the rebuild:' : 'Beyond the shortfall:', restBody)}
                                         {renderCards(rest, priority.length)}
+                                        {longshots.length > 0 && focusHeader('Long shots:', longBody)}
+                                        {renderCards(longshots, priority.length + rest.length)}
                                     </>;
                                 })()
                                 : <div className="tc-dhq-empty">No actionable package clears {actionFloor}% acceptance. Use moonshots only if you want long-shot leverage ideas.</div>}
