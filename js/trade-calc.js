@@ -1381,7 +1381,15 @@
         // Compute assessments — shared engine only; entries are absent while
         // the shared pass is still loading (existing loading states cover it).
 
-        const tradedPicks = useMemo(() => window.S?.tradedPicks || [], [currentLeague]);
+        // b106 (owner report 2026-09-06): S.tradedPicks lands only after the
+        // league hydrate finishes, so a snapshot keyed on the league alone can
+        // capture the pre-hydrate EMPTY list and never refresh — every roster
+        // then "owns" all its original picks and the finder spends picks the
+        // owner traded away years ago. statsData is set in the same hydrate
+        // pass, so it (plus timeRecomputeTs for background syncs) re-reads the
+        // ledger the moment real data exists; picksByOwner and the finder's
+        // data epoch already chain off this value and rescan on their own.
+        const tradedPicks = useMemo(() => window.S?.tradedPicks || [], [currentLeague, statsData, timeRecomputeTs]);
 
         const picksByOwner = useMemo(() => {
             if (!allRosters.length) return {};
