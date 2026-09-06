@@ -123,6 +123,11 @@
         // order for free; here we hide the lane UI + SEED so free never sees a
         // board framed as an AI recommendation.
         const pro = typeof window.wrIsPro !== 'function' || window.wrIsPro();
+        // Per-round positional targets set on the Big Board tab (owner ask
+        // 2026-09-06, draft night): shown read-only on this panel's round
+        // lines — the plan travels with the stored board; editing stays on
+        // the Big Board tab.
+        const [livePlans, setLivePlans] = React.useState({});
 
         // Phone/touch tier (mobile plan Phase 2 item 13): HTML5 drag is inert on
         // iOS/touch, and this exact panel is what MobileFeed mounts on phones —
@@ -173,6 +178,7 @@
                 if (!ctxFns || typeof ctxFns.loadStoredBoard !== 'function' || !state.leagueId) return;
                 const stored = ctxFns.loadStoredBoard(state.leagueId, state.variant || 'startup');
                 if (!stored) return;
+                if (stored.roundPlans) setLivePlans(stored.roundPlans);
                 const sig = boardUserSig({
                     myOrder: stored.myOrder || [], tags: stored.tags || {}, notes: stored.notes || {},
                     drafted: stored.drafted || [], activeLane: stored.activeLane,
@@ -217,7 +223,9 @@
             const typedKey = keys?.BIGBOARD_DRAFT ? keys.BIGBOARD_DRAFT(state.leagueId, state.variant || 'startup') : null;
             const legacyKey = keys?.BIGBOARD ? keys.BIGBOARD(state.leagueId) : null;
             const absorb = (value) => {
-                if (!value || boardUserSig(value) === liveBoardSigRef.current) return; // our own echo / no change
+                if (!value) return;
+                if (value.roundPlans) setLivePlans(value.roundPlans);
+                if (boardUserSig(value) === liveBoardSigRef.current) return; // our own echo / no change
                 liveBoardSigRef.current = boardUserSig(value);
                 dispatch({
                     type: 'UPDATE_BOARD_CONTEXT',
@@ -458,9 +466,15 @@
                 if ((n - 1) % roundSize === 0) {
                     let mine = null;
                     for (let k = (round - 1) * roundSize + 1; k <= round * roundSize; k++) { if (userPickRanks.has(k)) { mine = k; break; } }
+                    const planKey = (livePlans[round] || livePlans[String(round)] || [])[0];
+                    const planLabel = planKey === 'DEF' ? 'D/ST' : planKey;
                     out.push(
                         <div key={'bbrd' + n} style={{ display: 'flex', alignItems: 'baseline', gap: '10px', margin: round === 1 ? '2px 0 8px' : '14px 0 8px', borderBottom: '1px solid var(--gold)', paddingBottom: '5px' }}>
                             <span style={{ color: 'var(--gold)', fontFamily: FONT_MONO, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.16em' }}>ROUND {round}</span>
+                            {planLabel && (
+                                <span title={'Round ' + round + ' positional target (set on the Big Board tab)'}
+                                    style={{ color: 'var(--gold)', fontFamily: FONT_MONO, fontSize: '0.6rem', fontWeight: 800, letterSpacing: '0.1em', border: '1px solid var(--acc-line2, rgba(212,175,55,0.35))', background: 'var(--acc-fill1, rgba(212,175,55,0.1))', borderRadius: '4px', padding: '1px 7px', lineHeight: 1.6 }}>TARGET · {planLabel}</span>
+                            )}
                             {mine && <span style={{ marginLeft: 'auto', color: 'var(--silver)', fontFamily: FONT_MONO, fontSize: '0.62rem', letterSpacing: '0.1em' }}>YOU PICK {pickLabel(mine)} · #{mine}</span>}
                         </div>
                     );
