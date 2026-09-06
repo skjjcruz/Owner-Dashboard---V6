@@ -66,14 +66,22 @@
         const [draftView, setDraftView] = useState('board'); // 'command' | 'board' | 'mock' | 'live' — Big Board is the front door (owner ruling 2026-08-15); live-draft auto-open below still outranks it
         const [draftInfo, setDraftInfo] = useState(null);
         const draftVariant = useMemo(() => {
+            // Fallback guess when classification has nothing to go on (a
+            // brand-new league whose settings haven't landed yet): a draft of
+            // 8+ rounds is NEVER a rookie draft — show the full player pool
+            // rather than prospects-only (owner report 2026-09-06: a fresh
+            // redraft league briefly presented as rookie-only).
+            const fbRounds = Number(draftInfo?.settings?.rounds) || 0;
+            const fb = fbRounds >= 8 ? 'startup' : 'rookie';
             try {
                 return window.DraftCC?.state?.detectDraftVariant?.({
                     currentLeague,
                     draft: draftInfo,
-                    fallback: 'rookie',
-                }) || 'rookie';
+                    fallback: fb,
+                }) || fb;
             } catch (e) {
-                return 'rookie';
+                window.wrLog?.('draft.variantDetect', e);
+                return fb;
             }
         }, [currentLeague, draftInfo, timeRecomputeTs]);
         const isRookieDraft = draftVariant === 'rookie';
