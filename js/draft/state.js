@@ -773,6 +773,14 @@
                 const v = window.dynastyValue(pid);
                 if (v > 0) return { value: Math.round(v), source: 'window.dynastyValue' };
             }
+            // The prospect-CSV fallback is for FIRST-YEAR players only. It
+            // matches by name, so an unscored VETERAN whose last name collides
+            // with a college prospect inherited that prospect's calibrated
+            // value — owner report 2026-09-06: two FA vets ranked #2/#3 on a
+            // fresh redraft board at an elite prospect's 7,600.
+            const expRaw = player?.years_exp ?? player?.yearsExp;
+            const exp = Number(expRaw);
+            if (Number.isFinite(exp) && exp > 0) return { value: 0, source: 'unscored-veteran' };
             return resolvePlayerDhq({ pid, player, name });
         };
         const VALID = (typeof window.getLeaguePositions === 'function')
