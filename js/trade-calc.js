@@ -1041,7 +1041,9 @@
         const [finderTypeaheadIdx, setFinderTypeaheadIdx] = useState(0);
         const [assetBrowserOpen, setAssetBrowserOpen] = useState(false);
         const [dealHqNotice, setDealHqNotice] = useState(null);
-        const [showAllDeals, setShowAllDeals] = useState(false);
+        // b105 (owner ruling 2026-09-06): moonshots show by default; the
+        // toggle hides them.
+        const [showAllDeals, setShowAllDeals] = useState(true);
         const [expandedDealId, setExpandedDealId] = useState(null);
         const [assetBrowserPos, setAssetBrowserPos] = useState('ALL');
         const [assetBrowserSort, setAssetBrowserSort] = useState('dhq');
@@ -3906,7 +3908,7 @@
         const finderMoonshotCount = Math.max(0, finderDeals.length - finderActionable.length);
         // LAB (owner report 2026-09-05): every actionable package renders — the
         // old top-8 cap made "14 actionable" a lie you couldn't scroll to.
-        // Moonshots alone stay behind the toggle.
+        // b105: moonshots render too unless the owner hides them.
         const finderVisibleDeals = showAllDeals ? finderDeals : finderActionable;
         // Alex rec feed — once per finder-result change (pooled scans publish on
         // completion with partner:null), never as a render side effect.
@@ -4360,7 +4362,7 @@
                         ) : <div className="tc-dhq-empty">No tradeable assets to browse for this scope.</div>)}
 
                         {deals.length
-                            ? <div className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'} hidden` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
+                            ? <div className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'}${showAllDeals ? '' : ' hidden'}` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
                             : finderPoolOn && !finderPool.done
                                 ? <div className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
                                 : <div className="tc-dhq-empty">No package found for this intent. Try another partner chip, clear the focus, or open the builder below.</div>}
@@ -4371,10 +4373,10 @@
                     <section className="tc-dhq-panel tc-dhq-deal-stage">
                         <div className="tc-dhq-panel-head">
                             <span>Finder Rows</span>
-                            <em>{(() => { const n = showAllDeals ? deals.length : Math.min(deals.length, Math.max(actionableDeals.length, actionableDeals.length < 4 ? Math.min(6, deals.length) : 0)); return `${n} idea${n === 1 ? '' : 's'}`; })()} · {finderPoolOn ? 'league-wide' : selectedPartner ? selectedPartner.ownerName : 'Select a partner'}</em>
+                            <em>{`${visibleDeals.length} idea${visibleDeals.length === 1 ? '' : 's'}`} · {finderPoolOn ? 'league-wide' : selectedPartner ? selectedPartner.ownerName : 'Select a partner'}</em>
                         </div>
                         <div className="tc-dhq-deal-stage-body">
-                            {(visibleDeals.length || deals.length)
+                            {visibleDeals.length
                                 ? (() => {
                                     // LAB13 (owner request 2026-09-05): the board explains
                                     // itself. Shortfall-fixing trades lead under a header
@@ -4445,27 +4447,19 @@
                                         : lp.pol === 'win_now'
                                             ? `depth and value plays. Sell-for-futures moves are off this board entirely — your plan says win now.`
                                             : `${priority.length ? 'other moves the board likes — ' : ''}converting surplus into draft capital (each states what it costs your lineup per week) and value plays outside the shortfall focus.`;
-                                    // Starved-board law (owner report 2026-09-05, b103): when the
-                                    // gates leave fewer than four actionable rows, the board shows
-                                    // the best of what they rejected under an honest header — the
-                                    // market stays visible, the taxes stay named, nothing hides
-                                    // behind a button on an empty page.
-                                    const longshots = (!showAllDeals && visibleDeals.length < 4)
-                                        ? deals.filter(d => !visibleDeals.includes(d)).slice(0, 6 - visibleDeals.length)
-                                        : [];
-                                    const longBody = `priced out by the rules — the DNA taxes, the Starter Grip, or your ${lensTxt || 'GM'} plan put their acceptance below the ${actionFloor}% bar. Shown so you can still see the market; treat them as negotiation starters, not recommendations.`;
+                                    // b105 (owner ruling 2026-09-06): the Long shots header is
+                                    // gone — moonshots simply render in their sections, and the
+                                    // toggle below hides them when the owner wants a tight board.
                                     return <>
                                         {priority.length > 0 && focusHeader('The priority:', priBody)}
                                         {renderCards(priority, 0)}
                                         {rest.length > 0 && focusHeader(lp.pol === 'rebuild' ? 'Outside the rebuild:' : 'Beyond the shortfall:', restBody)}
                                         {renderCards(rest, priority.length)}
-                                        {longshots.length > 0 && focusHeader('Long shots:', longBody)}
-                                        {renderCards(longshots, priority.length + rest.length)}
                                     </>;
                                 })()
-                                : <div className="tc-dhq-empty">No actionable package clears {actionFloor}% acceptance. Use moonshots only if you want long-shot leverage ideas.</div>}
+                                : <div className="tc-dhq-empty">No package clears {actionFloor}% acceptance{moonshotCount ? ` — your ${moonshotCount} moonshot${moonshotCount === 1 ? ' is' : 's are'} hidden` : ''}.</div>}
                         </div>
-                        {(deals.length > visibleDeals.length || showAllDeals) && <button className="tc-dhq-show-more" onClick={() => setShowAllDeals(!showAllDeals)}>{showAllDeals ? 'Hide moonshots' : moonshotCount ? `Show ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'}` : `Show ${deals.length - visibleDeals.length} more`}</button>}
+                        {moonshotCount > 0 && <button className="tc-dhq-show-more" onClick={() => setShowAllDeals(!showAllDeals)}>{showAllDeals ? 'Hide moonshots' : `Show ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'}`}</button>}
                     </section>
                 )}
 
@@ -5681,8 +5675,8 @@
                                     : <div className="tc-dhq-empty">No package found for this intent — change the partner or focus in the finder controls.</div>)
                         )}
                         {_pro && rosterState.isUsable && finderVisibleDeals.map(phDealCard)}
-                        {_pro && rosterState.isUsable && (finderDeals.length > finderVisibleDeals.length || showAllDeals) && (
-                            <button type="button" style={{ ...actBtn(false), width: '100%' }} onClick={() => setShowAllDeals(!showAllDeals)}>{showAllDeals ? 'Hide moonshots' : finderMoonshotCount ? `Show ${finderMoonshotCount} moonshot${finderMoonshotCount === 1 ? '' : 's'}` : `Show ${finderDeals.length - finderVisibleDeals.length} more`}</button>
+                        {_pro && rosterState.isUsable && finderMoonshotCount > 0 && (
+                            <button type="button" style={{ ...actBtn(false), width: '100%' }} onClick={() => setShowAllDeals(!showAllDeals)}>{showAllDeals ? 'Hide moonshots' : `Show ${finderMoonshotCount} moonshot${finderMoonshotCount === 1 ? '' : 's'}`}</button>
                         )}
                         {!_pro && React.createElement(TcProTeaser, { label: 'Trade Finder', feature: 'trade-finder', sub: 'Auto-generate deals every owner in your league would actually consider — ranked by acceptance odds, owner psychology, and roster fit.' })}
                         {/* Intent=Picks → a draft-pick board with an Owned/League scope toggle. */}
