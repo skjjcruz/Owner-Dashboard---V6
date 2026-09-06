@@ -406,7 +406,23 @@
             if (!roundSize) return out;
             const order = Array.isArray(state.pickOrder) && state.pickOrder.length ? state.pickOrder : null;
             if (order) {
-                order.forEach((slot, i) => { if (Number(slot) === Number(state.userSlot)) out.add(i + 1); });
+                // pickOrder entries are rich pick objects ({slot, rosterId, ...})
+                // in every set-up draft — Number(object) is NaN, so the old
+                // slot-number compare made this set come back EMPTY exactly when
+                // a live draft was running (owner report 2026-09-06: the amber
+                // your-pick markers vanished from the live room's board).
+                // rosterId match first — that is traded-pick truth.
+                order.forEach((entry, i) => {
+                    let mine = false;
+                    if (entry && typeof entry === 'object') {
+                        mine = (entry.rosterId != null && state.userRosterId != null)
+                            ? String(entry.rosterId) === String(state.userRosterId)
+                            : Number(entry.slot) === Number(state.userSlot);
+                    } else {
+                        mine = Number(entry) === Number(state.userSlot);
+                    }
+                    if (mine) out.add(i + 1);
+                });
             } else {
                 const slot = Math.min(roundSize, Math.max(1, Number(state.userSlot) || 1));
                 const rounds = totalRounds || Math.ceil(300 / roundSize);
@@ -416,7 +432,7 @@
                 }
             }
             return out;
-        }, [roundSize, totalRounds, state.pickOrder, state.userSlot, state.draftType]);
+        }, [roundSize, totalRounds, state.pickOrder, state.userSlot, state.userRosterId, state.draftType]);
         const pickLabel = (overall) => {
             const r = Math.floor((overall - 1) / roundSize) + 1;
             return r + '.' + String(((overall - 1) % roundSize) + 1).padStart(2, '0');
@@ -763,7 +779,7 @@
                                     {React.createElement(AssetRowC, {
                                         pos: normEdPos(p.pos),
                                         name: p.name,
-                                        tag: ['#' + rowRank, nflTeam || college || null, b.tier ? 'T' + b.tier : null, p._copies > 1 && p._copiesTaken > 0 ? p._copiesTaken + '/' + p._copies + ' taken' : null].filter(Boolean).join(' · '),
+                                        tag: [showBreakers && userPickRanks.has(rowRank) ? '◆ ' + pickLabel(rowRank) : null, '#' + rowRank, nflTeam || college || null, b.tier ? 'T' + b.tier : null, p._copies > 1 && p._copiesTaken > 0 ? p._copiesTaken + '/' + p._copies + ' taken' : null].filter(Boolean).join(' · '),
                                         // Mirrors the Draft tab feeder's bar: DHQ · ADP (market,
                                         // seasonal only) · Rank (owner ask 2026-08-15).
                                         slots: [
@@ -1045,6 +1061,10 @@
                                 )}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
                                     <span style={{ color: 'var(--white)', fontWeight: 700, fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: p._drafted ? 'line-through' : 'none' }}>{p.name}</span>
+                                    {showBreakers && userPickRanks.has(rowRank) && (
+                                        <span title={'Your pick: ' + pickLabel(rowRank) + ' (#' + rowRank + ' overall)'}
+                                            style={{ flexShrink: 0, color: 'var(--gold)', fontSize: '0.7rem', lineHeight: 1 }}>◆</span>
+                                    )}
                                     {p._copies > 1 && p._copiesTaken > 0 && (() => {
                                         // Copies-taken chip for multi-copy leagues: green→amber→red
                                         // as the last copy nears; red when all copies are gone.
