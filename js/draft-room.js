@@ -2887,7 +2887,7 @@
                                 {activeFlashAlexBrief.pickLines.map(line => (
                                     <div key={line.overall} className={'draft-alex-pick-line' + (line.isUser ? ' is-user' : '')} role="button" tabIndex={0} title="Open player card" onClick={() => openDraftPlayer(line.pid)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDraftPlayer(line.pid); } }}>
                                         <span className="draft-alex-pick-no">{line.pickLabel}</span>
-                                        <img className="draft-alex-player-photo" src={line.photoUrl} alt="" onError={e => e.currentTarget.style.visibility = 'hidden'} />
+                                        <img className="draft-alex-player-photo" src={line.photoUrl} alt="" loading="lazy" decoding="async" onError={e => e.currentTarget.style.visibility = 'hidden'} />
                                         <span className="draft-alex-pick-main">
                                             <strong>{line.player} <em>{line.pos}</em></strong>
                                             <small>{line.nflTeam} - {line.school}</small>
@@ -3299,7 +3299,7 @@
                                             style={pick.locked ? { borderLeft: '3px solid var(--good, #3fb950)', opacity: 0.92 } : undefined}
                                         >
                                             <span className="draft-rec-rank">{pick.pickLabel}</span>
-                                            <img className="draft-rec-photo" src={pick.photoUrl} alt="" onError={e => e.currentTarget.style.visibility = 'hidden'} />
+                                            <img className="draft-rec-photo" src={pick.photoUrl} alt="" loading="lazy" decoding="async" onError={e => e.currentTarget.style.visibility = 'hidden'} />
                                             <span className="draft-rec-main">
                                                 <strong>{pick.name} <small>{pick.pos}</small></strong>
                                             </span>
@@ -3422,7 +3422,7 @@
                                 <div className="draft-scout-drawer-backdrop" onClick={() => setScoutDrawerPid(null)}>
                                     <div className="draft-scout-drawer" onClick={e => e.stopPropagation()}>
                                         <div className="draft-scout-drawer-head">
-                                            <img src={photoSrc} alt="" onError={e => e.currentTarget.style.display = 'none'} className="draft-scout-drawer-photo" />
+                                            <img src={photoSrc} alt="" loading="lazy" decoding="async" onError={e => e.currentTarget.style.display = 'none'} className="draft-scout-drawer-photo" />
                                             <div className="draft-scout-drawer-title">
                                                 <strong>{pName(r.p)} <small>{pos}</small></strong>
                                                 <em>{[team, college].filter(Boolean).join(' · ') || 'Team / school TBD'}{age ? ' · age ' + age : ''}</em>
@@ -3913,7 +3913,7 @@
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, padding: '5px 7px' }}>
                                             <div style={{ width: 28, height: 28, flexShrink: 0 }}>
-                                                <img src={photoSrc} alt="" onError={e => e.target.style.display='none'} style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover', objectPosition: 'top', border: '1px solid var(--acc-line1, rgba(212,175,55,0.22))' }} />
+                                                <img src={photoSrc} alt="" loading="lazy" decoding="async" onError={e => e.target.style.display='none'} style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover', objectPosition: 'top', border: '1px solid var(--acc-line1, rgba(212,175,55,0.22))' }} />
                                             </div>
                                             <div style={{ minWidth: 0 }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
