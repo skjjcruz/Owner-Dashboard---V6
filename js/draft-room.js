@@ -65,7 +65,15 @@
         const [draftSort, setDraftSort] = useState({ key: 'dhq', dir: -1 });
         const [draftView, setDraftView] = useState('board'); // 'command' | 'board' | 'mock' | 'live' — Big Board is the front door (owner ruling 2026-08-15); live-draft auto-open below still outranks it
         const [draftInfo, setDraftInfo] = useState(null);
+        // Variant flicker guard (draft-night post-mortem 2026-09-07): a
+        // one-render wrong guess here flips the board's STORAGE KEY, which
+        // wipes the in-memory board and can cascade into the AI seed writing
+        // over a hand-built board. While the league's settings haven't landed,
+        // HOLD the last settled answer instead of guessing.
+        const draftVariantSettledRef = useRef(null);
         const draftVariant = useMemo(() => {
+            const settled = !!(currentLeague?.settings || (currentLeague?.roster_positions || []).length);
+            if (!settled && draftVariantSettledRef.current) return draftVariantSettledRef.current;
             // Fallback guess when classification has nothing to go on (a
             // brand-new league whose settings haven't landed yet): a draft of
             // 8+ rounds is NEVER a rookie draft — show the full player pool
@@ -73,16 +81,18 @@
             // redraft league briefly presented as rookie-only).
             const fbRounds = Number(draftInfo?.settings?.rounds) || 0;
             const fb = fbRounds >= 8 ? 'startup' : 'rookie';
+            let v = fb;
             try {
-                return window.DraftCC?.state?.detectDraftVariant?.({
+                v = window.DraftCC?.state?.detectDraftVariant?.({
                     currentLeague,
                     draft: draftInfo,
                     fallback: fb,
                 }) || fb;
             } catch (e) {
                 window.wrLog?.('draft.variantDetect', e);
-                return fb;
             }
+            if (settled) draftVariantSettledRef.current = v;
+            return v;
         }, [currentLeague, draftInfo, timeRecomputeTs]);
         const isRookieDraft = draftVariant === 'rookie';
         const isSeasonalDraft = !isRookieDraft && (resolvedLeagueSkin?.state?.isSeasonal || skinFeatures.showFuturePicks === false);
@@ -112,7 +122,7 @@
         const boardSyncSigRef = useRef('');
         const boardHydratedRef = useRef(false); // saved board applied — gates the auto-save
         const cloudBoardPushRef = useRef(null); // debounce timer for the cloud board publish
-        const [draftedPids, setDraftedPids] = useState(new Set());
+        const [draftedPids, _setDraftedPids] = useState(new Set());
         // Players already taken in the live draft. Seeded from the persisted
         // live-sync state so a freshly opened Draft tab strikes them through
         // immediately, then kept live by the wr:live-draft-picks broadcast the
@@ -125,12 +135,25 @@
                 return d ? new Set(Object.keys(d)) : new Set();
             } catch (e) { return new Set(); }
         });
-        const [boardNotes, setBoardNotes] = useState({});
-        const [boardTags, setBoardTags] = useState({}); // pid -> 'target'|'avoid'|'sleeper'|'must'
-        const [roundPlans, setRoundPlans] = useState({}); // round -> ['RB','WR'] — position targets on the round breaker lines
+        const [boardNotes, _setBoardNotes] = useState({});
+        const [boardTags, _setBoardTags] = useState({}); // pid -> 'target'|'avoid'|'sleeper'|'must'
+        const [roundPlans, _setRoundPlans] = useState({}); // round -> ['RB','WR'] — position targets on the round breaker lines
         const [openPlanRound, setOpenPlanRound] = useState(null); // which round line has its position picker expanded
-        const [boardMode, setBoardMode] = useState('dhq'); // 'dhq' | 'ai' | 'my'
-        const [myBoardOrder, setMyBoardOrder] = useState([]); // custom ordered pid array
+        const [boardMode, _setBoardMode] = useState('dhq'); // 'dhq' | 'ai' | 'my'
+        const [myBoardOrder, _setMyBoardOrder] = useState([]); // custom ordered pid array
+        // ── THE BOARD LAW (owner post-mortem 2026-09-07, draft night) ──
+        // A machine may never overwrite a human board. Every setter used by a
+        // USER gesture goes through these wrappers, which stamp the session as
+        // human-touched; system paths (hydrate, key-switch wipe, AI seed) call
+        // the raw _set* functions, and the auto-save below refuses to persist
+        // machine-made state over a stored human board.
+        const userBoardTouchedRef = useRef(false);
+        const setBoardNotes = useCallback(v => { userBoardTouchedRef.current = true; _setBoardNotes(v); }, []);
+        const setBoardTags = useCallback(v => { userBoardTouchedRef.current = true; _setBoardTags(v); }, []);
+        const setRoundPlans = useCallback(v => { userBoardTouchedRef.current = true; _setRoundPlans(v); }, []);
+        const setBoardMode = useCallback(v => { userBoardTouchedRef.current = true; _setBoardMode(v); }, []);
+        const setMyBoardOrder = useCallback(v => { userBoardTouchedRef.current = true; _setMyBoardOrder(v); }, []);
+        const setDraftedPids = useCallback(v => { userBoardTouchedRef.current = true; _setDraftedPids(v); }, []);
         const [boardPosFilter, setBoardPosFilter] = useState(''); // '' | 'QB' | 'RB' | 'WR' | 'TE' | 'DL' | 'LB' | 'DB'
         const [boardSearch, setBoardSearch] = useState(''); // player/team/college lookup
         const [boardTeamFilter, setBoardTeamFilter] = useState(''); // '' | NFL team abbr
@@ -823,27 +846,32 @@
         }, [isRookieDraft, boardRoundFilter]);
 
         useEffect(() => {
+            // Key switch = a different board. Until the new key's data is
+            // applied, the auto-save must stand down — otherwise one variant's
+            // in-memory state persists under another variant's key (this is
+            // half of how a live board got clobbered on draft night 2026-09-06).
+            boardHydratedRef.current = false;
             const next = DraftStorage.get(boardStorageKey, DraftStorage.get(DRAFT_WR_KEYS.BIGBOARD(leagueKey), null));
             setBoardData(next);
             if (!next) {
-                setDraftedPids(new Set());
-                setBoardNotes({});
-                setBoardTags({});
-                setRoundPlans({});
-                setMyBoardOrder([]);
-                setBoardMode('dhq');
+                _setDraftedPids(new Set());
+                _setBoardNotes({});
+                _setBoardTags({});
+                _setRoundPlans({});
+                _setMyBoardOrder([]);
+                _setBoardMode('dhq');
             }
         }, [boardStorageKey, leagueKey]);
 
         // Restore board data from localStorage
         useEffect(() => {
             if (boardData) {
-                if (boardData.tags) setBoardTags(boardData.tags);
-                if (boardData.notes) setBoardNotes(boardData.notes);
-                if (boardData.roundPlans) setRoundPlans(boardData.roundPlans);
-                if (boardData.drafted) setDraftedPids(new Set(boardData.drafted));
-                if (boardData.myOrder) setMyBoardOrder(boardData.myOrder);
-                if (['dhq', 'ai', 'my'].includes(boardData.activeLane || boardData.boardMode)) setBoardMode(boardData.activeLane || boardData.boardMode);
+                if (boardData.tags) _setBoardTags(boardData.tags);
+                if (boardData.notes) _setBoardNotes(boardData.notes);
+                if (boardData.roundPlans) _setRoundPlans(boardData.roundPlans);
+                if (boardData.drafted) _setDraftedPids(new Set(boardData.drafted));
+                if (boardData.myOrder) _setMyBoardOrder(boardData.myOrder);
+                if (['dhq', 'ai', 'my'].includes(boardData.activeLane || boardData.boardMode)) _setBoardMode(boardData.activeLane || boardData.boardMode);
             }
             // Only after the saved board is applied may the auto-save run. The
             // mount render's empty defaults used to slip through it first,
@@ -1006,6 +1034,22 @@
             // what stops a hydration from the shared store echoing straight back out
             // (and overwriting a fresher live edit with our now-stale in-memory copy).
             if (!boardHydratedRef.current) return; // pre-hydration defaults must never persist
+            // THE BOARD LAW (draft-night post-mortem 2026-09-07): if no human
+            // touched the board this session, the copy on disk outranks anything
+            // the machine assembled in memory — a seed, a half-loaded pool, a
+            // variant flicker. Preserve every stored human field; if that makes
+            // the payload identical to disk, the sig check below skips the write.
+            if (!userBoardTouchedRef.current) {
+                const disk = DraftStorage.get(boardStorageKey, null);
+                if (disk) {
+                    if (Array.isArray(disk.myOrder) && disk.myOrder.length) payload.myOrder = disk.myOrder;
+                    if (disk.tags && Object.keys(disk.tags).length && !Object.keys(payload.tags || {}).length) payload.tags = disk.tags;
+                    if (disk.notes && Object.keys(disk.notes).length && !Object.keys(payload.notes || {}).length) payload.notes = disk.notes;
+                    if (disk.roundPlans && Object.keys(disk.roundPlans).length && !Object.keys(payload.roundPlans || {}).length) payload.roundPlans = disk.roundPlans;
+                    if (Array.isArray(disk.drafted) && disk.drafted.length && !payload.drafted.length) payload.drafted = disk.drafted;
+                    if (['dhq', 'ai', 'my'].includes(disk.activeLane)) payload.activeLane = disk.activeLane;
+                }
+            }
             const sig = boardSyncSig(payload);
             if (sig === boardSyncSigRef.current) return;
             // Identical to what's already on disk = a re-open, not an edit.
@@ -3540,7 +3584,20 @@
                     };
 
                     // User Board starts from the AI recommendation, then becomes manual on first edit.
-                    if (myBoardOrder.length === 0 && aiSeedOrder.length) setMyBoardOrder(aiSeedOrder);
+                    // THE BOARD LAW (draft-night post-mortem 2026-09-07): this seed
+                    // fired while the stored board was momentarily unreadable and the
+                    // player pool was half-loaded — and the auto-save then wrote the
+                    // seeded junk over a hand-built board 12 minutes into a live
+                    // draft. The seed now runs only when (a) the board is hydrated
+                    // for the CURRENT storage key, (b) NO stored human order exists
+                    // on disk for that key, and (c) the pool carries real engine
+                    // values (rookie boards seed from the prospect model by design).
+                    // It also uses the RAW setter — a seed is not a human edit.
+                    if (myBoardOrder.length === 0 && aiSeedOrder.length && boardHydratedRef.current) {
+                        const seedDisk = DraftStorage.get(boardStorageKey, null);
+                        const seedPoolHealthy = isRookieDraft || draftPoolRows.some(r => r.source === 'window.dynastyValue');
+                        if (!(seedDisk?.myOrder?.length) && seedPoolHealthy) _setMyBoardOrder(aiSeedOrder);
+                    }
                     const aiBoardPlayers = applyActiveFilters(buildOrderedPlayers(aiSeedOrder));
                     const myOrder = myBoardOrder.length ? myBoardOrder : aiSeedOrder;
                     const myBoardPlayers = applyActiveFilters(buildOrderedPlayers(myOrder));
