@@ -2857,11 +2857,27 @@
         }
     }
 
+    // Recap archives live in the IndexedDB blob store (DhqStorage.recapArchive,
+    // quota diet 2026-09-07) — localStorage's ~5MB allowance clipped a real
+    // draft's recap. The mirror keeps these reads/writes synchronous; when it
+    // isn't loaded (older storage.js) the old localStorage lane still works.
+    function readRecapArchive(key) {
+        const store = window.DhqStorage?.recapArchive;
+        return store ? store.get(key) : readStoredArray(key);
+    }
+
+    function writeRecapArchive(key, rows) {
+        const store = window.DhqStorage?.recapArchive;
+        if (store) return store.set(key, rows);
+        localStorage.setItem(key, JSON.stringify(rows));
+        return rows;
+    }
+
     function archiveDraftRecap(recap, opts = {}) {
         if (!recap?.leagueId || typeof localStorage === 'undefined') return [];
         try {
             const key = draftRecapArchiveKey(recap.leagueId);
-            const existing = readStoredArray(key);
+            const existing = readRecapArchive(key);
             const id = recap.id || ('recap_' + (recap.savedAt || Date.now()));
             const archived = {
                 ...recap,
@@ -2880,7 +2896,7 @@
                 })]
                 .sort((a, b) => Number(b.savedAt || b.archivedAt || 0) - Number(a.savedAt || a.archivedAt || 0))
                 .slice(0, opts.limit || 25);
-            localStorage.setItem(key, JSON.stringify(next));
+            writeRecapArchive(key, next);
             return next;
         } catch (e) {
             if (window.wrLog) window.wrLog('draftState.archiveRecap', e);
@@ -2889,7 +2905,7 @@
     }
 
     function listDraftRecaps(leagueId) {
-        const archive = readStoredArray(draftRecapArchiveKey(leagueId));
+        const archive = readRecapArchive(draftRecapArchiveKey(leagueId));
         const learning = readStoredArray(draftLearningKey(leagueId));
         const seen = new Set();
         const rows = archive.concat(learning)
@@ -2922,7 +2938,10 @@
             return next;
         };
         removeFrom(draftLearningKey(leagueId));
-        return removeFrom(draftRecapArchiveKey(leagueId));
+        const archiveKey = draftRecapArchiveKey(leagueId);
+        const store = window.DhqStorage?.recapArchive;
+        if (store) return store.remove(archiveKey, recapId);
+        return removeFrom(archiveKey);
     }
 
     function buildRecapLearningDefaults(leagueId, opts = {}) {

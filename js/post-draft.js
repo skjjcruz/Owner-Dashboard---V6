@@ -92,8 +92,21 @@
   }
 
   // ── Recap archive ───────────────────────────────────────────────────────────
+  // Archives live in the IndexedDB blob store (DhqStorage.recapArchive, quota
+  // diet 2026-09-07) — same store js/draft/state.js writes, so both stay one
+  // archive. localStorage remains the fallback when the mirror isn't loaded.
+  function recapStoreGet(key) {
+    const store = window.DhqStorage && window.DhqStorage.recapArchive;
+    if (store) return store.get(key);
+    return lsGet(key, []);
+  }
+  function recapStoreSet(key, rows) {
+    const store = window.DhqStorage && window.DhqStorage.recapArchive;
+    if (store) return store.set(key, rows);
+    return lsSet(key, rows);
+  }
   function getRecapArchive(leagueId) {
-    const arr = lsGet(RECAP_KEY(leagueId), []);
+    const arr = recapStoreGet(RECAP_KEY(leagueId));
     return Array.isArray(arr) ? arr : [];
   }
   function archiveRecap(recap) {
@@ -104,7 +117,7 @@
     const next = [{ ...recap, id, archivedAt: Date.now() }, ...existing.filter(r => r && r.id !== id)]
       .sort((a, b) => Number(b.savedAt || b.archivedAt || 0) - Number(a.savedAt || a.archivedAt || 0))
       .slice(0, MAX_RECAPS);
-    lsSet(key, next);
+    recapStoreSet(key, next);
     dbUpsert(recap.leagueId, recap.season, 'recap_archive', { recaps: next }); // fire-and-forget
     return next;
   }
@@ -118,7 +131,7 @@
       const merged = Array.from(byId.values())
         .sort((a, b) => Number(b.savedAt || b.archivedAt || 0) - Number(a.savedAt || a.archivedAt || 0))
         .slice(0, MAX_RECAPS);
-      lsSet(RECAP_KEY(leagueId), merged);
+      recapStoreSet(RECAP_KEY(leagueId), merged);
       return merged;
     }
     return getRecapArchive(leagueId);
