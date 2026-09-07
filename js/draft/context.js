@@ -151,6 +151,104 @@
         };
     }
 
+    // ── BOARD LIBRARY (owner feature 2026-09-07) ─────────────────────
+    // "The only reason folks create a draft board is to use it" — so a board
+    // built once should be reusable in every league of the SAME KIND. Type
+    // must match: a rookie board's rankings are meaningless against a redraft
+    // pool. The storage key already carries the variant
+    // (wr_bigboard_<league>_<variant>), so an exact-suffix match IS the
+    // type check — no guessing, no cross-type accidents.
+
+    // What travels between leagues: the human's work only.
+    // NOT `drafted` (that is THIS league's live draft state — copying it would
+    // grey out players nobody has taken) and NOT `aiOrder` (machine output,
+    // regenerated per league from that league's own roster and format).
+    function portableBoardPayload(source) {
+        const s = source && typeof source === 'object' ? source : {};
+        return {
+            myOrder: uniqueIds(s.myOrder || []),
+            tags: { ...(s.tags || {}) },
+            notes: { ...(s.notes || {}) },
+            roundPlans: { ...(s.roundPlans || {}) },
+        };
+    }
+
+    // Summary counts for the picker rows (what the user is about to copy).
+    function describeBoard(b) {
+        const p = portableBoardPayload(b);
+        return {
+            ranked: p.myOrder.length,
+            tags: Object.keys(p.tags).length,
+            notes: Object.keys(p.notes).length,
+            plans: Object.keys(p.roundPlans).length,
+            updatedAt: b?.updatedAt || null,
+        };
+    }
+
+    // Every hand-built board on this device of the given variant, newest
+    // first. `cloudRows` (from OD.listBigBoardDocs) folds in boards saved from
+    // the user's other devices; newest copy of a league wins.
+    function listPortableBoards(opts = {}) {
+        const variant = normalizeDraftType({ draftType: opts.variant });
+        const exclude = idKey(opts.excludeLeagueId || '');
+        const suffix = '_' + variant;
+        const prefix = 'wr_bigboard_';
+        const found = new Map(); // leagueId -> { leagueId, data, updatedAt, source }
+
+        const consider = (leagueId, data, source) => {
+            const lid = idKey(leagueId || '');
+            if (!lid || lid === exclude) return;
+            if (!data || typeof data !== 'object') return;
+            if (boardUserWeight(data) === 0) return; // nothing hand-built to offer
+            const ts = Date.parse(data.updatedAt || '') || 0;
+            const prev = found.get(lid);
+            if (prev && prev.ts >= ts) return;
+            found.set(lid, { leagueId: lid, data, ts, updatedAt: data.updatedAt || null, source });
+        };
+
+        try {
+            Object.keys(localStorage).forEach(key => {
+                if (key.indexOf(prefix) !== 0) return;
+                // Exact suffix match = exact type match. Also keeps multi-word
+                // variants (best_ball) from colliding with anything else.
+                if (key.slice(-suffix.length) !== suffix) return;
+                const leagueId = key.slice(prefix.length, key.length - suffix.length);
+                if (!leagueId || leagueId.indexOf('_') !== -1) return;
+                let parsed = null;
+                try { parsed = JSON.parse(localStorage.getItem(key)); } catch (e) { return; }
+                consider(leagueId, parsed, 'device');
+            });
+        } catch (e) { if (window.wrLog) window.wrLog('draftContext.listPortableBoards', e); }
+
+        (Array.isArray(opts.cloudRows) ? opts.cloudRows : []).forEach(row => {
+            // A cloud doc carries the storage key it was saved under, so the
+            // same exact-suffix type check applies to it.
+            const key = String(row?.key || '');
+            if (key.indexOf(prefix) !== 0 || key.slice(-suffix.length) !== suffix) return;
+            const leagueId = key.slice(prefix.length, key.length - suffix.length);
+            consider(leagueId, row?.data, 'cloud');
+        });
+
+        const leagueName = (lid) => {
+            try {
+                const hit = (window.S?.leagues || []).find(l => idKey(l?.league_id || l?.id || '') === lid);
+                return hit?.name || null;
+            } catch (e) { return null; }
+        };
+
+        return Array.from(found.values())
+            .map(row => ({
+                leagueId: row.leagueId,
+                leagueName: leagueName(row.leagueId) || ('League ' + row.leagueId.slice(-4)),
+                variant,
+                source: row.source,
+                updatedAt: row.updatedAt,
+                summary: describeBoard(row.data),
+                data: row.data,
+            }))
+            .sort((a, b) => (Date.parse(b.updatedAt || '') || 0) - (Date.parse(a.updatedAt || '') || 0));
+    }
+
     function rankMap(order) {
         const out = {};
         uniqueIds(order).forEach((pid, idx) => { out[pid] = idx + 1; });
@@ -1155,6 +1253,9 @@
         undoPickInContext,
         applyBoardPatchToContext,
         saveBoardPatch,
+        listPortableBoards,
+        portableBoardPayload,
+        describeBoard,
         summarizeOwnerIntel,
         _private: {
             confidenceFromSample,

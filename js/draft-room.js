@@ -145,6 +145,12 @@
         // the room shows a sign-in invite instead of silently skipping.
         const [boardUnprotected, setBoardUnprotected] = useState(false);
         const boardGuestNoticedRef = useRef(false); // one invite per session
+        // Board library (owner feature 2026-09-07): copy a board you already
+        // built in another league of the SAME KIND into this one.
+        const [boardCopyOpen, setBoardCopyOpen] = useState(false);
+        const [boardCopyRows, setBoardCopyRows] = useState(null); // null = still looking
+        const [boardCopyConfirm, setBoardCopyConfirm] = useState(null); // row awaiting overwrite OK
+        const [boardCopyNote, setBoardCopyNote] = useState('');
         const [myBoardOrder, _setMyBoardOrder] = useState([]); // custom ordered pid array
         // ── THE BOARD LAW (owner post-mortem 2026-09-07, draft night) ──
         // A machine may never overwrite a human board. Every setter used by a
@@ -1139,6 +1145,78 @@
             window.addEventListener('wr:board-unprotected', onUnprotected);
             return () => window.removeEventListener('wr:board-unprotected', onUnprotected);
         }, []);
+
+        // ── BOARD LIBRARY ────────────────────────────────────────────────
+        // Open the picker: list every hand-built board of THIS draft's kind,
+        // from this device and (when signed in) the user's other devices.
+        const openBoardCopy = useCallback(async () => {
+            setBoardCopyOpen(true);
+            setBoardCopyConfirm(null);
+            setBoardCopyNote('');
+            setBoardCopyRows(null);
+            const scan = (cloudRows) => {
+                try {
+                    return window.DraftCC?.context?.listPortableBoards?.({
+                        variant: draftVariant,
+                        excludeLeagueId: leagueKey,
+                        cloudRows,
+                    }) || [];
+                } catch (e) {
+                    window.wrLog?.('board.copyScan', e);
+                    return [];
+                }
+            };
+            // Device boards render immediately; the cloud pass refreshes the
+            // list a moment later so a slow network never blocks the picker.
+            setBoardCopyRows(scan([]));
+            try {
+                const cloudRows = await (window.OD?.listBigBoardDocs?.() || Promise.resolve([]));
+                if (cloudRows && cloudRows.length) setBoardCopyRows(scan(cloudRows));
+            } catch (e) { /* cloud unavailable — device boards still listed */ }
+        }, [draftVariant, leagueKey]);
+
+        // Apply a copy. This is a HUMAN gesture, so it rides the wrapped
+        // setters: the Board Law stamps the session as user-touched and the
+        // auto-save persists the copy (local + cloud + 30-day history).
+        const applyBoardCopy = useCallback((row) => {
+            // Type re-check at the moment of the copy. The picker lists boards
+            // for the draft type known when it OPENED; if this league's type
+            // settled differently in between (league settings landing late —
+            // the same race behind the draft-night clobber), a listed board
+            // may no longer match. Refuse and re-scan rather than drop rookie
+            // rankings into a redraft pool.
+            if (row?.variant && row.variant !== draftVariant) {
+                setBoardCopyNote('This draft is set up as a ' + draftVariant.replace('_', ' ') + ' — reopening your matching boards.');
+                setBoardCopyConfirm(null);
+                setBoardCopyOpen(false);
+                return;
+            }
+            const payload = window.DraftCC?.context?.portableBoardPayload?.(row?.data) || null;
+            if (!payload) return;
+            // Copied verbatim — never filtered against the live pool. A pool
+            // still loading would silently drop real players (the draft-night
+            // failure mode); rows the pool doesn't carry simply don't render.
+            setMyBoardOrder(payload.myOrder);
+            setBoardTags(payload.tags);
+            setBoardNotes(payload.notes);
+            setRoundPlans(payload.roundPlans);
+            setBoardMode('my');
+            setBoardCopyConfirm(null);
+            setBoardCopyOpen(false);
+            const bits = [
+                payload.myOrder.length + ' ranked',
+                Object.keys(payload.tags).length ? Object.keys(payload.tags).length + ' tags' : '',
+                Object.keys(payload.notes).length ? Object.keys(payload.notes).length + ' notes' : '',
+                Object.keys(payload.roundPlans).length ? Object.keys(payload.roundPlans).length + ' round plans' : '',
+            ].filter(Boolean).join(' · ');
+            setBoardCopyNote('Copied from ' + row.leagueName + ' — ' + bits + '.');
+        }, [draftVariant]);
+
+        // The picker's list is only valid for one draft type; if this league's
+        // type settles while the sheet is open, rebuild it.
+        useEffect(() => {
+            if (boardCopyOpen) openBoardCopy();
+        }, [draftVariant]);
 
         // Keep the User Board's strike-throughs in step with the live draft: each
         // pick the command center makes arrives here as a wr:live-draft-picks event
@@ -3976,6 +4054,79 @@
                         { k: 'my', label: 'My Draft Board', sub: 'editable front office board', detail: myBoardOrder.length ? 'Manual order with your notes, tags, and draft prep.' : (isPro ? 'Starts from AI Recommended, then becomes yours when edited.' : 'Starts from the value order, then becomes yours when edited.') },
                     ];
                     const activeBoardInfo = boardModeOptions.find(opt => opt.k === boardMode) || boardModeOptions[0];
+                    // ── BOARD LIBRARY UI (shared by phone + desktop headers) ──
+                    const variantLabel = ({
+                        rookie: 'rookie draft',
+                        redraft: 'redraft',
+                        best_ball: 'best ball',
+                        startup: 'startup/dynasty',
+                    })[draftVariant] || 'this draft type';
+                    const copyBoardBtn = (
+                        <button type="button" onClick={openBoardCopy} style={{ padding: '6px 11px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', background: 'var(--acc-fill2, rgba(212,175,55,0.12))', color: 'var(--gold)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                            title={'Copy a board you already built in another ' + variantLabel + ' league'}>
+                            Copy board from another league
+                        </button>
+                    );
+                    const boardCopyNoteEl = boardCopyNote ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', marginBottom: 8, background: 'var(--acc-fill1, rgba(212,175,55,0.08))', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: 8 }}>
+                            <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', color: 'var(--gold)' }}>{boardCopyNote}</span>
+                            <button type="button" aria-label="Dismiss" onClick={() => setBoardCopyNote('')} style={{ padding: '4px 8px', background: 'transparent', color: 'var(--silver)', border: '1px solid var(--acc-line1, rgba(255,255,255,0.15))', borderRadius: 6, cursor: 'pointer' }}>✕</button>
+                        </div>
+                    ) : null;
+                    const boardCopySheet = boardCopyOpen ? (
+                        <div onClick={() => { setBoardCopyOpen(false); setBoardCopyConfirm(null); }} style={{ position: 'fixed', inset: 0, zIndex: 96000, background: 'rgba(6,8,12,0.74)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }}>
+                            <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 520, maxHeight: '80vh', overflowY: 'auto', background: 'var(--charcoal, #0e0e12)', border: '1px solid var(--acc-line3, rgba(212,175,55,0.4))', borderRadius: 'var(--card-radius)', padding: '16px 16px 14px' }}>
+                                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
+                                    <h3 style={{ margin: 0, color: 'var(--white)', fontFamily: 'var(--font-title)', fontSize: '1.05rem' }}>Copy a draft board</h3>
+                                    <button type="button" aria-label="Close" onClick={() => { setBoardCopyOpen(false); setBoardCopyConfirm(null); }} style={{ padding: '4px 9px', background: 'transparent', color: 'var(--silver)', border: '1px solid var(--acc-line1, rgba(255,255,255,0.15))', borderRadius: 6, cursor: 'pointer' }}>✕</button>
+                                </div>
+                                <p style={{ margin: '0 0 12px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', color: 'var(--silver)', opacity: 0.8, lineHeight: 1.5 }}>
+                                    Boards only travel between leagues of the same kind, so you are seeing your <strong style={{ color: 'var(--gold)' }}>{variantLabel}</strong> boards. Your rankings, tags, notes, and round plans come across — the live draft picks stay with each league.
+                                </p>
+                                {boardCopyRows === null && (
+                                    <div style={{ padding: '18px 4px', textAlign: 'center', color: 'var(--silver)', opacity: 0.6, fontSize: '0.76rem' }}>Looking for your boards…</div>
+                                )}
+                                {boardCopyRows !== null && boardCopyRows.length === 0 && (
+                                    <div style={{ padding: '14px 12px', color: 'var(--silver)', fontSize: '0.76rem', lineHeight: 1.6, background: 'var(--ov-2, rgba(255,255,255,0.025))', borderRadius: 8 }}>
+                                        No other {variantLabel} boards yet. Build one here and it will be ready to copy into your next {variantLabel} league.
+                                    </div>
+                                )}
+                                {(boardCopyRows || []).map(row => {
+                                    const s = row.summary;
+                                    const when = row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : null;
+                                    const isConfirm = boardCopyConfirm && boardCopyConfirm.leagueId === row.leagueId;
+                                    return (
+                                        <div key={row.leagueId} style={{ padding: '11px 12px', marginBottom: 8, border: '1px solid ' + (isConfirm ? 'var(--acc-line3, rgba(212,175,55,0.4))' : 'var(--ov-5, rgba(255,255,255,0.08))'), borderRadius: 8, background: 'var(--ov-2, rgba(255,255,255,0.025))' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                                                <div style={{ flex: '1 1 190px', minWidth: 0 }}>
+                                                    <strong style={{ display: 'block', color: 'var(--white)', fontFamily: 'var(--font-body)', fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.leagueName}</strong>
+                                                    <span style={{ display: 'block', color: 'var(--silver)', opacity: 0.65, fontFamily: 'var(--font-mono, monospace)', fontSize: 'var(--text-micro, 0.6875rem)', marginTop: 2 }}>
+                                                        {[s.ranked + ' ranked', s.tags ? s.tags + ' tags' : '', s.notes ? s.notes + ' notes' : '', s.plans ? s.plans + ' round plans' : ''].filter(Boolean).join(' · ')}
+                                                        {when ? ' · ' + when : ''}
+                                                    </span>
+                                                </div>
+                                                <button type="button" onClick={() => {
+                                                    // Overwriting real work needs a deliberate second tap.
+                                                    const mine = myBoardOrder.length + Object.keys(boardTags || {}).length + Object.keys(boardNotes || {}).length;
+                                                    if (mine > 0 && !isConfirm) { setBoardCopyConfirm(row); return; }
+                                                    applyBoardCopy(row);
+                                                }} style={{ padding: '8px 14px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', fontWeight: 900, letterSpacing: '0.05em', background: isConfirm ? 'var(--k-c0392b, #c0392b)' : 'var(--gold)', color: isConfirm ? '#fff' : '#151515', border: 'none', borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                                    {isConfirm ? 'REPLACE MY BOARD' : 'COPY'}
+                                                </button>
+                                            </div>
+                                            {isConfirm && (
+                                                <div style={{ marginTop: 8, fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', color: 'var(--silver)', lineHeight: 1.5 }}>
+                                                    This league already has a board ({myBoardOrder.length} ranked, {Object.keys(boardTags || {}).length} tags, {Object.keys(boardNotes || {}).length} notes). Copying replaces it — the version you have now is kept in your cloud history for 30 days.
+                                                    <button type="button" onClick={() => setBoardCopyConfirm(null)} style={{ marginLeft: 8, padding: '3px 9px', background: 'transparent', color: 'var(--gold)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: 5, cursor: 'pointer', fontSize: 'var(--text-micro, 0.6875rem)' }}>Cancel</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ) : null;
+
                     // Guest door: shared by the phone and desktop board headers.
                     const guestBanner = boardUnprotected ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', marginBottom: 8, background: 'var(--acc-fill1, rgba(212,175,55,0.08))', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: 8 }}>
@@ -4315,6 +4466,11 @@
                         return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 {guestBanner}
+                                {boardCopySheet}
+                                {boardCopyNoteEl}
+                                {boardMode === 'my' && (
+                                    <div style={{ display: 'flex' }}>{copyBoardBtn}</div>
+                                )}
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
                                     <span style={{ color: 'var(--gold)', fontFamily: 'var(--font-body)', fontSize: MICRO, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{isRookieDraft ? 'Draft Big Board' : 'Redraft Big Board'}</span>
                                     <span style={{ color: 'var(--silver)', opacity: 0.6, fontSize: MICRO, fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeBoardInfo.label} · {visibleBoardPlayers.length} players</span>
@@ -4377,6 +4533,8 @@
                     return (
                     <div>
                         {guestBanner}
+                        {boardCopySheet}
+                        {boardCopyNoteEl}
                         <section style={{ border: '1px solid var(--acc-fill3, rgba(212,175,55,0.18))', borderRadius: 'var(--card-radius)', background: 'linear-gradient(135deg, var(--acc-fill2, rgba(212,175,55,0.08)), var(--ov-1, rgba(255,255,255,0.018)))', padding: '14px 15px', marginBottom: 12 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 12 }}>
                                 <div style={{ minWidth: 0 }}>
@@ -4413,6 +4571,14 @@
                                     </button>
                                 ))}
                             </div>
+                            {boardMode === 'my' && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+                                    {copyBoardBtn}
+                                    <span style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.55, fontFamily: 'var(--font-body)' }}>
+                                        Build a board once, reuse it in every {variantLabel} league.
+                                    </span>
+                                </div>
+                            )}
                         </section>
 
                         {/* Player search */}
