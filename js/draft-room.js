@@ -140,6 +140,11 @@
         const [roundPlans, _setRoundPlans] = useState({}); // round -> ['RB','WR'] — position targets on the round breaker lines
         const [openPlanRound, setOpenPlanRound] = useState(null); // which round line has its position picker expanded
         const [boardMode, _setBoardMode] = useState('dhq'); // 'dhq' | 'ai' | 'my'
+        // Guest door (owner go 2026-09-07): a signed-out session's board has no
+        // cloud lane — the vault push dispatches wr:board-unprotected once and
+        // the room shows a sign-in invite instead of silently skipping.
+        const [boardUnprotected, setBoardUnprotected] = useState(false);
+        const boardGuestNoticedRef = useRef(false); // one invite per session
         const [myBoardOrder, _setMyBoardOrder] = useState([]); // custom ordered pid array
         // ── THE BOARD LAW (owner post-mortem 2026-09-07, draft night) ──
         // A machine may never overwrite a human board. Every setter used by a
@@ -1080,7 +1085,16 @@
                         // Big Board cloud vault (owner directive 2026-08-17): this
                         // effect is the Draft tab's own save path — it bypasses
                         // context.saveBoardPatch, so the vault must be fed here too.
-                        if (lid) window.OD?.saveBigBoardBackup?.(lid, stored);
+                        // Guest door (2026-09-07): a signed-out session has no cloud
+                        // lane — surface the sign-in invite once instead of skipping
+                        // silently (draft night's phantom vaultPushFailed errors).
+                        if (lid) window.OD?.saveBigBoardBackup?.(lid, stored)?.then?.(ok => {
+                            if (ok || boardGuestNoticedRef.current) return;
+                            if (typeof window.OD?.hasCloudIdentity === 'function' && !window.OD.hasCloudIdentity()) {
+                                boardGuestNoticedRef.current = true;
+                                setBoardUnprotected(true);
+                            }
+                        });
                     } catch (e) { /* cloud unavailable — local board still serves */ }
                 }, 1200);
             } catch (e) { /* never let sync break the save */ }
@@ -1119,6 +1133,12 @@
                 window.removeEventListener('storage', onStorage);
             };
         }, [boardStorageKey, leagueKey]);
+
+        useEffect(() => {
+            const onUnprotected = () => setBoardUnprotected(true);
+            window.addEventListener('wr:board-unprotected', onUnprotected);
+            return () => window.removeEventListener('wr:board-unprotected', onUnprotected);
+        }, []);
 
         // Keep the User Board's strike-throughs in step with the live draft: each
         // pick the command center makes arrives here as a wr:live-draft-picks event
@@ -3956,6 +3976,16 @@
                         { k: 'my', label: 'My Draft Board', sub: 'editable front office board', detail: myBoardOrder.length ? 'Manual order with your notes, tags, and draft prep.' : (isPro ? 'Starts from AI Recommended, then becomes yours when edited.' : 'Starts from the value order, then becomes yours when edited.') },
                     ];
                     const activeBoardInfo = boardModeOptions.find(opt => opt.k === boardMode) || boardModeOptions[0];
+                    // Guest door: shared by the phone and desktop board headers.
+                    const guestBanner = boardUnprotected ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', marginBottom: 8, background: 'var(--acc-fill1, rgba(212,175,55,0.08))', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: 8 }}>
+                            <span style={{ fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', color: 'var(--silver)', flex: '1 1 220px', minWidth: 0 }}>
+                                <strong style={{ color: 'var(--gold)' }}>Your board lives only on this device.</strong> Create a free account and DHQ guards it in the cloud with a 30-day undo history.
+                            </span>
+                            <button type="button" onClick={() => { try { window.location.href = 'login.html'; } catch (e) { /* navigation blocked */ } }} style={{ padding: '8px 14px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', fontWeight: 900, letterSpacing: '0.06em', background: 'var(--gold)', color: '#151515', border: 'none', borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}>SIGN IN FREE</button>
+                            <button type="button" aria-label="Dismiss" onClick={() => setBoardUnprotected(false)} style={{ padding: '6px 9px', background: 'transparent', color: 'var(--silver)', border: '1px solid var(--acc-line1, rgba(255,255,255,0.15))', borderRadius: 6, cursor: 'pointer' }}>✕</button>
+                        </div>
+                    ) : null;
                     const allBoardPlayers = boardMode === 'my' ? myBoardPlayers : boardMode === 'ai' ? aiBoardPlayers : dhqBoardPlayers;
                     // ── ROUND BREAKERS + YOUR-PICK MARKERS (owner feature 2026-08-17) ──
                     // League-specific round rules every numTeams players, your picks
@@ -4284,6 +4314,7 @@
                         }
                         return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {guestBanner}
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
                                     <span style={{ color: 'var(--gold)', fontFamily: 'var(--font-body)', fontSize: MICRO, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{isRookieDraft ? 'Draft Big Board' : 'Redraft Big Board'}</span>
                                     <span style={{ color: 'var(--silver)', opacity: 0.6, fontSize: MICRO, fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeBoardInfo.label} · {visibleBoardPlayers.length} players</span>
@@ -4345,6 +4376,7 @@
 
                     return (
                     <div>
+                        {guestBanner}
                         <section style={{ border: '1px solid var(--acc-fill3, rgba(212,175,55,0.18))', borderRadius: 'var(--card-radius)', background: 'linear-gradient(135deg, var(--acc-fill2, rgba(212,175,55,0.08)), var(--ov-1, rgba(255,255,255,0.018)))', padding: '14px 15px', marginBottom: 12 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 12 }}>
                                 <div style={{ minWidth: 0 }}>

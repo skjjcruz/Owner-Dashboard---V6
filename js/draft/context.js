@@ -262,6 +262,7 @@
     // locally. Backup-only: local edits always win — the race guard below
     // re-checks local weight when the async restore lands.
     const _vaultPushTimers = {};
+    let _vaultGuestNoticed = false; // one sign-in invite per session, not a nag
     function scheduleVaultPush(leagueId, board) {
         try {
             if (!leagueId || typeof window.OD?.saveBigBoardBackup !== 'function') return;
@@ -270,7 +271,20 @@
             _vaultPushTimers[leagueId] = setTimeout(() => {
                 delete _vaultPushTimers[leagueId];
                 window.OD.saveBigBoardBackup(leagueId, board).then(ok => {
-                    if (!ok && window.wrLog) window.wrLog('draftContext.vaultPushFailed', { leagueId });
+                    if (ok) return;
+                    // A signed-out session has no cloud lane BY DESIGN — that's
+                    // an invitation to sign in, not a failure. Draft night
+                    // 2026-09-06 logged 13 phantom vaultPushFailed errors that
+                    // were all guests at this locked door. Tell the room once
+                    // so it can show the sign-in banner; never log an error.
+                    if (typeof window.OD?.hasCloudIdentity === 'function' && !window.OD.hasCloudIdentity()) {
+                        if (!_vaultGuestNoticed) {
+                            _vaultGuestNoticed = true;
+                            try { window.dispatchEvent(new CustomEvent('wr:board-unprotected', { detail: { leagueId } })); } catch (e) { /* no listeners */ }
+                        }
+                        return;
+                    }
+                    if (window.wrLog) window.wrLog('draftContext.vaultPushFailed', { leagueId });
                 });
             }, 4000);
         } catch (e) { /* backup must never break an edit */ }
