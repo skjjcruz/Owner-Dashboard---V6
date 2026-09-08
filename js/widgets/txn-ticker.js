@@ -48,6 +48,22 @@
         }
     }
 
+    // Position + NFL team for a ticker row (owner ask 2026-09-08). Read from
+    // the same player store every other surface uses, so a pid the store
+    // hasn't got yet simply renders the name alone rather than a broken tag.
+    function tickerPlayerMeta(pid) {
+        try {
+            const players = window.S?.players || window.App?.S?.players || {};
+            const p = players[String(pid)];
+            if (!p) return null;
+            const pos = window.App?.posLabel?.(p.position) || (p.position === 'DEF' ? 'D/ST' : p.position) || '';
+            // A free agent has no NFL team; say so rather than printing nothing.
+            const team = p.team || (pos ? 'FA' : '');
+            if (!pos && !team) return null;
+            return { pos, team, color: window.App?.posColor?.(p.position) || window.posColor?.(p.position) || null };
+        } catch (e) { return null; }
+    }
+
     function WrTxnTickerList({ transactions, getOwnerName, getPlayerName, timeAgo, onRowTap, colors }) {
         const ago = timeAgo || defaultTimeAgo;
         const S = colors?.S || 'var(--silver)';
@@ -66,6 +82,19 @@
                     openTickerPlayer(pid);
                 },
             };
+        }
+        // Rendered right after the name: position in its own colour (the
+        // app-wide convention), NFL team muted beside it.
+        function playerTag(pid) {
+            const meta = tickerPlayerMeta(pid);
+            if (!meta) return null;
+            return (
+                <span style={{ marginLeft: 4, fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, letterSpacing: '0.02em' }}>
+                    <span style={{ color: meta.color || S, opacity: meta.color ? 0.95 : 0.6 }}>{meta.pos}</span>
+                    {meta.pos && meta.team ? <span style={{ color: S, opacity: 0.35 }}>·</span> : null}
+                    <span style={{ color: S, opacity: 0.6 }}>{meta.team}</span>
+                </span>
+            );
         }
         function tickerRowProps(txn) {
             if (!onRowTap) return {};
@@ -115,13 +144,13 @@
                             {tickerAddPids(txn).map(pid => (
                                 <span key={'a'+pid} style={{ color: 'var(--good)', cursor: 'pointer', marginRight: '5px' }}
                                     {...tickerPlayerProps(pid)}>
-                                    +{getPlayerName(pid)}
+                                    +{getPlayerName(pid)}{playerTag(pid)}
                                 </span>
                             ))}
                             {tickerDropPids(txn).map(pid => (
                                 <span key={'d'+pid} style={{ color: 'var(--bad)', cursor: 'pointer', marginRight: '5px' }}
                                     {...tickerPlayerProps(pid)}>
-                                    -{getPlayerName(pid)}
+                                    -{getPlayerName(pid)}{playerTag(pid)}
                                 </span>
                             ))}
                             {txn.settings?.waiver_bid > 0 && <span style={{ color: 'var(--warn)', marginLeft: '2px' }}>${txn.settings.waiver_bid}</span>}
