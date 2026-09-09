@@ -1880,6 +1880,7 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
       };
       Object.entries(meta || {}).forEach(([key, value]) => {
         if (/email|password|token|secret|message|content|body/i.test(key)) return;
+        if (key === 'accountId') return; // first-class column now, not metadata
         if (value == null) return;
         if (['string', 'number', 'boolean'].includes(typeof value)) out[key] = value;
       });
@@ -1896,14 +1897,28 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
     // redirected to the connect page — a REAL Apple signup on 9/1 landed an
     // account at 14:20:52 and the funnel still read "Signup succeeded: 0"
     // (owner deep dive 2026-09-02).
+    // Landing events carried no account id, so Mission Control could only ever
+    // say "3 people signed up with google" — naming them meant hand-matching
+    // signups to accounts by timestamp (owner ask 2026-09-09). Pass
+    // metadata.accountId on the success paths and the row identifies itself.
     function trackLandingEvent(eventName, metadata = {}) {
       try {
         if (LANDING_EDITOR_PREVIEW) return Promise.resolve();
         const db = getSbClient();
         if (!db || !eventName) return Promise.resolve();
+        let accountId = metadata.accountId || null;
+        if (!accountId) {
+          // Fall back to the stored session, so every later landing event on
+          // an authenticated device is attributable too.
+          try {
+            const sess = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+            accountId = sess?.user?.id || null;
+          } catch (e) { accountId = null; }
+        }
         const insert = db.from('analytics_events').insert([{
           event_id: 'evt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10),
           username: null,
+          user_id: accountId,
           league_id: null,
           session_id: landingAnalyticsSessionId(),
           platform: 'warroom',
@@ -2030,7 +2045,7 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
         }
         localStorage.setItem(SESSION_KEY, JSON.stringify(data));
         if (signup) resetDeviceOnboardingForNewAccount();
-        trackLandingEvent(signup ? 'signup_succeeded' : 'signin_succeeded');
+        trackLandingEvent(signup ? 'signup_succeeded' : 'signin_succeeded', { accountId: data?.user?.id || null });
         showAlert('success', signup ? 'Account ready \u2014 connect your leagues\u2026' : 'Welcome back\u2026');
         // New accounts go straight to the connect-your-leagues page;
         // returning sign-ins resume wherever they left off.
@@ -2178,9 +2193,10 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
         const oauthIsNew = !!(appSession && appSession.isNew === true);
         // AWAITED so the success reaches the server before we navigate away —
         // otherwise a successful signup reads as a funnel dropout.
+        const oauthAccountId = (appSession && appSession.user && appSession.user.id) || null;
         await Promise.all([
-          trackLandingEvent('oauth_succeeded', { provider: oauthProvider, isNew: oauthIsNew }),
-          trackLandingEvent(oauthIsNew ? 'signup_succeeded' : 'signin_succeeded', { method: oauthProvider }),
+          trackLandingEvent('oauth_succeeded', { provider: oauthProvider, isNew: oauthIsNew, accountId: oauthAccountId }),
+          trackLandingEvent(oauthIsNew ? 'signup_succeeded' : 'signin_succeeded', { method: oauthProvider, accountId: oauthAccountId }),
         ]);
         // First-ever sign-in (fw-oauth-sync just created the account): route
         // to the connect-your-leagues page instead of straight in.
