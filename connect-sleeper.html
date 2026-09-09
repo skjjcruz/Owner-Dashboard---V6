@@ -48,7 +48,12 @@
     .step{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);margin-bottom:8px}
     h1{font-size:24px;font-weight:800;margin-bottom:10px}
     .sub{font-size:14px;color:var(--silver);line-height:1.55;margin-bottom:22px}
-    .switch{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+    .switch{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+    @media (max-width:460px){.switch{grid-template-columns:1fr}}
+    .private{display:none;margin-top:2px}
+    .private.show{display:block;animation:fade .3s ease}
+    .private-toggle{background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;margin-bottom:10px}
+    .private-toggle:hover{color:var(--gold)}
     .switch button{position:relative;padding:18px 12px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:15px;font-weight:700;color:var(--silver);background:var(--bg2);border:1px solid var(--border);transition:border-color .15s,color .15s,box-shadow .15s,transform .12s}
     .switch button:hover{border-color:rgba(212,175,55,.45);transform:translateY(-1px)}
     .switch button.on{color:var(--white);border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset,0 4px 18px rgba(212,175,55,.12)}
@@ -98,6 +103,7 @@
     <div class="switch" role="group" aria-label="Where do you play?">
       <button id="tabSleeper" onclick="pick('sleeper')">Sleeper<span class="sm" id="smSleeper">username</span><span class="tick">&#10003;</span></button>
       <button id="tabMfl" onclick="pick('mfl')">MyFantasyLeague<span class="sm" id="smMfl">league ID</span><span class="tick">&#10003;</span></button>
+      <button id="tabEspn" onclick="pick('espn')">ESPN<span class="sm" id="smEspn">league ID</span><span class="tick">&#10003;</span></button>
     </div>
 
     <div class="pane" id="paneSleeper">
@@ -113,6 +119,20 @@
       </div>
       <button class="btn-link" id="btnMfl" onclick="connectMfl()">Connect MFL league</button>
       <p class="hint">Your league ID is the <strong>number in your MFL web address</strong> (the part after <strong>L=</strong>). We&rsquo;ll load that league and its history.</p>
+    </div>
+
+    <div class="pane" id="paneEspn">
+      <div class="duo">
+        <input class="input" id="espnLeagueId" placeholder="ESPN league ID" inputmode="numeric" autocomplete="off">
+        <input class="input" id="espnYear" value="2026" aria-label="Season" inputmode="numeric" autocomplete="off">
+      </div>
+      <button class="private-toggle" id="espnPrivateToggle" onclick="toggleEspnPrivate()">Private league? Add your ESPN cookies</button>
+      <div class="private" id="espnPrivate">
+        <input class="input" id="espnS2" placeholder="espn_s2 cookie value" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <input class="input" id="espnSwid" placeholder="SWID cookie value {XXXXXXXX-...}" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <button class="btn-link" id="btnEspn" onclick="connectEspn()">Connect ESPN league</button>
+      <p class="hint">Your league ID is the <strong>number after leagueId=</strong> in your ESPN league&rsquo;s web address. Public leagues connect with just the ID. Private leagues also need two cookies from a computer: sign in at fantasy.espn.com, press <strong>F12 &rarr; Application &rarr; Cookies</strong>, and copy <strong>espn_s2</strong> and <strong>SWID</strong>.</p>
     </div>
 
     <div class="linkedline" id="linkedline"></div>
@@ -135,6 +155,10 @@
     // Records who connects a league platform so Mission Control can see the
     // step-2 funnel. Sleeper usernames are public identifiers; nothing
     // sensitive is recorded.
+    const ESPN_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl';
+    const PROXY_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co/functions/v1/espn-proxy';
+    const TABS = { sleeper: ['tabSleeper', 'paneSleeper', 'smSleeper', 'btnSleeper', 'sleeperName'], mfl: ['tabMfl', 'paneMfl', 'smMfl', 'btnMfl', 'mflLeagueId'], espn: ['tabEspn', 'paneEspn', 'smEspn', 'btnEspn', 'espnLeagueId'] };
+    const NAMES = { sleeper: 'Sleeper', mfl: 'MFL', espn: 'ESPN' };
     const TRACK_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co/rest/v1/analytics_events';
     const TRACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4c2hpcXl4aGhpZnZ0ZnFhd2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTExMzAsImV4cCI6MjA4ODI4NzEzMH0.zJi9W986ZLaANiZN6pt6ReFwaQU6yPeidsERIWo2ibI';
     function trackSessionId() {
@@ -193,7 +217,7 @@
       })(),
     });
 
-    const linked = { sleeper: false, mfl: false };
+    const linked = { sleeper: false, mfl: false, espn: false };
 
     function destForUser() {
       const pref = localStorage.getItem('fw_preferred_view');
@@ -218,37 +242,37 @@
     }
 
     function pick(which) {
-      document.getElementById('tabSleeper').classList.toggle('on', which === 'sleeper');
-      document.getElementById('tabMfl').classList.toggle('on', which === 'mfl');
-      document.getElementById('paneSleeper').className = which === 'sleeper' ? 'pane on' : 'pane';
-      document.getElementById('paneMfl').className = which === 'mfl' ? 'pane on' : 'pane';
-      const input = document.getElementById(which === 'sleeper' ? 'sleeperName' : 'mflLeagueId');
+      Object.keys(TABS).forEach(k => {
+        document.getElementById(TABS[k][0]).classList.toggle('on', k === which);
+        document.getElementById(TABS[k][1]).className = k === which ? 'pane on' : 'pane';
+      });
+      const input = document.getElementById(TABS[which][4]);
       if (input && !input.disabled) input.focus();
     }
 
     function markLinked(which, subLabel) {
       linked[which] = true;
-      const tab = document.getElementById(which === 'sleeper' ? 'tabSleeper' : 'tabMfl');
-      tab.classList.add('linked');
-      document.getElementById(which === 'sleeper' ? 'smSleeper' : 'smMfl').textContent = subLabel || 'connected';
-      const btn = document.getElementById(which === 'sleeper' ? 'btnSleeper' : 'btnMfl');
+      const [tabId, , smId, btnId] = TABS[which];
+      document.getElementById(tabId).classList.add('linked');
+      document.getElementById(smId).textContent = subLabel || 'connected';
+      const btn = document.getElementById(btnId);
       btn.disabled = true;
-      btn.textContent = which === 'sleeper' ? 'Sleeper connected ✓' : 'MFL league connected ✓';
+      btn.textContent = NAMES[which] + ' connected ✓';
       refreshEnter();
-      // Nudge toward the other platform if it isn't linked yet.
-      if (which === 'sleeper' && !linked.mfl) pick('mfl');
-      if (which === 'mfl' && !linked.sleeper) pick('sleeper');
+      // Nudge toward the first platform they haven't linked yet.
+      const next = Object.keys(TABS).find(k => !linked[k]);
+      if (next) pick(next);
     }
 
     function refreshEnter() {
-      const n = (linked.sleeper ? 1 : 0) + (linked.mfl ? 1 : 0);
-      document.getElementById('enterBtn').disabled = n === 0;
+      const on = Object.keys(TABS).filter(k => linked[k]);
+      document.getElementById('enterBtn').disabled = on.length === 0;
       const line = document.getElementById('linkedline');
-      if (n === 1) {
-        line.textContent = (linked.sleeper ? 'Sleeper connected.' : 'MFL connected.') + ' Play somewhere else too? Add it — or head in.';
+      if (on.length === 1) {
+        line.textContent = NAMES[on[0]] + ' connected. Play somewhere else too? Add it — or head in.';
         line.className = 'linkedline show';
-      } else if (n === 2) {
-        line.textContent = 'Sleeper + MFL connected. All your leagues, one HQ.';
+      } else if (on.length > 1) {
+        line.textContent = on.map(k => NAMES[k]).join(' + ') + ' connected. All your leagues, one HQ.';
         line.className = 'linkedline show';
       }
     }
@@ -308,11 +332,72 @@
       }
     }
 
+    function toggleEspnPrivate() {
+      const el = document.getElementById('espnPrivate');
+      el.classList.toggle('show');
+      if (el.classList.contains('show')) document.getElementById('espnS2').focus();
+    }
+
+    async function connectEspn() {
+      const idInput = document.getElementById('espnLeagueId');
+      const yearInput = document.getElementById('espnYear');
+      const leagueId = idInput.value.trim().replace(/\D/g, '');
+      const year = (yearInput.value.trim() || '2026').replace(/\D/g, '') || '2026';
+      const s2 = document.getElementById('espnS2').value.trim();
+      const swid = document.getElementById('espnSwid').value.trim();
+      const btn = document.getElementById('btnEspn');
+      if (!leagueId) { showAlert('error', 'Enter your ESPN league ID — the number after leagueId= in your ESPN web address.'); idInput.focus(); return; }
+      btn.disabled = true; btn.textContent = 'Finding your league…';
+      const url = `${ESPN_BASE}/seasons/${year}/segments/0/leagues/${leagueId}?view=mTeam&view=mSettings`;
+      try {
+        let data = null;
+        if (s2 && swid) {
+          // Private league: the browser can't send ESPN cookies cross-site,
+          // so the server-side connector forwards them.
+          const res = await fetch(PROXY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TRACK_KEY, 'apikey': TRACK_KEY },
+            body: JSON.stringify({ url, espnS2: s2, swid }),
+          });
+          if (!res.ok) throw Object.assign(new Error('proxy'), { status: res.status });
+          data = await res.json();
+        } else {
+          const res = await fetch(url);
+          if (res.status === 401 || res.status === 403) {
+            document.getElementById('espnPrivate').classList.add('show');
+            showAlert('error', 'That ESPN league is private. Add your espn_s2 and SWID cookies below and try again.');
+            btn.disabled = false; btn.textContent = 'Connect ESPN league';
+            document.getElementById('espnS2').focus();
+            return;
+          }
+          if (!res.ok) throw Object.assign(new Error('espn'), { status: res.status });
+          data = await res.json();
+        }
+        const leagueName = data && data.settings && data.settings.name;
+        const teams = (data && data.teams || []).length;
+        if (!leagueName && !teams) {
+          showAlert('error', "We couldn't find that ESPN league for " + year + '. Double-check the league ID (the leagueId= number) and season.');
+          btn.disabled = false; btn.textContent = 'Connect ESPN league';
+          return;
+        }
+        localStorage.setItem('espn_league_id', leagueId);
+        localStorage.setItem('espn_year', year);
+        try { if (s2) sessionStorage.setItem('espn_s2', s2); if (swid) sessionStorage.setItem('espn_swid', swid); } catch (e) {}
+        idInput.disabled = true; yearInput.disabled = true;
+        markLinked('espn', leagueName || (teams + '-team league'));
+      } catch (err) {
+        if (err && (err.status === 401 || err.status === 403)) {
+          showAlert('error', 'ESPN rejected those cookies. Copy fresh espn_s2 and SWID values and try again.');
+        } else {
+          showAlert('error', "We couldn't reach ESPN right now. Check the league ID and try again in a minute.");
+        }
+        btn.disabled = false; btn.textContent = 'Connect ESPN league';
+      }
+    }
+
     function enterApp() {
-      if (!linked.sleeper && !linked.mfl) return;
-      const platforms = [];
-      if (linked.sleeper) platforms.push('sleeper');
-      if (linked.mfl) platforms.push('mfl');
+      if (!Object.keys(TABS).some(k => linked[k])) return;
+      const platforms = Object.keys(TABS).filter(k => linked[k]);
       patchProfile({ platforms, onboardingComplete: true });
       let connectedName = null;
       try { connectedName = (JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}).username || null; } catch (e) {}

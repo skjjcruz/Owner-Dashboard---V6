@@ -151,7 +151,10 @@ const WR_SHARED_FILES = [
 ];
 // MFL is GA on production (mirrors MFL_ENABLED=true in js/app.js). ESPN/Yahoo stay sandbox-only beta.
 WR_SHARED_FILES.splice(7, 0, 'mfl-api.js');
-if (WR_PLATFORM_SANDBOX_ACCESS) WR_SHARED_FILES.splice(7, 0, 'espn-api.js', 'yahoo-api.js');
+// ESPN is GA on the website (2026-09-09) — its module loads for everyone, the
+// same way MFL does. Yahoo stays sandbox-only.
+WR_SHARED_FILES.splice(7, 0, 'espn-api.js');
+if (WR_PLATFORM_SANDBOX_ACCESS) WR_SHARED_FILES.splice(7, 0, 'yahoo-api.js');
 WRShared.preloadMany(WR_SHARED_FILES);
     </script>
     <style>
@@ -3163,7 +3166,7 @@ window.addEventListener('appinstalled', () => {
 <!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
      owner can read back exactly which version his device is running before
      testing — kills the stale-cache guessing game. Bump the code every deploy. -->
-<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b120</div>
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b121</div>
 </body>
 </html>
 <!-- build 1774212614 -->
