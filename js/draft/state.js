@@ -2624,16 +2624,23 @@
             };
             // Use the tab's mode to pick the right key (live-sync → 'live', else 'mock')
             const keyMode = forcedMode || (state.mode === 'live-sync' ? 'live-sync' : null);
+            const key = LS_KEY(state.leagueId, keyMode);
+            // The resume snapshot is a whale (300 pool rows + 600 slim rows +
+            // every pick) and localStorage's ~5MB allowance could not hold it:
+            // draftState.save threw QuotaExceededError 30 times in one live
+            // draft (owner stats 2026-09-09), so that drafter's place was not
+            // being saved. It rides the IndexedDB blob mirror now.
+            const blob = window.DhqStorage?.blob;
+            if (blob && blob.owns(key)) { blob.set(key, toSave); return; }
             try {
-                localStorage.setItem(LS_KEY(state.leagueId, keyMode), JSON.stringify(toSave));
+                localStorage.setItem(key, JSON.stringify(toSave));
             } catch (e) {
-                // This raw setItem bypassed the b38 storage-wrapper janitor, so
-                // a full device silently lost its mid-draft resume snapshot
-                // (owner stats 2026-08-28, midnight live draft). Clean the
-                // rebuildable caches and retry once before giving up.
+                // Fallback lane only (no IndexedDB). This raw setItem bypassed
+                // the b38 storage-wrapper janitor, so a full device silently
+                // lost its snapshot; clean the rebuildable caches and retry.
                 const J = window.DhqStorageJanitor;
                 if (!(J && J.isQuotaError(e) && J.run('quota:draft-save'))) throw e;
-                localStorage.setItem(LS_KEY(state.leagueId, keyMode), JSON.stringify(toSave));
+                localStorage.setItem(key, JSON.stringify(toSave));
             }
         } catch (e) {
             if (window.wrLog) window.wrLog('draftState.save', e);
@@ -2643,11 +2650,17 @@
     function loadFromLocal(leagueId, forcedMode) {
         if (!leagueId) return null;
         try {
-            const raw = localStorage.getItem(LS_KEY(leagueId, forcedMode));
-            if (!raw) return null;
-            const parsed = JSON.parse(raw);
-            if (parsed.version !== DRAFT_STATE_VERSION) {
-                localStorage.removeItem(LS_KEY(leagueId, forcedMode));
+            const key = LS_KEY(leagueId, forcedMode);
+            const blob = window.DhqStorage?.blob;
+            let parsed = (blob && blob.owns(key)) ? blob.get(key) : null;
+            if (!parsed) {
+                const raw = localStorage.getItem(key);
+                if (!raw) return null;
+                parsed = JSON.parse(raw);
+            }
+            if (!parsed || parsed.version !== DRAFT_STATE_VERSION) {
+                if (blob && blob.owns(key)) blob.remove(key);
+                else localStorage.removeItem(key);
                 return null;
             }
             // Sanity check: if forcedMode is set, ignore state with a mismatched mode
@@ -2671,7 +2684,12 @@
     }
 
     function clearLocal(leagueId, forcedMode) {
-        try { localStorage.removeItem(LS_KEY(leagueId, forcedMode)); } catch (e) {}
+        const key = LS_KEY(leagueId, forcedMode);
+        try {
+            const blob = window.DhqStorage?.blob;
+            if (blob && blob.owns(key)) { blob.remove(key); return; }
+            localStorage.removeItem(key);
+        } catch (e) {}
     }
 
     // ── Grade helper ─────────────────────────────────────────────────
