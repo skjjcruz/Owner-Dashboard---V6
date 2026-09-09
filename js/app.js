@@ -1925,6 +1925,41 @@
             handleSelectLeague(league);
         }
 
+        // ── The connect that people actually use (owner find 2026-09-09) ──
+        // connect-sleeper.html fires sleeper_connected and writes the account
+        // profile, but this in-app form — the one real users reach — only
+        // wrote localStorage and reloaded. So sleeper_connected had fired ZERO
+        // times ever, app_users.platform_usernames stayed empty for everyone,
+        // and the connect funnel was invisible. It now validates the username,
+        // reports the connection, and records it on the account.
+        const connectSleeperFromHub = async (raw) => {
+            const typed = String(raw || '').trim();
+            if (!typed) return;
+            let uname = typed;
+            let sleeperUserId = null;
+            try {
+                const res = await fetch('https://api.sleeper.app/v1/user/' + encodeURIComponent(typed));
+                const user = res.ok ? await res.json() : null;
+                if (user && user.user_id) { uname = user.username || typed; sleeperUserId = user.user_id; }
+            } catch (e) { /* offline — accept the typed name, as before */ }
+            try {
+                localStorage.setItem('od_auth_v1', JSON.stringify({ sleeperUsername: uname, sleeperUserId }));
+                localStorage.setItem('od_locked_username_v2', uname);
+            } catch (e) { /* storage blocked — the reload below still tries */ }
+            // Fire-and-forget: tracking must never delay or block the connect.
+            try { window.OD?.track?.('sleeper_connected', { sleeperUsername: uname, source: 'hub', verified: !!sleeperUserId }); } catch (e) {}
+            // THE column that was never written: app_users.platform_usernames.
+            // Without it the account record showed "no league connected" for
+            // everyone, which is what made the funnel unreadable. Only a name
+            // Sleeper confirmed is recorded — a typo must not leave the account
+            // permanently claiming a league it does not have. The local sign-in
+            // above still accepts it, exactly as before.
+            if (sleeperUserId) {
+                try { window.OD?.savePlatformUsernames?.({ sleeper: uname }); } catch (e) {}
+            }
+            window.location.reload();
+        };
+
         // Search connected leagues across active production platforms.
         const allLeagues = [...sleeperLeagues, ...visibleEspnLeagues, ...visibleMflLeagues];
         const hasLeagues = allLeagues.length > 0;
@@ -2122,8 +2157,8 @@
                         <div className="product-card-body">
                             {!sleeperUsername ? (
                                 <div className="hub-connect-card">
-                                    <input id="wr-sleeper-input" placeholder="Sleeper username" onKeyDown={e => { if (e.key === 'Enter') { const v = e.target.value.trim(); if (v) { localStorage.setItem('od_auth_v1', JSON.stringify({sleeperUsername:v})); window.location.reload(); } } }} />
-                                    <button className="hub-cta gold" onClick={() => { const v = document.getElementById('wr-sleeper-input')?.value?.trim(); if (v) { localStorage.setItem('od_auth_v1', JSON.stringify({sleeperUsername:v})); window.location.reload(); } }}>CONNECT</button>
+                                    <input id="wr-sleeper-input" placeholder="Sleeper username" onKeyDown={e => { if (e.key === 'Enter') { const v = e.target.value.trim(); if (v) connectSleeperFromHub(v); } }} />
+                                    <button className="hub-cta gold" onClick={() => { const v = document.getElementById('wr-sleeper-input')?.value?.trim(); if (v) connectSleeperFromHub(v); }}>CONNECT</button>
                                     <button className="hub-cta ghost" style={{ marginTop: '6px' }} onClick={() => { localStorage.setItem('od_auth_v1', JSON.stringify({sleeperUsername:'bigloco'})); AppStorage.set(APP_WR_KEYS.DEMO_MODE, '1'); window.location.reload(); }}>Demo League</button>
                                 </div>
                             ) : hasLeagues ? (
