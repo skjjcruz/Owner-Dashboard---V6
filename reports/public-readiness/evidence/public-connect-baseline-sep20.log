@@ -1,0 +1,46 @@
+FAIL duplicateSubmission: Pending provider request must not duplicate
+
+2 !== 1
+
+FAIL changedAccount: Late A provider reply must not write a connection into B
++ actual - expected
+
++ '{"username":"Controlled","sleeperUserId":"123456789012345678","createdAt":"2026-09-20T16:47:13.195Z"}'
+- null
+
+FAIL signedOut: Late reply must not recreate signed-out connection
++ actual - expected
+
++ '{"username":"Controlled","sleeperUserId":"123456789012345678","createdAt":"2026-09-20T16:47:13.196Z"}'
+- null
+
+FAIL malformedIdentity: Malformed provider identity must not be accepted
++ actual - expected
+
++ '{"username":"Controlled","sleeperUserId":{"wrong":true},"createdAt":"2026-09-20T16:47:13.196Z"}'
+- null
+
+FAIL saveFailure: Failed profile write must roll back incomplete connection
++ actual - expected
+
++ '{"username":"Controlled","sleeperUserId":"123456789012345678","createdAt":"2026-09-20T16:47:13.197Z"}'
+- null
+
+FAIL staleSignOut: Old page must not sign out B
++ actual - expected
+
++ null
+- '{"token":"b-token","user":{"id":"account-b"}}'
+
+FAIL requestTimeoutAndRetry: Provider request must have a real timeout
+FAIL exactMflInput: Malformed league ID must not silently connect a different ID
+
+1 !== 0
+
+PASS mflFailureThenRetry
+FAIL partialEspnCookies: Partial private credentials must not fall through to public lookup
+
+1 !== 0
+
+PASS privateEspn
+FAIL pendingEnterAndLateNavigation: Cannot navigate while another connection is pending

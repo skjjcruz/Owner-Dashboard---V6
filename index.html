@@ -36,7 +36,7 @@
         if (!ok && isGuest) {
           try {
             var ga = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
-            if ((ga && ga.username) || localStorage.getItem('mfl_league_id')) ok = true;
+            if ((ga && ga.username) || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id')) ok = true;
           } catch (e) {}
         }
         if (!ok) {
@@ -2889,6 +2889,16 @@ WRShared.preloadMany(WR_SHARED_FILES);
     }
 </style>
 
+<style>
+.tc-pick-notice { padding:10px; margin:8px 0; border:1px solid var(--acc-line1, #685723); border-radius:6px; color:var(--silver, #ddd); font-size:14px; line-height:1.45; overflow-wrap:anywhere; }
+.tc-pick-notice button { display:block; min-height:44px; margin-top:6px; padding:6px 12px; color:var(--gold, #d4af37); background:transparent; border:1px solid currentColor; border-radius:5px; font:inherit; cursor:pointer; }
+.tc-pick-select { width:100%; min-height:44px; color:inherit; font:inherit; text-align:left; border:0; background:transparent; }
+.tc-pick-select, .tc-pick-select .tc-ta-pick-name, .tc-pick-select .tc-ta-player-val { font-size:14px; line-height:1.35; }
+.tc-pick-select .tc-ta-player-val { flex-shrink:0; max-width:48%; white-space:normal; }
+.tc-ta-side .tc-ta-remove { min-width:44px; min-height:44px; }
+.tc-ta-side .tc-ta-owner-select { min-height:44px; }
+.tc-pick-select:disabled { opacity:0.65; cursor:default; }
+</style>
 </head>
 <body>
     <!-- Static boot splash: pure HTML/CSS, visible at first paint while the JS
@@ -2915,7 +2925,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script src="js/pro-launch.js?v=20260414d"></script>
 <!-- Billing shim (web-only build): keeps the window.DHQBilling API surface;
      purchases route to Stripe via upgrade.html (in-app purchase is iOS-app-only). -->
-<script src="js/billing.js?v=20260722webonly1"></script>
+<script src="js/billing.js?v=20260920webrecovery1"></script>
 <script src="college-stats.js"></script>
 <script src="draft-history.js"></script>
 <script src="charts.js"></script>
@@ -3014,9 +3024,10 @@ WRShared.preloadMany(WR_SHARED_FILES);
      group, when the owning surface first calls wrLoadModuleGroup('<group>'). -->
 <script src="js/module-loader.js?v=20260612modlazy1"></script>
 <script type="text/babel" src="js/settings.js?v=20260902intel1"></script>
-<script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20260906b106"></script>
+<script type="text/babel" data-wr-defer="trade" src="js/trade-pick-inventory.js?v=20260920picks1"></script>
+<script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20260920picks1"></script>
 <script type="text/babel" src="js/post-draft.js?v=20260907b112"></script>
-<script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260915truth1"></script>
+<script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260920feed"></script>
 <!-- Season Odds panel loads with Game Day (owner ruling 2026-07-30) — must
      precede lineup.js in the group so window.WrSeasonOdds exists on first render. -->
 <script type="text/babel" data-wr-defer="lineup" src="js/components/season-odds-panel.js?v=20260817chp1"></script>
@@ -3047,11 +3058,11 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="draft" src="js/draft/persistence.js?v=20260415cd8"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/scenarios.js?v=20260415cd8"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/ghost-replay.js?v=20260415cd8"></script>
-<script type="text/babel" data-wr-defer="draft" src="js/draft/live-sync.js?v=20260516p6redo"></script>
+<script type="text/babel" data-wr-defer="draft" src="js/draft/live-sync.js?v=20260920mfl-context"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/live-decision-engine.js?v=20260601draftux"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/analyst-mock.js?v=20260531voice1"></script>
-<script type="text/babel" data-wr-defer="draft" src="js/draft/command-center.js?v=20260828jan2"></script>
-<script type="text/babel" data-wr-defer="draft" src="js/draft-room.js?v=20260907b116"></script>
+<script type="text/babel" data-wr-defer="draft" src="js/draft/command-center.js?v=20260920mfl-context"></script>
+<script type="text/babel" data-wr-defer="draft" src="js/draft-room.js?v=20260920mfl-context"></script>
 <!-- 5. League detail tab components (extracted from league-detail.js) -->
 <!-- v2 widget modules (load before dashboard.js which consumes them) -->
 <script type="text/babel" src="js/widgets/roster-pulse.js?v=20260613gm1"></script>
@@ -3059,7 +3070,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/widgets/window-forecast.js?v=20260902voice1"></script>
 <script type="text/babel" src="js/widgets/gap-plan.js?v=20260902onemsg1"></script>
 <script type="text/babel" src="js/widgets/league-landscape.js?v=20260902onemsg1"></script>
-<script type="text/babel" src="js/widgets/txn-ticker.js?v=20260908tick3"></script>
+<script type="text/babel" src="js/widgets/txn-ticker.js?v=20260920feed"></script>
 <script type="text/babel" src="js/widgets/market-radar.js?v=20260613gm1"></script>
 <script type="text/babel" src="js/widgets/faab-command.js?v=20260816fw1"></script>
 <script type="text/babel" src="js/widgets/draft-capital.js?v=20260916spent2"></script>
@@ -3072,7 +3083,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/widgets/my-trophies.js?v=20260611kpifix1"></script>
 <!-- League Calendar widget — depends on window.WrCalendar (js/tabs/calendar.js) -->
 <script type="text/babel" src="js/widgets/league-calendar.js?v=20260827cal4"></script>
-<script type="text/babel" src="js/tabs/dashboard.js?v=20260917truth3"></script>
+<script type="text/babel" src="js/tabs/dashboard.js?v=20260920feed"></script>
 <script type="text/babel" src="js/tabs/flash-brief.js?v=20260917week1"></script>
 <!-- Group "analysis": analytics.js embeds LeagueMapTab, so both defer together
      (league-map.js first — DOM order is execution order within a group). -->
@@ -3087,16 +3098,20 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="alex" src="js/tabs/alex-insights.js?v=20260613strip1"></script>
 <!-- Group "empire": hub-level Empire Dashboard (Pro mode), loaded by app.js when
      Pro mode activates — also provides window.App.buildEmpireDna etc. -->
-<script type="text/babel" data-wr-defer="empire" src="js/tabs/global-view.js?v=20260902onemsg1"></script>
+<script type="text/babel" data-wr-defer="empire" src="js/tabs/global-view.js?v=20260920evidence1"></script>
 <script src="js/tutorial.js?v=20260503tutorial1"></script>
 <!-- 6. Strategy editor: calls shared GMStrategy API, no logic duplication.
      Only consumed by alex-insights' Strategy sub-view, so it rides the same
      "alex" lazy group — inert at boot, loaded on first GM's Office / Strategy open. -->
 <script type="text/babel" data-wr-defer="alex" src="js/tabs/strategy-editor.js?v=20260613rec1"></script>
 <!-- 7. League detail: coordinator shell, depends on all above -->
-    <script type="text/babel" src="js/league-detail.js?v=20260902voice1"></script>
+    <script type="text/babel" src="js/league-detail.js?v=20260920mfl-context"></script>
 <!-- 8. App: OwnerDashboard + ReactDOM.render (loads last) -->
-<script type="text/babel" src="js/app.js?v=20260909b120"></script>
+<script src="js/espn-hub.js?v=20260920a"></script>
+<script src="js/public-portfolio.js?v=20260920coverage2"></script>
+<script src="js/shared/mfl-draft-context.js?v=20260920context1"></script>
+<script src="js/public-empire.js?v=20260920evidence1"></script>
+<script type="text/babel" src="js/app.js?v=20260920empire-evidence1"></script>
 
 <!-- All JSX code extracted to js/ modules. Only bootstrap remains. -->
 <script>

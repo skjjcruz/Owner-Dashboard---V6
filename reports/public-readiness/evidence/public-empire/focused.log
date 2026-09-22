@@ -1,0 +1,17 @@
+PASS sameRosterIdsStayInTheirLeagueAndGlobalsUntouched
+PASS malformedStatsAndOutageNeverInventHistoricalProduction
+PASS explicitEmptyCurrentSeasonLabelsHistoricalBasis
+PASS missingPlayersAndStaleCardsDoNotProduceReads
+PASS pickFailureIsNotEmptyOrAssessedAndRetryRecovers
+PASS nonSleeperNeverUsesSleeperTransactionsAndPreservesStatus
+PASS accountChangeDuringPlayersStopsEveryFollowup
+PASS accountChangeDuringSavedNotesStopsTransactionsAndWrites
+PASS transactionFailureRemainsUnavailableAndNoPartialInference
+PASS supersededGenerationCannotPublishOrFollowup
+PASS boundedTimeoutAndNoColdGlobalEngineInvocation
+PASS actualReviewedAdapterHonorsConsumedAndTransferredRights
+(node:4416) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS actualAppBootstrapCancelsAtModuleAndPendingEvidenceBoundaries
+PASS modelRejectsGlobalAssessmentsAndUnverifiedPicks
+14 Empire evidence groups passed.

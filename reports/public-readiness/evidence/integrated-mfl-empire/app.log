@@ -1,0 +1,58 @@
+[MFL] platform-provider.js not loaded — provider will not be registered
+(node:27239) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS explicitTeamSaveRetainsExactTargetAndOwner
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS reopensOwnedSelectionWithoutGlobalStateOrCloudWrite
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS unknownLegacyPointerIsPreservedForExplicitReconnect
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS changedPendingFlatPointerCannotMixTargets
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS changedAccountViewAndCancelRejectLateResponses
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS cloudBodyTimeoutPreservesDeviceAndNeverClaimsSynced
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS sameTabAccountSwitchRemovesPreviouslyShownTeams
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS standaloneConnectionUsesOwnedCanonicalSaveAndRollback
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS allEntryPathsRequireTheMountedAccountAndSavedTeam
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS observedAccountTransitionClosesTheAlreadyOpenedMflRoom
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS laterRenderCannotMountAnOldAccountRoom
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS scopeRetirementIsSticky
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS duplicateReadAndTeamClickDoNotDuplicateCloudWrite
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS delayedLegacyCloudReadCannotWriteAcrossAccount
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS cloudSaveRequiresExactAckAndPreservesDeviceConnection
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS storageFailureKeepsPickerAndAllowsRetry
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS wrongFranchiseIsVisibleAndNoImplicitOwnerIsSelected
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS providerFailureIsNotSavedAndRetryWorks
+18 actual MFL caller groups; 0 failed

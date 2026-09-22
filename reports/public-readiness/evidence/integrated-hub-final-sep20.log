@@ -1,0 +1,23 @@
+
+> owner-dashboard-v6@1.0.0 test:espn-hub
+> node tests/public-espn-hub.cjs && node tests/public-espn-browser.cjs
+
+PASS restoresExactSavedSeasonWithoutChangingActiveLeague
+PASS chosenTeamSurvivesReloadAndFreshRosterIdentity
+PASS selectionIsScopedToAccountAndSeason
+PASS delayedAccountAndConnectionChangesCannotPublishOrWrite
+PASS storageBoundaryInvalidatesSameBytes
+PASS timeoutThenRetryIgnoresLateOriginalReply
+PASS missingPartialAndForeignPayloadsAreNotEmptySuccess
+PASS privateCredentialsStayInSessionAndReachProxy
+PASS unknownIdentityAndIncompleteCookiesFailBeforeProvider
+PASS appOwnerClaimsMustBeCompleteConsistentAndLive
+PASS failedTeamSaveAndUnknownTeamCannotClaimSelection
+PASS rejectedPrivateStorageRestoresPriorConnection
+PASS actualHubLoadCallbackPublishesOnlyNewestResponse
+(node:13255) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS actualLeagueDetailCarriesSelectedTeamAndRejectsLateAccount
+PASS actualLoaderAndProviderRejectForeignSeasonAndLateView
+PASS actualHubKeepsGoodDataOnFailureAndClearsInvalidAccount
+[{"viewport":{"width":320,"height":740},"calls":4,"checks":["failed load and retry","saved season","explicit team and deep-link handoff","selection persists through reload","keyboard league entry","late account response rejected","active league bridge preserved","no overflow"],"limits":"actual hub and provider mapper; LeagueDetail render is a handoff fixture"},{"viewport":{"width":390,"height":844},"calls":4,"checks":["failed load and retry","saved season","explicit team and deep-link handoff","selection persists through reload","keyboard league entry","late account response rejected","active league bridge preserved","no overflow"],"limits":"actual hub and provider mapper; LeagueDetail render is a handoff fixture"},{"viewport":{"width":844,"height":390},"calls":4,"checks":["failed load and retry","saved season","explicit team and deep-link handoff","selection persists through reload","keyboard league entry","late account response rejected","active league bridge preserved","no overflow"],"limits":"actual hub and provider mapper; LeagueDetail render is a handoff fixture"}]

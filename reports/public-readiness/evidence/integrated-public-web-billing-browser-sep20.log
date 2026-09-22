@@ -1,0 +1,49 @@
+
+> owner-dashboard-v6@1.0.0 test:web-billing
+> node tests/web-billing-client.cjs && node tests/web-billing-browser.cjs
+
+PASS webOnlyContract
+PASS mismatchedOrMissingTokenOwnerNeverStartsBilling
+PASS contradictoryRefreshedTokenCannotBeSaved
+PASS delayedRefreshCannotOverwriteB
+PASS delayedBodyCannotOverwriteB
+PASS storageEventInvalidatesSameCredential
+PASS invalidResponseCannotChangeCredential
+PASS confirmedSavePreservesFields
+PASS quotaCannotClaimActivation
+PASS revokedCredentialStopsAndPreserves
+PASS freeThenProUsesOwnRefreshedToken
+PASS outageAndTimeoutNeverClaimSuccess
+PASS returnWithoutServerProStaysPending
+PASS confirmedReturnCanContinue
+PASS checkoutDuplicateAndPlanChangesAreBlockedWhilePending
+PASS checkoutAndPortalDropLateIdentityResponses
+PASS retryAndReloadUseExactCheckoutParameters
+PASS noCheckoutIfRecoveryCannotBeSaved
+PASS existingCheckoutOrSubscriptionOffersRecovery
+PASS existingCheckoutRecoverySurvivesReload
+PASS emptyUnauthorizedBodyStillShowsSignIn
+PASS checkoutTimeoutIsRecoverableAndLateUrlCannotRedirect
+PASS mismatchedReturnDoesNotAutoRefreshAnyAccount
+PASS matchingReturnRequiresProAndRetainsMarkerUntilSaved
+PASS cancellationCannotAssertNoCharge
+PASS cachedProDoesNotSkipServerCheckOrHideManagement
+PASS cachedProFreeCorrectionIsVisible
+PASS portalErrorsKeepManagementRetryAndAppleGuidance
+PASS rejectedSessionsHaveReachableSignInRecovery
+PASS replacementAccountHidesOldSignInAction
+PASS settingsPortalRejectsLateSuccessAndFailure
+PASS settingsPortalSuccessAndRecovery
+PASS settingsTimeoutAndUnsafeUrlAreRecoverable
+PASS unsafeUrlsAreNeverOpened
+34 actual-source groups; 0 failed
+{"scenario":"pending-reload-portal-guidance-check-confirmed","viewport":{"width":320,"height":740},"result":"pass","realProviderRequests":0}
+{"scenario":"checkout-error-retry-reload-exact-parameters","viewport":{"width":320,"height":740},"result":"pass","realProviderRequests":0}
+{"scenario":"pending-reload-portal-guidance-check-confirmed","viewport":{"width":390,"height":844},"result":"pass","realProviderRequests":0}
+{"scenario":"checkout-error-retry-reload-exact-parameters","viewport":{"width":390,"height":844},"result":"pass","realProviderRequests":0}
+{"scenario":"pending-reload-portal-guidance-check-confirmed","viewport":{"width":844,"height":390},"result":"pass","realProviderRequests":0}
+{"scenario":"checkout-error-retry-reload-exact-parameters","viewport":{"width":844,"height":390},"result":"pass","realProviderRequests":0}
+{"scenario":"late-fw-create-checkout-cannot-cross-account","viewport":{"width":390,"height":844},"result":"pass","realProviderRequests":0}
+{"scenario":"late-fw-billing-portal-cannot-cross-account","viewport":{"width":390,"height":844},"result":"pass","realProviderRequests":0}
+{"scenario":"late-settings-portal-cannot-cross-account","viewport":{"width":390,"height":844},"result":"pass","realProviderRequests":0}
+{"scenario":"actual-15-second-checkout-deadline-and-late-result","result":"pass","realProviderRequests":0}

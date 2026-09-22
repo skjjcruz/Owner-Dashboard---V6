@@ -66,8 +66,11 @@
         // page; the handler stores the session and redirects to step 2 shortly.
         var hash = window.location.hash || '';
         var oauthReturn = hash.indexOf('access_token=') !== -1 || /[?&]code=/.test(window.location.search);
-        var oauthError  = hash.indexOf('error=') !== -1 || q.has('error');
-        if (oauthReturn && !oauthError) {
+        window.__dhqFreshOAuthReturn = oauthReturn;
+        var oauthError = /[#&]error(?:_description)?=/.test(hash) || q.has('error') || q.has('error_description');
+        window.__dhqOAuthReturnError = oauthError;
+        if (oauthError) { reveal(); return; }
+        if (oauthReturn) {
           showSigningIn();
           // Fallback: if the callback never redirects, drop the splash + reveal the
           // page after a few seconds so no one is trapped on a blank screen.
@@ -82,20 +85,24 @@
         // (restored 2026-08-21 — same line the pre-swap page carried; MFL-only
         // guests count too, 2026-08-31).
         var ga = null; try { ga = JSON.parse(localStorage.getItem('od_auth_v1') || 'null'); } catch (e) {}
-        if (localStorage.getItem('wr_guest_v1') === '1' && ((ga && ga.username) || localStorage.getItem('mfl_league_id'))) { window.location.replace('index.html'); return; }
+        if (!handedIsNew && localStorage.getItem('wr_guest_v1') === '1' && ((ga && ga.username) || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id'))) { window.location.replace('index.html'); return; }
         // Guest mid-setup (flag set, no league yet): resume at the connect
         // page instead of stranding them on the marketing page. An app
         // relaunch between tapping Guest and connecting a league used to
         // land exactly here (owner bug report 2026-08-31). Sign out on the
         // connect page clears the flag, so this can't loop.
-        if (localStorage.getItem('wr_guest_v1') === '1') { window.location.replace('connect-sleeper.html'); return; }
+        if (!handedIsNew && localStorage.getItem('wr_guest_v1') === '1') { window.location.replace('connect-sleeper.html'); return; }
         var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
-        if (!sess || !sess.token) { reveal(); return; } // not signed in -> show landing
+        // Damaged or expired records belong to the bounded body recovery flow.
+        // Do not redirect into the app before that flow can inspect them.
+        var claims = null;
+        try { claims = JSON.parse(atob(String(sess && sess.token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) {}
+        if (!sess || typeof sess.token !== 'string' || !sess.user || !sess.user.id || !claims || typeof claims.exp !== 'number' || Date.now() >= claims.exp * 1000 - 30000 || (claims.app_metadata && claims.app_metadata.user_id && claims.app_metadata.user_id !== sess.user.id)) { reveal(); return; }
         var profile = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
         var legacy  = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
         var onboarded = (profile && (profile.onboardingComplete === true || profile.sleeperUsername))
           || (legacy && legacy.username)
-          || localStorage.getItem('mfl_league_id');
+          || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id');
         // Brand-new accounts ALWAYS start at the connect-your-leagues page —
         // even on a device where a previous account already finished
         // onboarding. That progress is stored per DEVICE, so without this
@@ -114,6 +121,9 @@
           try { localStorage.removeItem('mfl_league_id'); } catch (e) {}
           try { localStorage.removeItem('mfl_year'); } catch (e) {}
           try { localStorage.removeItem('mfl_franchise_id'); } catch (e) {}
+          ['espn_league_id', 'espn_year', 'espn_s2', 'espn_swid', 'mfl_api_key', 'mfl_api_key_context_v1', 'mfl_guest_owner_v1', 'mfl_write_cookie', 'mfl_write_host', 'mfl_write_context_v1', 'wr_guest_v1'].forEach(function (key) {
+            try { localStorage.removeItem(key); sessionStorage.removeItem(key); } catch (e) {}
+          });
           window.location.replace('connect-sleeper.html'); return;
         }
         if (!onboarded) { window.location.replace('connect-sleeper.html'); return; }
@@ -223,6 +233,7 @@ html.js-nav .topbar--frosted{background:rgba(8,9,12,.78);backdrop-filter:blur(10
 .aha-cta__s{font:400 15px/1.5 var(--font-sans);color:var(--text-2);margin:0;max-width:46ch}
 .tier__note{font:500 var(--fs-micro) var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--pos);margin-top:calc(var(--sp-2)*-1)}
 .mcta{display:none}
+.mcta[hidden]{display:none!important}
 @media(max-width:560px){
   .mcta{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:45;flex-direction:column;align-items:center;gap:6px;padding:var(--sp-3) var(--sp-4) calc(var(--sp-3) + env(safe-area-inset-bottom));background:rgba(8,9,12,.92);backdrop-filter:blur(10px);border-top:1px solid var(--border)}
   .mcta .btn{width:100%;text-align:center}
@@ -280,17 +291,18 @@ html.js-nav .topbar--frosted{background:rgba(8,9,12,.78);backdrop-filter:blur(10
 .rchip b{color:var(--forge);font-weight:600}
 .rchip--rule{border-color:var(--forge-dim);color:var(--forge-bright)}
 .rchip--lock{border-color:var(--forge-dim);color:var(--forge-bright)}
-.strat__grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-5)}
-.strat__knob{display:flex;flex-direction:column;gap:var(--sp-2)}
+.strat__grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--sp-5)}
+.strat__knob{min-width:0;display:flex;flex-direction:column;gap:var(--sp-2)}
 .floor{position:relative;height:8px;background:var(--bg-inset);border:1px solid var(--border);border-radius:999px;margin:2px 0 var(--sp-1)}
 .floor i{display:block;height:100%;background:linear-gradient(90deg,var(--forge-dim),var(--forge));border-radius:999px}
 .floor__th{position:absolute;top:50%;width:15px;height:15px;transform:translate(-50%,-50%);background:var(--forge);border:2px solid var(--bg-1);border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.strat__knob .seg{flex-wrap:wrap}
 .seg--full{display:flex}
 .seg--full button{flex:1;text-align:center}
 .seg--sm button{padding:5px 9px;font-size:10px}
 .strat__foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--sp-3);border-top:1px solid var(--border);padding-top:var(--sp-4)}
 .strat__save{font:600 var(--fs-label) var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--forge);border:1px solid var(--forge);border-radius:6px;padding:9px 16px}
-@media(max-width:760px){.modes{grid-template-columns:repeat(2,1fr)}.strat__grid{grid-template-columns:1fr}}
+@media(max-width:760px){.modes{grid-template-columns:repeat(2,1fr)}.strat__grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:440px){.modes{grid-template-columns:1fr}}
 @media(max-width:940px){.shot-grid,.intel-grid{grid-template-columns:1fr;gap:var(--sp-5)}}
 /* hero command-center stat rows */
@@ -318,7 +330,7 @@ html.js-nav .topbar--frosted{background:rgba(8,9,12,.78);backdrop-filter:blur(10
 .ftag--free{border-color:#1f5f47;color:var(--pos)}
 .ftag--pro{border-color:var(--forge-dim);color:var(--forge)}
 .ftag--soon{border-color:#2c5e80;color:var(--tactical)}
-@media(max-width:560px){.nav-features{display:none}}
+@media(max-width:940px){.nav-features{display:none}}
 
 /* ===== DHQ Labs / Discord community band (#community) ===== */
 .community{position:relative;padding:var(--sp-9) 0;overflow:hidden}
@@ -705,7 +717,10 @@ html.js-nav .topbar--frosted{background:rgba(8,9,12,.78);backdrop-filter:blur(10
   .aha-cta{padding:var(--sp-5) var(--sp-4)}
   /* topbar: drop the long sub-label and tighten buttons so the primary CTA never clips */
   .brand small{display:none}
-  .topbar__r .btn{padding:9px 13px}
+  .topbar__in{height:auto;min-height:60px;gap:8px;flex-wrap:wrap;padding-top:8px;padding-bottom:8px}
+  .topbar .brand{font-size:12px;gap:6px}
+  .topbar__r{gap:4px;margin-left:auto}
+  .topbar__r .btn{padding:8px 10px;min-height:44px;font-size:14px}
   /* tighten the board on phones: hide the clipped scale label, fit all 7 position tabs on one row */
   .panelhdr__m{display:none}
   .board__tabs button{min-width:40px;padding:var(--sp-3) 2px}
@@ -737,8 +752,8 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
     <button class="btn btn--ghost nav-features" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Plans</button>
     <button class="btn btn--ghost nav-features" onclick="document.getElementById('about').scrollIntoView({behavior:'smooth'})">Vision</button>
     <button class="btn btn--ghost nav-features" onclick="document.getElementById('community').scrollIntoView({behavior:'smooth'})">Discord</button>
-    <button class="btn btn--ghost" id="navSignin" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'})">Sign in</button>
-    <button class="btn btn--primary" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free</button>
+    <button class="btn btn--ghost" id="navSignin" onclick="openAuth('signin')">Sign in</button>
+    <button class="btn btn--primary" onclick="openAuth('signup')">Start free</button>
   </div>
 </div></header>
 
@@ -751,7 +766,7 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
       <h1>Generic advice: stop here.<span class="f">This is your world.</span></h1>
       <p class="hero__sub">Every other tool ranks players for a league that isn't yours. Dynasty HQ rebuilds every value, trade, and draft call around <b>your exact scoring and roster</b> — and reads <b>how each rival actually operates.</b></p>
       <div class="hero__cta">
-        <button class="btn btn--primary btn--lg" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free</button>
+        <button class="btn btn--primary btn--lg" onclick="openAuth('signup')">Start free</button>
         <button class="btn btn--ghost" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">or see plans</button>
       </div>
       <div class="hero__fine" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center"><span class="chip">$0 · no credit card</span><span class="chip">Dynasty + redraft</span><span class="chip">Sleeper · MFL</span></div>
@@ -823,7 +838,7 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
   <div class="aha-cta">
     <p class="aha-cta__t">That's your board — recomputed live on your settings.</p>
     <p class="aha-cta__s">Connect your Sleeper league to make it real — your rosters, your matchups, your market, season over season.</p>
-    <button class="btn btn--primary btn--lg" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free</button>
+    <button class="btn btn--primary btn--lg" onclick="openAuth('signup')">Start free</button>
     <span class="hero__fine">Free to start · no credit card</span>
   </div>
   </div>
@@ -836,19 +851,19 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
     <div class="tier">
       <div class="tier__name">Scout</div><div class="tier__price"><span class="price-amt">$0</span></div><div class="tier__note">Free forever</div>
       <ul><li>Mobile and desktop experience</li><li>A curated-feature experience</li><li>The raw data, you do your own analysis</li></ul>
-      <button class="btn btn--primary" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free</button>
+      <button class="btn btn--primary" onclick="openAuth('signup')">Start free</button>
     </div>
     <div class="tier tier--feat" id="tier-dhq">
       <div class="tier__name" style="color:var(--forge)">Dynasty HQ Pro</div>
       <div class="tier__price"><span class="price-amt" style="text-decoration:line-through;text-decoration-thickness:3px;text-decoration-color:var(--forge);color:var(--text-3)">$9.99</span><span class="price-per" style="text-decoration:line-through;text-decoration-color:var(--forge);color:var(--text-3)">/mo</span>&nbsp;&nbsp;<span class="price-amt" style="color:var(--forge)">Free</span></div>
       <div class="tier__note" style="color:var(--forge);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">Free for the 2026 season</div>
       <ul><li>The full Dynasty HQ experience</li><li>DHQ Engine, Owner DNA, Follow-live draft</li><li>Deep GM-strategy customization</li><li>Alex Ingram, your AI GM.</li></ul>
-      <button class="btn btn--primary" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Claim the season</button>
+      <button class="btn btn--primary" onclick="openAuth('signup')">Claim the season</button>
     </div>
     <div class="tier">
       <div class="tier__name">DHQ Labs</div><div class="tier__price"><span class="price-amt">Soon</span></div><div class="tier__note" style="color:var(--tactical)">In development</div>
       <ul><li>Full redraft functionality</li><li>Empire mode — all leagues, one terminal</li><li>MFL sync</li></ul>
-      <button class="btn btn--secondary" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Get early access</button>
+      <button class="btn btn--secondary" onclick="openAuth('signup')">Get early access</button>
     </div>
   </div>
 </div></section>
@@ -1144,7 +1159,7 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
   <div class="closing__in reveal">
     <h2>A universe built around your league.</h2>
     <p>Your scoring. Your rivals. Your history. No other system cares this much about making the experience yours — and only yours.</p>
-    <button class="btn btn--primary btn--lg" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free</button>
+    <button class="btn btn--primary btn--lg" onclick="openAuth('signup')">Start free</button>
     <div class="hero__fine" style="margin-top:var(--sp-4)">Free to start · no credit card</div>
   </div>
 </section>
@@ -1161,7 +1176,7 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
        card sprawls full-width and the phone-only header leaks onto desktop. */
     :root{--accent:var(--forge);--accent-bright:var(--forge-bright);--radius:10px;--muted:var(--text-3);--silver:var(--text-2)}
     .phone-auth-head{display:none}
-    .auth{max-width:430px;margin:0 auto;padding:84px 24px 96px}
+    .auth{max-width:430px;margin:0 auto;padding:84px 24px 96px;scroll-margin-top:76px}
     .auth-title{text-align:center;font-family:var(--font-mono);font-size:18px;font-weight:600;letter-spacing:.04em;margin-bottom:22px;color:var(--text-1)}
     .auth-input{width:100%;min-height:46px;padding:0 14px;font-size:14px;font-family:var(--font-mono);background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);margin-bottom:10px;outline:none;box-sizing:border-box;transition:border-color 90ms ease}
     .auth-input:focus{border-color:var(--accent)}
@@ -1186,7 +1201,7 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
     <h2 class="auth-title" id="authTitle">Create your account</h2>
     <p id="authSub" style="text-align:center;font-size:14px;color:var(--silver);line-height:1.55;margin:-12px 0 22px">Step 1 of 2 — create your account with Google or email. Next, you'll connect your leagues.</p>
 
-    <div class="alert" id="alertJoin"></div>
+    <div class="alert" id="alertJoin" role="status" aria-live="polite"></div>
 
     <!-- Google -->
     <!-- Guest lane (restored 2026-08-21; owner ruling: show it on the website
@@ -1213,8 +1228,8 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
     <div class="auth-or"><span>or</span></div>
 
     <!-- Email signup / signin -->
-    <input class="auth-input" type="email" id="acctEmail" placeholder="Email" autocomplete="email" autocapitalize="off">
-    <input class="auth-input" type="password" id="acctPassword" placeholder="Password (8+ characters)" autocomplete="current-password">
+    <input class="auth-input" type="email" id="acctEmail" aria-label="Email" placeholder="Email" autocomplete="email" autocapitalize="off">
+    <input class="auth-input" type="password" id="acctPassword" aria-label="Password" placeholder="Password (8+ characters)" autocomplete="new-password">
     <button class="auth-submit" id="btnJoin" onclick="handleEmailAuth()">Create account →</button>
 
     <p style="text-align:center;font-size:12px;color:var(--muted);margin-top:12px">
@@ -1356,7 +1371,7 @@ body.editing .ed-del{opacity:.45;text-decoration:line-through;outline:1px dashed
 
 <!-- mobile sticky CTA (shown under 560px) -->
 <div class="mcta">
-  <button class="btn btn--primary btn--lg" onclick="document.getElementById('auth').scrollIntoView({behavior:'smooth'});document.getElementById('acctEmail').focus()">Start free</button>
+  <button class="btn btn--primary btn--lg" onclick="openAuth('signup')">Start free</button>
   <span class="hero__fine">Free to start · no credit card</span>
 </div>
 
@@ -1832,6 +1847,7 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
     const FW_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4c2hpcXl4aGhpZnZ0ZnFhd2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTExMzAsImV4cCI6MjA4ODI4NzEzMH0.zJi9W986ZLaANiZN6pt6ReFwaQU6yPeidsERIWo2ibI';
     const SUPABASE_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co';
     const SESSION_KEY = 'fw_session_v1';
+    const PROVIDER_SESSION_KEY = 'sb-' + new URL(SUPABASE_URL).hostname.split('.')[0] + '-auth-token';
     const SCOUT_URL = 'https://skjjcruz.github.io/ReconAI-sandbox-dev/';
     const LANDING_EDITOR_PREVIEW = new URLSearchParams(window.location.search).has('landingPreview');
     // ?signout — arrive here from the DHQ logo to land on the sign-in page and
@@ -1843,9 +1859,10 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
 
     // Supabase client — used only for lightweight landing analytics below.
     let _sbClient = null;
+    let _signoutClient = FORCE_SIGNOUT;
     function getSbClient() {
       if (!_sbClient && window.supabase) {
-        _sbClient = window.supabase.createClient(SUPABASE_URL, FW_ANON_KEY);
+        _sbClient = window.supabase.createClient(SUPABASE_URL, FW_ANON_KEY, _signoutClient ? { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } } : undefined);
       }
       return _sbClient;
     }
@@ -1968,10 +1985,34 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
       try { localStorage.removeItem('mfl_league_id'); } catch {}
       try { localStorage.removeItem('mfl_year'); } catch {}
       try { localStorage.removeItem('mfl_franchise_id'); } catch {}
+      for (const key of ['espn_league_id', 'espn_year', 'espn_s2', 'espn_swid', 'mfl_api_key', 'mfl_api_key_context_v1', 'mfl_guest_owner_v1', 'mfl_write_cookie', 'mfl_write_host', 'mfl_write_context_v1', 'wr_guest_v1']) {
+        try { localStorage.removeItem(key); sessionStorage.removeItem(key); } catch {}
+      }
     }
     const FW_API_BASE = SUPABASE_URL + '/functions/v1';
 
     let authMode = 'signup'; // 'signup' | 'signin'
+    let authIntentVersion = 0;
+    let pendingProviderAuth = null;
+    let pendingEmailAuth = null;
+    function authSnapshot() {
+      try { return { version: authIntentVersion, session: localStorage.getItem(SESSION_KEY), auth: localStorage.getItem(AUTH_KEY) }; }
+      catch { return null; }
+    }
+    function sameAuthSnapshot(attempt) {
+      try { return !!attempt && attempt.version === authIntentVersion && attempt.session === localStorage.getItem(SESSION_KEY) && attempt.auth === localStorage.getItem(AUTH_KEY); }
+      catch { return false; }
+    }
+    function beginAuthIntent() { authIntentVersion++; return authSnapshot(); }
+    window.addEventListener('storage', event => {
+      if (event.key === null || event.key === SESSION_KEY || event.key === AUTH_KEY || event.key === PROVIDER_SESSION_KEY) authIntentVersion++;
+    });
+    async function boundedAuthWork(work) {
+      let timer;
+      try { return await Promise.race([work, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Sign-in timed out.')), 20000); })]); }
+      finally { clearTimeout(timer); }
+    }
+    let pendingResetRequest = false;
 
     function destForUser() {
       const pref = localStorage.getItem('fw_preferred_view');
@@ -1993,19 +2034,20 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
     }
 
     // Where to send a signed-in user: the connect-your-leagues page until a
-    // league source (Sleeper or MFL) is bound; the app once one is.
+    // league source (Sleeper, MFL or ESPN) is bound; the app once one is.
     function nextAfterAuth() {
       try {
         const profile = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
         const legacy = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
         if (profile?.onboardingComplete === true || profile?.sleeperUsername || legacy?.username
-          || localStorage.getItem('mfl_league_id')) return destForUser();
+          || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id')) return destForUser();
       } catch {}
       return CONNECT_URL;
     }
 
-    function toggleAuthMode() {
-      authMode = authMode === 'signup' ? 'signin' : 'signup';
+    function setAuthMode(mode) {
+      if (pendingEmailAuth) return;
+      authMode = mode === 'signin' ? 'signin' : 'signup';
       const signup = authMode === 'signup';
       document.getElementById('authTitle').textContent = signup ? 'Create your account' : 'Welcome back';
       document.getElementById('authSub').textContent = signup
@@ -2017,78 +2059,139 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
       document.getElementById('btnApple').lastChild.textContent = signup ? ' Continue with Apple' : ' Sign in with Apple';
       document.getElementById('toggleMode').textContent = signup ? 'Already have an account? Sign in' : 'Need an account? Sign up';
       document.getElementById('forgotBtn').style.display = signup ? 'none' : '';
+      document.getElementById('acctPassword').autocomplete = signup ? 'new-password' : 'current-password';
     }
 
+    function toggleAuthMode() {
+      setAuthMode(authMode === 'signup' ? 'signin' : 'signup');
+    }
+
+    function openAuth(mode) {
+      setAuthMode(mode);
+      const target = document.getElementById('auth');
+      const offset = document.querySelector('.topbar').getBoundingClientRect().height + 12;
+      if (window.lenis) window.lenis.scrollTo(target, { offset: -offset, duration: 0.7 });
+      else window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY - offset,
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    }
+
+    // A second invitation to create an account must never cover the account form.
+    const authSection = document.getElementById('auth');
+    const mobileAuthInvite = document.querySelector('.mcta');
+    if (window.IntersectionObserver) {
+      new IntersectionObserver(entries => {
+        mobileAuthInvite.hidden = entries.some(entry => entry.isIntersecting);
+      }).observe(authSection);
+    }
+    authSection.addEventListener('focusin', () => { mobileAuthInvite.hidden = true; });
+
     // \u2500\u2500 Email signup / signin (account only \u2014 Sleeper handled on step 2) \u2500
+    async function landingAuthRequest(endpoint, body, token = FW_ANON_KEY) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20000);
+      try {
+        const res = await fetch(`${FW_API_BASE}/${endpoint}`, {
+          method: 'POST', signal: controller.signal,
+          headers: { 'Content-Type': 'application/json', 'apikey': FW_ANON_KEY, 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(body),
+        });
+        return { res, data: await res.json() };
+      } finally { clearTimeout(timer); }
+    }
+
     async function handleEmailAuth() {
+      if (pendingEmailAuth || pendingProviderAuth) return;
       const email = document.getElementById('acctEmail').value.trim();
       const password = document.getElementById('acctPassword').value;
       const btn = document.getElementById('btnJoin');
       const signup = authMode === 'signup';
       if (!email || !password) { showAlert('error', 'Email and password are required.'); return; }
       if (signup && password.length < 8) { showAlert('error', 'Password must be at least 8 characters.'); return; }
+      const attempt = beginAuthIntent();
+      if (!attempt) { showAlert('error', 'Sign-in needs browser storage. Allow storage for this site and try again.'); return; }
+      pendingEmailAuth = attempt;
+      const currentAttempt = () => pendingEmailAuth === attempt && sameAuthSnapshot(attempt);
       trackLandingEvent(signup ? 'signup_started' : 'signin_started');
-      btn.disabled = true; btn.textContent = signup ? 'Creating account\u2026' : 'Signing in\u2026';
+      btn.disabled = true; btn.textContent = signup ? 'Creating account…' : 'Signing in…';
       try {
         const path = signup ? 'fw-signup' : 'fw-signin';
-        const res = await fetch(`${FW_API_BASE}/${path}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': FW_ANON_KEY, 'Authorization': `Bearer ${FW_ANON_KEY}` },
-          body: JSON.stringify({ email, password }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.token) {
+        const { res, data } = await landingAuthRequest(path, { email, password });
+        if (!currentAttempt()) return;
+        if (!res.ok || !data.token || !data.user?.id) {
           trackLandingEvent(signup ? 'signup_failed' : 'signin_failed', { status: res.status });
           showAlert('error', data.error || (signup ? 'Sign-up failed.' : 'Invalid email or password.'));
-          btn.disabled = false; btn.textContent = signup ? 'Create account \u2192' : 'Sign in \u2192';
           return;
         }
         localStorage.setItem(SESSION_KEY, JSON.stringify(data));
         if (signup) resetDeviceOnboardingForNewAccount();
-        trackLandingEvent(signup ? 'signup_succeeded' : 'signin_succeeded', { accountId: data?.user?.id || null });
-        showAlert('success', signup ? 'Account ready \u2014 connect your leagues\u2026' : 'Welcome back\u2026');
-        // New accounts go straight to the connect-your-leagues page;
-        // returning sign-ins resume wherever they left off.
-        setTimeout(() => { window.location.href = signup ? CONNECT_URL : nextAfterAuth(); }, 600);
+        trackLandingEvent(signup ? 'signup_succeeded' : 'signin_succeeded', { accountId: data.user.id });
+        showAlert('success', signup ? 'Account ready — connect your leagues…' : 'Welcome back…');
+        // Retain the same identity through the brief confirmation before navigation.
+        attempt.completed = true;
+        const signedInSession = authSnapshot();
+        setTimeout(() => {
+          if (sameAuthSnapshot(signedInSession)) {
+            window.location.href = signup ? CONNECT_URL : nextAfterAuth();
+          } else {
+            pendingEmailAuth = null;
+            btn.disabled = false;
+            btn.textContent = authMode === 'signup' ? 'Create account →' : 'Sign in →';
+          }
+        }, 600);
       } catch (err) {
+        if (!currentAttempt()) return;
         trackLandingEvent(signup ? 'signup_failed' : 'signin_failed', { reason: 'network' });
-        showAlert('error', 'Network error: ' + (err?.message || String(err)));
-        btn.disabled = false; btn.textContent = signup ? 'Create account \u2192' : 'Sign in \u2192';
+        showAlert('error', signup
+          ? 'Could not confirm account creation. Try signing in, or check your connection and retry.'
+          : 'Unable to finish signing in. Check your connection and try again.');
+      } finally {
+        if (pendingEmailAuth === attempt && !attempt.completed) {
+          pendingEmailAuth = null;
+          btn.disabled = false;
+          btn.textContent = authMode === 'signup' ? 'Create account →' : 'Sign in →';
+        }
       }
     }
 
     // \u2500\u2500 Google OAuth (account only) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-    function handleGoogle() {
-      const db = getSbClient();
-      if (!db) { showAlert('error', 'Sign-in is still loading \u2014 try again in a moment.'); return; }
-      trackLandingEvent('oauth_started', { provider: 'google' });
-      // Mission Control's funnel counts signup_started/signup_succeeded.
-      // Without these a Google or Apple signup is invisible and the funnel
-      // reads 0 no matter how many people sign up (owner ask 2026-08-20).
-      trackLandingEvent(authMode === 'signup' ? 'signup_started' : 'signin_started', { method: 'google' });
-      db.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
-    }
-
-    // ── Apple OAuth (account only) ──────────────────────────────────────────
-    function handleApple() {
+    async function handleProvider(provider) {
+      if (pendingEmailAuth || pendingProviderAuth) return;
+      const attempt = beginAuthIntent();
+      if (!attempt) { showAlert('error', 'Sign-in needs browser storage. Allow storage for this site and try again.'); return; }
       const db = getSbClient();
       if (!db) { showAlert('error', 'Sign-in is still loading — try again in a moment.'); return; }
-      trackLandingEvent('oauth_started', { provider: 'apple' });
-      // Mission Control's funnel counts signup_started/signup_succeeded.
-      // Without these a Google or Apple signup is invisible and the funnel
-      // reads 0 no matter how many people sign up (owner ask 2026-08-20).
-      trackLandingEvent(authMode === 'signup' ? 'signup_started' : 'signin_started', { method: 'apple' });
-      db.auth.signInWithOAuth({ provider: 'apple', options: { redirectTo: window.location.origin + window.location.pathname } });
+      pendingProviderAuth = attempt;
+      const buttons = ['btnGoogle', 'btnApple', 'btnJoin'].map(id => document.getElementById(id));
+      buttons.forEach(button => { button.disabled = true; });
+      trackLandingEvent('oauth_started', { provider });
+      trackLandingEvent(authMode === 'signup' ? 'signup_started' : 'signin_started', { method: provider });
+      try {
+        // The SDK must not navigate before the captured account is checked.
+        const result = await boundedAuthWork(db.auth.signInWithOAuth({ provider, options: {
+          redirectTo: window.location.origin + window.location.pathname, skipBrowserRedirect: true,
+        } }));
+        if (!sameAuthSnapshot(attempt)) return;
+        if (result.error || !result.data?.url || new URL(result.data.url).protocol !== 'https:') throw new Error('Provider sign-in unavailable.');
+        window.location.href = result.data.url;
+      } catch {
+        if (sameAuthSnapshot(attempt)) showAlert('error', 'Provider sign-in could not be started. Try again or use email.');
+      } finally {
+        if (pendingProviderAuth === attempt) { pendingProviderAuth = null; buttons.forEach(button => { button.disabled = false; }); }
+      }
     }
+    function handleGoogle() { return handleProvider('google'); }
+    function handleApple() { return handleProvider('apple'); }
 
     // Handle Google redirect back: store session, then route to step 2.
     // Captured before Supabase's client consumes the URL: a fresh OAuth return
     // must always re-sync and replace any stored session — the old "skip if a
     // token already exists" rule meant a stale or malformed saved session
     // could never be repaired by signing in again.
-    const FRESH_OAUTH_RETURN =
+    const FRESH_OAUTH_RETURN = window.__dhqFreshOAuthReturn === true ||
       (window.location.hash || '').indexOf('access_token=') !== -1 ||
       /[?&]code=/.test(window.location.search || '');
+
+    const OAUTH_RETURN_ERROR = window.__dhqOAuthReturnError === true || /[#?&]error(?:_description)?=/.test((window.location.hash || '') + (window.location.search || ''));
 
     // Best-effort JWT expiry check (mirrors the shared client): true only when
     // a decodable `exp` claim is in the past (30s skew).
@@ -2104,8 +2207,14 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
     // A session is only worth acting on when it can pass the shared client's
     // checks in the app: token present, not expired, and user.id attached
     // (id-less sessions — the Jul 9–11 sign-in bug shape — resolve free).
+    function sessionClaims(token) {
+      try { return JSON.parse(atob(String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); }
+      catch { return null; }
+    }
     function sessionHealthy(s) {
-      return !!(s?.token && s?.user?.id && !jwtExpired(s.token));
+      const claims = sessionClaims(s?.token);
+      return !!(typeof s?.token === 'string' && s.token && s?.user?.id && typeof claims?.exp === 'number' && !jwtExpired(s.token)
+        && (!claims.app_metadata?.user_id || claims.app_metadata.user_id === s.user.id));
     }
     // Cover the OAuth landing bounce with a calm full-screen state instead of
     // flashing the marketing page mid-redirect. Removed only on paths that
@@ -2119,114 +2228,78 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
     }
     function dropOAuthOverlay() {
       try { if (_oauthOverlay) { _oauthOverlay.remove(); _oauthOverlay = null; } } catch {}
+      for (const id of ['wr-signing-in', 'preboot-hide']) { try { document.getElementById(id)?.remove(); } catch {} }
     }
     (async function handleOAuthCallback() {
+      const attempt = authSnapshot();
+      let installed = null;
       try {
-        if (LANDING_EDITOR_PREVIEW || FORCE_SIGNOUT || STAY_HOME) { dropOAuthOverlay(); return; }
-        // A provider bounced us back with an error in the URL — this used to
-        // fall through in complete silence (owner deep dive 2026-09-02:
-        // "Signup submitted… then nothing"). Now it reports itself.
-        const _urlErr = ((window.location.hash || '') + (window.location.search || '')).match(/[#?&]error(?:_description)?=([^&]+)/);
-        if (_urlErr) {
-          dropOAuthOverlay();
-          trackLandingEvent('oauth_returned_error', { detail: decodeURIComponent(_urlErr[1]).slice(0, 120) });
-          showAlert('error', 'Sign-in was cancelled or blocked by the provider. Please try again — or use email.');
-          return;
-        }
+        if (!attempt || LANDING_EDITOR_PREVIEW || FORCE_SIGNOUT || STAY_HOME) { dropOAuthOverlay(); return; }
+        const urlError = ((window.location.hash || '') + (window.location.search || '')).match(/[#?&]error(?:_description)?=([^&]+)/);
+        if (urlError || OAUTH_RETURN_ERROR) { trackLandingEvent('oauth_returned_error'); showAlert('error', 'Sign-in was cancelled or blocked by the provider. Try again or use email.'); return; }
+        // Existing app credentials have their own repair path. A lingering
+        // provider session must not silently select a different account.
+        if (!FRESH_OAUTH_RETURN && attempt.session) return;
         const db = getSbClient();
-        if (!db) { dropOAuthOverlay(); return; }
-        const { data } = await db.auth.getSession();
-        if (!data?.session) {
-          dropOAuthOverlay();
-          // Only a fresh OAuth return with no resulting session is a failure
-          // worth reporting — a plain landing view with no session is normal.
-          if (FRESH_OAUTH_RETURN) {
-            trackLandingEvent('oauth_no_session', {});
-            showAlert('error', 'Sign-in didn’t finish — the provider sent us back without a session. Please try again.');
-          }
+        if (!db) { if (FRESH_OAUTH_RETURN) showAlert('error', 'Sign-in is unavailable. Try again or use email.'); return; }
+        const { data, error } = await boundedAuthWork(db.auth.getSession());
+        if (!sameAuthSnapshot(attempt)) return;
+        if (error || !data?.session?.access_token || !data.session.user?.email) {
+          if (FRESH_OAUTH_RETURN) { trackLandingEvent('oauth_no_session'); showAlert('error', 'Sign-in did not finish. Try again or use email.'); }
           return;
         }
         const user = data.session.user;
         const oauthProvider = user.app_metadata?.provider || 'oauth';
-        const fallbackName = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
-        const existing = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
-        let appSession = null;
-        // Re-sync on a fresh OAuth return, when nothing usable is stored, and
-        // also when the stored session is damaged (no user.id / expired) —
-        // a lingering Supabase session is exactly what lets us repair those.
-        if (FRESH_OAUTH_RETURN || !sessionHealthy(existing)) {
-          // Exchange the Supabase OAuth token for a Dynasty HQ app session so the
-          // user is registered in app_users and accepted by authenticated APIs.
-          try {
-            const res = await fetch(`${FW_API_BASE}/fw-oauth-sync`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.session.access_token}` },
-              body: JSON.stringify({ productSlug: 'war_room' }),
-            });
-            if (res.ok) appSession = await res.json();
-          } catch (syncErr) { console.warn('[WR] OAuth sync error:', syncErr); }
-
-          if (appSession?.token && appSession?.user?.id) {
-            // Store the WHOLE user record — id/tier/products included. The
-            // shared client refuses account sessions without user.id, so
-            // dropping the id here is what locked every Google sign-in to
-            // the free tier once gating went live.
-            localStorage.setItem(SESSION_KEY, JSON.stringify({
-              token: appSession.token,
-              user: Object.assign({}, appSession.user || {}, {
-                email: appSession.user.email || user.email,
-                displayName: appSession.user.displayName || fallbackName,
-              }),
-            }));
-          } else if (!sessionHealthy(existing)) {
-            // The sync failed and there is no healthy session to fall back
-            // on. Do NOT store the raw Supabase token: a session without
-            // user.id is refused by the shared client and reads as free
-            // tier — the exact shape that locked Google sign-ins to Scout.
-            // Stay here so the user can retry.
-            dropOAuthOverlay();
-            trackLandingEvent('oauth_sync_failed', { provider: oauthProvider });
-            showAlert('error', 'Sign-in hit a snag finishing your account setup. Please try again in a moment.');
-            return;
-          }
+        const { res, data: appSession } = await landingAuthRequest('fw-oauth-sync', { productSlug: 'war_room' }, data.session.access_token);
+        if (!sameAuthSnapshot(attempt)) return;
+        if (!res.ok || !sessionHealthy(appSession) || String(appSession.user.email || '').toLowerCase() !== String(user.email).toLowerCase()) {
+          trackLandingEvent('oauth_sync_failed', { provider: oauthProvider });
+          showAlert('error', 'Sign-in could not finish your account setup. Try again in a moment.');
+          return;
         }
-        const oauthIsNew = !!(appSession && appSession.isNew === true);
-        // AWAITED so the success reaches the server before we navigate away —
-        // otherwise a successful signup reads as a funnel dropout.
-        const oauthAccountId = (appSession && appSession.user && appSession.user.id) || null;
+        const complete = { token: appSession.token, user: Object.assign({}, appSession.user, {
+          displayName: appSession.user.displayName || user.user_metadata?.full_name || user.user_metadata?.name || user.email,
+        }) };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(complete));
+        installed = authSnapshot();
+        const oauthIsNew = appSession.isNew === true;
         await Promise.all([
-          trackLandingEvent('oauth_succeeded', { provider: oauthProvider, isNew: oauthIsNew, accountId: oauthAccountId }),
-          trackLandingEvent(oauthIsNew ? 'signup_succeeded' : 'signin_succeeded', { method: oauthProvider, accountId: oauthAccountId }),
+          trackLandingEvent('oauth_succeeded', { provider: oauthProvider, isNew: oauthIsNew, accountId: appSession.user.id }),
+          trackLandingEvent(oauthIsNew ? 'signup_succeeded' : 'signin_succeeded', { method: oauthProvider, accountId: appSession.user.id }),
         ]);
-        // First-ever sign-in (fw-oauth-sync just created the account): route
-        // to the connect-your-leagues page instead of straight in.
-        if (appSession && appSession.isNew === true) {
-          resetDeviceOnboardingForNewAccount();
-          window.location.href = CONNECT_URL;
-        } else {
-          window.location.href = nextAfterAuth();
-        }
-      } catch (e) {
-        dropOAuthOverlay();
-        console.warn('[WR] OAuth callback error:', e);
-        trackLandingEvent('oauth_callback_error', { detail: String(e && e.message || e).slice(0, 120) });
-      }
+        if (!sameAuthSnapshot(installed)) return;
+        if (oauthIsNew) resetDeviceOnboardingForNewAccount();
+        window.location.href = oauthIsNew ? CONNECT_URL : nextAfterAuth();
+      } catch {
+        if (sameAuthSnapshot(installed || attempt)) { trackLandingEvent('oauth_callback_error', { reason: 'unconfirmed' }); showAlert('error', 'Sign-in could not be confirmed. Check your connection and try again.'); }
+      } finally { dropOAuthOverlay(); }
     })();
 
     // \u2500\u2500 Forgot password \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     async function handleForgot() {
+      if (pendingResetRequest || pendingEmailAuth) return;
       const email = document.getElementById('acctEmail').value.trim();
-      if (!email) { showAlert('error', 'Enter your email first, then tap \u201cForgot password?\u201d'); document.getElementById('acctEmail').focus(); return; }
+      if (!email) { showAlert('error', 'Enter your email first, then tap “Forgot password?”'); document.getElementById('acctEmail').focus(); return; }
+      const button = document.getElementById('forgotBtn');
+      const attempt = authSnapshot();
+      pendingResetRequest = true; button.disabled = true;
       trackLandingEvent('password_reset_requested');
       try {
-        await fetch(`${FW_API_BASE}/fw-request-password-reset`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': FW_ANON_KEY, 'Authorization': `Bearer ${FW_ANON_KEY}` },
-          body: JSON.stringify({ email }),
-        });
-      } catch {}
-      // Always show success \u2014 never reveal whether an email exists.
-      showAlert('success', 'If that email has an account, a password reset link is on the way.');
+        const { res, data } = await landingAuthRequest('fw-request-password-reset', { email });
+        if (!sameAuthSnapshot(attempt) || document.getElementById('acctEmail').value.trim() !== email) return;
+        if (!res.ok || data.ok !== true) {
+          showAlert('error', data.error || 'The reset request could not be confirmed. Please try again.');
+          return;
+        }
+        // The server keeps account existence private; only acknowledge a confirmed request.
+        showAlert('success', 'If that email has an account, a password reset link is on the way.');
+      } catch {
+        if (sameAuthSnapshot(attempt) && document.getElementById('acctEmail').value.trim() === email) {
+          showAlert('error', 'The reset request could not be confirmed. Check your connection and try again.');
+        }
+      } finally {
+        pendingResetRequest = false; button.disabled = false;
+      }
     }
 
     // If already signed in, skip ahead \u2014 to step 2 if Sleeper isn't bound yet,
@@ -2235,6 +2308,15 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
     // stay on this page. The redirect guards above already bail on FORCE_SIGNOUT.
     (async function forceSignOut() {
       if (!FORCE_SIGNOUT) return;
+      authIntentVersion++;
+      // Capture the old provider credential and remove it synchronously. The
+      // SDK's asynchronous signOut cleanup must not erase a later account.
+      const providerKey = PROVIDER_SESSION_KEY;
+      let providerToken = null;
+      try { providerToken = JSON.parse(localStorage.getItem(providerKey) || 'null')?.access_token || null; } catch {}
+      for (const key of [providerKey, providerKey + '-code-verifier', providerKey + '-user']) {
+        try { localStorage.removeItem(key); sessionStorage.removeItem(key); } catch {}
+      }
       try { localStorage.removeItem(SESSION_KEY); } catch {}
       try { localStorage.removeItem(AUTH_KEY); } catch {}
       try { localStorage.removeItem('od_locked_username_v2'); } catch {}
@@ -2249,7 +2331,23 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
           localStorage.setItem(PROFILE_KEY, JSON.stringify(prof));
         }
       } catch {}
-      try { const db = getSbClient(); if (db) await db.auth.signOut(); } catch {}
+      const attempt = authSnapshot();
+      pendingProviderAuth = attempt;
+      try {
+        if (typeof providerToken === 'string' && providerToken) {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 20000);
+          try {
+            const result = await fetch(SUPABASE_URL + '/auth/v1/logout?scope=global', { method: 'POST', signal: controller.signal,
+              headers: { apikey: FW_ANON_KEY, Authorization: 'Bearer ' + providerToken } });
+            if (!result.ok && ![401,403,404].includes(result.status)) throw new Error('Provider sign-out was not confirmed.');
+          } finally { clearTimeout(timer); }
+        }
+      } catch {
+        if (sameAuthSnapshot(attempt)) showAlert('error', 'Signed out on this browser. Provider sign-out could not be confirmed on other devices.');
+      }
+      finally { _signoutClient = false; _sbClient = null; if (pendingProviderAuth === attempt) pendingProviderAuth = null; }
+      if (!sameAuthSnapshot(attempt)) return;
       try { if (authMode === 'signup') toggleAuthMode(); } catch {}
       try { history.replaceState(null, '', window.location.pathname); } catch {}
     })();
@@ -2271,7 +2369,7 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
           } catch {}
           return;
         }
-        if (FRESH_OAUTH_RETURN) return; // the OAuth callback owns this visit
+        if (FRESH_OAUTH_RETURN || OAUTH_RETURN_ERROR) return; // the OAuth callback owns this visit
         const session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
         if (!session?.token) return;
         if (sessionHealthy(session)) {
@@ -2283,26 +2381,31 @@ if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',in
         // fw-refresh-session before entering the app — entering with it
         // shows the account as free tier. Unrepairable ones are cleared so
         // the normal sign-in flow is the recovery path.
+        const attempt = authSnapshot();
+        if (!attempt) return;
         (async () => {
-          if (!jwtExpired(session.token)) {
-            try {
-              const res = await fetch(`${FW_API_BASE}/fw-refresh-session`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${session.token}`, 'apikey': FW_ANON_KEY },
-              });
-              if (res.ok) {
-                const data = await res.json();
-                if (data?.token && data?.user?.id) {
-                  localStorage.setItem(SESSION_KEY, JSON.stringify({ token: data.token, user: data.user }));
-                  trackLandingEvent('landing_session_repaired');
-                  window.location.href = nextAfterAuth();
-                  return;
-                }
-              }
-            } catch {}
+          try {
+            if (jwtExpired(session.token)) {
+              if (sameAuthSnapshot(attempt)) { localStorage.removeItem(SESSION_KEY); showAlert('error', 'Your session expired. Sign in to continue.'); }
+              return;
+            }
+            const repairOwner = sessionClaims(session.token)?.app_metadata?.user_id || session.user?.id;
+            const { res, data } = await landingAuthRequest('fw-refresh-session', undefined, session.token);
+            if (!sameAuthSnapshot(attempt)) return;
+            if (res.ok && sessionHealthy(data) && (!repairOwner || data.user.id === repairOwner)) {
+              localStorage.setItem(SESSION_KEY, JSON.stringify({ token: data.token, user: data.user }));
+              trackLandingEvent('landing_session_repaired');
+              window.location.href = nextAfterAuth();
+            } else if (res.status === 401) {
+              localStorage.removeItem(SESSION_KEY);
+              trackLandingEvent('landing_dead_session_cleared');
+              showAlert('error', 'Your session is no longer valid. Sign in to continue.');
+            } else {
+              showAlert('error', 'Your saved sign-in could not be checked. Try signing in again when your connection is available.');
+            }
+          } catch {
+            if (sameAuthSnapshot(attempt)) showAlert('error', 'Your saved sign-in could not be checked. Check your connection and try signing in again.');
           }
-          localStorage.removeItem(SESSION_KEY);
-          trackLandingEvent('landing_dead_session_cleared');
         })();
       } catch {}
     })();

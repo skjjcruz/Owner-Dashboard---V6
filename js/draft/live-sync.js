@@ -22,6 +22,7 @@
     // this often and reuse the last value in between.
     const SLOW_REFRESH_MS = 15000;
     let _pollTimer = null;
+    let _run = null;
     let _lastPickNo = 0;
     let _seenPickKeys = new Set();
     let _lastSuccessAt = 0;
@@ -42,7 +43,8 @@
      * @param {Object} opts — { initialPickNo, seenPickKeys, onStatus }
      */
     function start(draftId, onNewPicks, opts = {}) {
-        if (_pollTimer) stop();
+        if (opts.isCurrent && !opts.isCurrent()) return;
+        stop();
         if (!draftId || typeof onNewPicks !== 'function') return;
 
         _lastPickNo = Number(opts.initialPickNo || 0);
@@ -55,13 +57,23 @@
         // MFL drafts mirror through window.MFL.fetchDraftStatus instead of Sleeper.
         // The draft id encodes league + year: 'mfl_draft_<leagueId>_<year>'.
         const isMfl = typeof draftId === 'string' && draftId.startsWith('mfl_draft_');
-        let mflLeagueId = null, mflYear = null;
-        if (isMfl) {
-            const parts = draftId.replace('mfl_draft_', '').split('_');
-            mflLeagueId = parts[0];
-            mflYear = parts[1] || String(new Date().getFullYear());
+        const account = window.App?.PublicPortfolio?.capture();
+        const run = { busy: false };
+        _run = run;
+        const ownsRun = () => _run === run && (!opts.isCurrent || opts.isCurrent())
+            && (!window.App?.PublicPortfolio || window.App.PublicPortfolio.current(account));
+        let mflScope;
+        try { if (isMfl) mflScope = window.App.MflDraftContext.captureDraft(draftId, { league: opts.league, isCurrent: ownsRun }); }
+        catch (error) {
+            stop();
+            if (onStatus) onStatus({ status: 'error', error: error.message, stale: true, lastPollAt: null });
+            return;
         }
+        const active = () => ownsRun() && (!mflScope || mflScope.isCurrent());
         const poll = async () => {
+            if (!active()) { if (_run === run) stop(); return; }
+            if (run.busy) return;
+            run.busy = true;
             try {
                 let picks = null;
                 let meta = null;
@@ -71,12 +83,9 @@
                     // Re-pull the MFL draft board; map MADE picks → Sleeper pick shape
                     // for the existing reconciler. Email/offline drafts may commit in
                     // batches — the gap-tolerant reconciler already handles that.
-                    const key = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('mfl_api_key') : null) || null;
-                    const arr = window.MFL?.fetchDraftStatus
-                        ? await window.MFL.fetchDraftStatus(mflLeagueId, mflYear, key)
-                        : [];
-                    const list = Array.isArray(arr) ? arr : [];
-                    const d = list.find(x => x.draft_id === draftId) || list[0] || null;
+                    const list = await mflScope.fetch();
+                    if (!active()) return;
+                    const d = list.find(x => String(x.draft_id) === String(draftId)) || null;
                     if (d) {
                         picks = (d.picks || []).map(p => ({
                             pick_no: p.pick_no,
@@ -122,6 +131,7 @@
                         refreshSlow ? fetchMeta() : Promise.resolve(_lastMeta),
                         refreshSlow ? fetchTp() : Promise.resolve(_lastTradedPicks),
                     ]);
+                    if (!active()) return;
                     picks = picksRes;
                     meta = metaRes;
                     tradedPicks = tpRes;
@@ -129,6 +139,7 @@
                     _lastTradedPicks = tradedPicks;
                     if (refreshSlow) _lastSlowAt = nowTs;
                 }
+                if (!active()) return;
                 if (picks == null) {
                     // Distinguish a dead/missing draft (null/404 from the fetch) from
                     // a valid empty pre-draft feed ([]). A silent return here would
@@ -177,8 +188,9 @@
                     tradedPicks: Array.isArray(tradedPicks) ? tradedPicks : null,
                     mflSlots: Array.isArray(mflSlots) ? mflSlots : null,
                 });
-                if (snapshot.newPicks.length) onNewPicks(snapshot.newPicks, snapshot);
+                if (active() && snapshot.newPicks.length) onNewPicks(snapshot.newPicks, snapshot);
             } catch (e) {
+                if (!active()) return;
                 const now = Date.now();
                 const stale = !_lastSuccessAt || now - _lastSuccessAt >= STALE_AFTER_MS;
                 if (onStatus) onStatus({
@@ -188,12 +200,13 @@
                     error: e?.message || 'Live sync poll failed.',
                 });
                 if (window.wrLog) window.wrLog('liveSync.poll', e);
-            }
+            } finally { run.busy = false; if (!active() && _run === run) stop(); }
         };
 
         // Fire immediately then on interval
-        poll();
         _pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+        poll();
+        return () => { if (_run === run) stop(); };
     }
 
     function pickKey(pick) {
@@ -312,6 +325,7 @@
     }
 
     function stop() {
+        _run = null;
         if (_pollTimer) {
             clearInterval(_pollTimer);
             _pollTimer = null;

@@ -761,7 +761,12 @@ function empireFixture(overrides) {
     ],
     liLoaded: true,
   };
-  return Object.assign({}, base, overrides || {});
+  const result = Object.assign({}, base, overrides || {});
+  // This pure-model fixture supplies explicit per-league contexts; the actual
+  // coordinator/account/engine contract is exercised in public-empire-engine.
+  const contexts = new Map(result.allLeagues.map(l => [l, result.scores]));
+  ctx.App.PublicEmpire = { valuesFor: l => contexts.get(l) || {}, assessmentsFor: () => [] };
+  return result;
 }
 
 test('counts multi-league exposure by player',
@@ -797,19 +802,21 @@ test('places assets into build, peak, and post-window buckets',
     eq(post.count, 1);
   });
 
-test('summarizes own, acquired, and premium draft capital',
+test('does not invent draft capital from an absent verified rights inventory',
   () => {
     const m = buildEmpirePortfolioModel(empireFixture());
     const alpha = m.provinces.find(p => p.id === 'l1');
     ok(alpha, 'expected Alpha league');
-    eq(alpha.pickCount, 12);
-    eq(alpha.ownPickCount, 11);
-    eq(alpha.acquiredPickCount, 1);
-    eq(alpha.premiumPickCount, 6);
-    eq(m.pickCapital.byYear.find(y => y.year === 2026).premium, 4);
+    eq(alpha.pickCount, 0);
+    eq(alpha.pickFeedPresent, false);
+    eq(m.pickCapital.complete, false);
+    eq(m.picks.length, 0);
+    ok(m.dataQuality.items.find(item => item.key === 'picks').detail.includes('no picks assumed'));
+    // Completed/current, transferred and seasonal rights are exercised through
+    // the actual reviewed adapter in public-empire.cjs/browser.cjs.
   });
 
-test('marks DHQ as degraded when LI loaded but owned assets are unvalued',
+test('marks DHQ as degraded when no owned league context values assets',
   () => {
     const m = buildEmpirePortfolioModel(empireFixture({ scores: {} }));
     const dhq = m.dataQuality.items.find(i => i.key === 'dhq');
@@ -829,7 +836,7 @@ test('google oauth callback stores the full user record (id included)',
     // getAppSession() refuses sessions without user.id — rebuilding the user
     // object as {email, displayName} silently locks Google accounts to free.
     ok(landing.includes('FRESH_OAUTH_RETURN'), 'oauth callback must re-sync on fresh returns');
-    ok(landing.includes('Object.assign({}, appSession.user || {}'), 'oauth callback must keep the whole user record');
+    ok(landing.includes('Object.assign({}, appSession.user,'), 'oauth callback must keep the whole user record');
   });
 
 // (The 'session issuers share one entitlements helper' test lives in the dev
@@ -984,7 +991,7 @@ test('league hub brand icon returns to the app front page, which stays put',
     ok(landing.includes('if (signup) resetDeviceOnboardingForNewAccount()'), 'email signup must reset onboarding memory');
     // A fresh OAuth return must never be hijacked by the existing-session
     // redirect before the sync/repair completes.
-    ok(landing.includes('if (FRESH_OAUTH_RETURN) return;'), 'checkSession must yield to the OAuth callback');
+    ok(landing.includes('if (FRESH_OAUTH_RETURN || OAUTH_RETURN_ERROR) return;'), 'checkSession must yield to the OAuth callback');
   });
 
 test('deploy build stamps the shared-loader cache version',

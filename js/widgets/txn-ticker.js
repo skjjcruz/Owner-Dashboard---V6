@@ -17,6 +17,41 @@
 (function () {
     'use strict';
 
+    // A missing feed is different from a confirmed empty response. Keep this
+    // status next to the rows so every current consumer can carry uncertainty.
+    const tradeProviderLabel = provider => ({ espn: 'ESPN', yahoo: 'Yahoo' }[provider] || 'Provider');
+    const confirmedEmptyTrades = status => 'No completed trades returned by ' + tradeProviderLabel(status?.provider) + '.';
+    function resolveTransactionFeed(hydrated, league, providerId) {
+        if (!['espn', 'yahoo'].includes(providerId)) return { transactions: hydrated.transactions || {}, status: null };
+        const leagueId = String(league.id || league.league_id || '');
+        const season = String(league.season || '');
+        const supplied = hydrated.transactionStatus;
+        const valid = supplied?.provider === providerId && supplied.leagueId === leagueId && supplied.season === season && supplied.scope === 'executed_trades'
+            && ['ready', 'stale', 'unavailable'].includes(supplied.status)
+            && Number.isInteger(supplied.excludedTradeCount) && supplied.excludedTradeCount >= 0
+            && (supplied.status === 'unavailable' || Number.isFinite(supplied.lastSuccessAt) && supplied.lastSuccessAt > 0)
+            && hydrated.transactions && !Array.isArray(hydrated.transactions) && typeof hydrated.transactions === 'object'
+            && Object.values(hydrated.transactions).every(rows => Array.isArray(rows) && rows.every(row => row?.type === 'trade' && row.status === 'complete'));
+        const status = valid ? { ...supplied } : { provider: providerId, leagueId, season, scope: 'executed_trades', status: 'unavailable', lastSuccessAt: null };
+        const label = tradeProviderLabel(providerId);
+        status.message = status.status === 'ready' ? 'Completed ' + label + ' trades only. Adds, drops and waivers are not included.'
+            : status.status === 'stale' ? label + ' trades could not refresh. Showing the last confirmed feed.'
+                : label + ' trades are unavailable. This does not mean there were no trades.';
+        if (status.excludedTradeCount > 0) status.message += ' Other trade records were excluded because ' + label + ' did not mark them ' + (providerId === 'yahoo' ? 'successful.' : 'executed.');
+        return { transactions: valid && status.status !== 'unavailable' ? hydrated.transactions : {}, status };
+    }
+
+    function WrTxnFeedStatus({ status, onRetry, retrying }) {
+        if (!status) return null;
+        return <div role="status" style={{ fontSize: '14px', lineHeight: 1.45, padding: '10px 0', color: 'var(--silver)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <span style={{ flex: '1 1 180px' }}>{status.message || 'Checking ' + tradeProviderLabel(status.provider) + ' trades…'}{status.status === 'stale' && status.lastSuccessAt ? <small style={{ display: 'block', fontSize: '13px' }}>Last confirmed {new Date(status.lastSuccessAt).toLocaleString()}</small> : null}</span>
+            {onRetry && status.status !== 'ready' && <button type="button" onClick={onRetry} disabled={retrying || status.status === 'loading'} style={{ minHeight: '44px', padding: '8px 12px', fontSize: '14px', background: 'transparent', border: '1px solid var(--gold)', borderRadius: '6px', color: 'var(--gold)', cursor: 'pointer' }}>{retrying ? 'Checking trades…' : 'Retry ' + tradeProviderLabel(status.provider) + ' trades'}</button>}
+        </div>;
+    }
+    window.App = window.App || {};
+    window.App.TransactionFeed = { resolve: resolveTransactionFeed, label: tradeProviderLabel, emptyMessage: confirmedEmptyTrades };
+    window.WrTxnFeedStatus = WrTxnFeedStatus;
+
     function defaultTimeAgo(ts) {
         if (!ts) return '';
         // Sleeper API returns seconds; convert to ms. Guard against already-ms values.

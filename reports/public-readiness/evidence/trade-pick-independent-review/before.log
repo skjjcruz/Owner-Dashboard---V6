@@ -1,0 +1,2 @@
+{"case":"ready state after same-document account switch","oldEvidenceStatus":"ready","canSpend":true,"selectionIssue":null}
+{"case":"conflicting MFL connection","status":"ready","calls":[{"kind":"draft","id":"7","key":"fixture-other-league"},{"kind":"future","id":"7","key":"fixture-other-league"}]}

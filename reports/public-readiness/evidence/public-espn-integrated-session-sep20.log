@@ -1,0 +1,36 @@
+
+> owner-dashboard-v6@1.0.0 test:landing-session
+> node tests/landing-session-lifecycle.cjs && node tests/landing-session-browser.cjs
+
+PASS delayedOAuthCannotOverwriteManualSignIn
+PASS failedManualAttemptSupersedesBackgroundRestore
+PASS delayedRefreshFailureCannotClearNewAccount
+PASS freshOAuthFailureCannotClaimCachedAccount
+PASS failedRefreshPreservesRecoverableSession
+PASS repairMustMatchOriginalTokenOwner
+PASS confirmedRepairAndRevokedSession
+PASS delayedSuccessRepairCannotOverwriteAccount
+PASS explicitProviderCannotRedirectReplacementAccount
+PASS explicitProviderErrorAndRetry
+PASS pendingProviderTimeoutUnlocks
+PASS oauthTimeoutDropsOverlayAndPreservesSession
+PASS oauthAnalyticsWaitCannotResetNewProfile
+PASS freshFlagSurvivesConsumedUrl
+PASS oauthQuotaDoesNotClaimSuccess
+PASS storageEventSupersedesSameBytes
+PASS existingAccountIsNotReplacedByLingeringOAuth
+PASS providerErrorReturnCannotEnterCachedAccount
+PASS forcedSignoutCannotClearLaterProviderAccount
+PASS forcedSignoutFailureKeepsLocalLogoutTruthful
+PASS prebootRoutesOnlyHealthyCredential
+PASS oauthPreservesFullAuthoritativeUser
+PASS mismatchedCacheCannotOverrideTokenOwner
+PASS resetResponseDoesNotReplaceLaterSignInStatus
+PASS espnGuestAndSignedInDestinations
+PASS freshAccountClearsEspnPointerAndCookies
+{"scenario":"oauth-race","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":2,"realAccountsUsed":false}
+{"scenario":"repair-race","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":2,"realAccountsUsed":false}
+{"scenario":"oauth-failure","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":2,"realAccountsUsed":false}
+{"scenario":"provider-start","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":2,"realAccountsUsed":false}
+{"scenario":"guest-espn","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":0,"realAccountsUsed":false}
+{"scenario":"fresh-espn","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":0,"realAccountsUsed":false}

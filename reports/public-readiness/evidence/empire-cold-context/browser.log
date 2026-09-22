@@ -1,0 +1,5 @@
+(node:25309) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS Empire cold context 320x740
+PASS Empire cold context 390x844
+PASS Empire cold context 844x390

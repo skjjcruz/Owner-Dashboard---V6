@@ -1,0 +1,2 @@
+{"case":"ready state after same-document account switch","oldEvidenceStatus":"unavailable","canSpend":false,"selectionIssue":"A selected pick is no longer verified for this owner. Retry ownership or remove that pick; your draft trade is preserved."}
+{"case":"conflicting MFL connection","error":"The MFL league connection is incomplete.","calls":[]}

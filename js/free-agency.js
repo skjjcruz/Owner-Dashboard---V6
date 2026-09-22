@@ -1705,7 +1705,7 @@
                             <div className="fa-hq-panel">
                                 <div className="fa-hq-panel-head">
                                     <span>Transaction Ticker</span>
-                                    <em>latest adds and drops</em>
+                                    <em>{['espn', 'yahoo'].includes(window.S?.transactionStatus?.provider) ? 'completed ' + window.App.TransactionFeed.label(window.S.transactionStatus.provider) + ' trades' : 'latest adds and drops'}</em>
                                 </div>
                                 {React.createElement(window.WrTxnTickerList, {
                                     transactions: tickerTxns.slice(0, compact ? 3 : 5),

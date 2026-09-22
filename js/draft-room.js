@@ -257,7 +257,7 @@
             let lastSig = '';
             const read = () => {
                 try {
-                    const lid = window.S?.currentLeagueId || currentLeague?.league_id || currentLeague?.id;
+                    const lid = currentLeague?.league_id || currentLeague?.id;
                     const s = window.DraftCC?.state?.loadFromLocal?.(lid, 'live-sync');
                     const last = s && s.picks && s.picks.length ? s.picks[s.picks.length - 1] : null;
                     const sig = s ? ((s.mode || '') + '|' + (s.phase || '') + '|' + (s.liveSync?.status || '') + '|' + ((s.picks || []).length) + '|' + (last ? (last.overall + ':' + last.pid) : '')) : '';
@@ -324,26 +324,19 @@
             let prevStatus = ''; // per-league transition detection (drafting → complete)
             // MFL leagues have no Sleeper drafts endpoint — that fetch 404s on the
             // 'mfl_<id>_<year>' league id. Source the status-bearing MFL draft
-            // objects instead (re-pulled live so pre_draft → drafting is caught),
-            // falling back to the hydrated copy on window.S / the league object.
+            // objects instead, bound to the selected account and saved connection.
             const isMfl = !!(currentLeague?._mfl || String(currentLeague?.id || '').startsWith('mfl_'));
+            let mflScope;
+            try { if (isMfl) mflScope = window.App.MflDraftContext.capture(currentLeague, { isCurrent: () => !cancelled }); }
+            catch (error) { window.wrLog?.('draftRoom.mflDraftStatus', error); setLiveDraftStatus(''); setLiveDraftId(null); return; }
+            const contextCurrent = () => !cancelled && (!mflScope || mflScope.isCurrent());
             const fetchDrafts = isMfl
-                ? (async () => {
-                    try {
-                        if (window.MFL?.fetchDraftStatus) {
-                            const mlid = currentLeague._mflLeagueId || String(currentLeague.id || '').replace(/^mfl_/, '').replace(/_\d+$/, '');
-                            const yr = currentLeague.season || localStorage.getItem('mfl_year') || String(new Date().getFullYear());
-                            const key = sessionStorage.getItem('mfl_api_key') || null;
-                            const d = await window.MFL.fetchDraftStatus(mlid, yr, key, currentLeague);
-                            if (Array.isArray(d) && d.length) return d;
-                        }
-                    } catch (e) { window.wrLog?.('draftRoom.mflDraftStatus', e); }
-                    return window.S?.drafts || currentLeague?.drafts || [];
-                })
+                ? () => mflScope.fetch()
                 : (window.Sleeper?.fetchDrafts || (async (id) => { const r = await fetch('https://api.sleeper.app/v1/league/' + id + '/drafts'); return r.ok ? r.json() : []; }));
             const poll = () => {
+                if (!contextCurrent()) return;
                 Promise.resolve(fetchDrafts(lid)).then(rows => {
-                    if (cancelled) return;
+                    if (!contextCurrent()) return;
                     const drafts = Array.isArray(rows) ? rows : [];
                     // Draft of record: a completed draft only reads 'complete' while it
                     // still owns the room — once superseded, status follows the next draft.
@@ -357,7 +350,7 @@
                     // the league data instead of rendering stale pre-draft state.
                     if (prevStatus === 'drafting' && status === 'complete') {
                         draftJustCompletedRef.current = true; // fresh completion seen live this session
-                        try { window.WR?.Sync?.refresh?.('draft-complete'); } catch (e) {}
+                        try { if (!mflScope || !window.S?.currentLeagueId || String(window.S.currentLeagueId) === String(lid)) window.WR?.Sync?.refresh?.('draft-complete'); } catch (e) {}
                     }
                     prevStatus = status;
                     // Completion timestamp for the auto-open recency bound below.
@@ -368,12 +361,12 @@
                     setLiveDraftId(active?.draft_id != null ? String(active.draft_id) : null);
                     // Slow heartbeat post-completion so the tab rotates to the next
                     // draft when it goes live, without a remount.
-                    if (!cancelled) timer = setTimeout(poll, status === 'complete' ? 60000 : 20000);
-                }).catch(() => { if (!cancelled) timer = setTimeout(poll, 30000); });
+                    if (contextCurrent()) timer = setTimeout(poll, status === 'complete' ? 60000 : 20000);
+                }).catch(() => { if (contextCurrent()) timer = setTimeout(poll, 30000); });
             };
             poll();
             return () => { cancelled = true; if (timer) clearTimeout(timer); };
-        }, [currentLeague?.league_id, currentLeague?.id]);
+        }, [currentLeague?.league_id, currentLeague?.id, currentLeague?.season, currentLeague?._mflFranchiseId]);
         // War Room is "locked" (generation frozen, tracking mode) when the Sleeper draft is live
         // OR picks are already mirroring through the live-sync store.
         const liveDraftOn = liveDraftStatus === 'drafting' || liveDraftStatus === 'complete' || liveDraftSnapshot.active;

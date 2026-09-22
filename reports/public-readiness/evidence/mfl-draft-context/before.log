@@ -1,0 +1,147 @@
+(node:26858) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+FAIL ownedCredentialsPreserveViewedLeagueDespiteForeignGlobalState AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ [
++   {
++     _dimensionsInferred: true,
++     _slots: [
++       {
++         _mfl_player: '101',
++         _traded: false,
++         draft_slot: 1,
++         pick_no: 1,
++         picked_by: '0001',
++         player_id: 'mfl_101',
++         roster_id: '0001',
++         round: 1
++       },
++       {
++         _mfl_player: '',
++         _traded: false,
++         draft_slot: 2,
++         pick_no: 2,
++         picked_by: '0002',
++         player_id: '',
++         roster_id: '0002',
++         round: 1
++       }
++     ],
++     _source: 'mfl',
++     created: null,
++     draft_id: 'mfl_draft_12345_2025',
++     draft_order: {},
++     last_picked: null,
++     league_id: 'mfl_12345_2025',
++     metadata: {
++       description: '',
++       name: 'MFL Draft',
++       player_type: '0'
++     },
++     on_the_clock: '0002',
++     picks: [
++       {
++         _mfl_player: '101',
++         _traded: false,
++         draft_slot: 1,
++         pick_no: 1,
++         picked_by: '0001',
++         player_id: 'mfl_101',
++         roster_id: '0001',
++         round: 1
++       }
++     ],
++     season: '2025',
++     settings: {
++       player_type: 0,
++       rounds: 1,
++       teams: 2
++     },
++     slot_to_roster_id: {},
++     start_time: null,
++     status: 'drafting',
++     type: 'snake'
++   }
++ ]
+- undefined
+
+    at ownedCredentialsPreserveViewedLeagueDespiteForeignGlobalState (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:6:482)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL accountBCannotUseSavedAKeyOrCard AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at accountBCannotUseSavedAKeyOrCard (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:7:148)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL unknownSavedOwnerCannotBecomeAnExplicitPrivateKey AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at unknownSavedOwnerCannotBecomeAnExplicitPrivateKey (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:8:263)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL selectedYearAndTeamMustAgreeBeforeRequest AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at selectedYearAndTeamMustAgreeBeforeRequest (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:9:420)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL lateHeaderAndRoomResponsesCannotPublishAfterAccountSwitch AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at lateHeaderAndRoomResponsesCannotPublishAfterAccountSwitch (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:11:289)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL keyTeamStorageAndViewChangesFenceHeldResponses AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at keyTeamStorageAndViewChangesFenceHeldResponses (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:12:400)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL unownedGlobalFallbackIsNeverRetaggedAfterOutage AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'mfl_12345_2025'
+- 'mfl_99999_2026'
+       ^
+
+    at unownedGlobalFallbackIsNeverRetaggedAfterOutage (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:13:366)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL liveMirrorUsesOwnedKeyAndExactDraftUnit AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  assert(!wrong.some(v=>v.player_id))
+
+    at liveMirrorUsesOwnedKeyAndExactDraftUnit (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:16:506)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL malformedOrForeignAccountLiveDraftStopsBeforeTransport AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at malformedOrForeignAccountLiveDraftStopsBeforeTransport (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:17:266)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL stoppedMirrorCannotEmitHeldPicksOrStatus AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+2 !== 0
+
+    at stoppedMirrorCannotEmitHeldPicksOrStatus (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:22:283)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL slowPollDoesNotOverlapAndCanPollAfterSuccess AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 2
+
+    at slowPollDoesNotOverlapAndCanPollAfterSuccess (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:24:422)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL accountSwitchDuringLiveReadStopsWithoutPublishing AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at accountSwitchDuringLiveReadStopsWithoutPublishing (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:25:293)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+FAIL onStatusReplacementCannotInvokeOldPickCallback AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 0
+
+    at onStatusReplacementCannotInvokeOldPickCallback (/Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:26:184)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-drafts/tests/mfl-draft-context.cjs:31:190
+PASS unchangedReconcilerRecoversMissingPicksWithoutSkippingThem
+14 actual MFL draft groups; 13 failed

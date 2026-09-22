@@ -703,9 +703,9 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, host, () => {
   const compileNote = COMPILE ? (Babel ? '  [JSX compile: ON]' : '  [JSX compile: requested but @babel/standalone missing]') : '';
-  console.log(`Serving ${root} at http://${host}:${port}/${compileNote}`);
+  console.log(`Serving ${root} at http://${host}:${server.address().port}/${compileNote}`);
   if (openPath) {
-    const target = new URL(openPath.replace(/^\/+/, ''), `http://${host}:${port}/`).toString();
+    const target = new URL(openPath.replace(/^\/+/, ''), `http://${host}:${server.address().port}/`).toString();
     const opener = spawn('open', [target], { detached: true, stdio: 'ignore' });
     opener.unref();
   }

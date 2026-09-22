@@ -60,11 +60,57 @@
     const DHQ_HOME_URL = 'landing.html?home';
     window.App.DHQ_HOME_URL = DHQ_HOME_URL;
 
-    // ── Owner default: bigloco's locked-in MFL franchise in the "MLS Dynasty
-    // League" (id 41969). Used to auto-select the team on rehydrate when no
-    // mfl_franchise_id is persisted yet. Matched by NAME in loadMflData so the
-    // pick survives storage clears / new devices without pinning a numeric id. ──
-    const OWNER_MFL_TEAM = 'St. Louis City SC';
+    // MFL request ownership is captured before cloud/provider work. The cloud
+    // column belongs to legacy users; modern account profiles are not equivalent.
+    let mflAccountEpoch = 0;
+    window.addEventListener('storage', event => {
+        if (!event.key || ['fw_session_v1','od_session_v1','od_auth_v1','wr_guest_v1'].includes(event.key) || /^sb-.*-auth-token/.test(event.key)) mflAccountEpoch++;
+    });
+    function captureMflAccount() {
+        const read = () => JSON.stringify(['fw_session_v1','od_session_v1','od_auth_v1','wr_guest_v1', ...Object.keys(localStorage).filter(key => /^sb-.*-auth-token/.test(key)).sort()].map(key => [key,localStorage.getItem(key)]));
+        const snapshot = read(), epoch = mflAccountEpoch;
+        let retired = false;
+        return { isCurrent() {
+            if (retired) return false;
+            try { if (epoch === mflAccountEpoch && read() === snapshot) return true; } catch (_) { /* storage unavailable */ }
+            retired = true; return false;
+        } };
+    }
+    async function mflCloudConnection(scope, connection) {
+        scope.check();
+        const owner = window.MFL.provider.currentOwner();
+        if (!owner?.startsWith('legacy:')) return { status: 'device', connection: null };
+        const token = window.OD?.getSessionToken?.(), username = owner.slice(7);
+        let claims;
+        try { claims = JSON.parse(window.atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); } catch (_) { /* reject below */ }
+        if (!claims || claims.sub !== username || claims.app_metadata?.sleeper_username !== username || claims.exp * 1000 <= Date.now()) throw new Error('Sign in again before syncing this MFL connection.');
+        const base = window.OD?.SUPABASE_URL || window.App?.CONFIG?.supabaseUrl;
+        const anon = window.OD?.SUPABASE_ANON || window.App?.CONFIG?.supabaseAnon;
+        if (!base || !anon) return { status: 'device', connection: null };
+        const check = () => { scope.check(); if (window.MFL.provider.currentOwner() !== owner || window.OD?.getSessionToken?.() !== token) throw new Error('Your account changed before MFL account sync completed. Reload to verify the saved connection.'); };
+        const safe = connection ? {leagueId:String(connection.leagueId),year:String(connection.year),franchiseId:connection.franchiseId ? String(connection.franchiseId) : null} : null;
+        const url = new URL('/rest/v1/users', base);
+        url.searchParams.set('select','mfl_connection');
+        if (safe) url.searchParams.set('on_conflict','sleeper_username');
+        else url.searchParams.set('sleeper_username','eq.'+username);
+        const controller = new AbortController();
+        let timer;
+        try {
+            const data = await Promise.race([(async()=>{
+                check();
+                const response = await fetch(url.href, {method:safe?'POST':'GET',signal:controller.signal,
+                    headers:{apikey:anon,Authorization:'Bearer '+token,'Content-Type':'application/json',...(safe?{Prefer:'resolution=merge-duplicates,return=representation'}:{})},
+                    ...(safe?{body:JSON.stringify({sleeper_username:username,mfl_connection:safe})}:{})});
+                check();
+                if (!response.ok) throw new Error(safe ? 'The connection is saved on this device, but account sync was not confirmed.' : 'Account connection could not load. Reconnect MFL below or retry after reloading.');
+                const result = await response.json(); check(); return result;
+            })(), new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error(safe?'The connection is saved on this device. Account sync timed out; its outcome is unconfirmed.':'Account connection timed out. Reconnect MFL below or retry after reloading.'));},20000);})]);
+            if (!Array.isArray(data) || data.length > 1) throw new Error('Account connection could not be verified. Your device connection is preserved.');
+            const saved = data[0]?.mfl_connection || null;
+            if (safe && (!saved || String(saved.leagueId)!==safe.leagueId || String(saved.year)!==safe.year || (saved.franchiseId||null)!==safe.franchiseId)) throw new Error('The connection is saved on this device, but account sync was not confirmed.');
+            return {status:safe?'synced':'loaded',connection:saved};
+        } finally { clearTimeout(timer); }
+    }
 
     // ── Notes from the Front — Field Log feed from Scout sessions ──
     var FL_CAT_COLORS = { trade:'var(--k-d4af37, #d4af37)', roster:'var(--k-2ecc71, #2ecc71)', draft:'var(--k-3498db, #3498db)', waivers:'var(--k-9b59b6, #9b59b6)', research:'var(--k-e67e22, #e67e22)', note:'var(--k-808080, #808080)' };
@@ -411,7 +457,7 @@
 
     // ── League Room masthead — DHQ crest, club identity, motto, actions ──
     // Module-level (stable identity) so motto-edit state survives hub re-renders.
-    function LeagueRoomMasthead({ username, leagueCount, onOpenSettings }) {
+    function LeagueRoomMasthead({ username, leagueCount, coverageIncomplete, onOpenSettings }) {
         const [club, setClub] = useOwnerClub();
         const tier = useResolvedTier();
         const isPaid = tier !== 'free';
@@ -482,7 +528,7 @@
                     <div style={{ marginTop: '11px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.64rem', letterSpacing: '0.1em', color: 'var(--silver)' }}>
                         <OwnerAvatarBadge club={club} size={22} />
                         <span style={metaSpan}>EST <b style={{ color: 'var(--gold)', fontWeight: 700 }}>{estYear}</b></span>
-                        <span style={metaSpan}><b style={{ color: 'var(--gold)', fontWeight: 700 }}>{leagueCount}</b> FRANCHISE{leagueCount === 1 ? '' : 'S'}</span>
+                        <span style={metaSpan}><b style={{ color: 'var(--gold)', fontWeight: 700 }}>{leagueCount}</b> {coverageIncomplete ? 'LOADED FRANCHISE' : 'FRANCHISE'}{leagueCount === 1 ? '' : 'S'}</span>
                         {username && <span style={metaSpan}>SLEEPER <b style={{ color: 'var(--gold)', fontWeight: 700 }}>@{String(username).toUpperCase()}</b></span>}
                         {!club.showTitles && (
                             <button onClick={() => setClub({ showTitles: true })} title="Show your championship titles"
@@ -831,6 +877,11 @@
         const [sleeperUser, setSleeperUser] = useState(null);
         const [selectedYear, setSelectedYear] = useState('2026');
         const [sleeperLeagues, setSleeperLeagues] = useState([]);
+        const portfolioApi = window.App.PublicPortfolio;
+        const portfolioAccount = React.useRef(portfolioApi.capture());
+        const [portfolioAccountChanged, setPortfolioAccountChanged] = useState(false);
+        const sleeperSnapshotRef = React.useRef(null);
+        const [sleeperCoverage, setSleeperCoverage] = useState({ status: 'idle', knownCount: null, loadedCount: 0 });
         const [activeLeagueId, setActiveLeagueId] = useState(null);
         const [selectedLeague, setSelectedLeague] = useState(null);
         const [proMode, setProMode] = useState(false); // Empire Dashboard mode
@@ -852,12 +903,23 @@
         // ESPN state
         const [espnLeagues, setEspnLeagues] = useState([]);
         const [espnConnecting, setEspnConnecting] = useState(false);
+        const [espnChoiceLeague, setEspnChoiceLeague] = useState(null);
+        const [espnS2Input, setEspnS2Input] = useState('');
+        const [espnSwidInput, setEspnSwidInput] = useState('');
+        const espnRequestRef = React.useRef(0);
+        const espnPageRef = React.useRef(null);
         // MFL state
         const [mflLeagues, setMflLeagues] = useState([]);
         const [mflConnecting, setMflConnecting] = useState(false);
         const [mflError, setMflError] = useState(null);
         const [mflFranchises, setMflFranchises] = useState(null);
-        const [mflPendingResult, setMflPendingResult] = useState(null);
+        const [, setMflPendingResult] = useState(null);
+        const [mflSaveStatus, setMflSaveStatus] = useState(null);
+        const mflRequestRef = React.useRef(null), mflPendingRef = React.useRef(null), mflPageRef = React.useRef(null);
+        const mflViewRef = React.useRef(null);
+        const mflView = String(selectedYear)+':'+String(selectedLeague?.id || '');
+        if (mflViewRef.current !== null && mflViewRef.current !== mflView && mflRequestRef.current) mflRequestRef.current.retired = true;
+        mflViewRef.current = mflView;
         const visibleEspnLeagues = (ESPN_ENABLED || PLATFORM_SANDBOX_ACCESS) ? espnLeagues : [];
         const visibleMflLeagues = MFL_SANDBOX_ACCESS ? mflLeagues : [];
         const [espnError, setEspnError] = useState(null);
@@ -875,6 +937,7 @@
         useEffect(() => {
             if (window.OD?.loadDisplayName) {
                 window.OD.loadDisplayName().then(name => {
+                    if (!portfolioApi.current(portfolioAccount.current)) return;
                     if (name) { setCustomDisplayName(name); localStorage.setItem('od_display_name', name); }
                 }).catch(err => window.wrLog('app.loadDisplayName', err));
             }
@@ -926,6 +989,49 @@
             if (sleeperUsername) loadSleeperData();
         }, [selectedYear]);
 
+        async function loadEspnData(connection) {
+            const request = ++espnRequestRef.current;
+            setEspnConnecting(true); setEspnError(null);
+            try {
+                if (!window.App.EspnHub.isCurrent(espnPageRef.current)) throw new Error('Your account or ESPN connection changed. Reload to continue with the current account.');
+                const league = await window.App.EspnHub.load(connection);
+                if (request !== espnRequestRef.current || !window.App.EspnHub.isLeagueCurrent(league)) return;
+                espnPageRef.current = window.App.EspnHub.capture();
+                setEspnLeagues(prev => [...prev.filter(l => l.id !== league.id), league]);
+                if (!league._espnTeamId) setEspnChoiceLeague(league);
+                else setEspnChoiceLeague(prev => prev?.id === league.id ? null : prev);
+            } catch (e) {
+                if (request === espnRequestRef.current) {
+                    if (!window.App.EspnHub.isCurrent(espnPageRef.current)) { setEspnLeagues([]); setEspnChoiceLeague(null); setEspnS2Input(''); setEspnSwidInput(''); }
+                    setEspnError(e.message || 'ESPN could not be loaded. Try again.');
+                }
+            } finally { if (request === espnRequestRef.current) setEspnConnecting(false); }
+        }
+        useEffect(() => {
+            try { espnPageRef.current = window.App.EspnHub.capture(); if (window.App.EspnHub.readSaved()) loadEspnData(); }
+            catch (e) { setEspnError(e.message || 'The saved ESPN connection could not be read.'); }
+            function changed(event) {
+                if (event.key && !['fw_session_v1', 'od_auth_v1', 'wr_guest_v1', 'espn_league_id', 'espn_year'].includes(event.key) && !/^sb-.*-auth-token$/.test(event.key)) return;
+                espnRequestRef.current++;
+                setEspnLeagues([]); setEspnChoiceLeague(null); setEspnConnecting(false);
+                setEspnS2Input(''); setEspnSwidInput('');
+                setSelectedLeague(previous => previous?._espn ? null : previous);
+                setEspnError('Your account or ESPN connection changed. Reload to continue with the current account.');
+            }
+            window.addEventListener('storage', changed);
+            return () => { espnRequestRef.current++; window.removeEventListener('storage', changed); };
+        }, []);
+
+        function chooseEspnTeam(league, teamId) {
+            try {
+                const selected = window.App.EspnHub.chooseTeam(league, teamId);
+                setEspnLeagues(prev => prev.map(l => l.id === selected.id ? selected : l));
+                setEspnChoiceLeague(null); setEspnError(null);
+                const route = parseHash(window.location.hash);
+                handleSelectLeague(selected, String(route.leagueId) === selected.id ? route.tab : null);
+            } catch (e) { setEspnError(e.message); }
+        }
+
         // Build the hub league object from a mapped MFL result. Shared by the
         // connect flow (finalizeMFLConnect) and the on-load rehydrator
         // (loadMflData) so both produce an identical shape.
@@ -962,208 +1068,168 @@
             };
         }
 
-        // ── MFL rehydration ──
-        // Sleeper leagues reload from the username on every launch; MFL has no
-        // such identity, so a connected league would vanish on refresh. We
-        // persist the connection (id / year / team) and re-fetch it on mount so
-        // a locked-in MFL league always reappears in the franchise picker.
+        function cancelMFLConnect() {
+            mflRequestRef.current = null;
+            mflPendingRef.current = null;
+            setMflConnecting(false); setMflFranchises(null); setMflPendingResult(null);
+        }
+        function mflLeagueCurrent(league) {
+            if (!league?._mfl) return true;
+            try {
+                if (!mflPageRef.current?.isCurrent()) return false;
+                const creds=league._platformCreds, saved=window.MFL.provider.loadCredentials(league.id);
+                return window.MFL.provider.isConnectionCurrent(creds) && !!saved
+                    && saved._mflOwner===creds._mflOwner
+                    && String(saved.leagueId)===String(league._mflLeagueId)
+                    && String(saved.year)===String(league.season)
+                    && String(creds.leagueId)===String(saved.leagueId) && String(creds.year)===String(saved.year)
+                    && !!league._mflFranchiseId && String(saved.franchiseId)===String(league._mflFranchiseId)
+                    && String(creds.franchiseId)===String(saved.franchiseId)
+                    && (creds.apiKey||null)===(saved.apiKey||null);
+            } catch (_) { return false; }
+        }
+        function clearMFLSelection() {
+            setSelectedLeague(previous=>previous?._mfl?null:previous);
+            setActiveLeagueId(previous=>String(previous||'').startsWith('mfl_')?null:previous);
+        }
+        function guardMFLLeagueEntry(league) {
+            if (mflLeagueCurrent(league)) return true;
+            clearMFLSelection();cancelMFLConnect();setMflLeagues([]);setMflSaveStatus(null);
+            setMflError('Your MFL account or selected team changed. Reload or reconnect before opening this league.');
+            return false;
+        }
+        function reportMFLFailure(request, error) {
+            if (request && mflRequestRef.current !== request) return;
+            if (mflPageRef.current && !mflPageRef.current.isCurrent()) {
+                clearMFLSelection();setMflLeagues([]);mflPendingRef.current=null;setMflFranchises(null);setMflPendingResult(null);setMflSaveStatus(null);
+            }
+            setMflError(error.message || 'MFL could not load. Reconnect below.');
+        }
+        function beginMFLRequest() {
+            if (!mflPageRef.current) mflPageRef.current = captureMflAccount();
+            const page = mflPageRef.current, view = mflViewRef.current;
+            if (!page.isCurrent()) throw new Error('Your account changed. Reload before connecting MFL.');
+            const request = { busy:true, retired:false, isCurrent() {
+                if (!page.isCurrent() || mflRequestRef.current !== request || mflViewRef.current !== view) request.retired = true;
+                return !request.retired;
+            } };
+            request.check = () => { if (!request.isCurrent()) throw new Error('Your account or league selection changed. Reopen the MFL connection.'); };
+            mflRequestRef.current = request;
+            return request;
+        }
+        async function prepareMFLConnection(request, credentials, explicit) {
+            request.check();
+            let creds = credentials;
+            if (explicit) {
+                const connected = await window.MFL.provider.connect(credentials, {isCurrent:request.isCurrent});
+                request.check();
+                creds = connected.leagues[0]._platformCreds;
+            }
+            if (!window.MFL.provider.isConnectionCurrent(creds)) throw new Error('This MFL connection needs to be reconnected for your account.');
+            const raw = await window.MFL.fetchLeague(creds.leagueId, creds.year, creds.apiKey || null, {isCurrent:request.isCurrent});
+            request.check();
+            const list = raw.leagueData.league.franchises.franchise;
+            const franchises = (Array.isArray(list) ? list : [list]).map(row => ({...row,id:String(row.id)}));
+            const players = raw.playersData.players.player;
+            const crosswalk = window.MFL.buildCrosswalk({}, Array.isArray(players)?players:[players], creds.year);
+            const result = window.MFL.mapToSleeperState(raw, creds.leagueId, creds.year, crosswalk);
+            return Object.freeze({request,creds:Object.freeze({...creds}),raw,result,franchises:Object.freeze(franchises)});
+        }
+        // Rehydration uses only current-owner records. Unknown flat metadata is
+        // preserved for an explicit reconnect, never silently adopted.
         useEffect(() => {
             if (!MFL_SANDBOX_ACCESS) return;
-            let alive = true;
+            let request;
+            try { request = beginMFLRequest(); setMflConnecting(true); } catch (error) { setMflError(error.message); return; }
             (async () => {
-                // Resolve the connection: prefer local, else pull the cloud-synced
-                // one so a fresh device rehydrates the MFL league + team without a
-                // manual reconnect (mirrors how Sleeper rehydrates from the username).
-                let leagueId = localStorage.getItem('mfl_league_id');
-                if (!leagueId && window.OD?.loadMflConnection) {
-                    try {
-                        const conn = await window.OD.loadMflConnection();
-                        if (conn?.leagueId) {
-                            leagueId = String(conn.leagueId);
-                            localStorage.setItem('mfl_league_id', leagueId);
-                            if (conn.year) localStorage.setItem('mfl_year', String(conn.year));
-                            if (conn.franchiseId) localStorage.setItem('mfl_franchise_id', String(conn.franchiseId));
-                        }
-                    } catch (e) { window.wrLog?.('app.loadMflConnection', e); }
-                }
-                if (!alive || !leagueId) return;
-                // mfl-api.js ships in the shared bundle, but guard against the
-                // connector not being ready yet on a cold start.
-                for (let i = 0; i < 50 && !window.MFL; i++) {
-                    await new Promise(r => setTimeout(r, 100));
-                }
-                if (!alive || !window.MFL) return;
-                const year = localStorage.getItem('mfl_year') || '2026';
-                const apiKey = sessionStorage.getItem('mfl_api_key') || null;
-                let franchiseId = localStorage.getItem('mfl_franchise_id') || null;
                 try {
-                    const raw = await window.MFL.fetchLeague(leagueId, year, apiKey);
-                    if (!alive || !raw?.leagueData?.league) return;
-                    const franchisesRaw = raw.leagueData?.league?.franchises?.franchise || [];
-                    const franchiseArr = Array.isArray(franchisesRaw) ? franchisesRaw : [franchisesRaw];
-                    // Owner default: if bigloco hasn't picked a team yet, lock in the
-                    // known franchise (OWNER_MFL_TEAM) by name and persist its id so
-                    // it sticks across reloads / devices.
-                    if (!franchiseId && (sleeperUsername || '').toLowerCase() === 'bigloco') {
-                        const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                        const owned = franchiseArr.find(f => norm(f.name) === norm(OWNER_MFL_TEAM));
-                        if (owned) { franchiseId = owned.id; localStorage.setItem('mfl_franchise_id', String(owned.id)); }
+                    for (let i=0;i<50&&!window.MFL?.provider?.loadConnection;i++) { await new Promise(resolve=>setTimeout(resolve,100)); request.check(); }
+                    if (!window.MFL?.provider?.loadConnection) throw new Error('MFL connector is unavailable. Reload and retry.');
+                    let creds = window.MFL.provider.loadConnection();
+                    if (!creds) {
+                        const cloud = await mflCloudConnection(request);
+                        request.check();
+                        if (cloud.connection?.leagueId) creds = {...cloud.connection,apiKey:null,_mflOwner:window.MFL.provider.currentOwner()};
                     }
-                    const mflPlayerArr = raw.playersData?.players?.player || [];
-                    const allMflPlayers = Array.isArray(mflPlayerArr) ? mflPlayerArr : [mflPlayerArr];
-                    const crosswalk = window.MFL.buildCrosswalk({}, allMflPlayers, year);
-                    const result = window.MFL.mapToSleeperState(raw, leagueId, year, crosswalk);
-                    if (!alive) return;
-                    const league = buildMflLeagueObj(result, leagueId, franchiseId);
-                    setMflLeagues(prev => {
-                        const filtered = prev.filter(l => l._mflLeagueId !== league._mflLeagueId);
-                        return [...filtered, league];
-                    });
-                    // Keep the cloud copy in sync — backfills a league first
-                    // connected on this device so it follows the account elsewhere.
-                    window.OD?.saveMflConnection?.({ leagueId, year, franchiseId });
-                    // Still no team (non-owner, or name not matched)? Prime the
-                    // franchise picker so it can be locked in one click from the MFL card.
-                    if (!franchiseId) {
-                        setMflFranchises(franchiseArr);
-                        setMflPendingResult(result);
+                    if (!creds) return;
+                    const pending = await prepareMFLConnection(request,creds,false);
+                    request.check();
+                    if (creds.franchiseId && pending.franchises.some(row=>row.id===String(creds.franchiseId))) {
+                        const id = pending.result.league.league_id;
+                        window.MFL.provider.saveCredentials(id,creds);
+                        const league = {...buildMflLeagueObj(pending.result,creds.leagueId,creds.franchiseId),_platformCreds:{...creds}};
+                        setMflLeagues(previous=>[...previous.filter(row=>row.id!==league.id),league]);
+                    } else {
+                        mflPendingRef.current = pending; setMflPendingResult(pending); setMflFranchises(pending.franchises);
+                        if (creds.franchiseId) setMflError('Your saved team is no longer listed. Select your current franchise.');
                     }
-                } catch (e) {
-                    window.wrLog?.('app.loadMflData', e);
-                }
+                } catch (error) {
+                    reportMFLFailure(request,error);
+                } finally { if (mflRequestRef.current === request) {request.busy=false;setMflConnecting(false);} }
             })();
-            return () => { alive = false; };
+            const changed = () => {
+                if (mflPageRef.current?.isCurrent()) return;
+                cancelMFLConnect(); clearMFLSelection();setMflLeagues([]); setMflError('Your account changed. Reload to connect the current account.');
+            };
+            window.addEventListener('storage',changed);
+            return () => { mflRequestRef.current=null; mflPendingRef.current=null; window.removeEventListener('storage',changed); };
         }, []);
 
-        async function loadSleeperData() {
-            setLoading(true);
-            setError(null);
-            setSleeperLeagues([]);
-
-            try {
-                const user = await fetchSleeperUser(sleeperUsername);
-                if (!user) {
-                    setError("Couldn't find that Sleeper username — check spelling and try again");
-                    setLoading(false);
-                    return;
-                }
-                setSleeperUser(user);
-
-                const leagues = (await fetchUserLeagues(user.user_id, selectedYear)) || [];
-                if (!leagues.length) { setSleeperLeagues([]); setLoading(false); hubSyncedAtRef.current = Date.now(); return; }
-
-                // Stream each league's full details into state as it resolves, preserving
-                // the original order, instead of awaiting the slowest league via a single
-                // Promise.all. The hub paints fast leagues immediately rather than blocking
-                // on the slowest one. Each streamed entry is always complete (never a
-                // partial skeleton), so opening a card is safe. `loading` stays true until
-                // every league settles, which preserves the deep-link routing guards below.
-                const byId = new Map();
-                const orderedBuilt = () => leagues.map(lg => byId.get(lg.league_id)).filter(Boolean);
-
-                await Promise.all(
-                    leagues.map(async (league) => {
-                        try {
-                            const [rosters, users] = await Promise.all([
-                                fetchLeagueRosters(league.league_id),
-                                fetchLeagueUsers(league.league_id)
-                            ]);
-
-                            const myRoster = rosters.find(r => r.owner_id === user.user_id);
-
-                            byId.set(league.league_id, {
-                                id: league.league_id,
-                                name: league.name,
-                                wins: myRoster?.settings?.wins || 0,
-                                losses: myRoster?.settings?.losses || 0,
-                                ties: myRoster?.settings?.ties || 0,
-                                season: selectedYear,
-                                // 'pre_draft' | 'drafting' | 'in_season' | 'complete' — lets
-                                // hub surfaces tell an upcoming draft from a finished one.
-                                status: league.status || null,
-                                // Sleeper league avatar id — card art fallback chain.
-                                avatar: league.avatar || null,
-                                scoring_settings: league.scoring_settings || {},
-                                roster_positions: league.roster_positions || [],
-                                settings: league.settings || {},
-                                rosters,
-                                users
-                            });
-                        } catch (e) {
-                            console.error(`Failed to load league ${league.name}:`, e);
-                        } finally {
-                            // Re-render with everything loaded so far, in original order.
-                            setSleeperLeagues(orderedBuilt());
-                        }
-                    })
-                );
-
-                hubSyncedAtRef.current = Date.now();
-                setLoading(false);
-            } catch (err) {
-                console.error('Failed to load Sleeper data:', err);
-                setError('Failed to load Sleeper data. Please refresh.');
-                setLoading(false);
-            }
+        // Initial, selected-year and return-to-hub refresh share a stream of
+        // complete cards plus coverage. A failed request never becomes zero holdings.
+        function clearChangedPortfolio() {
+            setPortfolioAccountChanged(true); setError(null);
+            hubRevalidatingRef.current = null; sleeperSnapshotRef.current = null;
+            setSleeperLeagues([]); setSleeperUser(null); setLoading(false);
+            setSleeperCoverage({ status: 'error', knownCount: null, loadedCount: 0,
+                error: 'Your account changed. Reload to open the current account.' });
         }
-
-        // Background hub revalidation — non-destructive loadSleeperData variant.
-        // The return-to-hub freshness check must never yank a working franchise
-        // picker: no loading/error toggles, no upfront sleeperLeagues clear.
-        // Fresh data replaces state only on success; any failure (user lookup,
-        // league list, per-league detail) silently keeps what's already on
-        // screen and console.warns. Initial + year-change loads keep using
-        // loadSleeperData's destructive reset.
-        async function revalidateSleeperData() {
-            if (hubRevalidatingRef.current) return;
-            hubRevalidatingRef.current = true;
-            try {
-                const user = await fetchSleeperUser(sleeperUsername);
-                if (!user) { console.warn('Hub revalidation: Sleeper user lookup failed — keeping cached leagues'); return; }
-                setSleeperUser(user);
-                const leagues = (await fetchUserLeagues(user.user_id, selectedYear)) || [];
-                if (!leagues.length) { console.warn('Hub revalidation: no leagues returned — keeping cached leagues'); return; }
-                const byId = new Map();
-                await Promise.all(
-                    leagues.map(async (league) => {
-                        try {
-                            const [rosters, users] = await Promise.all([
-                                fetchLeagueRosters(league.league_id),
-                                fetchLeagueUsers(league.league_id)
-                            ]);
-                            const myRoster = rosters.find(r => r.owner_id === user.user_id);
-                            byId.set(league.league_id, {
-                                id: league.league_id,
-                                name: league.name,
-                                wins: myRoster?.settings?.wins || 0,
-                                losses: myRoster?.settings?.losses || 0,
-                                ties: myRoster?.settings?.ties || 0,
-                                season: selectedYear,
-                                avatar: league.avatar || null,
-                                scoring_settings: league.scoring_settings || {},
-                                roster_positions: league.roster_positions || [],
-                                settings: league.settings || {},
-                                rosters,
-                                users
-                            });
-                        } catch (e) {
-                            console.warn(`Hub revalidation: failed to refresh league ${league.name} — keeping cached copy:`, e);
-                        }
-                    })
-                );
-                // Single swap at the end: fresh entries where the refetch worked,
-                // the existing card where it didn't — a league never disappears
-                // because one background request hiccupped.
-                setSleeperLeagues(prev => leagues
-                    .map(lg => byId.get(lg.league_id) || (prev || []).find(p => String(p.id) === String(lg.league_id)))
-                    .filter(Boolean));
-                hubSyncedAtRef.current = Date.now();
-            } catch (err) {
-                console.warn('Hub revalidation failed — keeping cached league data:', err);
-            } finally {
-                hubRevalidatingRef.current = false;
-            }
+        function syncSleeperPortfolio() {
+            const account = portfolioAccount.current;
+            if (!portfolioApi.current(account)) { clearChangedPortfolio(); return Promise.resolve(null); }
+            const contextKey = String(sleeperUsername).toLowerCase() + ':' + String(selectedYear);
+            if (hubRevalidatingRef.current?.contextKey === contextKey) return hubRevalidatingRef.current.promise;
+            const request = { contextKey, promise: null };
+            hubRevalidatingRef.current = request;
+            const active = () => hubRevalidatingRef.current === request && portfolioApi.current(account);
+            setLoading(true); setError(null);
+            if (sleeperSnapshotRef.current?.contextKey !== contextKey) {
+                setSleeperLeagues([]); setSleeperUser(null);
+                setSleeperCoverage({ status: 'loading', knownCount: null, loadedCount: 0 });
+            } else setSleeperCoverage(previous => ({ ...previous, status: 'loading' }));
+            const apply = snapshot => {
+                if (!active()) return;
+                sleeperSnapshotRef.current = snapshot;
+                setSleeperUser(snapshot.user); setSleeperLeagues(snapshot.leagues);
+                setSleeperCoverage(snapshot.coverage); setError(snapshot.coverage.listVerified ? null : snapshot.coverage.error);
+            };
+            request.promise = portfolioApi.fetchSleeperPortfolio({ username: sleeperUsername, season: selectedYear,
+                identity: account, previous: sleeperSnapshotRef.current, isCurrent: active, onProgress: apply })
+                .then(snapshot => {
+                    if (!active()) return null;
+                    apply(snapshot);
+                    if (snapshot.coverage.status === 'ready') hubSyncedAtRef.current = Date.now();
+                    return snapshot;
+                }).catch(failure => {
+                    if (active()) { setError(failure.message); setSleeperCoverage(previous => ({ ...previous, status: 'error', error: failure.message })); }
+                    return null;
+                }).finally(() => {
+                    if (hubRevalidatingRef.current !== request) return;
+                    hubRevalidatingRef.current = null;
+                    if (portfolioApi.current(account)) setLoading(false);
+                    else clearChangedPortfolio();
+                });
+            return request.promise;
         }
+        function loadSleeperData() { return syncSleeperPortfolio(); }
+        function revalidateSleeperData() { return syncSleeperPortfolio(); }
+        useEffect(() => {
+            const invalidate = () => {
+                if (!portfolioApi.current(portfolioAccount.current)) clearChangedPortfolio();
+            };
+            window.addEventListener('storage', invalidate);
+            return () => { window.removeEventListener('storage', invalidate); hubRevalidatingRef.current = null; };
+        }, []);
 
         // Hub freshness (audit:refresh-stale step 10): league cards load once per
         // year selection and then sit stale for the whole session. When the user
@@ -1239,6 +1305,14 @@
                     const allLeagues = [...sleeperLeagues, ...visibleEspnLeagues, ...visibleMflLeagues];
                     const league = allLeagues.find(l => String(l.id) === String(nextState.leagueId));
                     if (league) {
+                        if (!guardMFLLeagueEntry(league)) { isNavigatingRef.current=false;return; }
+                        if (league._espn && (!window.App.EspnHub.isLeagueCurrent(league) || !league._espnTeamId)) {
+                            setSelectedLeague(null);
+                            if (window.App.EspnHub.isLeagueCurrent(league)) setEspnChoiceLeague(league);
+                            else setEspnError('Your ESPN connection changed. Reload before opening this league.');
+                            isNavigatingRef.current = false;
+                            return;
+                        }
                         setActiveLeagueId(league.id);
                         setSelectedLeague(league);
                         // Legacy 'brief' tab folded into dashboard
@@ -1273,10 +1347,14 @@
             if (!allLeagues.length) return;
             const league = allLeagues.find(l => String(l.id) === String(route.leagueId));
             if (!league) {
-                if (!loading) initialRouteAppliedRef.current = true;
+                if (String(route.leagueId).startsWith('espn_')) return;
+                const knownPending = sleeperCoverage.knownLeagues?.some(item => String(item.id) === String(route.leagueId));
+                if (!loading && !knownPending && sleeperCoverage.status === 'ready') initialRouteAppliedRef.current = true;
                 return;
             }
             initialRouteAppliedRef.current = true;
+            if (!guardMFLLeagueEntry(league)) return;
+            if (league._espn && !league._espnTeamId) { setEspnChoiceLeague(league); return; }
             isNavigatingRef.current = true;
             setActiveLeagueId(league.id);
             setSelectedLeague(league);
@@ -1292,7 +1370,7 @@
                 routeUrl(buildHash(league.id, routeEntryTab))
             );
             setTimeout(() => { isNavigatingRef.current = false; }, 0);
-        }, [loading, sleeperLeagues, espnLeagues, mflLeagues]);
+        }, [loading, sleeperLeagues, espnLeagues, mflLeagues, espnConnecting, sleeperCoverage]);
 
         // Show Empire Dashboard (Pro mode)
         // global-view.js is a deferred module group (see js/module-loader.js); load it
@@ -1309,112 +1387,37 @@
                 .catch(() => { if (alive) setEmpireModuleState('error'); });
             return () => { alive = false; };
         }, [proMode, _EmpireDash]);
-        const [empirePlayersLoaded, setEmpirePlayersLoaded] = useState(false);
         const [empirePlayers, setEmpirePlayers] = useState({});
-        // Bumped after background roster assessment so the Rolodex re-renders.
-        const [, setEmpireAssessReady] = useState(0);
-
-        // Load player database + DHQ engine when Pro mode activates
+        const [empireSnapshot, setEmpireSnapshot] = useState(null);
+        const [empireRetry, setEmpireRetry] = useState(0);
         useEffect(() => {
-            if (!proMode || empirePlayersLoaded) return;
+            if (!proMode || selectedLeague) return;
+            let alive = true;
+            const current = () => alive && portfolioApi.current(portfolioAccount.current);
+            setEmpireSnapshot(null);
             (async () => {
                 try {
-                    // The deferred empire group owns buildEmpireDna & co. — make sure it
-                    // has executed before the assessment loop below reaches for it.
-                    if (window.wrLoadModuleGroup) { try { await window.wrLoadModuleGroup('empire'); } catch (e) {} }
-                    // Load 10k player database (league-independent, cached 1hr)
-                    const players = await window.App.fetchAllPlayers();
-                    setEmpirePlayers(players || {});
-                    // Ensure window.S exists for assessment functions
-                    if (!window.S) window.S = {};
-                    window.S.players = players;
-                    // Populate rosters from all leagues into window.S for assessments
-                    const allRosters = [];
-                    const allUsers = [];
-                    const allLeaguesList = [...sleeperLeagues, ...visibleEspnLeagues, ...visibleMflLeagues];
-                    allLeaguesList.forEach(l => {
-                        (l.rosters || []).forEach(r => { if (!allRosters.find(x => x.roster_id === r.roster_id)) allRosters.push(r); });
-                        (l.users || []).forEach(u => { if (!allUsers.find(x => x.user_id === u.user_id)) allUsers.push(u); });
+                    // The reviewed Trade adapter owns provider and draft evidence.
+                    if (window.wrLoadModuleGroup) await Promise.all([window.wrLoadModuleGroup('empire'), window.wrLoadModuleGroup('trade')]);
+                    if (!current()) { if (alive) clearChangedPortfolio(); return; }
+                    await window.App.PublicEmpire.load({
+                        identity: portfolioAccount.current, isCurrent: current,
+                        leagues: [...sleeperLeagues, ...visibleEspnLeagues, ...visibleMflLeagues],
+                        players: empirePlayers, sleeperUserId: sleeperUser?.user_id,
+                        onProgress: result => { if (current()) { setEmpirePlayers(result.players); setEmpireSnapshot(result); } },
                     });
-                    window.S.rosters = allRosters;
-                    window.S.leagueUsers = allUsers;
-                    window.S.myUserId = sleeperUser?.user_id;
-                    window.S.user = sleeperUser;
-                    // Fetch traded picks for all leagues in parallel
-                    const allTradedPicks = [];
-                    await Promise.allSettled(allLeaguesList.map(async l => {
-                        const lid = l.id || l.league_id;
-                        if (!lid) return;
-                        try {
-                            const tp = await fetch('https://api.sleeper.app/v1/league/' + lid + '/traded_picks').then(r => r.ok ? r.json() : []);
-                            const norm = window.App?.normalizeTradedPicks;
-                            l.tradedPicks = (norm ? norm(l.rosters || [], tp || []) : (tp || []))
-                                .map(p => ({ ...p, league_id: String(lid) }));
-                            allTradedPicks.push(...l.tradedPicks);
-                        } catch {}
-                    }));
-                    window.S.tradedPicks = allTradedPicks;
-                    // Empire mode opens no single league, so S.currentLeagueId is unset and
-                    // loadLeagueIntel() bails — DHQ player scores never populate, leaving Empire
-                    // Value 0 and every asset unvalued. Point LeagueIntel at a representative league
-                    // (mirrors the canonical league-open S setup in league-detail.js) so the Empire
-                    // gets DHQ-scale values — the documented one-league proxy (see H5 note, global-view.js).
-                    if (!window.S.currentLeagueId) {
-                        const rep = allLeaguesList.find(l => (l.rosters || []).length && (l.id || l.league_id)) || allLeaguesList[0];
-                        if (rep) {
-                            const repId = rep.id || rep.league_id;
-                            window.S.leagues = [{ league_id: repId, name: rep.name, scoring_settings: rep.scoring_settings, roster_positions: rep.roster_positions, settings: rep.settings }];
-                            window.S.currentLeagueId = repId;
-                            window.S.season = window.S.season || rep.season || String(new Date().getFullYear());
-                            // loadLeagueIntel reads S.rosters for the rep league's team count / starter pool.
-                            // The cross-league merged array (set above) is deduped by roster_id and would
-                            // give a wrong totalTeams, so point it at the rep league's own rosters.
-                            if (rep.rosters && rep.rosters.length) window.S.rosters = rep.rosters;
-                        }
-                    }
-                    // Unblock the dashboard immediately; load DHQ scores in the background and
-                    // re-render the Empire once they land (don't block the UI on the ~15s first load).
-                    setEmpirePlayersLoaded(true);
-                    if (typeof window.App?.loadLeagueIntel === 'function' && !window.App.LI_LOADED) {
-                        if (window.DhqEvents?.once) window.DhqEvents.once('li:loaded', () => setEmpireAssessReady(Date.now()));
-                        window.App.loadLeagueIntel().catch(() => {});
-                    }
-                    // Then assess every roster in the background, yielding between
-                    // leagues so a heavy or oddly-shaped league can't freeze the load.
-                    if (typeof window.App?.assessAllTeams === 'function') {
-                        (async () => {
-                            // Empire mode never populated S.playerStats, so assessments ran with no
-                            // production data → degraded health/tier. Fetch current-season stats once
-                            // (league-independent season totals) and feed them to every assessment.
-                            if ((!window.S.playerStats || !Object.keys(window.S.playerStats).length) && typeof window.fetchSeasonStats === 'function') {
-                                const season = parseInt(window.S.season || new Date().getFullYear(), 10);
-                                let st = (await window.fetchSeasonStats(String(season)).catch(() => ({}))) || {};
-                                // Offseason: the current season has no games yet — fall back to the last
-                                // completed season so dynasty health/tier reflect real production.
-                                if (!Object.keys(st).length) st = (await window.fetchSeasonStats(String(season - 1)).catch(() => ({}))) || {};
-                                window.S.playerStats = st;
-                            }
-                            const stats = window.S.playerStats || {};
-                            for (const l of allLeaguesList) {
-                                await new Promise(r => setTimeout(r, 0));
-                                const lid = l.id || l.league_id;
-                                try {
-                                    l.empireAssessments = window.App.assessAllTeams(l.rosters || [], players, stats, l, l.users || [], l.tradedPicks || []);
-                                } catch (e) { l.empireAssessments = []; }
-                                // Real Owner DNA for the moat: curated reads (od_owner_dna) take
-                                // precedence; transaction-behavioral inference fills the gaps.
-                                try {
-                                    const saved = (window.OD?.loadDNA ? await window.OD.loadDNA(lid).catch(() => ({})) : {}) || {};
-                                    const txns = (window.WrTxns?.fetchLeagueTxns ? await window.WrTxns.fetchLeagueTxns(lid).catch(() => []) : []) || [];
-                                    l.empireDna = window.App.buildEmpireDna ? window.App.buildEmpireDna(saved, txns, l.rosters || [], sleeperUser?.user_id) : saved;
-                                } catch (e) { l.empireDna = l.empireDna || {}; }
-                            }
-                            setEmpireAssessReady(Date.now());
-                        })();
-                    }
-                } catch (e) { console.warn('[Empire] Data load error:', e); setEmpirePlayersLoaded(true); }
+                } catch (error) {
+                    if (current()) setEmpireSnapshot(previous => ({ ...(previous || { leagues: [], players: {} }), status: { status: 'error', error: error.message } }));
+                    else if (alive) clearChangedPortfolio();
+                }
             })();
-        }, [proMode, empirePlayersLoaded]);
+            return () => { alive = false; };
+        }, [proMode, selectedLeague, sleeperLeagues, espnLeagues, mflLeagues, empireRetry]);
+
+        if (portfolioAccountChanged) return <main style={{ padding: '48px 20px', maxWidth: '600px', margin: '0 auto', fontSize: '16px', lineHeight: 1.5 }}>
+            <h1>Your account changed</h1><p>Reload to open the current account. Previous portfolio results have been cleared.</p>
+            <button type="button" onClick={() => window.location.reload()} style={{ minHeight: '44px', padding: '10px 16px', font: 'inherit' }}>Reload current account</button>
+        </main>;
 
         // Defense-in-depth: Empire is sandbox-only — even if stale history state or
         // a stray caller flips proMode on in production, never mount the surface.
@@ -1450,10 +1453,15 @@
             return (
                 <ErrorBoundary>
                     <_EmpireDash
-                        allLeagues={[...sleeperLeagues, ...visibleEspnLeagues, ...visibleMflLeagues]}
+                        allLeagues={empireSnapshot?.leagues || []}
                         playersData={empirePlayers}
+                        ownerName={customDisplayName || sleeperUser?.display_name || sleeperUser?.username || 'Commander'}
+                        portfolioCoverage={sleeperUsername ? sleeperCoverage : null}
+                        evidenceStatus={empireSnapshot?.status || { status: 'loading' }}
+                        onRetryEvidence={() => { if (!portfolioApi.current(portfolioAccount.current)) { clearChangedPortfolio(); return; } setEmpireRetry(value => value + 1); }}
                         sleeperUserId={sleeperUser?.user_id}
                         onEnterLeague={(league) => {
+                            if (!portfolioApi.current(portfolioAccount.current)) { clearChangedPortfolio(); return; }
                             handleSelectLeague(league);
                         }}
                         onBack={() => {
@@ -1467,12 +1475,17 @@
             );
         }
 
+        // A later render cannot keep an old account/team's room mounted.
+        if (selectedLeague?._mfl && !mflLeagueCurrent(selectedLeague)) {
+            guardMFLLeagueEntry(selectedLeague);return null;
+        }
         // Show league detail if selected
         const LeagueDetail = window.LeagueDetail;
         if (selectedLeague) {
             return <>
                 <ErrorBoundary>
                     <LeagueDetail
+                        key={selectedLeague._espn ? selectedLeague.id + ':' + selectedLeague._espnTeamId : undefined}
                         league={selectedLeague}
                         onBack={() => {
                             setSelectedLeague(null);
@@ -1536,10 +1549,10 @@
         function leagueHealth(league) {
             const gp = league.wins + league.losses + (league.ties || 0);
             const wp = gp > 0 ? Math.round((league.wins / gp) * 100) : null;
-            const myRoster = league.rosters?.find(r => r.owner_id === sleeperUser?.user_id);
+            const myRoster = league._espn ? window.App.EspnHub.selectedRoster(league, league.rosters) : league.rosters?.find(r => r.owner_id === sleeperUser?.user_id);
             const rosterSlots = league.roster_positions?.filter(p => p !== 'BN' && p !== 'IR' && p !== 'TAXI').length || 0;
             const filled = myRoster?.starters?.filter(s => s && s !== '0').length || 0;
-            const fillPct = rosterSlots > 0 ? Math.round((filled / rosterSlots) * 100) : null;
+            const fillPct = rosterSlots > 0 && myRoster ? Math.round((filled / rosterSlots) * 100) : null;
             return { gp, wp, fillPct, teamCount: league.rosters?.length || 0 };
         }
 
@@ -1553,6 +1566,7 @@
         }
         function leagueTeamName(league) {
             try {
+                if (league._espn) return window.App.EspnHub.selectedRoster(league, league.rosters)?._team_name || league.name || '';
                 const me = league.rosters?.find(r => r.owner_id === sleeperUser?.user_id);
                 if (me) {
                     const u = league.users?.find(x => x.user_id === me.owner_id);
@@ -1616,7 +1630,7 @@
             // cards start arriving we render them live and show a "loading more" hint.
             if (loading && sleeperLeagues.length === 0) return <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--silver)', fontSize: 'var(--text-body, 1rem)' }}>Loading leagues...</div>;
             if (error && sleeperLeagues.length === 0) return <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--k-e74c3c, #e74c3c)', fontSize: 'var(--text-body, 1rem)' }}>{error}</div>;
-            if (!loading && sleeperLeagues.length === 0) return <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--silver)', fontSize: 'var(--text-body, 1rem)' }}>No leagues found for {selectedYear}</div>;
+            if (!loading && sleeperLeagues.length === 0) return <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--silver)', fontSize: 'var(--text-body, 1rem)' }}>{sleeperCoverage.listVerified && sleeperCoverage.knownCount === 0 ? 'No leagues found for ' + selectedYear : 'League details are unavailable. Retry league sync above.'}</div>;
 
             return (
                 <div className="hub-league-selector">
@@ -1705,7 +1719,7 @@
                                     <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: '1.15rem', letterSpacing: '.08em', color: 'var(--gold)' }}>EMPIRE COMMAND</span>
                                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '.06em', color: 'var(--black)', background: 'var(--gold)', borderRadius: '5px', padding: '1px 6px' }}>PRO</span>
                                 </div>
-                                <div style={{ fontSize: 'var(--text-label, 0.8rem)', color: 'var(--silver)', marginTop: '4px' }}>All {leagues.length} league{leagues.length !== 1 ? 's' : ''} in one terminal · cross-league trade intelligence</div>
+                                <div style={{ fontSize: 'var(--text-label, 0.8rem)', color: 'var(--silver)', marginTop: '4px' }}>{sleeperUsername && sleeperCoverage.status !== 'ready' ? 'Loaded ' : 'All '}{leagues.length} league{leagues.length !== 1 ? 's' : ''} in one terminal · cross-league trade intelligence</div>
                             </div>
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--gold)" strokeWidth="2" style={{ flexShrink: 0, opacity: 0.7 }}><polyline points="9 18 15 12 9 6"/></svg>
                         </div>
@@ -1761,7 +1775,8 @@
                             // feature-gated, not league-gated. No tiles lock.
                             const recordCol = h.wp === null ? 'var(--silver)' : h.wp >= 60 ? 'var(--win-green)' : h.wp < 40 ? 'var(--loss-red)' : 'var(--silver)';
                             return (
-                                <div key={l.id} onClick={() => onSelect(l)}
+                                <div key={l.id} onClick={() => onSelect(l)} role="button" tabIndex={0} aria-label={'Open ' + title}
+                                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(l); } }}
                                     style={{ position: 'relative', cursor: 'pointer', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid ' + (isLast ? 'var(--gold)' : 'var(--acc-line1, rgba(212,175,55,0.18))'), borderRadius: '12px', padding: '14px', transition: 'all .14s' }}
                                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                                     onMouseLeave={e => { e.currentTarget.style.borderColor = isLast ? 'var(--gold)' : 'var(--acc-line1, rgba(212,175,55,0.18))'; e.currentTarget.style.transform = 'none'; }}>
@@ -1778,6 +1793,7 @@
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                                                 <span style={{ fontSize: 'var(--text-body, 1rem)', fontWeight: 600, color: 'var(--white)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
+                                                {l._portfolioStale && <span style={{ fontSize: '12px', color: 'var(--gold)', flexShrink: 0 }}>Saved data</span>}
                                                 {isLast && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600, color: 'var(--gold)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: '4px', padding: '0 4px', flexShrink: 0 }}>LAST</span>}
                                             </div>
                                             {sub && <div style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
@@ -1790,15 +1806,15 @@
                                 </div>
                             );
                         })}
-                        <div onClick={() => setShowConnect(true)}
-                            style={{ cursor: 'pointer', border: '1px dashed var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: '12px', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', color: 'var(--silver)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-label, 0.8rem)', minHeight: '92px', transition: 'all .14s' }}
+                        <button type="button" onClick={() => setShowConnect(true)}
+                            style={{ background:'transparent',width:'100%',cursor: 'pointer', border: '1px dashed var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: '12px', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', color: 'var(--silver)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-label, 0.8rem)', minHeight: '92px', transition: 'all .14s' }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.color = 'var(--gold)'; }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--acc-line2, rgba(212,175,55,0.3))'; e.currentTarget.style.color = 'var(--silver)'; }}>
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                             Add a league
-                        </div>
+                        </button>
                     </div>
-                    {loading && <div style={{ padding: '10px', textAlign: 'center', color: 'var(--silver)', fontSize: 'var(--text-label, 0.75rem)', opacity: 0.6 }}>Loading more leagues…</div>}
+                    {hubSyncing && <div style={{ padding: '10px', textAlign: 'center', color: 'var(--silver)', fontSize: 'var(--text-label, 0.75rem)', opacity: 0.6 }}>Loading more leagues…</div>}
                 </div>
             );
         }
@@ -1812,10 +1828,15 @@
         // league-gated: Pro unlocks the smart tools inside every league, but
         // free users are never blocked from opening a league. (The old
         // one-free-league claim/lock machinery was removed here.)
-        function handleSelectLeague(league) {
+        function handleSelectLeague(league, requestedTab) {
+            if (!guardMFLLeagueEntry(league)) return;
+            if (league._espn) {
+                if (!window.App.EspnHub.isLeagueCurrent(league)) { setEspnError('Your account or ESPN connection changed. Reload before opening this league.'); return; }
+                if (!league._espnTeamId) { setEspnChoiceLeague(league); return; }
+            }
             setActiveLeagueId(league.id);
             setSelectedLeague(league);
-            const entryTab = defaultTabForLeague(league);
+            const entryTab = requestedTab || defaultTabForLeague(league);
             setActiveTab(entryTab);
             AppStorage.set(APP_WR_KEYS.LAST_LEAGUE_ID, league.id);
             AppStorage.set(APP_WR_KEYS.LAST_LEAGUE_NAME, league.name);
@@ -1844,89 +1865,54 @@
         async function handleESPNConnect(leagueId, espnS2, swid) {
             if (!platformAccessAllowed('espn')) { setEspnError(platformBetaMessage('espn')); return; }
             if (!leagueId) { setEspnError('Enter your ESPN league ID'); return; }
-            const numericId = leagueId.replace(/\D/g, '');
-            if (!numericId) { setEspnError('League ID must be a number from your ESPN URL'); return; }
+            const numericId = String(leagueId).trim();
+            if (!/^[1-9]\d*$/.test(numericId)) { setEspnError('League ID must be the exact number from your ESPN URL'); return; }
             if (!window.ESPN) { setEspnError('ESPN connector not loaded — refresh and try again'); return; }
-            setEspnConnecting(true);
-            setEspnError(null);
-            try {
-                const year = parseInt(selectedYear);
-                // Persist credentials for Scout deep-link
-                if (espnS2) { sessionStorage.setItem('espn_s2', espnS2); localStorage.removeItem('espn_s2'); }
-                if (swid)   { sessionStorage.setItem('espn_swid', swid); localStorage.removeItem('espn_swid'); }
-                const result = await window.ESPN.connectLeague(numericId, year, espnS2 || null, swid || null);
-                const league = {
-                    id:              result.league.league_id,
-                    name:            result.league.name,
-                    season:          String(year),
-                    wins:            0, losses: 0, ties: 0,
-                    rosters:         result.rosters,
-                    scoring_settings: result.league.scoring_settings,
-                    roster_positions: result.league.roster_positions,
-                    settings:         result.league.settings || {},
-                    _espn:            true,
-                    _espnLeagueId:    numericId,
-                };
-                setEspnLeagues(prev => {
-                    const filtered = prev.filter(l => l._espnLeagueId !== numericId);
-                    return [...filtered, league];
-                });
-            } catch (e) {
-                setEspnError(e.message || 'ESPN connection failed');
-            } finally {
-                setEspnConnecting(false);
-            }
+            if (espnConnecting) return;
+            return loadEspnData({ leagueId: numericId, year: selectedYear, espnS2: espnS2 || '', swid: swid || '' });
         }
 
         async function handleMFLConnect(leagueId, year, apiKey) {
             if (!platformAccessAllowed('mfl')) { setMflError(platformBetaMessage('mfl')); return; }
-            if (!leagueId) { setMflError('Enter your MFL League ID'); return; }
-            if (!window.MFL) { setMflError('MFL connector not loaded — refresh and try again'); return; }
-            setMflConnecting(true);
-            setMflError(null);
+            if (mflRequestRef.current?.busy) return;
+            if (!window.MFL?.provider?.loadConnection) { setMflError('MFL connector not loaded — reload and try again'); return; }
+            let request;
             try {
-                const raw = await window.MFL.fetchLeague(leagueId, year, apiKey || null);
-                if (!raw?.leagueData?.league) throw new Error('Invalid MFL league data. Check your League ID and year.');
-                // Build crosswalk (empty Sleeper players — rebuilds when full DB loads)
-                const mflPlayerArr = raw.playersData?.players?.player || [];
-                const allMflPlayers = Array.isArray(mflPlayerArr) ? mflPlayerArr : [mflPlayerArr];
-                const crosswalk = window.MFL.buildCrosswalk({}, allMflPlayers, year);
-                const result = window.MFL.mapToSleeperState(raw, leagueId, year, crosswalk);
-                // Extract franchise list for picker
-                const franchises = raw.leagueData?.league?.franchises?.franchise || [];
-                const franchiseArr = Array.isArray(franchises) ? franchises : [franchises];
-                // Store credentials
-                localStorage.setItem('mfl_league_id', leagueId);
-                localStorage.setItem('mfl_year', String(year));
-                if (apiKey) { sessionStorage.setItem('mfl_api_key', apiKey); localStorage.removeItem('mfl_api_key'); }
-                setMflPendingResult(result);
-                setMflFranchises(franchiseArr);
-            } catch (e) {
-                setMflError(e.message || 'MFL connection failed');
-            } finally {
-                setMflConnecting(false);
-            }
+                request=beginMFLRequest();
+                mflPendingRef.current=null;setMflPendingResult(null);setMflFranchises(null);
+                setMflConnecting(true);setMflError(null);setMflSaveStatus(null);
+                const pending=await prepareMFLConnection(request,{leagueId,year,apiKey:apiKey||null},true);
+                request.check();
+                mflPendingRef.current=pending;setMflPendingResult(pending);setMflFranchises(pending.franchises);
+            } catch (error) { reportMFLFailure(request,error); }
+            finally { if (request && mflRequestRef.current===request) {request.busy=false;setMflConnecting(false);} }
         }
-
-        function finalizeMFLConnect(franchiseId) {
+        async function finalizeMFLConnect(franchiseId) {
             if (!platformAccessAllowed('mfl')) return;
-            const result = mflPendingResult;
-            if (!result) return;
-            const leagueId = localStorage.getItem('mfl_league_id');
-            // Lock in the team pick so it rehydrates on every future launch
-            // (league id + year are already persisted in handleMFLConnect).
-            if (franchiseId) localStorage.setItem('mfl_franchise_id', String(franchiseId));
-            else localStorage.removeItem('mfl_franchise_id');
-            // Sync the connection to the account so it follows the user across devices.
-            window.OD?.saveMflConnection?.({ leagueId, year: localStorage.getItem('mfl_year') || '2026', franchiseId: franchiseId || null });
-            const league = buildMflLeagueObj(result, leagueId, franchiseId);
-            setMflLeagues(prev => {
-                const filtered = prev.filter(l => l._mflLeagueId !== league._mflLeagueId);
-                return [...filtered, league];
-            });
-            setMflFranchises(null);
-            setMflPendingResult(null);
-            handleSelectLeague(league);
+            const pending=mflPendingRef.current;
+            if (!pending || pending.request.busy) return;
+            const request=pending.request;
+            try {
+                request.check();
+                const id=String(franchiseId);
+                if (!pending.franchises.some(row=>row.id===id)) throw new Error('Select a team from this MFL league.');
+                // Recheck canonical raw provenance immediately before storage.
+                window.MFL.mapToSleeperState(pending.raw,pending.creds.leagueId,pending.creds.year);
+                const creds={...pending.creds,franchiseId:id};
+                const key=pending.result.league.league_id;
+                window.MFL.provider.saveCredentials(key,creds);
+                request.busy=true;setMflConnecting(true);setMflError(null);
+                const league={...buildMflLeagueObj(pending.result,creds.leagueId,id),_platformCreds:creds};
+                setMflLeagues(previous=>[...previous.filter(row=>row.id!==league.id),league]);
+                let status;
+                try { const cloud=await mflCloudConnection(request,creds);status=cloud.status==='synced'?'Saved on this device and synced to your account.':'Saved on this device. Account sync is unavailable for this sign-in.'; }
+                catch (error) { request.check();status=error.message; }
+                request.check();setMflSaveStatus(status);
+                mflPendingRef.current=null;setMflFranchises(null);setMflPendingResult(null);
+                // Keep the confirmation visible in the hub; the saved card opens
+                // the selected franchise through the existing navigation.
+            } catch (error) { reportMFLFailure(request,error); }
+            finally { if (mflRequestRef.current===request) {request.busy=false;setMflConnecting(false);} }
         }
 
         // ── The connect that people actually use (owner find 2026-09-09) ──
@@ -1973,7 +1959,7 @@
         // `loading` starts true and only resolves via loadSleeperData, which never
         // runs without a username — so treat the hub as syncing only when a Sleeper
         // fetch is actually in flight (a signed-out user goes straight to connect).
-        const hubSyncing = loading && !!sleeperUsername;
+        const hubSyncing = (loading && !!sleeperUsername) || espnConnecting;
         const hubCtrlStyle = { fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 600, letterSpacing: '.12em', color: 'var(--silver)', background: 'transparent', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', padding: '7px 11px', cursor: 'pointer', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', lineHeight: 1 };
 
         return (
@@ -2086,10 +2072,48 @@
                     <LeagueRoomMasthead
                         username={sleeperUsername}
                         leagueCount={allLeagues.length}
+                        coverageIncomplete={sleeperCoverage.status !== 'ready'}
                         onOpenSettings={() => setShowOwnerSettings(true)}
                     />
                 )}
                 {sleeperUsername && <ChampionshipBanners titles={ownerTitles} />}
+                {sleeperUsername && sleeperCoverage.status !== 'idle' && <section aria-label="Sleeper league sync" style={{ margin: '12px', padding: '12px', border: '1px solid var(--acc-line1)', borderRadius: '8px', fontSize: '14px', lineHeight: 1.45 }}>
+                    <div role="status">{portfolioApi.leagueCoverage(sleeperCoverage)}</div>
+                    {sleeperCoverage.error && <div>{sleeperCoverage.error}</div>}
+                    {!!sleeperCoverage.unavailable?.length && <details><summary style={{ minHeight: '44px', paddingTop: '10px' }}>Leagues awaiting data</summary><ul>{sleeperCoverage.unavailable.map(league => <li key={league.id}>{league.name}</li>)}</ul></details>}
+                    <button type="button" disabled={loading} onClick={() => portfolioApi.current(portfolioAccount.current) ? loadSleeperData() : window.location.reload()} style={{ minHeight: '44px', padding: '8px 12px', marginTop: '6px', font: 'inherit', color: 'var(--gold)', background: 'transparent', border: '1px solid currentColor', borderRadius: '6px' }}>{loading ? 'Syncing leagues…' : portfolioApi.current(portfolioAccount.current) ? 'Refresh leagues' : 'Reload current account'}</button>
+                </section>}
+
+
+                {!showConnect && (mflError || mflFranchises || mflSaveStatus) && <section role="region" aria-label="MFL connection" style={{padding:'12px',marginBottom:'12px'}}>
+                    {mflError && <p role="alert" style={{fontSize:'14px'}}>{mflError}</p>}
+                    {mflSaveStatus && <p role="status" style={{fontSize:'14px'}}>{mflSaveStatus}</p>}
+                    <button className="hub-cta gold" onClick={()=>setShowConnect(true)}>{mflFranchises?'Choose your MFL team':'Manage MFL connection'}</button>
+                </section>}
+
+                {(espnConnecting || espnError || espnChoiceLeague || visibleEspnLeagues.length > 0) && (
+                    <section className="hub-franchise-picker" aria-label="ESPN connection" style={{ margin: '12px', padding: '14px', border: '1px solid var(--acc-line1)', borderRadius: '12px' }}>
+                        <strong>ESPN {espnChoiceLeague?.season || visibleEspnLeagues[0]?.season || ''}</strong>
+                        {espnConnecting && <p role="status">Loading your league and teams…</p>}
+                        {espnError && <p role="alert" style={{ color: 'var(--danger, #f87171)', margin: '10px 0', lineHeight: 1.5 }}>{espnError}{visibleEspnLeagues.length > 0 ? ' Previously loaded league details are still shown.' : ''}</p>}
+                        {espnChoiceLeague && <div>
+                            <p style={{ margin: '10px 0', lineHeight: 1.5 }}>Choose your team in {espnChoiceLeague.name}. This sets your dashboard view; it does not change league membership.</p>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>{espnChoiceLeague.rosters.map(roster => (
+                                <button className="hub-cta gold" key={roster.roster_id} style={{ minHeight: '44px', whiteSpace: 'normal' }} onClick={() => chooseEspnTeam(espnChoiceLeague, roster.roster_id)}>{roster._team_name || roster._owner_name || 'Team ' + roster.roster_id}</button>
+                            ))}</div>
+                        </div>}
+                        {!espnConnecting && <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
+                            <button className="hub-cta ghost" onClick={() => loadEspnData()}>{espnError ? 'Retry ESPN' : 'Refresh ESPN'}</button>
+                            {visibleEspnLeagues[0]?._espnTeamId && <button className="hub-cta ghost" onClick={() => setEspnChoiceLeague(visibleEspnLeagues[0])}>Change team</button>}
+                        </div>}
+                        {espnError && <details style={{ marginTop: '10px' }}><summary>Private league access</summary>
+                            <p style={{ margin: '10px 0', lineHeight: 1.5 }}>If ESPN needs new cookies, add both values. They stay in this browser session.</p>
+                            <input aria-label="ESPN espn_s2 cookie" type="password" autoComplete="off" value={espnS2Input} onChange={e => setEspnS2Input(e.target.value)} style={{ width: '100%', minHeight: '44px', fontSize: '16px', marginBottom: '8px' }} />
+                            <input aria-label="ESPN SWID cookie" type="password" autoComplete="off" value={espnSwidInput} onChange={e => setEspnSwidInput(e.target.value)} style={{ width: '100%', minHeight: '44px', fontSize: '16px', marginBottom: '8px' }} />
+                            <button className="hub-cta gold" disabled={espnConnecting} onClick={() => { try { loadEspnData({ ...window.App.EspnHub.readSaved(), espnS2: espnS2Input, swid: espnSwidInput }); } catch (e) { setEspnError(e.message); } }}>Retry private league</button>
+                        </details>}
+                    </section>
+                )}
 
                 {/* ── Franchise picker — the default landing for every visitor.
                      Shows once we're past the initial no-cache sync, and stays
@@ -2129,13 +2153,13 @@
                      This is the only entry to the platform connectors now; the
                      picker itself is always the default surface underneath. ── */}
                 {showConnect && (
-                <div onClick={() => setShowConnect(false)}
+                <div onClick={() => {cancelMFLConnect();setShowConnect(false);}}
                     style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(4,4,7,0.74)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: 'calc(52px + var(--wr-dev-banner-height, 0px)) 12px 40px' }}>
                 <div onClick={e => e.stopPropagation()}
                     style={{ width: '100%', maxWidth: '760px', background: 'var(--page-bg, #08080B)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', borderRadius: '16px', padding: '16px', boxShadow: '0 24px 70px rgba(0,0,0,0.6)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
                         <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: '1.05rem', letterSpacing: '.08em', color: 'var(--gold)' }}>ADD A LEAGUE</span>
-                        <button onClick={() => setShowConnect(false)} className="hub-cta ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', width: 'auto', flex: '0 0 auto' }}>✕ Close</button>
+                        <button onClick={() => {cancelMFLConnect();setShowConnect(false);}} className="hub-cta ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', width: 'auto', flex: '0 0 auto' }}>✕ Close</button>
                     </div>
                     {resumeLeague && (
                         <div className="session-strip" style={{ marginBottom: '12px' }}>
@@ -2187,7 +2211,7 @@
                             </div>
                             <div>
                                 <div className="product-card-title">MFL</div>
-                                <div className="product-card-subtitle">{visibleMflLeagues.length > 0 ? visibleMflLeagues.length + ' league' + (visibleMflLeagues.length !== 1 ? 's' : '') + ' synced' : 'MyFantasyLeague connector'}</div>
+                                <div className="product-card-subtitle">{visibleMflLeagues.length > 0 ? visibleMflLeagues.length + ' league' + (visibleMflLeagues.length !== 1 ? 's' : '') + ' connected' : 'MyFantasyLeague connector'}</div>
                             </div>
                         </div>
                         <div className="product-card-body">
@@ -2201,19 +2225,21 @@
                                     ))}
                                 </div>
                             )}
+                            {mflError && <div role="alert" style={{fontSize:'14px',color:'var(--k-e74c3c, #e74c3c)',marginBottom:'8px'}}>{mflError}</div>}
+                            {mflSaveStatus && <div role="status" style={{fontSize:'14px',color:'var(--silver)',marginBottom:'8px'}}>{mflSaveStatus}</div>}
                             {/* Franchise picker */}
                             {mflFranchises && (
                                 <div>
                                     <div style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--gold)', marginBottom: '8px', fontWeight: 700 }}>Select your team:</div>
                                     <div style={{ maxHeight: '200px', overflow: 'auto' }}>
                                         {mflFranchises.map(f => (
-                                            <button key={f.id} onClick={() => finalizeMFLConnect(f.id)}
-                                                style={{ display: 'block', width: '100%', padding: '8px 10px', marginBottom: '4px', background: 'rgba(46,125,50,0.08)', border: '1px solid rgba(46,125,50,0.25)', borderRadius: '6px', color: 'var(--white)', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)', cursor: 'pointer', textAlign: 'left' }}>
+                                            <button key={f.id} disabled={mflConnecting} onClick={() => finalizeMFLConnect(f.id)}
+                                                style={{ display: 'block', minHeight:'44px', width: '100%', padding: '8px 10px', marginBottom: '4px', background: 'rgba(46,125,50,0.08)', border: '1px solid rgba(46,125,50,0.25)', borderRadius: '6px', color: 'var(--white)', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)', cursor: 'pointer', textAlign: 'left' }}>
                                                 {f.name || f.owner_name || ('Team ' + f.id)}
                                             </button>
                                         ))}
                                     </div>
-                                    <button onClick={() => { setMflFranchises(null); setMflPendingResult(null); }} style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', background: 'none', border: 'none', cursor: 'pointer', marginTop: '6px' }}>Cancel</button>
+                                    <button onClick={cancelMFLConnect} style={{ minHeight:'44px',minWidth:'44px',fontSize: '14px', color: 'var(--silver)', background: 'none', border: 'none', cursor: 'pointer', marginTop: '6px' }}>Cancel</button>
                                 </div>
                             )}
                             {/* Connect form */}
@@ -2233,14 +2259,14 @@
                                         ))}
                                     </div>
                                     <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                                        <input id="wr-mfl-id" placeholder="League ID" style={{ flex: 1, padding: '8px 10px', background: 'var(--charcoal)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.2))', borderRadius: '6px', color: 'var(--white)', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)' }} />
-                                        <input id="wr-mfl-year" placeholder="Year" defaultValue="2026" style={{ width: '70px', padding: '8px 10px', background: 'var(--charcoal)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.2))', borderRadius: '6px', color: 'var(--white)', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)', textAlign: 'center' }} />
+                                        <input id="wr-mfl-id" aria-label="MFL league ID" disabled={mflConnecting} placeholder="League ID" style={{ minWidth:0,flex: 1, padding: '8px 10px', background: 'var(--charcoal)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.2))', borderRadius: '6px', color: 'var(--white)', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)' }} />
+                                        <input id="wr-mfl-year" aria-label="MFL season" disabled={mflConnecting} placeholder="Year" defaultValue="2026" style={{ width: '70px', padding: '8px 10px', background: 'var(--charcoal)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.2))', borderRadius: '6px', color: 'var(--white)', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)', textAlign: 'center' }} />
                                     </div>
                                     <details style={{ marginBottom: '8px' }}>
                                         <summary style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', cursor: 'pointer', opacity: 0.7 }}>Private league? Add API key</summary>
-                                        <input id="wr-mfl-apikey" placeholder="API Key (optional)" style={{ width: '100%', marginTop: '6px', padding: '8px 10px', background: 'var(--charcoal)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.2))', borderRadius: '6px', color: 'var(--white)', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)' }} />
+                                        <input id="wr-mfl-apikey" aria-label="MFL private API key" type="password" disabled={mflConnecting} placeholder="API Key (optional)" style={{ width: '100%', marginTop: '6px', padding: '8px 10px', background: 'var(--charcoal)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.2))', borderRadius: '6px', color: 'var(--white)', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)' }} />
                                     </details>
-                                    {mflError && <div style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--k-e74c3c, #e74c3c)', marginBottom: '8px' }}>{mflError}</div>}
+
                                     <button className="hub-cta gold" disabled={mflConnecting} onClick={() => {
                                         const id = document.getElementById('wr-mfl-id')?.value?.trim();
                                         const yr = document.getElementById('wr-mfl-year')?.value?.trim() || '2026';

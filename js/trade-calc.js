@@ -241,13 +241,14 @@
     // Tier split (Phase 2, owner ruling): grade/label/diff/side totals + raw roster-impact
     // values stay free; acceptance %, psych taxes, posture/DNA/behavior chips are Pro
     // (wrIsPro() only — never canAccess).
-    function TcVerdictPanel({ verdictColor, diffDisplay, grade, totalA, totalB, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, FAAB_RATE, likelihoodColor, likelihood, netTaxTotal, manualBehaviorFit, otherOwnerId, theirPosture, otherDnaKey, otherDna, manualBehaviorProfile, psychTaxes, grudgeTax, gmFloor, gmModeLabel, gmViability, gmWarnings }) {
+    function TcVerdictPanel({ pickIssue, verdictColor, diffDisplay, grade, totalA, totalB, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, FAAB_RATE, likelihoodColor, likelihood, netTaxTotal, manualBehaviorFit, otherOwnerId, theirPosture, otherDnaKey, otherDna, manualBehaviorProfile, psychTaxes, grudgeTax, gmFloor, gmModeLabel, gmViability, gmWarnings }) {
         const _pro = typeof window.wrIsPro === 'function' ? window.wrIsPro() : true;
         // Owner ruling (restored): the 8-factor psych-tax table + approach line render
         // ALWAYS-VISIBLE at the bottom of the panel — the old collapsed 'Why? ▾'
         // toggle made them effectively invisible. Off-switch: the ✕ on the breakdown
         // header or Owner Settings → League room widgets (showPsychTax, club store).
         const [showPsychTax, hidePsychTax, revealPsychTax] = useTcShowPsychTax();
+        if (pickIssue) return <div role="status" className="tc-pick-notice">{pickIssue}</div>;
         return (
             <div className="tc-ta-verdict tc-ta-sticky-summary" id="wr-export-trade">
                 <div className="tc-section-hdr" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>TRADE ANALYSIS<button onClick={() => window.wrExport?.capture(document.getElementById('wr-export-trade'), 'trade-analysis')} style={{ background:'none', border:'1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius:'4px', padding:'2px 8px', color:'var(--gold)', fontSize:'var(--text-micro, 0.6875rem)', cursor:'pointer', fontFamily: 'var(--font-body)', minHeight:'44px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>Snapshot</button></div>
@@ -470,7 +471,7 @@
     // One side of the manual builder: owner select, added players/picks with value bars, a roster
     // picker, FAAB input, and a side total. ~29 deps (state, setters, helper closures, value fns)
     // passed via a tradeSideDeps bag. The new persistent-builder layout will refine this contract.
-    function TcTradeSide({ side, color, label, tradeIds, tradePickIds, tradeFaab, getPlayerValue, pickValueForParts, FAAB_RATE, rosterPlayersFor, tradeOwner, picksByOwner, comparePicksByDraftOrder, setTradeOwner, setSearchText, ownerOptions, playersData, MAX_VALUE, removePlayer, posColor, normPos, PICK_COLORS, ownerNameForRosterId, allRosters, removePick, pickLabel, searchText, TC_POS_ORDER, addPlayer, makePickId, addPick, setTradeFaab }) {
+    function TcTradeSide({ pickInventory, pickApi, retryPicks, side, color, label, tradeIds, tradePickIds, tradeFaab, getPlayerValue, pickValueForParts, FAAB_RATE, rosterPlayersFor, tradeOwner, picksByOwner, comparePicksByDraftOrder, setTradeOwner, setSearchText, ownerOptions, playersData, MAX_VALUE, removePlayer, posColor, normPos, PICK_COLORS, ownerNameForRosterId, allRosters, removePick, pickLabel, searchText, TC_POS_ORDER, addPlayer, makePickId, addPick, setTradeFaab }) {
                 const ids = tradeIds[side];
                 const pickIds = tradePickIds[side];
                 const faab = tradeFaab[side] || 0;
@@ -479,6 +480,7 @@
                     + Math.round(faab * FAAB_RATE);
                 const rosterPlayers = rosterPlayersFor(side);
                 const ownerId = tradeOwner[side] || null;
+                const sidePicksUnknown = pickIds.some(id => !pickApi.owns(pickInventory, tradeOwner[side], id) || !pickApi.priced(pickInventory, id.split('-')[1]));
                 const ownerPicksList = ownerId ? (picksByOwner[ownerId] || []).slice().sort(comparePicksByDraftOrder) : [];
                 // The roster filter also searches draft picks so a specific pick is
                 // easy to find: matches the label ("2026 1.13"), round ("r1", "round 1"),
@@ -499,6 +501,11 @@
                             {ownerOptions.map(o => <option key={o.id||'none'} value={o.id||''}>{o.label}</option>)}
                         </select>
 
+                        <div className="tc-pick-notice" role="status">
+                            {pickInventory.coverage.complete ? 'Draft-pick ownership checked.' : pickInventory.coverage.reason}
+                            {pickInventory.coverage.format && pickInventory.coverage.format !== 'dynasty' && ' Seasonal draft rights are shown without dynasty pick prices.'}
+                            <button type="button" onClick={retryPicks} disabled={pickInventory.status === 'loading'}>Refresh picks</button>
+                        </div>
                         {/* Added players */}
                         {ids.map(pid => {
                             const p = playersData[pid]; const v = getPlayerValue(pid);
@@ -522,19 +529,21 @@
                             const parts = pkId.split('-');
                             const yr = parts[1], rd = Number(parts[2]), fromRid = parts[3];
                             const slot = (parts[4] || '').charAt(0) === 's' ? Number(parts[4].slice(1)) : null;
-                            const val = pickValueForParts(yr, rd, fromRid, slot);
+                            const verified = pickApi.owns(pickInventory, ownerId, pkId);
+                            const valueKnown = verified && pickApi.priced(pickInventory, yr);
+                            const val = valueKnown ? pickValueForParts(yr, rd, fromRid, slot) : 0;
                             const pct = Math.round((val / MAX_VALUE) * 100);
                             const pickColor = PICK_COLORS[rd] || 'var(--silver)';
                             const via = ownerNameForRosterId(fromRid);
                             const isOwn = !via || (ownerId && (() => { const r = allRosters.find(x => x.owner_id === ownerId); return r && String(r.roster_id) === String(fromRid); })());
                             return (
                                 <div key={pkId} className="tc-ta-player-row">
-                                    <button className="tc-ta-remove" onClick={() => removePick(side, pkId)}>X</button>
+                                    <button type="button" className="tc-ta-remove" aria-label={'Remove ' + pickLabel(yr, rd, fromRid, slot)} onClick={() => removePick(side, pkId)}>X</button>
                                     <span className="tc-ta-pos-dot" style={{ background: pickColor }} />
                                     <span style={{ flex:1, fontSize:'0.82rem', fontWeight:600 }}>{pickLabel(yr, rd, fromRid, slot)}{!isOwn && via && <span style={{ fontSize:'0.76rem', color:'var(--silver)', opacity:0.6, marginLeft:'0.3rem' }}>via {via}</span>}</span>
                                     <div className="tc-ta-val-col" style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2 }}>
                                         <div className="tc-ta-val-bar-wrap"><div className="tc-ta-val-bar-fill" style={{ width:`${pct}%`, background: pickColor }} /></div>
-                                        <span style={{ fontSize:'0.7rem', fontWeight:700, color: pickColor }}>{val.toLocaleString()}</span>
+                                        <span style={{ fontSize:'0.7rem', fontWeight:700, color: pickColor }}>{valueKnown ? val.toLocaleString() : 'Unverified value'}</span>
                                     </div>
                                 </div>
                             );
@@ -543,7 +552,7 @@
                         {/* Roster picker */}
                         {tradeOwner[side] && rosterPlayers !== null ? (
                             <div>
-                                <input className="tc-ta-roster-filter" placeholder={`Filter ${rosterPlayers.length} players & ${ownerPicksList.length} picks...`} value={searchText[side]} onChange={e => setSearchText(prev => ({ ...prev, [side]: e.target.value }))} />
+                                <input className="tc-ta-roster-filter" placeholder={`Filter ${rosterPlayers.length} players & ${ownerPicksList.length} ${pickInventory.coverage.complete ? '' : 'known '}picks...`} value={searchText[side]} onChange={e => setSearchText(prev => ({ ...prev, [side]: e.target.value }))} />
                                 <div className="tc-ta-roster-list-tall">
                                     {rosterPlayers.length > 0 && (() => {
                                         const grouped = {};
@@ -571,23 +580,24 @@
                                             {filteredPicks.map(({ year, round, fromRosterId, slot }) => {
                                                 const pkId = makePickId(year, round, fromRosterId) + (slot != null ? '-s' + slot : '');
                                                 const added = pickIds.includes(pkId);
-                                                const val = pickValueForParts(year, round, fromRosterId, slot);
+                                                const valueKnown = pickInventory.status === 'ready' && pickApi.priced(pickInventory, year);
+                                                const val = valueKnown ? pickValueForParts(year, round, fromRosterId, slot) : 0;
                                                 const pickColor = PICK_COLORS[round] || 'var(--silver)';
                                                 const via = ownerNameForRosterId(fromRosterId);
                                                 const r2 = allRosters.find(x => x.owner_id === ownerId);
                                                 const isOwn2 = r2 && String(r2.roster_id) === String(fromRosterId);
                                                 return (
-                                                    <div key={pkId} className={`tc-ta-roster-item${added?' tc-added':''}`} onClick={() => !added && addPick(side, pkId)}>
+                                                    <button type="button" key={pkId} className={`tc-ta-roster-item tc-pick-select${added?' tc-added':''}`} disabled={added || pickInventory.status !== 'ready'} onClick={() => addPick(side, pkId)}>
                                                         <span className="tc-ta-pos-dot" style={{ background: pickColor }} />
                                                         <span className="tc-ta-pick-name" style={{ flex:1, fontWeight:600 }}>{pickLabel(year, round, fromRosterId, slot)}{!isOwn2 && via && <span style={{ fontSize:'0.74rem', color:'var(--silver)', opacity:0.6, marginLeft:'0.3rem' }}>via {via}</span>}</span>
-                                                        <span className="tc-ta-player-val" style={{ color: pickColor }}>{val.toLocaleString()}</span>
-                                                    </div>
+                                                        <span className="tc-ta-player-val" style={{ color: pickColor }}>{valueKnown ? val.toLocaleString() : 'Value unavailable'}</span>
+                                                    </button>
                                                 );
                                             })}
                                         </div>
                                     )}
                                     {rosterPlayers.length === 0 && filteredPicks.length === 0 && (
-                                        <div className="tc-ta-roster-empty">No players or picks match{pickQuery ? ` "${searchText[side]}"` : ''}</div>
+                                        <div className="tc-ta-roster-empty">{pickInventory.coverage.complete ? 'No players or picks match' : 'No loaded players or verified picks match'}{pickQuery ? ` "${searchText[side]}"` : ''}</div>
                                     )}
                                 </div>
                             </div>
@@ -607,7 +617,7 @@
                         {/* Total */}
                         <div className="tc-ta-total-row" style={{ background:`${color}12`, border:`1px solid ${color}30` }}>
                             <span className="tc-ta-total-label">Total Value</span>
-                            <span className="tc-ta-total-val" style={{ color }}>{tot > 0 ? tot.toLocaleString() : '--'}</span>
+                            <span className="tc-ta-total-val" style={{ color }}>{sidePicksUnknown ? 'Awaiting pick verification' : tot > 0 ? tot.toLocaleString() : '--'}</span>
                         </div>
                     </div>
                 );
@@ -631,7 +641,7 @@
         const valueSourceLabel = resolvedLeagueSkin?.features?.showDynastyValue === false ? 'format-adjusted values' : 'dynasty valuations';
         let WEEKLY_TARGET = 243;
         // Shared roster-construction constants from window.App.PlayerValue
-        const { IDEAL_ROSTER, DRAFT_ROUNDS, PICK_HORIZON,
+        const { IDEAL_ROSTER,
                 LINEUP_STARTERS, MIN_STARTER_QUALITY, NFL_STARTER_POOL,
                 POS_PT_TARGETS, POS_WEIGHTS, TOTAL_WEIGHT,
                 PICK_VALUES, PICK_VALUES_BY_SLOT, PICK_COLORS, resolvePickValue: _resolvePickValue } = window.App.PlayerValue;
@@ -821,66 +831,6 @@
             return badge ? badge.detail : '';
         }
 
-        function detectPickIdMode(rosters, tradedPicks) {
-            const rosterIds = new Set(rosters.map(r => String(r.roster_id)));
-            const userIds = new Set(rosters.map(r => String(r.owner_id)));
-            let rosterHits = 0, userHits = 0;
-            for (const tp of tradedPicks || []) {
-                const oid = String(tp.owner_id ?? '');
-                if (rosterIds.has(oid)) rosterHits++;
-                if (userIds.has(oid)) userHits++;
-            }
-            return rosterHits >= userHits ? 'roster' : 'user';
-        }
-
-        // The tradeable pick window: the next PICK_HORIZON draft seasons. Once a
-        // season's rookie draft is complete those picks are spent, so the window
-        // rolls forward by a year (e.g. after the 2026 draft: 2027/2028/2029, not
-        // 2026/2027/2028) — this is what pulls the just-drafted year off the
-        // trade calculator.
-        function pickWindowYears(leagueSeason, skipCurrentSeason) {
-            const start = Number(leagueSeason) + (skipCurrentSeason ? 1 : 0);
-            return Array.from({ length: PICK_HORIZON }, (_, i) => start + i);
-        }
-
-        function buildPicksByOwner(rosters, tradedPicks, leagueSeason, draftRounds, skipCurrentSeason) {
-            // League-specific round count (falls back to the constant only if unknown).
-            const rounds = Math.max(1, Number(draftRounds) || DRAFT_ROUNDS);
-            const PICK_YEARS_INT = pickWindowYears(leagueSeason, skipCurrentSeason);
-            const mode = detectPickIdMode(rosters, tradedPicks);
-            const rosterById = {};
-            for (const r of rosters) rosterById[String(r.roster_id)] = r;
-            const ownerByKey = {};
-            for (const r of rosters) {
-                const originRosterId = String(r.roster_id);
-                const ownerUserId = String(r.owner_id);
-                for (const y of PICK_YEARS_INT) { for (let rd = 1; rd <= rounds; rd++) { ownerByKey[`${y}-${rd}-${originRosterId}`] = ownerUserId; } }
-            }
-            for (const tp of tradedPicks || []) {
-                const y = Number(tp.season); if (!PICK_YEARS_INT.includes(y)) continue;
-                const rd = Number(tp.round); if (!Number.isFinite(rd) || rd < 1 || rd > rounds) continue;
-                const originRosterId = String(tp.roster_id);
-                let newOwnerUserId;
-                if (mode === 'user') { newOwnerUserId = String(tp.owner_id ?? ''); }
-                else { const r = rosterById[String(tp.owner_id ?? '')]; newOwnerUserId = r?.owner_id ? String(r.owner_id) : null; }
-                if (!newOwnerUserId) continue;
-                const key = `${y}-${rd}-${originRosterId}`;
-                if (key in ownerByKey) ownerByKey[key] = newOwnerUserId;
-            }
-            const picksByOwner = {};
-            for (const [key, ownerUserId] of Object.entries(ownerByKey)) {
-                const parts = key.split('-');
-                const y = Number(parts[0]), rd = Number(parts[1]), fromRosterId = parts[2];
-                if (!picksByOwner[ownerUserId]) picksByOwner[ownerUserId] = [];
-                picksByOwner[ownerUserId].push({ year: y, round: rd, fromRosterId });
-            }
-            for (const oid of Object.keys(picksByOwner)) {
-                picksByOwner[oid].sort((a, b) => a.year - b.year || a.round - b.round || Number(a.fromRosterId) - Number(b.fromRosterId));
-            }
-            return picksByOwner;
-        }
-
-        // ── One brain (owner ruling 2026-09-02) ─────────────────────────
         // The Trade Room reads the SAME shared assessment as every other
         // surface — needs, strengths, tier, panic, window all come from
         // DHQ-Shared/team-assess.js. The 120-line local duplicate (static
@@ -1183,112 +1133,42 @@
             refreshLedger(false);
         }, [tcTab, leagueId, ledgerRawTrades, ledgerSyncing]);
 
-        // Fetch draft slot maps for accurate pick ownership (slot_to_roster_id from Sleeper)
-        const [draftSlotMaps, setDraftSlotMaps] = useState({});
-        // League-specific rookie-draft round count — replaces the hardcoded DRAFT_ROUNDS
-        // so EVERY league's future picks use its real round count, not a flat 7.
-        const [leagueDraftRounds, setLeagueDraftRounds] = useState(null);
-        // True once every draft for the league's current season has completed —
-        // the signal that "the draft is over" and this season's picks should drop
-        // out of the trade calculator. Defaults false so picks stay tradeable
-        // until we positively confirm the draft finished (or for platforms with
-        // no draft objects, e.g. ESPN/Yahoo).
-        const [currentDraftComplete, setCurrentDraftComplete] = useState(false);
+        const pickApi = window.App.TradePickInventory;
+        const pickAccount = React.useRef(pickApi.capture());
+        const [pickEvidence, setPickEvidence] = useState(null);
+        const [pickRetry, setPickRetry] = useState(0);
         useEffect(() => {
-            if (!leagueId || !allRosters.length) return;
             let cancelled = false;
-            (async () => {
-                try {
-                    const leagueSeason = parseInt(currentLeague.season || new Date().getFullYear());
-                    const pickYears = Array.from({ length: PICK_HORIZON }, (_, i) => leagueSeason + i);
-                    // MFL leagues 404 on the Sleeper drafts endpoint. Their draft objects
-                    // (hydrated onto window.S / the league) already carry season +
-                    // slot_to_roster_id + draft_order, so the pick-slot labels (1.13 etc.)
-                    // resolve for the current draft the same way Sleeper's do.
-                    const isMfl = !!(currentLeague?._mfl || String(leagueId).startsWith('mfl_'));
-                    // Gather the league's drafts (used for BOTH the slot maps and the
-                    // round count). Sleeper's drafts aren't in window.S, so fetch the
-                    // list; MFL's are already hydrated; ESPN/Yahoo have none (→ []).
-                    let draftsList;
-                    if (isMfl) {
-                        draftsList = (window.S?.drafts && window.S.drafts.length) ? window.S.drafts : (currentLeague?.drafts || []);
-                    } else {
-                        draftsList = await fetch('https://api.sleeper.app/v1/league/' + leagueId + '/drafts').then(r => r.ok ? r.json() : []).catch(() => []);
-                    }
-                    if (cancelled) return;
-                    draftsList = Array.isArray(draftsList) ? draftsList : [];
-                    // ── "Draft is over" detection ──────────────────────────────
-                    // When every draft for the current season has completed, that
-                    // season's rookie picks are spent and must come off the trade
-                    // calculator. Require .length > 0 so "no drafts yet" is never
-                    // read as complete, and .every so a rookie+supplemental pair
-                    // doesn't drop the year while one is still pending (mirrors the
-                    // free-agency rookie-lock logic).
-                    const currentSeasonDrafts = draftsList.filter(d => Number(d.season) === leagueSeason);
-                    const seasonDraftDone = currentSeasonDrafts.length > 0
-                        && currentSeasonDrafts.every(d => String(d.status || '').toLowerCase() === 'complete');
-                    if (!cancelled) setCurrentDraftComplete(seasonDraftDone);
-                    // ── League-specific rookie-draft round count (ALL platforms) ──
-                    // Resolve from the ROOKIE draft (player_type===1) so a startup draft
-                    // can't inflate it; resolveDraftRounds falls back to the league's
-                    // settings.draft_rounds (Sleeper field / ESPN+Yahoo bench-derived).
-                    // Resolve the rookie draft (player_type===1) for the season — its
-                    // settings.rounds is the authoritative dynasty rookie-round count.
-                    // (Deliberately NOT using resolveDraftRounds here: its seasonal/
-                    // redraft branch returns a roster-slot count, which would INFLATE
-                    // redraft leagues past the old default.)
-                    const rookieDrafts = draftsList.filter(d => Number(d?.settings?.player_type) === 1);
-                    const rookieDraft =
-                        rookieDrafts.find(d => Number(d.season) === leagueSeason && ['pre_draft', 'drafting'].includes(String(d.status || '').toLowerCase()))
-                        || rookieDrafts.find(d => ['pre_draft', 'drafting'].includes(String(d.status || '').toLowerCase()))
-                        || rookieDrafts.find(d => Number(d.season) === leagueSeason)
-                        || rookieDrafts[0] || null;
-                    const rookieRounds = Number(rookieDraft?.settings?.rounds) || 0;
-                    // Rookie draft is trusted (sanity-capped at 12). Otherwise use the
-                    // league's draft_rounds (ESPN/Yahoo bench-derived; Sleeper field),
-                    // capped at the old default so a startup/roster count can't inflate.
-                    const rr = rookieRounds > 0
-                        ? Math.min(rookieRounds, 12)
-                        : Math.min(Number(currentLeague?.settings?.draft_rounds) || DRAFT_ROUNDS, DRAFT_ROUNDS);
-                    setLeagueDraftRounds(rr > 0 ? rr : null);
-                    // ── Slot maps (current/upcoming draft order) ──
-                    const relevantDrafts = draftsList.filter(d => pickYears.includes(Number(d.season)));
-                    if (!relevantDrafts.length) return;
-                    const details = isMfl
-                        ? relevantDrafts // the MFL draft object IS its own detail
-                        : await Promise.all(relevantDrafts.map(d =>
-                            fetch('https://api.sleeper.app/v1/draft/' + d.draft_id).then(r => r.ok ? r.json() : null).catch(() => null)
-                        ));
-                    if (cancelled) return;
-                    const maps = {};
-                    const rosterIdByOwnerId = {};
-                    allRosters.forEach(r => { if (r.owner_id != null) rosterIdByOwnerId[String(r.owner_id)] = String(r.roster_id); });
-                    details.forEach((d, i) => {
-                        if (!d?.slot_to_roster_id && !d?.draft_order && !relevantDrafts[i]?.draft_order) return;
-                        const year = Number(relevantDrafts[i].season);
-                        const rosterToSlot = {};
-                        if (d.slot_to_roster_id) {
-                            Object.entries(d.slot_to_roster_id).forEach(([slot, rosterId]) => {
-                                rosterToSlot[String(rosterId)] = parseInt(slot);
-                            });
-                        } else {
-                            Object.entries(d.draft_order || relevantDrafts[i].draft_order || {}).forEach(([ownerOrRosterId, slot]) => {
-                                const rosterId = rosterIdByOwnerId[String(ownerOrRosterId)] || (allRosters.some(r => String(r.roster_id) === String(ownerOrRosterId)) ? String(ownerOrRosterId) : null);
-                                if (rosterId) rosterToSlot[rosterId] = parseInt(slot);
-                            });
-                        }
-                        maps[year] = rosterToSlot;
-                    });
-                    setDraftSlotMaps(maps);
-                    console.log('[TradeCalc] Draft slot maps loaded:', Object.keys(maps).length, 'years');
-                } catch (e) { console.warn('[TradeCalc] Draft slot maps failed:', e); }
-            })();
-            return () => { cancelled = true; };
-        }, [leagueId, allRosters.length]);
-
-        // League-specific rookie-draft rounds: resolved value → league setting →
-        // constant (last resort only). Used everywhere instead of hardcoded 7.
-        const tcDraftRounds = Math.max(1, Number(leagueDraftRounds) || Math.min(Number(currentLeague?.settings?.draft_rounds) || DRAFT_ROUNDS, DRAFT_ROUNDS));
+            const snapshot = pickAccount.current;
+            const active = () => !cancelled && pickApi.current(snapshot);
+            const invalidate = () => {
+                if (!pickApi.current(snapshot)) setPickEvidence(null);
+            };
+            window.addEventListener('storage', invalidate);
+            if (active() && leagueId && allRosters.length) {
+                setPickEvidence(previous => ({ status: 'loading', leagueId, season: Number(currentLeague.season),
+                    previous: previous?.status === 'ready' ? previous : previous?.previous }));
+                pickApi.load(currentLeague, allRosters, { snapshot }).then(evidence => {
+                    if (active()) setPickEvidence(evidence);
+                }).catch(error => {
+                    if (active()) setPickEvidence(previous => ({ status: 'error', error: error.message,
+                        leagueId, season: Number(currentLeague.season), previous: previous?.previous }));
+                });
+            }
+            return () => { cancelled = true; window.removeEventListener('storage', invalidate); };
+        }, [currentLeague, allRosters, timeRecomputeTs, pickRetry]);
+        const pickInventory = useMemo(() => {
+            const next = pickApi.inventory(currentLeague, allRosters, pickEvidence);
+            if (pickEvidence?.previous && ['loading', 'error'].includes(pickEvidence.status)) {
+                const previous = pickApi.inventory(currentLeague, allRosters, pickEvidence.previous);
+                if (previous.status === 'ready') return { ...previous, status: 'stale', coverage: { ...previous.coverage,
+                    complete: false, reason: (pickEvidence.error || 'Refreshing pick ownership…') + ' Previously checked picks are shown; retry before using them.' } };
+            }
+            return next;
+        }, [currentLeague, allRosters, pickEvidence]);
+        const draftSlotMaps = pickInventory.slotMaps;
+        const retryPicks = () => setPickRetry(value => value + 1);
+        const pickIssue = pickApi.selectionIssue(pickInventory, tradeOwner, tradePickIds);
 
         function ownerNameForRosterId(rid) { const r = allRosters.find(x => String(x.roster_id) === String(rid)); if (!r) return null; const u = leagueUsers.find(x => x.user_id === r.owner_id); return u?.display_name || null; }
 
@@ -1381,63 +1261,7 @@
         // Compute assessments — shared engine only; entries are absent while
         // the shared pass is still loading (existing loading states cover it).
 
-        // b106 (owner report 2026-09-06): S.tradedPicks lands only after the
-        // league hydrate finishes, so a snapshot keyed on the league alone can
-        // capture the pre-hydrate EMPTY list and never refresh — every roster
-        // then "owns" all its original picks and the finder spends picks the
-        // owner traded away years ago. statsData is set in the same hydrate
-        // pass, so it (plus timeRecomputeTs for background syncs) re-reads the
-        // ledger the moment real data exists; picksByOwner and the finder's
-        // data epoch already chain off this value and rescan on their own.
-        const tradedPicks = useMemo(() => window.S?.tradedPicks || [], [currentLeague, statsData, timeRecomputeTs]);
-
-        const picksByOwner = useMemo(() => {
-            if (!allRosters.length) return {};
-            const leagueSeason = parseInt(currentLeague.season || new Date().getFullYear());
-            // MFL builds picks ENTIRELY from real MFL data (never the generic base
-            // model, which invents a fixed 7 rounds × every team × N future years):
-            //   • current draft year ← the live board (exact slots + ownership)
-            //   • future years       ← TYPE=futureDraftPicks (the EXACT picks that
-            //     exist — real years, real rounds, real ownership). No future picks
-            //     defined ⇒ none shown. This fixes phantom 7-round future picks and
-            //     makes the round/year count league-specific.
-            const isMfl = !!(currentLeague?._mfl || String(currentLeague?.id || currentLeague?.league_id || '').startsWith('mfl_'));
-            if (isMfl) {
-                const out = {};
-                // Current draft year from the live board (unmade = still tradeable).
-                const draft = (window.S?.drafts || currentLeague?.drafts || []).find(d => Number(d.season) === leagueSeason);
-                const slots = draft && Array.isArray(draft._slots) ? draft._slots : null;
-                if (slots) {
-                    slots.forEach(s => {
-                        if (!s || s.player_id) return; // already drafted → now a player
-                        const owner = String(s.roster_id || '');
-                        if (!owner) return;
-                        (out[owner] = out[owner] || []).push({
-                            year: leagueSeason,
-                            round: Number(s.round),
-                            fromRosterId: owner,
-                            slot: Number(s.draft_slot) || null,
-                        });
-                    });
-                }
-                // Future years from the authoritative future-pick ownership.
-                const future = window.S?._mflFuturePicks || null;
-                if (future) {
-                    Object.entries(future).forEach(([owner, picks]) => {
-                        (picks || []).forEach(p => {
-                            if (Number(p.season) === leagueSeason) return; // current handled by the board
-                            (out[owner] = out[owner] || []).push({
-                                year: Number(p.season),
-                                round: Number(p.round),
-                                fromRosterId: String(p.roster_id),
-                            });
-                        });
-                    });
-                }
-                return out;
-            }
-            return buildPicksByOwner(allRosters, tradedPicks, leagueSeason, tcDraftRounds, currentDraftComplete);
-        }, [allRosters, tradedPicks, tcDraftRounds, currentDraftComplete]);
+        const picksByOwner = pickInventory.byOwner;
 
         // ── LAB one brain (ratified spec 2026-09-04) ────────────────────
         // The ledger loads here (moved above the assessments memo it feeds);
@@ -1535,7 +1359,7 @@
                     oneBrain: ob,
                 };
             }).filter(Boolean);
-        }, [allRosters, playersData, statsData, picksByOwner, timeRecomputeTs, leagueDraftRounds, currentDraftComplete, labBrain]);
+        }, [allRosters, playersData, statsData, picksByOwner, timeRecomputeTs, labBrain]);
 
         const myRosterId = myRoster?.roster_id;
         const rosterState = window.App?.getRosterDataState?.({ roster: myRoster, currentLeague, rosters: allRosters, leagueSkin: resolvedLeagueSkin }) || { isUsable: true };
@@ -1829,6 +1653,7 @@
 
         function pickAssetsForOwner(ownerId) {
             return (picksByOwner[String(ownerId)] || [])
+                .filter(p => pickInventory.status === 'ready' && pickApi.priced(pickInventory, p.year))
                 .map(pickAsset)
                 .filter(Boolean)
                 .sort((a, b) => b.value - a.value || comparePicksByDraftOrder(a, b));
@@ -3792,7 +3617,7 @@
             // LAB: labModel joins the epoch — when the ledger or intent reads
             // land, the partner board, deal cache and pooled scan all refresh
             // so Whys/ordering pick the model up without a manual reload.
-            [assessments, ownerDna, grudges, ownerBehaviorByRosterId, teamContextByRosterId, picksByOwner, draftSlotMaps, leagueDraftRounds, labModel]
+            [assessments, ownerDna, grudges, ownerBehaviorByRosterId, teamContextByRosterId, picksByOwner, draftSlotMaps, labModel]
         );
         const partnerBoard = useMemo(() => computePartnerBoard(), [finderDataEpoch]);
         // Per-(partner, mode, focus) deal cache, invalidated wholesale on tuning/data
@@ -3937,19 +3762,6 @@
         // ── Phone board→builder helpers (iPhone program Phase 2) — component scope
         // so the phone workspace's gold "+" affordances and picks board run the
         // builder's canonical add recipes.
-        // Hide picks whose rookie draft has already been held: any PAST season, plus
-        // the CURRENT NFL season once its draft is done — proxied by the regular
-        // season / playoffs having started, since rookie drafts run pre-season.
-        // Future picks always show. (MFL already drops made current-year slots
-        // per-slot at build time; this is the backstop and the Sleeper fix — its
-        // synthetic picks include the current season.)
-        function pickUndrafted(pk) {
-            const nfl = (typeof window !== 'undefined' && window.S && window.S.nflState) || {};
-            const nflSeason = Number(nfl.season) || parseInt(currentLeague.season) || new Date().getFullYear();
-            const draftHeld = ['regular', 'post'].includes(String(nfl.season_type || '').toLowerCase());
-            const y = Number(pk.year);
-            return !Number.isFinite(y) || y > nflSeason || (y === nflSeason && !draftHeld);
-        }
         // Gold "+" add affordance → the EXISTING builder add handler
         // (buildTradeSideDeps().addPlayer — a cheap prop bag of closures over
         // component state) plus the owner-select seam for side B (mirrors
@@ -3971,9 +3783,11 @@
         function addPickRowToBuilder(row) {
             const mine = String(row.rosterId) === String(myRosterId);
             const side = mine ? 'A' : 'B';
+            if (!pickApi.owns(pickInventory, row.ownerId, row.id)) { setDealHqNotice('Refresh pick ownership before adding this pick'); return false; }
             if (tradePickIds[side].includes(row.id)) { setDealHqNotice('Already in the live deal'); return false; }
             if (!mine && tradeOwner.B !== row.ownerId) setTradeOwner(prev => ({ ...prev, B: row.ownerId }));
-            buildTradeSideDeps().addPick(side, row.id);
+            setTradeOwner(prev => ({ ...prev, [side]: row.ownerId }));
+            setTradePickIds(prev => ({ ...prev, [side]: [...prev[side], row.id] }));
             setDealHqNotice(mine ? 'Added to YOU SEND' : 'Added to YOU GET');
             return true;
         }
@@ -4640,6 +4454,7 @@
                     <div className={'tc-tab-row' + (railOn ? ' rail-owns-tabs' : '')}>
                         <div className="tc-dhq-modebar" role="group" aria-label="Trade Center sections">{renderTcTabButtons()}</div>
                     </div>
+                    {active === 'desk' && !pickInventory.coverage.complete && <div role="status" className="tc-pick-notice">{pickInventory.coverage.reason}<button type="button" onClick={retryPicks} disabled={pickInventory.status === 'loading'}>Refresh picks</button></div>}
                     <div className={'tc-adaptive-canvas' + (railOn ? ' has-rail' : '')}>
                     <div className="tc-adaptive-main">
                     {active === 'desk' && tradeContext && (
@@ -4662,7 +4477,7 @@
                             <div className="tc-dhq-panel-head">
                                 <span>Trade Builder</span>
                                 <em>{_verdict.hasTrade
-                                    ? `${_verdict.verdictText} ${_verdict.diffDisplay} · gave ${_verdict.totalA.toLocaleString()} / got ${_verdict.totalB.toLocaleString()}${_pro ? ` · ${_verdict.likelihood}% accept` : ''}`
+                                    ? _verdict.pickIssue ? 'Pick verification required — selections preserved' : `${_verdict.verdictText} ${_verdict.diffDisplay} · gave ${_verdict.totalA.toLocaleString()} / got ${_verdict.totalB.toLocaleString()}${_pro ? ` · ${_verdict.likelihood}% accept` : ''}`
                                     : 'Build or tweak a trade without leaving this view.'}</em>
                                 <div className="tc-dhq-actions" style={{ flex: '0 0 auto' }}>
                                     <button type="button" onClick={() => setBuilderExpanded(false)}>Close ▴</button>
@@ -4700,6 +4515,10 @@
         // the retired analyzer surface so the persistent builder strip can reuse it (and so the
         // verdict math lives in one place). Pure function of builder state; no behavior change.
         function computeManualVerdict() {
+            const pickIssue = pickApi.selectionIssue(pickInventory, tradeOwner, tradePickIds);
+            if (pickIssue) return { pickIssue, hasTrade: true, grade: null, totalA: 0, totalB: 0, userGain: 0,
+                verdictText: 'PICK VERIFICATION REQUIRED', diffDisplay: '', likelihood: null };
+
             // Use the same ownership-aware value path as the pick list.
             const pickVal = (pkId) => { const p = pkId.split('-'); const sl = (p[4] || '').charAt(0) === 's' ? Number(p[4].slice(1)) : null; return pickValueForParts(p[1], Number(p[2]), p[3], sl); };
             const totalA = tradeIds.A.reduce((s, id) => s + (getPlayerValue(id).value || 0), 0)
@@ -4849,20 +4668,26 @@
         }
 
         async function requestAlexVerdict(v, dealKey) {
+            const account = pickAccount.current;
+            if (!pickApi.current(account)) return;
+            if (v.pickIssue || pickApi.selectionIssue(pickInventory, tradeOwner, tradePickIds)) return;
             setAlexVerdict({ loading: true, dealKey });
             try {
                 const result = await window.OD.callAI({ type: 'trade_verdict', context: buildTradeVerdictContext(v) });
+                if (!pickApi.current(account)) return;
                 setAlexVerdict({ text: result.analysis, dealKey });
                 const partnerName = (assessments.find(a => a.ownerId === v.otherOwnerId) || {}).ownerName;
                 if (typeof window.OD?.saveAIAnalysis === 'function') {
                     window.OD.saveAIAnalysis(leagueId, 'trade_verdict', partnerName ? `Trade Verdict vs ${partnerName}` : 'Trade Verdict', result.analysis).catch?.(() => {});
                 }
             } catch (e) {
+                if (!pickApi.current(account)) return;
                 setAlexVerdict({ error: e.message || 'Second opinion failed. Try again in a moment.', dealKey });
             }
         }
 
         function sendVerdictFeedback(action, dealKey) {
+            if (!pickApi.current(pickAccount.current)) return;
             setAlexVerdict(prev => prev && prev.dealKey === dealKey ? { ...prev, feedback: action } : prev);
             // Learning-loop capture — no-op until the AIFeedback helper ships.
             window.WR?.AIFeedback?.send?.({ leagueId, surface: 'trade_verdict', recId: dealKey, action });
@@ -4870,7 +4695,7 @@
 
         function renderAlexVerdict() {
             const v = computeManualVerdict();
-            if (!v.hasTrade) return null;
+            if (!v.hasTrade || v.pickIssue) return null;
             if (!canAccess('trade-quick-check')) return null;
             // Key the response to the deal's contents so editing the deal invalidates a stale verdict.
             const dealKey = [tradeIds.A.join(','), tradeIds.B.join(','), tradePickIds.A.join(','), tradePickIds.B.join(','), tradeFaab.A, tradeFaab.B].join('|');
@@ -4939,13 +4764,13 @@
 
             function addPlayer(side, pid) { if (tradeIds[side].includes(pid)) return; setTradeIds(prev => ({ ...prev, [side]: [...prev[side], pid] })); setSearchText(prev => ({ ...prev, [side]: '' })); }
             function removePlayer(side, pid) { setTradeIds(prev => ({ ...prev, [side]: prev[side].filter(id => id !== pid) })); }
-            function addPick(side, pickId) { if (tradePickIds[side].includes(pickId)) return; setTradePickIds(prev => ({ ...prev, [side]: [...prev[side], pickId] })); }
+            function addPick(side, pickId) { if (!pickApi.owns(pickInventory, tradeOwner[side], pickId) || tradePickIds[side].includes(pickId)) return; setTradePickIds(prev => ({ ...prev, [side]: [...prev[side], pickId] })); }
             function removePick(side, pickId) { setTradePickIds(prev => ({ ...prev, [side]: prev[side].filter(id => id !== pickId) })); }
             function makePickId(year, round, fromRosterId) { return `PICK-${year}-${round}-${fromRosterId}`; }
             function pickLabel(year, round, fromRid, slot) { return formatPickLabel(year, round, fromRid, slot); }
             const ownerOptions = [{ id: null, label: '-- None --' }, ...assessments.map(a => ({ id: a.ownerId, label: `${a.ownerName} (${a.teamName})` }))];
 
-            return { tradeIds, tradePickIds, tradeFaab, getPlayerValue, pickValueForParts, FAAB_RATE, rosterPlayersFor, tradeOwner, picksByOwner, comparePicksByDraftOrder, setTradeOwner, setSearchText, ownerOptions, playersData, MAX_VALUE, removePlayer, posColor, normPos, PICK_COLORS, ownerNameForRosterId, allRosters, removePick, pickLabel, searchText, TC_POS_ORDER, addPlayer, makePickId, addPick, setTradeFaab };
+            return { pickInventory, pickApi, retryPicks, tradeIds, tradePickIds, tradeFaab, getPlayerValue, pickValueForParts, FAAB_RATE, rosterPlayersFor, tradeOwner, picksByOwner, comparePicksByDraftOrder, setTradeOwner, setSearchText, ownerOptions, playersData, MAX_VALUE, removePlayer, posColor, normPos, PICK_COLORS, ownerNameForRosterId, allRosters, removePick, pickLabel, searchText, TC_POS_ORDER, addPlayer, makePickId, addPick, setTradeFaab };
         }
 
         // ── Trade Log tab (Phase 5) — My Pipeline (Pro) + League Ledger (free) ──
@@ -5339,12 +5164,11 @@
             // picks (→ YOU GET).
             const phPicksMode = effMode === 'picks';
             const phPicksScopeMine = phPicksScope === 'owned';
-            // Drafted-pick exclusion = the component-scope pickUndrafted.
+            // The canonical inventory already excludes consumed draft rights.
             const phPickRowsAll = (_pro && active === 'desk' && rosterState.isUsable && phPicksMode)
                 ? assessments
                     .filter(a => phPicksScopeMine ? String(a.rosterId) === String(myRosterId) : String(a.rosterId) !== String(myRosterId))
                     .flatMap(a => pickAssetsForOwner(a.ownerId).map(pk => ({ ...pk, ownerId: a.ownerId, rosterId: a.rosterId, ownerName: a.ownerName || a.teamName || ('Team ' + a.rosterId) })))
-                    .filter(pickUndrafted)
                     // Draft order: year, then all rounds within that year, then slot —
                     // not value-ranked, so 2027 1st→2nd→3rd… then 2028.
                     .sort(comparePicksByDraftOrder)
@@ -5460,7 +5284,7 @@
                 heroEl = (
                     <HeroCard kicker={liveDealPartner ? 'Live deal · vs ' + liveDealPartner.ownerName : 'Live deal'}
                         headline={_verdict.verdictText + ' · ' + _verdict.diffDisplay}
-                        facts={'gave ' + _verdict.totalA.toLocaleString() + ' / received ' + _verdict.totalB.toLocaleString() + (_pro ? ' · accept ' + _verdict.likelihood + '%' : '')}
+                        facts={_verdict.pickIssue || 'gave ' + _verdict.totalA.toLocaleString() + ' / received ' + _verdict.totalB.toLocaleString() + (_pro ? ' · accept ' + _verdict.likelihood + '%' : '')}
                         cta="BUILDER" onCta={() => setPhBuilderOpen(true)} />
                 );
             }
@@ -5631,7 +5455,7 @@
             const actionBarEl = (
                 <ActionBar visible={active === 'desk'}
                     label={_verdict.hasTrade ? 'LIVE DEAL' : 'TRADE BUILDER'}
-                    value={_verdict.hasTrade ? `${_verdict.grade?.grade || '--'} ${_verdict.diffDisplay}` : 'No live deal'}
+                    value={_verdict.pickIssue ? 'Verify selected picks' : _verdict.hasTrade ? `${_verdict.grade?.grade || '--'} ${_verdict.diffDisplay}` : 'No live deal'}
                     tone={_verdict.hasTrade ? (_verdict.userGain > 0 ? 'good' : _verdict.userGain < 0 ? 'bad' : 'gold') : 'mute'}
                     actionLabel="BUILDER"
                     onAction={() => setPhBuilderOpen(true)}
@@ -5663,6 +5487,7 @@
                             </div>
                         )}
                         {heroEl}
+                        {!pickInventory.coverage.complete && <div role="status" className="tc-pick-notice">{pickInventory.coverage.reason}<button type="button" onClick={retryPicks} disabled={pickInventory.status === 'loading'}>Refresh picks</button></div>}
                         {_pro && !rosterState.isUsable && window.App?.renderRosterDataBlocker?.(rosterState, {
                             title: rosterState.isPreDraftRosterEmpty ? null : 'Roster sync incomplete',
                             message: rosterState.isPreDraftRosterEmpty ? rosterState.message : 'Trade partner scores need your current roster before they can be trusted.',

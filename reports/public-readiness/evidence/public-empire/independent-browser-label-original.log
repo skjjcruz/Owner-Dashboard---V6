@@ -1,0 +1,8 @@
+initial 320
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'PICK CAPITAL\nUnknown'
+- 'Pick Capital\nUnknown'
+
+    at /Users/jacobc/Projects/warroom-readiness-public-empire-evidence/tests/public-empire-browser.cjs:10:78

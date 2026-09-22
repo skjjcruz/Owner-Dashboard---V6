@@ -1,0 +1,29 @@
+
+> owner-dashboard-v6@1.0.0 test:trade-picks
+> node tests/trade-pick-inventory.cjs && node tests/trade-pick-browser.cjs
+
+PASS redraftUsesFullCurrentDraftAndNoFuture
+PASS completedSeasonalHasNoRemainingRights
+PASS completedDynastyKeepsAccepted2027To2029
+PASS consumedTradedSlotIsNotOffered
+PASS pendingDraftIgnoresUnrelatedCompletedGlobal
+PASS failureAndRetryDoNotProduceOriginalOwnership
+PASS malformedOrForeignDraftDoesNotLookEmpty
+PASS unknownOwnershipAndProgressPreserveUnknown
+PASS foreignTradeIsIgnoredWithoutUserIdGuessing
+PASS lateAccountCannotChainDraftDetailRequests
+PASS timeoutCannotResumeIntoFollowingRequests
+PASS unsupportedProviderNeverCallsSleeper
+PASS leagueSeasonAndRosterCompletenessRequired
+PASS oldSharedNeverCertifiesPhantomPicks
+PASS mflPreservesExactFutureAndDoesNotInventCurrentBoard
+PASS mflTruncatedUnknownFutureAndForeignCredentialsAreNotComplete
+PASS changedFormatOrOwnerCannotReuseReadyEvidence
+PASS actualCallerGuardsGradeFinderAndOwnerSelection
+PASS staleSelectionRequiresRetryButPreservesIntent
+19 actual shared/provider adapter groups passed.
+(node:87653) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:87654) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+[{"viewport":{"width":320,"height":740},"requests":21,"checks":["503 no false empty capital","retry and selection","stale good rows retained but ungraded","retry restores same selection","consumed selected right retained with recovery","remove enables evaluation","reload rechecks rights","seasonal rights unpriced","mounted account invalidation","no overflow"],"evidenceLevel":"actual TradeCalc pick hook, actual TcTradeSide/TcVerdictPanel, actual shared model; surrounding trade/player engine fixture"},{"viewport":{"width":390,"height":844},"requests":21,"checks":["503 no false empty capital","retry and selection","stale good rows retained but ungraded","retry restores same selection","consumed selected right retained with recovery","remove enables evaluation","reload rechecks rights","seasonal rights unpriced","mounted account invalidation","no overflow"],"evidenceLevel":"actual TradeCalc pick hook, actual TcTradeSide/TcVerdictPanel, actual shared model; surrounding trade/player engine fixture"},{"viewport":{"width":844,"height":390},"requests":21,"checks":["503 no false empty capital","retry and selection","stale good rows retained but ungraded","retry restores same selection","consumed selected right retained with recovery","remove enables evaluation","reload rechecks rights","seasonal rights unpriced","mounted account invalidation","no overflow"],"evidenceLevel":"actual TradeCalc pick hook, actual TcTradeSide/TcVerdictPanel, actual shared model; surrounding trade/player engine fixture"}]

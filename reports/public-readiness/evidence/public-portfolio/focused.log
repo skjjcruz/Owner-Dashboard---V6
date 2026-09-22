@@ -1,0 +1,17 @@
+PASS partialDenominatorAndRetry
+PASS slowLeagueDoesNotBlockFastCard
+PASS refreshFailureRetainsMarkedGoodCards
+PASS listFailureKeepsPriorCountUnverified
+PASS explicitEmptyListIsActualZero
+PASS incompleteRosterOrUserIsNotAnEmptyTeam
+PASS coownerUsesActualTeamAndDoesNotInventRecord
+PASS differentSeasonNeverRetainsPreviousCards
+PASS reusedUsernameCannotBorrowPriorUsersTeams
+PASS pendingAccountChangeStopsFollowupAndPublication
+PASS supersededYearStopsOldStream
+PASS timeoutWithoutAbortSupportSettlesTruthfully
+PASS actualCoordinatorCoalescesAndReturnsBeforeDeferredReactCommit
+PASS malformedSeasonAndUserFailClosed
+14 portfolio loader groups passed.
+(node:93350) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)

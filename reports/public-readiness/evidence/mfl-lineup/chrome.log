@@ -1,0 +1,3 @@
+PASS actual MFL card 320x740: provider outage, quota/retry, disconnect failure/retry, owned reload, unknown write recovery, exact target, 44px controls, B isolation and late C takeover
+PASS actual MFL card 390x844: provider outage, quota/retry, disconnect failure/retry, owned reload, unknown write recovery, exact target, 44px controls, B isolation and late C takeover
+PASS actual MFL card 844x390: provider outage, quota/retry, disconnect failure/retry, owned reload, unknown write recovery, exact target, 44px controls, B isolation and late C takeover

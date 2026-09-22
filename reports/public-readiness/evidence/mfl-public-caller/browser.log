@@ -1,0 +1,16 @@
+START hub 320
+hub loaded
+connect visible
+failure visible
+picker visible
+START hub 390
+hub loaded
+connect visible
+failure visible
+picker visible
+START hub 844
+hub loaded
+connect visible
+failure visible
+picker visible
+[{"viewport":{"width":320,"height":740},"flow":"hub","checks":["actual canonical provider outage/retry","explicit team selection","320 storage failure visible and retryable","44px picker","exact team/season handoff","saved reload","A response rejected after B","no overflow"],"limit":"LeagueDetail destination stub; provider reads isolated fixtures"},{"viewport":{"width":320,"height":740},"flow":"standalone","checks":["actual canonical public connection","owned metadata and no private key","entry and reload routing","no overflow"],"limit":"isolated full-core provider fixtures"},{"viewport":{"width":390,"height":844},"flow":"hub","checks":["actual canonical provider outage/retry","explicit team selection","320 storage failure visible and retryable","44px picker","exact team/season handoff","saved reload","A response rejected after B","no overflow"],"limit":"LeagueDetail destination stub; provider reads isolated fixtures"},{"viewport":{"width":390,"height":844},"flow":"standalone","checks":["actual canonical public connection","owned metadata and no private key","entry and reload routing","no overflow"],"limit":"isolated full-core provider fixtures"},{"viewport":{"width":844,"height":390},"flow":"hub","checks":["actual canonical provider outage/retry","explicit team selection","320 storage failure visible and retryable","44px picker","exact team/season handoff","saved reload","A response rejected after B","no overflow"],"limit":"LeagueDetail destination stub; provider reads isolated fixtures"},{"viewport":{"width":844,"height":390},"flow":"standalone","checks":["actual canonical public connection","owned metadata and no private key","entry and reload routing","no overflow"],"limit":"isolated full-core provider fixtures"}]

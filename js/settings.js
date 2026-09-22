@@ -11,17 +11,34 @@
     // where cancel / change-plan / update-card all live. Accounts with no
     // Stripe history fall back to the plans page. (App Store subs are
     // managed in Apple ID settings from the separate iOS app.)
+    let dhqBillingPortalRequest = null;
     async function dhqOpenBillingPortal() {
-        const goToManagePlan = () => { window.location.href = 'upgrade.html'; };
-        const client = window.OD && typeof window.OD.getClient === 'function' ? window.OD.getClient() : null;
-        if (!client) { goToManagePlan(); return; }
+        if (dhqBillingPortalRequest) return false;
+        const billing = window.DHQBilling;
+        const goToManagePlan = () => { window.location.href = 'upgrade.html?manage=1'; };
+        const context = billing && typeof billing.captureSession === 'function' ? billing.captureSession() : null;
+        if (!context) { goToManagePlan(); return false; }
+        dhqBillingPortalRequest = context;
         try {
-            const { data, error } = await client.functions.invoke('fw-billing-portal', {
-                body: { returnUrl: window.location.origin + window.location.pathname },
+            const { response, data } = await billing.requestJson('https://sxshiqyxhhifvtfqawbq.supabase.co/functions/v1/fw-billing-portal', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${context.token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ returnUrl: window.location.origin + window.location.pathname }),
             });
-            if (!error && data && data.url) { window.location.href = data.url; return; }
+            if (!billing.isCurrentSession(context)) return false;
+            let url;
+            try { url = new URL(data?.url); } catch { /* Show the recoverable plans page. */ }
+            if (response.ok && url?.protocol === 'https:' && !url.username && !url.password) {
+                window.location.href = url.href;
+                return true;
+            }
             goToManagePlan();
-        } catch { goToManagePlan(); }
+        } catch {
+            if (billing.isCurrentSession(context)) goToManagePlan();
+        } finally {
+            if (dhqBillingPortalRequest === context) dhqBillingPortalRequest = null;
+        }
+        return false;
     }
     window.dhqOpenBillingPortal = dhqOpenBillingPortal;
 

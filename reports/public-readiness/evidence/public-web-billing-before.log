@@ -1,0 +1,2 @@
+{"case":"actual web shim delayed A after B","storedUser":"a","expected":"b"}
+{"case":"actual upgrade server stays free","heading":"Welcome to Pro","navigated":"index.html","expected":"pending without success or navigation"}

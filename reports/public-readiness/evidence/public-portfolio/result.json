@@ -1,0 +1,59 @@
+[
+  {
+    "viewport": {
+      "width": 320,
+      "height": 740
+    },
+    "requests": 31,
+    "checks": [
+      "1 of 2 failed load visible",
+      "retry fulfills pending deep link",
+      "exact drafting season/tab preserved",
+      "return-to-hub revalidation",
+      "stale-good refresh retained",
+      "retry clears stale marker",
+      "same-document account change stops followup and clears UI",
+      "active global league untouched",
+      "no overflow"
+    ],
+    "limits": "Actual OwnerDashboard and loader; LeagueDetail destination renderer is a handoff fixture, no provider/account writes."
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "requests": 31,
+    "checks": [
+      "1 of 2 failed load visible",
+      "retry fulfills pending deep link",
+      "exact drafting season/tab preserved",
+      "return-to-hub revalidation",
+      "stale-good refresh retained",
+      "retry clears stale marker",
+      "same-document account change stops followup and clears UI",
+      "active global league untouched",
+      "no overflow"
+    ],
+    "limits": "Actual OwnerDashboard and loader; LeagueDetail destination renderer is a handoff fixture, no provider/account writes."
+  },
+  {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "requests": 31,
+    "checks": [
+      "1 of 2 failed load visible",
+      "retry fulfills pending deep link",
+      "exact drafting season/tab preserved",
+      "return-to-hub revalidation",
+      "stale-good refresh retained",
+      "retry clears stale marker",
+      "same-document account change stops followup and clears UI",
+      "active global league untouched",
+      "no overflow"
+    ],
+    "limits": "Actual OwnerDashboard and loader; LeagueDetail destination renderer is a handoff fixture, no provider/account writes."
+  }
+]

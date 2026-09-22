@@ -1,0 +1,2 @@
+REPRODUCED actual baseline: B restores A cookie without owner metadata.
+REPRODUCED actual baseline: A login resolves after B and persists A cookie.

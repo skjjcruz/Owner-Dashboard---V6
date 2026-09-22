@@ -10,6 +10,74 @@
 // lineup-write API, so Sleeper lineups are still set on the platform.
 // ══════════════════════════════════════════════════════════════════
 
+// Cookie provenance is local consistency metadata, not MFL authorization.
+// Unknown older cookies are preserved but never used for a different app user.
+window.App = window.App || {};
+window.App.MflLineupSession = (() => {
+    const cookieKeys = ['mfl_write_cookie', 'mfl_write_host', 'mfl_write_context_v1'];
+    const read = () => cookieKeys.map(key => sessionStorage.getItem(key));
+    const owner = () => window.MFL?.provider?.currentOwner?.() || null;
+    function account() {
+        const api = window.App.PublicPortfolio, captured = api?.capture?.();
+        let initialOwner;
+        try { initialOwner = owner(); } catch (_) { initialOwner = null; }
+        let active = true;
+        return { owner: initialOwner, current() {
+            try { if (active && captured && initialOwner && api.current(captured) && owner() === initialOwner) return true; } catch (_) { /* fail closed */ }
+            active = false; return false;
+        } };
+    }
+    function restore(accountScope, year) {
+        if (!accountScope?.current()) return { cookie: '', host: '' };
+        try {
+            const [cookie, host, raw] = read(), metadata = JSON.parse(raw || 'null');
+            if (cookie && metadata?.owner === accountScope.owner && String(metadata.year) === String(year)
+                && metadata.cookie === cookie && metadata.host === host
+                && /^MFL_USER_ID=[^\s;]+$/.test(cookie) && /^(?:api|www\d*)\.myfantasyleague\.com$/.test(host)) return { cookie, host };
+        } catch (_) { /* unknown old metadata does not authorize this account */ }
+        return { cookie: '', host: '' };
+    }
+    function capture(accountScope, viewCurrent) {
+        let snapshot;
+        try { snapshot = read(); } catch (_) { throw new Error('MFL login storage is unavailable. Retry when storage is available.'); }
+        let active = true;
+        const scope = { account: accountScope, viewCurrent,
+            current() {
+                try { if (active && accountScope.current() && viewCurrent() && read().every((value, i) => value === snapshot[i])) return true; } catch (_) { /* fail closed */ }
+                active = false; return false;
+            },
+            assert() { if (!scope.current()) throw new Error('Your account, MFL login or lineup changed. Reopen the current league before continuing.'); },
+            acceptStored() { snapshot = read(); },
+        };
+        scope.assert(); return scope;
+    }
+    function persist(scope, login, year) {
+        scope.assert();
+        if (!login || !/^MFL_USER_ID=[^\s;]+$/.test(login.cookie || '') || !/^(?:api|www\d*)\.myfantasyleague\.com$/.test(login.host || '')) throw new Error('MFL did not return a usable login. Reconnect it.');
+        const values = [login.cookie, login.host, JSON.stringify({ owner: scope.account.owner, year: String(year), cookie: login.cookie, host: login.host })];
+        const before = read(); let attempted = 0;
+        try {
+            for (let i = 0; i < cookieKeys.length; i++) {
+                attempted++; sessionStorage.setItem(cookieKeys[i], values[i]);
+                if (sessionStorage.getItem(cookieKeys[i]) !== values[i]) throw new Error('write failed');
+            }
+            scope.acceptStored();
+        } catch (_) {
+            for (let i = attempted - 1; i >= 0; i--) { try { if (before[i] === null) sessionStorage.removeItem(cookieKeys[i]); else sessionStorage.setItem(cookieKeys[i], before[i]); } catch (_) { /* report failed storage */ } }
+            const error = new Error('MFL login could not be saved in this tab. Your password has not been stored. Retry after freeing browser storage.');
+            error.code = 'MFL_COOKIE_STORAGE'; throw error;
+        }
+    }
+    function clear(scope) {
+        scope.assert();
+        let failed = false;
+        for (const key of cookieKeys) { try { sessionStorage.removeItem(key); } catch (_) { failed = true; } }
+        try { if (read().some(value => value !== null)) failed = true; scope.acceptStored(); } catch (_) { failed = true; }
+        if (failed) throw new Error('MFL login could not be fully removed from this tab. Retry disconnect.');
+    }
+    return { account, restore, capture, persist, clear };
+})();
+
 function LineupTab({
     myRoster, currentLeague, leagueSkin, playersData, statsData, stats2025Data,
     sleeperUserId, gmStrategy, setActiveTab, timeRecomputeTs,
@@ -296,75 +364,94 @@ function LineupTab({
     // MFL is the only platform with a public lineup-write API (Sleeper has none).
     const _plat = (window.App && window.App.Matchup && window.App.Matchup._platform) ? window.App.Matchup._platform(currentLeague) : 'sleeper';
     const isMfl = _plat === 'mfl';
-    const mflApiKey = (window.S && window.S._mflApiKey) || (function () { try { return sessionStorage.getItem('mfl_api_key') || localStorage.getItem('mfl_api_key'); } catch (e) { return null; } })();
-
-    // MFL requires a login COOKIE (not the API key) to set a lineup. Keep only the
-    // session token (sessionStorage, cleared on tab close); the password is used
-    // once to obtain it and never stored.
-    const [mflCookie, setMflCookie] = React.useState(() => { try { return sessionStorage.getItem('mfl_write_cookie') || ''; } catch (e) { return ''; } });
-    const [mflHost, setMflHost] = React.useState(() => { try { return sessionStorage.getItem('mfl_write_host') || ''; } catch (e) { return ''; } });
+    const mflSessions = window.App.MflLineupSession;
+    const mflAccountRef = React.useRef(null);
+    if (!mflAccountRef.current) mflAccountRef.current = mflSessions.account();
+    const mflViewRef = React.useRef({ key: '', version: 0 });
+    const mflViewKey = JSON.stringify([currentLeague?.league_id || currentLeague?.id, currentLeague?.season, myRoster?.roster_id, result?.week]);
+    const mflActionKey = JSON.stringify([mflViewKey, workingAssign]);
+    if (mflViewRef.current.key !== mflActionKey) mflViewRef.current = { key: mflActionKey, version: mflViewRef.current.version + 1 };
+    const mflFlightRef = React.useRef(null);
+    React.useEffect(() => () => { mflViewRef.current = { key: '', version: mflViewRef.current.version + 1 }; }, []);
+    const restoredMfl = mflSessions.restore(mflAccountRef.current, currentLeague?.season);
+    const [mflCookie, setMflCookie] = React.useState(restoredMfl.cookie);
+    const [mflHost, setMflHost] = React.useState(restoredMfl.host);
     const [mflUser, setMflUser] = React.useState('');
     const [mflPass, setMflPass] = React.useState('');
     const [mflAuthBusy, setMflAuthBusy] = React.useState(false);
     const [mflAuthErr, setMflAuthErr] = React.useState('');
+    const [mflClearRetry, setMflClearRetry] = React.useState(false);
+    React.useEffect(() => {
+        const restored = mflSessions.restore(mflAccountRef.current, currentLeague?.season);
+        setMflCookie(restored.cookie); setMflHost(restored.host); setMflPass(''); setMflAuthBusy(!!mflFlightRef.current); setMflAuthErr(''); setSubmit({ status: 'idle', msg: '' });
+    }, [mflViewKey]);
+    function captureMflAction() {
+        const selected = mflViewRef.current;
+        return mflSessions.capture(mflAccountRef.current, () => mflViewRef.current === selected);
+    }
     async function doMflLogin() {
-        if (!window.MFL || !window.MFL.mflLogin) { setMflAuthErr('MFL connector unavailable.'); return; }
+        if (mflFlightRef.current || !mflAccountRef.current.current()) return;
+        if (!window.MFL?.mflLogin) { setMflAuthErr('MFL connector unavailable.'); return; }
         if (!mflUser || !mflPass) { setMflAuthErr('Enter your MFL username and password.'); return; }
+        let scope;
+        try { scope = captureMflAction(); } catch (e) { setMflAuthErr(e.message); return; }
+        mflFlightRef.current = scope;
         setMflAuthBusy(true); setMflAuthErr('');
         try {
-            const yr = currentLeague.season || (window.S && window.S.mflYear);
-            const out = await window.MFL.mflLogin({ username: mflUser, password: mflPass, year: yr });
-            try { sessionStorage.setItem('mfl_write_cookie', out.cookie); if (out.host) sessionStorage.setItem('mfl_write_host', out.host); } catch (e) {}
-            setMflCookie(out.cookie); setMflHost(out.host || ''); setMflPass('');
-        } catch (e) { setMflAuthErr((e && e.message) || 'MFL login failed.'); }
-        finally { setMflAuthBusy(false); }
+            const yr = currentLeague.season;
+            const out = await window.MFL.mflLogin({ username: mflUser, password: mflPass, year: yr, isCurrent: scope.current });
+            if (!scope.current()) return;
+            mflSessions.persist(scope, out, yr);
+            setMflCookie(out.cookie); setMflHost(out.host); setMflPass(''); setMflClearRetry(false);
+        } catch (e) { if (scope.current() || (e.code === 'MFL_COOKIE_STORAGE' && scope.account.current() && scope.viewCurrent())) setMflAuthErr(e.message || 'MFL login failed.'); }
+        finally { if (mflFlightRef.current === scope) mflFlightRef.current = null; if (mflAccountRef.current.current() && mflViewRef.current.key) setMflAuthBusy(false); }
     }
     function mflDisconnect() {
-        try { sessionStorage.removeItem('mfl_write_cookie'); sessionStorage.removeItem('mfl_write_host'); } catch (e) {}
-        setMflCookie(''); setMflHost(''); setSubmit({ status: 'idle', msg: '' });
+        if (mflFlightRef.current || !mflAccountRef.current.current()) return;
+        try { mflSessions.clear(captureMflAction()); }
+        catch (e) {
+            const restored = mflSessions.restore(mflAccountRef.current, currentLeague.season);
+            setMflCookie(restored.cookie); setMflHost(restored.host); setMflAuthErr(e.message); setMflClearRetry(true); return;
+        }
+        setMflCookie(''); setMflHost(''); setMflAuthErr(''); setMflClearRetry(false); setSubmit({ status: 'idle', msg: '' });
     }
     async function pushToMfl() {
+        if (mflFlightRef.current || !mflAccountRef.current.current()) return;
         const MFL = window.MFL;
-        if (!MFL || !MFL.submitLineup) { setSubmit({ status: 'error', msg: 'MFL connector unavailable.' }); return; }
-        // Fail closed: if any starting slot TYPE wasn't recognized (so it was
-        // dropped from startingSlots), we'd under-submit and MFL's replace-all
-        // would bench it. Block rather than silently overwrite.
+        if (!MFL?.submitLineup) { setSubmit({ status: 'error', msg: 'MFL connector unavailable.' }); return; }
+        let scope;
+        try { scope = captureMflAction(); } catch (e) { setSubmit({ status: 'error', msg: e.message }); return; }
+        const restored = mflSessions.restore(mflAccountRef.current, currentLeague.season);
+        if (!restored.cookie || restored.cookie !== mflCookie || restored.host !== mflHost) {
+            setMflCookie(''); setMflHost(''); setMflAuthErr('Reconnect your MFL login for this account and season.'); return;
+        }
         const trueStartCount = (currentLeague.roster_positions || []).filter(p => { const s = SS.normSlot(p); return s && !BENCH.has(s); }).length;
         if (startingSlots.length < trueStartCount) {
-            setSubmit({ status: 'error', msg: 'Your lineup has a slot type we don’t fully support yet — set this lineup on MFL directly to be safe.' });
-            return;
+            setSubmit({ status: 'error', msg: 'Your lineup has a slot type we don’t fully support yet — set this lineup on MFL directly to be safe.' }); return;
         }
-        // MFL's lineup import is REPLACE-ALL: any starting slot we omit gets
-        // benched. Refuse to push unless every starting slot is filled.
         const emptySlots = startingSlots.filter(sl => !workingAssign[sl.idx]);
         if (emptySlots.length) {
-            // Free has no "Apply Optimal" button — don't reference it.
-            setSubmit({ status: 'error', msg: 'Fill all ' + startingSlots.length + ' starting slots first — ' + emptySlots.map(s => s.slotName.replace('_', ' ')).join(', ') + ' empty. ' + (pro ? 'Tap “Apply Optimal” to fill them. ' : '') + 'MFL benches anyone left out.' });
-            return;
+            setSubmit({ status: 'error', msg: 'Fill all ' + startingSlots.length + ' starting slots first — ' + emptySlots.map(s => s.slotName.replace('_', ' ')).join(', ') + ' empty. ' + (pro ? 'Tap “Apply Optimal” to fill them. ' : '') + 'MFL benches anyone left out.' }); return;
         }
-        const starterIds = startingSlots.map(sl => workingAssign[sl.idx]).filter(Boolean);
-        setSubmit({ status: 'submitting', msg: '' });
+        const starterIds = startingSlots.map(sl => workingAssign[sl.idx]);
+        mflFlightRef.current = scope; setMflAuthBusy(true); setSubmit({ status: 'submitting', msg: '' });
         try {
             await MFL.submitLineup({
-                // Prefer the league being VIEWED (session globals reflect only the
-                // last-connected MFL league — matches league-detail/draft-room).
-                leagueId: currentLeague._mflLeagueId || String(currentLeague.id || '').replace(/^mfl_/, '').replace(/_\d+$/, '') || (window.S && window.S.mflLeagueId),
-                year: currentLeague.season || (window.S && window.S.mflYear),
-                week: result.week,
-                franchiseId: myRoster.roster_id,
-                starterIds,
-                mflByPid: myRoster._mflPlayerIds || null,
-                cookie: mflCookie || undefined,
-                host: mflHost || undefined,
-                apiKey: mflApiKey,
+                leagueId: currentLeague._mflLeagueId || String(currentLeague.id || currentLeague.league_id || '').replace(/^mfl_/, '').replace(/_\d+$/, ''),
+                year: currentLeague.season, week: result.week, franchiseId: myRoster.roster_id,
+                starterIds, mflByPid: myRoster._mflPlayerIds || null,
+                cookie: restored.cookie, host: restored.host, isCurrent: scope.current,
             });
-            setSubmit({ status: 'done', msg: 'Lineup submitted to MFL for Week ' + result.week + '.' });
+            if (scope.current()) setSubmit({ status: 'done', msg: 'Lineup submitted to MFL for Week ' + result.week + '.' });
         } catch (e) {
-            const msg = (e && e.message) || 'MFL rejected the lineup — set it on MFL directly.';
-            // If the session expired, drop the cookie so the UI prompts a reconnect.
-            if (/authoriz|expired|not\s*log|logg?ed?[\s-]?in|session/i.test(msg)) mflDisconnect();
+            if (!scope.current()) return;
+            const msg = e.message || 'MFL did not confirm the lineup. Check MyFantasyLeague before retrying.';
+            if (/authoriz|expired|not\s*log|logg?ed?[\s-]?in|session/i.test(msg)) {
+                try { mflSessions.clear(scope); setMflClearRetry(false); } catch (_) { setMflClearRetry(true); }
+                setMflCookie(''); setMflHost(''); setMflAuthErr(msg);
+            }
             setSubmit({ status: 'error', msg });
-        }
+        } finally { if (mflFlightRef.current === scope) mflFlightRef.current = null; if (mflAccountRef.current.current() && mflViewRef.current.key) setMflAuthBusy(false); }
     }
 
     // MFL rosters don't expose current starters (starters:[]), so the builder
@@ -628,28 +715,28 @@ function LineupTab({
     // ── MFL lineup push card (write to MyFantasyLeague) ──
     function renderMflPush() {
         if (!isMfl) return null;
+        if (!mflAccountRef.current.current()) return <div role="alert" style={{ fontSize: '0.875rem', lineHeight: 1.5, padding: '12px' }}>Your account changed. Reopen the current league before connecting or submitting an MFL lineup.</div>;
         const s = submit.status;
         // Phone: 16px input font (iOS Safari zooms on focus below 16px) + 44px height.
-        const inputStyle = { flex: '1 1 130px', minWidth: 0, padding: isPhone ? '10px 12px' : '7px 10px', minHeight: isPhone ? '44px' : undefined, background: 'var(--charcoal, #0e0e12)', border: `1px solid ${LINE}`, borderRadius: '5px', color: TEXT, fontSize: isPhone ? '16px' : '0.8rem' };
+        const inputStyle = { flex: '1 1 130px', minWidth: 0, padding: isPhone ? '10px 12px' : '7px 10px', minHeight: '44px', background: 'var(--charcoal, #0e0e12)', border: `1px solid ${LINE}`, borderRadius: '5px', color: TEXT, fontSize: '16px' };
         return (
             <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderRadius: '6px', padding: '12px 16px', marginBottom: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
                     <div style={{ fontSize: '0.66rem', letterSpacing: '0.07em', color: GOLD, fontWeight: 700 }}>PUSH LINEUP TO MFL</div>
-                    {mflCookie ? <span onClick={mflDisconnect} style={{ fontSize: fz('0.62rem'), color: SILVER, cursor: 'pointer', padding: isPhone ? '12px 0 12px 12px' : 0 }}>● connected · disconnect</span> : null}
+                    {mflCookie ? <button type="button" onClick={mflDisconnect} disabled={mflAuthBusy || s === 'submitting'} style={{ background: 'transparent', border: 0, minHeight: 44, fontSize: '0.875rem', color: SILVER, cursor: 'pointer', padding: isPhone ? '12px 0 12px 12px' : 0 }}>● connected · disconnect</button> : null}
                 </div>
                 {!mflCookie ? (
                     <div style={{ marginTop: '8px' }}>
-                        <div style={{ fontSize: '0.72rem', color: SILVER, marginBottom: '8px', lineHeight: 1.5 }}>MFL requires your login to set a lineup (the API key can’t). Your password is used once to get a session token — only the token is kept (this tab), never the password.</div>
+                        <div style={{ fontSize: '0.875rem', color: SILVER, marginBottom: '8px', lineHeight: 1.5 }}>MFL requires your login to set a lineup (the API key can’t). Your password is used once to get a session token — only the token is kept (this tab), never the password.</div>
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                            <input value={mflUser} onChange={e => setMflUser(e.target.value)} placeholder="MFL username" autoComplete="off" style={inputStyle} />
-                            <input value={mflPass} onChange={e => setMflPass(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') doMflLogin(); }} placeholder="MFL password" type="password" autoComplete="off" style={inputStyle} />
-                            <button onClick={doMflLogin} disabled={mflAuthBusy} style={{ ...actBtn, color: GOLD, borderColor: 'var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.10)', opacity: mflAuthBusy ? 0.6 : 1 }}>{mflAuthBusy ? 'Connecting…' : 'Connect'}</button>
+                            <input aria-label="MFL username" disabled={mflAuthBusy} value={mflUser} onChange={e => setMflUser(e.target.value)} placeholder="MFL username" autoComplete="off" style={inputStyle} />
+                            <input aria-label="MFL password" disabled={mflAuthBusy} value={mflPass} onChange={e => setMflPass(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') doMflLogin(); }} placeholder="MFL password" type="password" autoComplete="off" style={inputStyle} />
+                            <button onClick={doMflLogin} disabled={mflAuthBusy} style={{ ...actBtn, minHeight: 44, fontSize: '0.875rem', color: GOLD, borderColor: 'var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.10)', opacity: mflAuthBusy ? 0.6 : 1 }}>{mflAuthBusy ? 'Connecting…' : 'Connect'}</button>
                         </div>
-                        {mflAuthErr ? <div style={{ fontSize: '0.7rem', color: RED, marginTop: '6px' }}>{mflAuthErr}</div> : null}
                     </div>
                 ) : (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginTop: '8px' }}>
-                        <div style={{ fontSize: '0.72rem', color: SILVER, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.875rem', color: SILVER, minWidth: 0 }}>
                             {s === 'done' ? <span style={{ color: GREEN }}>{submit.msg}</span>
                                 : s === 'error' ? <span style={{ color: RED }}>{submit.msg}</span>
                                     : 'Sets your working lineup as this week’s starters on MyFantasyLeague.'}
@@ -657,19 +744,21 @@ function LineupTab({
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                             {s === 'confirm' ? (
                                 <React.Fragment>
-                                    <span style={{ fontSize: '0.7rem', color: AMBER }}>Overwrite Week {result.week} starters?</span>
-                                    <button onClick={pushToMfl} style={{ ...actBtn, color: GOLD, borderColor: 'var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.12)' }}>Confirm</button>
-                                    <button onClick={() => setSubmit({ status: 'idle', msg: '' })} style={actBtn}>Cancel</button>
+                                    <span style={{ fontSize: '0.875rem', color: AMBER }}>Overwrite Week {result.week} starters?</span>
+                                    <button onClick={pushToMfl} style={{ ...actBtn, minHeight: 44, fontSize: '0.875rem', color: GOLD, borderColor: 'var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.12)' }}>Confirm</button>
+                                    <button onClick={() => setSubmit({ status: 'idle', msg: '' })} style={{ ...actBtn, minHeight: 44, fontSize: '0.875rem' }}>Cancel</button>
                                 </React.Fragment>
                             ) : (
-                                <button disabled={s === 'submitting'} onClick={() => setSubmit({ status: 'confirm', msg: '' })}
-                                    style={{ ...actBtn, opacity: s === 'submitting' ? 0.5 : 1, cursor: s === 'submitting' ? 'not-allowed' : 'pointer', color: GOLD, borderColor: 'var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.10)' }}>
-                                    {s === 'submitting' ? 'Submitting…' : s === 'done' ? 'Re-submit' : 'Submit to MFL'}
+                                <button disabled={mflAuthBusy || s === 'submitting'} onClick={() => setSubmit({ status: 'confirm', msg: '' })}
+                                    style={{ ...actBtn, minHeight: 44, fontSize: '0.875rem', opacity: s === 'submitting' ? 0.5 : 1, cursor: s === 'submitting' ? 'not-allowed' : 'pointer', color: GOLD, borderColor: 'var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.10)' }}>
+                                    {mflAuthBusy || s === 'submitting' ? 'Waiting for MFL…' : s === 'done' ? 'Re-submit' : 'Submit to MFL'}
                                 </button>
                             )}
                         </div>
                     </div>
                 )}
+                {mflAuthErr ? <div role="alert" style={{ fontSize: '0.875rem', color: RED, marginTop: '8px', lineHeight: 1.5 }}>{mflAuthErr}</div> : null}
+                {mflClearRetry ? <button type="button" onClick={mflDisconnect} style={{ ...actBtn, minHeight: 44, fontSize: '0.875rem', marginTop: 8 }}>Retry disconnect</button> : null}
             </div>
         );
     }

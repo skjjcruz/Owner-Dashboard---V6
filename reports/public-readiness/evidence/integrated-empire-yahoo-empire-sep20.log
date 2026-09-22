@@ -1,0 +1,31 @@
+
+> owner-dashboard-v6@1.0.0 test:public-empire
+> node tests/public-empire.cjs && node tests/public-empire-browser.cjs
+
+PASS unverifiedLegacyDisplayNameCannotSelectCloudNotes
+PASS pendingAndUnknownTradesCannotBecomeOwnerReads
+PASS malformedWeeklyHistoryCannotBeCertifiedComplete
+PASS sameRosterIdsStayInTheirLeagueAndGlobalsUntouched
+PASS malformedStatsAndOutageNeverInventHistoricalProduction
+PASS explicitEmptyCurrentSeasonLabelsHistoricalBasis
+PASS missingPlayersAndStaleCardsDoNotProduceReads
+PASS pickFailureIsNotEmptyOrAssessedAndRetryRecovers
+PASS nonSleeperNeverUsesSleeperTransactionsAndPreservesStatus
+PASS accountChangeDuringPlayersStopsEveryFollowup
+(node:11323) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS accountChangeDuringSavedNotesStopsTransactionsAndWrites
+PASS transactionFailureRemainsUnavailableAndNoPartialInference
+PASS supersededGenerationCannotPublishOrFollowup
+PASS boundedTimeoutAndNoColdGlobalEngineInvocation
+PASS actualReviewedAdapterHonorsConsumedAndTransferredRights
+PASS actualAppBootstrapCancelsAtModuleAndPendingEvidenceBoundaries
+PASS modelRejectsGlobalAssessmentsAndUnverifiedPicks
+17 Empire evidence groups passed.
+initial 320
+recovered 320
+initial 390
+recovered 390
+initial 844
+recovered 844
+[{"viewport":{"width":320,"height":740},"checks":["unknown rights have no phantom capital","loaded denominator visible","retry recovers completed-draft 2027–2029 rights","active global league preserved","correct league handoff","account interruption blocks followups","no horizontal overflow"],"limits":"Actual Empire component, evidence coordinator and reviewed adapter/shared pick model; assessment scores, account and provider data are fixtures. No live writes."},{"viewport":{"width":390,"height":844},"checks":["unknown rights have no phantom capital","loaded denominator visible","retry recovers completed-draft 2027–2029 rights","active global league preserved","correct league handoff","account interruption blocks followups","no horizontal overflow"],"limits":"Actual Empire component, evidence coordinator and reviewed adapter/shared pick model; assessment scores, account and provider data are fixtures. No live writes."},{"viewport":{"width":844,"height":390},"checks":["unknown rights have no phantom capital","loaded denominator visible","retry recovers completed-draft 2027–2029 rights","active global league preserved","correct league handoff","account interruption blocks followups","no horizontal overflow"],"limits":"Actual Empire component, evidence coordinator and reviewed adapter/shared pick model; assessment scores, account and provider data are fixtures. No live writes."}]

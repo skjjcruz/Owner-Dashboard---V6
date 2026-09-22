@@ -465,26 +465,19 @@
             // Source the status-bearing MFL draft objects instead so the header
             // "Draft Live" button appears + launches straight into the live draft.
             const isMfl = !!(currentLeague?._mfl || String(leagueId).startsWith('mfl_'));
+            let mflScope;
+            try { if (isMfl) mflScope = window.App.MflDraftContext.capture(currentLeague, { isCurrent: () => !cancelled }); }
+            catch (error) { window.wrLog?.('leagueDetail.mflDraftStatus', error); setHeaderDraftInfo(null); return; }
+            const contextCurrent = () => !cancelled && (!mflScope || mflScope.isCurrent());
             const fetchDrafts = isMfl
-                ? (async () => {
-                    try {
-                        if (window.MFL?.fetchDraftStatus) {
-                            const mlid = currentLeague._mflLeagueId || String(leagueId).replace(/^mfl_/, '').replace(/_\d+$/, '');
-                            const yr = currentLeague.season || localStorage.getItem('mfl_year') || String(new Date().getFullYear());
-                            const key = sessionStorage.getItem('mfl_api_key') || null;
-                            const d = await window.MFL.fetchDraftStatus(mlid, yr, key, currentLeague);
-                            if (Array.isArray(d) && d.length) return d;
-                        }
-                    } catch (e) { window.wrLog?.('leagueDetail.mflDraftStatus', e); }
-                    return window.S?.drafts || currentLeague?.drafts || [];
-                })
+                ? () => mflScope.fetch()
                 : (window.Sleeper?.fetchDrafts || (async (lid) => {
                     const resp = await fetch('https://api.sleeper.app/v1/league/' + lid + '/drafts');
                     return resp.ok ? resp.json() : [];
                 }));
             fetchDrafts(leagueId)
                 .then(rows => {
-                    if (cancelled) return;
+                    if (!contextCurrent()) return;
                     const drafts = Array.isArray(rows) ? rows : [];
                     // Publish to the shared pocket the calendar engine reads
                     // (WrCalendar.build: window.S.drafts || currentLeague.drafts)
@@ -492,7 +485,7 @@
                     // mid-August "date TBD" placeholder while this header
                     // already knows the real Sleeper draft time (owner report
                     // 2026-08-27). Empty results never clobber hydrated data.
-                    if (drafts.length) {
+                    if (drafts.length && (!mflScope || !window.S?.currentLeagueId || String(window.S.currentLeagueId) === String(leagueId))) {
                         window.S = window.S || {};
                         window.S.drafts = drafts;
                         // Stamp the owner league so hydration keeps (not wipes)
@@ -520,9 +513,9 @@
                     const active = sel !== undefined ? (sel.draft || null) : localDraftOfRecord();
                     setHeaderDraftInfo(active);
                 })
-                .catch(() => { if (!cancelled) setHeaderDraftInfo(null); });
+                .catch(() => { if (contextCurrent()) setHeaderDraftInfo(null); });
             return () => { cancelled = true; };
-        }, [currentLeague?.league_id, currentLeague?.id]);
+        }, [currentLeague?.league_id, currentLeague?.id, currentLeague?.season, currentLeague?._mflFranchiseId]);
 
         useEffect(() => {
             if (!headerDraftInfo?.start_time || headerDraftInfo.status !== 'pre_draft') return;
@@ -1052,6 +1045,17 @@
         const [welcomeMode, setWelcomeMode] = useState(false); // centered modal for first-time welcome
         const [showCornerToast, setShowCornerToast] = useState(false); // "I'll be down here" toast
         const [transactions, setTransactions] = useState([]);
+        const [transactionStatus, setTransactionStatus] = useState(null);
+        const [transactionRetrying, setTransactionRetrying] = useState(false);
+        const transactionRetryRef = useRef(false);
+        const yahooTransactionContextRef = useRef(null);
+        const yahooTransactionViewKey = currentLeague._yahoo ? String(currentLeague.id || currentLeague.league_id) + ':' + String(currentLeague.season || '') : null;
+        if (yahooTransactionViewKey && yahooTransactionContextRef.current?.viewKey !== yahooTransactionViewKey) {
+            try {
+                const captured = window.Yahoo?.provider?.captureContext?.(currentLeague);
+                yahooTransactionContextRef.current = { viewKey: yahooTransactionViewKey, isCurrent: () => !!captured?.isCurrent() };
+            } catch { yahooTransactionContextRef.current = { viewKey: yahooTransactionViewKey, isCurrent: () => false }; }
+        }
         const [rankedTeams, setRankedTeams] = useState([]);
         const [dhqStatus, setDhqStatus] = useState({ loading: false, step: '', progress: 0 });
         const [loadStage, setLoadStage] = useState('');
@@ -1858,10 +1862,12 @@
             loadLeagueDetails();
         }, [currentLeague]);
 
-        async function loadLeagueDetails() {
+        async function loadLeagueDetails(options = {}) {
             // New full load supersedes any in-flight background revalidation.
             const loadSeq = ++loadSeqRef.current;
+            const espnCurrent = () => currentLeague._yahoo ? !!yahooTransactionContextRef.current?.isCurrent() : (!currentLeague._espn || window.App.EspnHub?.isLeagueCurrent(currentLeague));
             try {
+                if (!espnCurrent()) throw new Error('Your league account or connection changed. Return to the hub and reload.');
                 // Clear assessment caches for THIS league so health scores compute fresh.
                 // Key by league ID — switching back to a previously-loaded league can
                 // reuse its cache if the underlying data hasn't changed.
@@ -1879,10 +1885,13 @@
                     throw new Error('League missing roster or user data');
                 }
 
-                const myRosterData = currentLeague._mfl && currentLeague._mflFranchiseId
+                const myRosterData = currentLeague._espn
+                    ? window.App.EspnHub.selectedRoster(currentLeague, currentLeague.rosters)
+                    : currentLeague._mfl && currentLeague._mflFranchiseId
                     ? currentLeague.rosters.find(r => r.roster_id === currentLeague._mflFranchiseId)
                     : currentLeague.rosters.find(r => r.owner_id === sleeperUserId);
                 setMyRoster(myRosterData);
+                if (currentLeague._espn && myRosterData) setViewingOwnerId(myRosterData.owner_id);
 
                 // Compute standings immediately (no fetch needed)
                 const standingsData = currentLeague.rosters.map(roster => {
@@ -1933,6 +1942,7 @@
                     fetchAllPlayers().catch(() => ({})),
                     fetchJSON(`${SLEEPER_BASE_URL}/state/nfl`).catch(() => ({})),
                 ]);
+                if (loadSeq !== loadSeqRef.current || !espnCurrent()) return;
                 // Fantasy week, not the raw NFL clock: preseason state counts
                 // EXHIBITION weeks (season_type 'pre', week 2 in mid-August) and
                 // painted "Week 2" across Game Day while every league was
@@ -1949,7 +1959,10 @@
                     currentSeason: currentLeague.season || activeYear,
                     prevSeason: STATS_YEAR,
                     nflState,
+                    isCurrent: () => loadSeq === loadSeqRef.current && espnCurrent(),
                 });
+
+                if (loadSeq !== loadSeqRef.current || !espnCurrent()) return;
 
                 applyHydrated(hydrated, { provider, sleeperPlayers, nflState, currentWeek, myRosterData, background: false });
 
@@ -1964,11 +1977,12 @@
                 if (window.WR?.Sync?.registerRevalidator) {
                     const bgLeagueId = currentLeague.id || currentLeague.league_id;
                     window.WR.Sync.registerRevalidator(async () => {
-                        if (loadSeq !== loadSeqRef.current) return;
+                        if (loadSeq !== loadSeqRef.current || !espnCurrent()) return;
                         const [bgPlayers, bgStateRaw] = await Promise.all([
                             fetchAllPlayers().catch(() => sleeperPlayers),                 // memoized player DB
                             fetchJSON(`${SLEEPER_BASE_URL}/state/nfl`).catch(() => ({})),  // always fresh — week-rollover source
                         ]);
+                        if (loadSeq !== loadSeqRef.current || !espnCurrent()) return;
                         const bgNfl = (bgStateRaw && Object.keys(bgStateRaw).length) ? bgStateRaw : (window.S?.nflState || nflState);
                         const bgWeek = (bgNfl && window.App?.WeeklyProj?.fantasyWeek)
                             ? window.App.WeeklyProj.fantasyWeek(bgNfl, currentLeague.settings)
@@ -1979,8 +1993,9 @@
                             currentSeason: currentLeague.season || activeYear,
                             prevSeason: STATS_YEAR,
                             nflState: bgNfl,
+                            isCurrent: () => loadSeq === loadSeqRef.current && espnCurrent(),
                         });
-                        if (loadSeq !== loadSeqRef.current) return;
+                        if (loadSeq !== loadSeqRef.current || !espnCurrent()) return;
                         if (window.S?.currentLeagueId && String(window.S.currentLeagueId) !== String(bgLeagueId)) return;
                         // Integrity gate (background only): hydrate's inner fetches
                         // degrade to {}/[] on failure, so a network blip could
@@ -1997,8 +2012,14 @@
                             throw new Error('Background revalidation returned empty rosters/users — keeping current data');
                         }
                         applyHydrated(bgHydrated, { provider, sleeperPlayers: bgPlayers, nflState: bgNfl, currentWeek: bgWeek, myRosterData, background: true });
+                        if (['espn', 'yahoo'].includes(provider.id) && window.S?.transactionStatus?.status !== 'ready') {
+                            throw new Error(provider.displayName + ' trade feed is incomplete — keeping its last confirmed data');
+                        }
                     });
                 }
+                // Feed recovery reuses provider/context guards and restores the
+                // background revalidator without starting AI/history/tag jobs.
+                if (options.transactionsOnly) { setLoadStage(''); return; }
 
                 // Paint the dashboard shell before DHQ starts, then await DHQ.
                 // This lets React commit the initial render (standings, rosters,
@@ -2007,6 +2028,7 @@
                 setLoadStage('');
                 // Yield to the browser so the render commits before DHQ blocks
                 await new Promise(r => setTimeout(r, 0));
+                if (loadSeq !== loadSeqRef.current || !espnCurrent()) return;
 
                 if (typeof window.App?.loadLeagueIntel === 'function' && !window.App.LI_LOADED) {
                     setDhqStatus({ loading: true, step: 'Analyzing league history...', progress: 20 });
@@ -2075,6 +2097,22 @@
             }
         }
 
+        async function retryTransactions() {
+            const isCurrent = () => currentLeague._yahoo ? !!yahooTransactionContextRef.current?.isCurrent() : !!window.App.EspnHub?.isLeagueCurrent(currentLeague);
+            if (transactionRetryRef.current) return;
+            if (!isCurrent()) {
+                if (currentLeague._yahoo) setError('Your Yahoo account or connection changed. Return to the hub and reopen this league.');
+                return;
+            }
+            transactionRetryRef.current = true;
+            setTransactionRetrying(true);
+            try { await loadLeagueDetails({ transactionsOnly: true }); }
+            finally {
+                transactionRetryRef.current = false;
+                if (isCurrent()) setTransactionRetrying(false);
+            }
+        }
+
         // ── applyHydrated (audit:refresh-stale step 4) ──────────────────
         // Commits a provider.hydrate() result to React state + the window.S
         // bridge. Shared by the full loadLeagueDetails path and the WR.Sync
@@ -2084,6 +2122,8 @@
         // their own 8h/manual cadence. Errors propagate to the caller
         // (loadLeagueDetails' catch sets the error UI; WR.Sync logs).
         function applyHydrated(hydrated, { provider, sleeperPlayers, nflState, currentWeek, myRosterData, background = false }) {
+            if (currentLeague._espn && !window.App.EspnHub?.isLeagueCurrent(currentLeague)) return;
+            if (currentLeague._yahoo && !yahooTransactionContextRef.current?.isCurrent()) return;
             // Pull enrichment out of _extras (Sleeper only — others empty)
             const stats       = hydrated._extras?.stats       || {};
             const projections = hydrated._extras?.projections || {};
@@ -2104,19 +2144,19 @@
             const tradedPicks = hydrated.tradedPicks || [];
             const matchupsData = hydrated.matchups || [];
 
-            // Patch currentLeague in place so downstream useEffects
-            // (computeRankings etc.) see the resolved rosters. React
-            // won't re-render from this mutation, but setStatsData /
-            // setSeasonCtxData below trigger re-renders anyway.
-            currentLeague.rosters = rosters;
-            if (leagueUsers.length) currentLeague.users = leagueUsers;
-
             // Re-resolve myRosterData now that rosters may have changed
-            const freshMyRoster = provider.id === 'mfl' && currentLeague._mflFranchiseId
+            const freshMyRoster = provider.id === 'espn'
+                ? window.App.EspnHub.selectedRoster(currentLeague, rosters)
+                : provider.id === 'mfl' && currentLeague._mflFranchiseId
                 ? rosters.find(r => r.roster_id === currentLeague._mflFranchiseId)
                 : rosters.find(r => r.owner_id === sleeperUserId) || myRosterData;
             if (freshMyRoster && freshMyRoster !== myRosterData) setMyRoster(freshMyRoster);
             const myRoster = freshMyRoster || myRosterData;
+            if (provider.id === 'espn' && !freshMyRoster) throw new Error('Your selected ESPN team is unavailable. Return to the hub to choose a current team.');
+
+            // Publish only after the chosen team's presence is established.
+            currentLeague.rosters = rosters;
+            if (leagueUsers.length) currentLeague.users = leagueUsers;
 
             setStatsData(stats);
             setProjectionsData(projections);
@@ -2339,21 +2379,25 @@
             // Flatten hydrated transactions (already bucketed by week
             // from the provider) and merge in DHQ historical trades.
             // This replaces the old per-platform transaction fetch.
+            const transactionFeed = window.App.TransactionFeed.resolve(hydrated, currentLeague, provider.id);
+            setTransactionStatus(transactionFeed.status);
             let allTxns = [];
-            Object.values(hydrated.transactions || {}).forEach(wk => {
+            Object.values(transactionFeed.transactions).forEach(wk => {
                 allTxns = allTxns.concat(wk || []);
             });
             // Order by EFFECTIVE time (when it took effect), not `created` (when a
             // waiver claim was first placed). A waiver claimed days ago but
             // processed last night must surface as last night's news, not sort
             // back to its claim date and get buried.
-            const txnEffectiveTs = t => (t.status_updated || t.created || 0);
+            const txnEffectiveTs = t => (t.status_updated || t.created || t.timestamp || 0);
             allTxns.sort((a, b) => txnEffectiveTs(b) - txnEffectiveTs(a));
 
             // Merge DHQ historical trades (pre-analyzed with value data)
             // Deduplicate by timestamp so the provider's recent txns
             // aren't doubled.
-            if (window.App?.LI?.tradeHistory?.length > 0) {
+            // Legacy LI has no league/account tag on its tradeHistory. It cannot
+            // certify a scoped provider feed or fill an unavailable response for this view.
+            if (!['espn', 'yahoo'].includes(provider.id) && window.App?.LI?.tradeHistory?.length > 0) {
                 const existingTradeTs = new Set(allTxns.filter(t => t.type === 'trade').map(t => t.created || 0));
                 const histTrades = window.App.LI.tradeHistory
                     .filter(t => !existingTradeTs.has(t.ts || 0))
@@ -2371,6 +2415,7 @@
                     txnsByWeek[key].push(t);
                 });
                 window.S.transactions = txnsByWeek;
+                window.S.transactionStatus = transactionFeed.status;
             }
             let visibleTxns = allTxns.slice(0, 50);
             if (!visibleTxns.some(t => t.type === 'trade')) {
@@ -3901,6 +3946,7 @@
                 </div>}
 
                 {/* Debug panel (dev only) */}
+                {activeTab !== 'dashboard' && transactionStatus && transactionStatus.status !== 'ready' && <div style={{ padding: '0 16px' }}><window.WrTxnFeedStatus status={transactionStatus} onRetry={retryTransactions} retrying={transactionRetrying} /></div>}
                 {DEV_DEBUG && <div className="wr-debug-strip" style={{ padding: '4px 24px', background: 'rgba(255,0,0,0.04)', borderBottom: '1px solid rgba(255,0,0,0.1)', fontSize: 'var(--text-label, 0.75rem)', fontFamily: 'monospace', color: 'var(--k-f0a500, #f0a500)' }}>
                     <div style={{ display: 'flex', gap: '16px', marginBottom: '2px' }}>
                         <span>year={timeYear}</span>
@@ -4094,6 +4140,9 @@
                     sleeperUserId={sleeperUserId}
                     setActiveTab={setActiveTab}
                     transactions={transactions}
+                    transactionStatus={transactionStatus}
+                    retryTransactions={retryTransactions}
+                    transactionRetrying={transactionRetrying}
                     standings={standings}
                     currentLeague={currentLeague}
                     leagueSkin={leagueSkin}

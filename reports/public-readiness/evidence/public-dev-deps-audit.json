@@ -1,0 +1,27 @@
+{
+  "before": {
+    "braceExpansion": "5.0.7",
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 1,
+      "critical": 0,
+      "total": 1
+    }
+  },
+  "after": {
+    "braceExpansion": "5.0.12",
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  },
+  "declaredParentRange": "minimatch -> brace-expansion ^5.0.5",
+  "runtimeUsed": "Node20.20.2",
+  "eslintPrintConfig": "passed"
+}

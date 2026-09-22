@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://api.sleeper.app https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://fantasysports.yahooapis.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
   <title>Dynasty HQ — Connect your leagues</title>
   <!-- Pre-paint auth gate: decide before render so this step-2 page only shows
@@ -10,28 +10,41 @@
        else (no session, or already onboarded) is redirected without a flash. -->
   <style id="preboot-hide">html{visibility:hidden!important}</style>
   <noscript><style>html{visibility:visible!important}</style></noscript>
+  <script src="reconai-shared/app-config.js"></script>
+  <script src="reconai-shared/mfl-api.js"></script>
   <script>
+    // Client routing guard only; server endpoints still authorize every action.
+    window.connectionSessionHealthy = function (session) {
+      try {
+        if (typeof session?.token !== 'string' || !session.user?.id || session.token.split('.').length !== 3) return false;
+        const claims = JSON.parse(atob(session.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return typeof claims.exp === 'number' && claims.exp * 1000 > Date.now()
+          && (!claims.app_metadata?.user_id || claims.app_metadata.user_id === session.user.id);
+      } catch (_) { return false; }
+    };
     (function () {
       function reveal(){ var s=document.getElementById('preboot-hide'); if(s&&s.parentNode){ s.parentNode.removeChild(s); } }
       try {
         var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
         var guestMode = false;
         try { guestMode = localStorage.getItem('wr_guest_v1') === '1'; } catch (e) {}
-        if ((!sess || !sess.token) && !guestMode) { window.location.replace('landing.html'); return; }
+        if (!window.connectionSessionHealthy(sess) && !guestMode) { window.location.replace('landing.html'); return; }
         var profile = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
         var legacy  = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
-        // Onboarded = any league source bound (Sleeper OR MFL) or an explicit
+        // Onboarded = any league source bound or an explicit
         // completed flag. MFL-only users must not bounce back to this page.
+        var mflLinked = false;
+        try { mflLinked = !!window.MFL?.provider?.loadConnection?.(); } catch (_) { /* Unknown provenance requires explicit reconnect. */ }
         var onboarded = (profile && (profile.onboardingComplete === true || profile.sleeperUsername))
           || (legacy && legacy.username)
-          || localStorage.getItem('mfl_league_id');
+          || mflLinked || localStorage.getItem('espn_league_id');
         if (onboarded) {
           var pref = localStorage.getItem('fw_preferred_view');
           window.location.replace(pref === 'scout' ? 'https://skjjcruz.github.io/ReconAI-sandbox-dev/' : 'index.html');
           return;
         }
         reveal(); // signed in, no league linked -> show the connect form
-      } catch (e) { reveal(); }
+      } catch (e) { window.location.replace('landing.html'); }
     })();
   </script>
   <link rel="icon" href="icon-192.png">
@@ -40,7 +53,7 @@
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
     :root{--gold:#D4AF37;--dark-gold:#B8941E;--bg:#0A0A0A;--bg2:#141414;--border:rgba(255,255,255,.1);--white:#FFFFFF;--silver:#C0C0C0;--muted:rgba(255,255,255,.5);--green:#34d399;--red:#f87171}
     html,body{min-height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--white);-webkit-font-smoothing:antialiased}
-    body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px 24px 12vh}
+    body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:max(24px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(32px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left))}
     /* Subdued DHQ watermark — matches the in-app background (icon at low opacity). */
     body::before{content:'';position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:clamp(400px,60vw,900px);height:clamp(400px,60vw,900px);background:url('icon-192.png') center/contain no-repeat;opacity:.06;filter:brightness(1.2);z-index:0;pointer-events:none}
     .card{position:relative;z-index:1;width:100%;max-width:440px;text-align:center}
@@ -63,7 +76,7 @@
     .switch button.linked .sm{color:var(--green)}
     .switch button .tick{display:none;position:absolute;top:-9px;right:-9px;width:22px;height:22px;border-radius:50%;background:var(--green);color:#062015;font-size:13px;font-weight:800;line-height:22px;box-shadow:0 2px 8px rgba(52,211,153,.5)}
     .switch button.linked .tick{display:block}
-    .input{width:100%;padding:14px;font-size:15px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;color:var(--white);font-family:inherit;margin-bottom:12px;outline:none;transition:border-color .15s}
+    .input{width:100%;padding:14px;font-size:16px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;color:var(--white);font-family:inherit;margin-bottom:12px;outline:none;transition:border-color .15s}
     .input:focus{border-color:var(--gold)}
     .input::placeholder{color:var(--muted)}
     .duo{display:grid;grid-template-columns:1fr 110px;gap:10px}
@@ -96,9 +109,9 @@
     <img src="icon-192.png" alt="Dynasty HQ" class="logo">
     <div class="step">Step 2 of 2</div>
     <h1>Connect your leagues</h1>
-    <p class="sub">Your account is set. Where do you play? Connect one or both.</p>
+    <p class="sub">Your account is set. Where do you play? Connect a platform to continue.</p>
 
-    <div class="alert" id="alert"></div>
+    <div class="alert" id="alert" role="status" aria-live="polite"></div>
 
     <div class="switch" role="group" aria-label="Where do you play?">
       <button id="tabSleeper" onclick="pick('sleeper')">Sleeper<span class="sm" id="smSleeper">username</span><span class="tick">&#10003;</span></button>
@@ -107,15 +120,15 @@
     </div>
 
     <div class="pane" id="paneSleeper">
-      <input class="input" id="sleeperName" placeholder="Your Sleeper username" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input class="input" id="sleeperName" aria-label="Sleeper username" placeholder="Your Sleeper username" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       <button class="btn-link" id="btnSleeper" onclick="connectSleeper()">Connect Sleeper</button>
       <p class="hint">This is your <strong>username</strong> on Sleeper — not your email. We&rsquo;ll pull in <strong>all</strong> your Sleeper leagues automatically. You can change it later in Settings.</p>
     </div>
 
     <div class="pane" id="paneMfl">
       <div class="duo">
-        <input class="input" id="mflLeagueId" placeholder="MFL league ID (e.g. 41208)" inputmode="numeric" autocomplete="off">
-        <input class="input" id="mflYear" value="2026" aria-label="Season" inputmode="numeric" autocomplete="off">
+        <input class="input" id="mflLeagueId" aria-label="MFL league ID" placeholder="MFL league ID (e.g. 41208)" inputmode="numeric" autocomplete="off">
+        <input class="input" id="mflYear" aria-label="MFL season" value="2026" inputmode="numeric" autocomplete="off">
       </div>
       <button class="btn-link" id="btnMfl" onclick="connectMfl()">Connect MFL league</button>
       <p class="hint">Your league ID is the <strong>number in your MFL web address</strong> (the part after <strong>L=</strong>). We&rsquo;ll load that league and its history.</p>
@@ -123,13 +136,13 @@
 
     <div class="pane" id="paneEspn">
       <div class="duo">
-        <input class="input" id="espnLeagueId" placeholder="ESPN league ID" inputmode="numeric" autocomplete="off">
-        <input class="input" id="espnYear" value="2026" aria-label="Season" inputmode="numeric" autocomplete="off">
+        <input class="input" id="espnLeagueId" aria-label="ESPN league ID" placeholder="ESPN league ID" inputmode="numeric" autocomplete="off">
+        <input class="input" id="espnYear" aria-label="ESPN season" value="2026" inputmode="numeric" autocomplete="off">
       </div>
       <button class="private-toggle" id="espnPrivateToggle" onclick="toggleEspnPrivate()">Private league? Add your ESPN cookies</button>
       <div class="private" id="espnPrivate">
-        <input class="input" id="espnS2" placeholder="espn_s2 cookie value" autocomplete="off" autocapitalize="off" spellcheck="false">
-        <input class="input" id="espnSwid" placeholder="SWID cookie value {XXXXXXXX-...}" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <input class="input" id="espnS2" aria-label="ESPN espn_s2 cookie" placeholder="espn_s2 cookie value" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <input class="input" id="espnSwid" aria-label="ESPN SWID cookie" placeholder="SWID cookie value {XXXXXXXX-...}" autocomplete="off" autocapitalize="off" spellcheck="false">
       </div>
       <button class="btn-link" id="btnEspn" onclick="connectEspn()">Connect ESPN league</button>
       <p class="hint">Your league ID is the <strong>number after leagueId=</strong> in your ESPN league&rsquo;s web address. Public leagues connect with just the ID. Private leagues also need two cookies from a computer: sign in at fantasy.espn.com, press <strong>F12 &rarr; Application &rarr; Cookies</strong>, and copy <strong>espn_s2</strong> and <strong>SWID</strong>.</p>
@@ -247,7 +260,7 @@
       const el = document.getElementById('alert');
       el.className = 'alert alert-' + type + ' show';
       el.textContent = message;
-      if (type !== 'success') setTimeout(() => el.classList.remove('show'), 6000);
+
     }
 
     function pick(which) {
@@ -269,13 +282,12 @@
       btn.textContent = NAMES[which] + ' connected ✓';
       refreshEnter();
       // Nudge toward the first platform they haven't linked yet.
-      const next = Object.keys(TABS).find(k => !linked[k]);
-      if (next) pick(next);
+      // Leave the completed connection and Enter action in place on phones.
     }
 
     function refreshEnter() {
       const on = Object.keys(TABS).filter(k => linked[k]);
-      document.getElementById('enterBtn').disabled = on.length === 0;
+      document.getElementById('enterBtn').disabled = on.length === 0 || Object.values(pendingConnections).some(Boolean);
       const line = document.getElementById('linkedline');
       if (on.length === 1) {
         line.textContent = NAMES[on[0]] + ' connected. Play somewhere else too? Add it — or head in.';
@@ -286,59 +298,134 @@
       }
     }
 
-    async function connectSleeper() {
-      const input = document.getElementById('sleeperName');
-      const username = input.value.trim();
-      const btn = document.getElementById('btnSleeper');
-      if (!username) { showAlert('error', 'Enter your Sleeper username to continue.'); input.focus(); return; }
-      btn.disabled = true; btn.textContent = 'Finding your leagues…';
+    function readConnectionBinding() {
+      return { session: localStorage.getItem(SESSION_KEY), guest: localStorage.getItem('wr_guest_v1'), legacy: localStorage.getItem(AUTH_KEY) };
+    }
+    let pageBinding = readConnectionBinding();
+    const pendingConnections = { sleeper: null, mfl: null, espn: null };
+    let entering = false;
+    function bindingMatches() {
+      const now = readConnectionBinding();
+      return now.session === pageBinding.session && now.guest === pageBinding.guest && now.legacy === pageBinding.legacy;
+    }
+    function requireConnectionBinding() {
+      if (!bindingMatches()) throw new Error('Your account changed. Reload this page to continue with the current account.');
+      let session;
+      try { session = JSON.parse(pageBinding.session || 'null'); } catch (_) {}
+      if (!window.connectionSessionHealthy(session) && pageBinding.guest !== '1') throw new Error('Sign in again before connecting a league.');
+    }
+    function saveConnection(localValues, sessionValues = {}) {
+      requireConnectionBinding();
+      const originalBinding = pageBinding;
+      const changes = [
+        ...Object.entries(localValues).map(([key, value]) => ({ storage: localStorage, key, value: value === null ? null : String(value) })),
+        ...Object.entries(sessionValues).map(([key, value]) => ({ storage: sessionStorage, key, value: value === null ? null : String(value) })),
+      ].map(change => ({ ...change, previous: change.storage.getItem(change.key) }));
+      const written = [];
       try {
-        const res = await fetch(`https://api.sleeper.app/v1/user/${encodeURIComponent(username)}`);
-        const user = res.ok ? await res.json() : null;
-        if (!user || !user.user_id) {
-          showAlert('error', "We couldn't find that Sleeper username. Check the spelling and try again.");
-          btn.disabled = false; btn.textContent = 'Connect Sleeper';
-          return;
+        for (const change of changes) {
+          if (change.value === null) change.storage.removeItem(change.key); else change.storage.setItem(change.key, change.value);
+          written.push(change);
         }
-        const uname = user.username || username;
-        localStorage.setItem(AUTH_KEY, JSON.stringify({ username: uname, sleeperUserId: user.user_id, createdAt: new Date().toISOString() }));
-        localStorage.setItem('od_locked_username_v2', uname);
-        try { if (localStorage.getItem('wr_guest_v1') !== '1') patchProfile({ sleeperUsername: uname, sleeperUserId: user.user_id }); } catch (e) {}
-        input.disabled = true;
-        trackConnectEvent('sleeper_connected', uname, { sleeperUsername: uname });
-        markLinked('sleeper', '@' + uname);
-      } catch (err) {
-        showAlert('error', 'Network error: ' + (err?.message || String(err)));
-        btn.disabled = false; btn.textContent = 'Connect Sleeper';
+        pageBinding = readConnectionBinding();
+      } catch (error) {
+        // A failed local save is not a completed connection. Undo only our own
+        // writes, preserving a newer account and any independently changed key.
+        const ownSessionWrite = written.find(change => change.storage === localStorage && change.key === SESSION_KEY);
+        const currentSession = localStorage.getItem(SESSION_KEY);
+        if (currentSession === originalBinding.session || (ownSessionWrite && currentSession === ownSessionWrite.value)) {
+          for (const change of written.reverse()) {
+            try {
+              if (change.storage.getItem(change.key) === change.value) {
+                if (change.previous === null) change.storage.removeItem(change.key);
+                else change.storage.setItem(change.key, change.previous);
+              }
+            } catch (_) {}
+          }
+        }
+        throw new Error('We could not save this connection in your browser. Free some browser storage and try again.');
       }
     }
-
-    async function connectMfl() {
-      const idInput = document.getElementById('mflLeagueId');
-      const yearInput = document.getElementById('mflYear');
-      const leagueId = idInput.value.trim().replace(/\D/g, '');
-      const year = (yearInput.value.trim() || '2026').replace(/\D/g, '') || '2026';
-      const btn = document.getElementById('btnMfl');
-      if (!leagueId) { showAlert('error', 'Enter your MFL league ID — the number after L= in your MFL web address.'); idInput.focus(); return; }
-      btn.disabled = true; btn.textContent = 'Finding your league…';
+    async function providerJson(url, options, signal) {
+      const response = await fetch(url, { ...options, signal });
+      if (!response.ok) throw Object.assign(new Error('Provider request failed'), { status: response.status });
+      return response.json();
+    }
+    async function runConnection(which, operation) {
+      if (pendingConnections[which] || linked[which] || entering) return;
+      const button = document.getElementById(TABS[which][3]);
+      const fields = ({ sleeper: ['sleeperName'], mfl: ['mflLeagueId', 'mflYear'], espn: ['espnLeagueId', 'espnYear', 'espnS2', 'espnSwid'] })[which].map(id => document.getElementById(id));
+      const controller = new AbortController();
+      let timer;
       try {
-        const res = await fetch(`https://api.myfantasyleague.com/${encodeURIComponent(year)}/export?TYPE=league&L=${encodeURIComponent(leagueId)}&JSON=1`);
-        const data = res.ok ? await res.json() : null;
-        const leagueName = data && data.league && data.league.name;
-        if (!leagueName) {
-          showAlert('error', "We couldn't find that MFL league for " + year + '. Double-check the league ID (the L= number) and season.');
-          btn.disabled = false; btn.textContent = 'Connect MFL league';
-          return;
+        requireConnectionBinding();
+        pendingConnections[which] = controller;
+        button.disabled = true;
+        button.textContent = which === 'sleeper' ? 'Finding your Sleeper account…' : 'Finding your league…';
+        fields.forEach(field => { field.disabled = true; });
+        document.getElementById('alert').className = 'alert';
+        refreshEnter();
+        timer = setTimeout(() => controller.abort(), 20000);
+        const result = await operation(controller.signal);
+        requireConnectionBinding();
+        if (controller.signal.aborted) throw Object.assign(new Error('Timed out'), { name: 'AbortError' });
+        if (result.commit) result.commit();
+        else saveConnection(result.local, result.session);
+        if (result.event) trackConnectEvent(result.event, result.username || null, result.metadata || {});
+        markLinked(which, result.label);
+      } catch (error) {
+        const message = !bindingMatches() ? 'Your account changed. Reload this page to continue with the current account.'
+          : error.name === 'AbortError' ? 'That connection took too long. Your details are still here; try again.'
+          : error.message === 'Provider request failed' ? 'We could not reach ' + NAMES[which] + ' right now. Your details are still here; try again.' : error.message;
+        showAlert('error', message || 'Unable to connect right now. Please try again.');
+      } finally {
+        clearTimeout(timer);
+        if (pendingConnections[which] === controller) pendingConnections[which] = null;
+        if (!linked[which]) {
+          fields.forEach(field => { field.disabled = false; });
+          button.disabled = false;
+          button.textContent = 'Connect ' + NAMES[which] + (which === 'sleeper' ? '' : ' league');
         }
-        localStorage.setItem('mfl_league_id', leagueId);
-        localStorage.setItem('mfl_year', year);
-        idInput.disabled = true; yearInput.disabled = true;
-        trackConnectEvent('mfl_connected', null, { mflLeagueId: leagueId });
-        markLinked('mfl', leagueName);
-      } catch (err) {
-        showAlert('error', "We couldn't reach MyFantasyLeague. If your league is private, open it in your browser once, then try again — or add it later from inside the app.");
-        btn.disabled = false; btn.textContent = 'Connect MFL league';
+        refreshEnter();
+        if (linked[which] && !Object.values(pendingConnections).some(Boolean)) document.getElementById('enterBtn').scrollIntoView?.({ block: 'nearest' });
       }
+    }
+    function leagueInputs(which) {
+      const leagueId = document.getElementById(which + 'LeagueId').value.trim();
+      const year = document.getElementById(which + 'Year').value.trim();
+      if (!/^[1-9]\d*$/.test(leagueId)) throw new Error('Enter the numeric ' + NAMES[which] + ' league ID exactly as shown in your league address.');
+      if (!/^\d{4}$/.test(year)) throw new Error('Enter the four-digit season for this league.');
+      return { leagueId, year };
+    }
+    async function connectSleeper() {
+      const username = document.getElementById('sleeperName').value.trim();
+      if (!username) { showAlert('error', 'Enter your Sleeper username to continue.'); return; }
+      return runConnection('sleeper', async signal => {
+        let user;
+        try { user = await providerJson('https://api.sleeper.app/v1/user/' + encodeURIComponent(username), {}, signal); }
+        catch (error) { if (error.status === 404) throw new Error("We couldn't find that Sleeper username. Check the spelling and try again."); throw error; }
+        if (!user || typeof user.user_id !== 'string' || !/^\d+$/.test(user.user_id) || typeof user.username !== 'string' || !user.username.trim()) throw new Error("We couldn't verify that Sleeper account. Check the username and try again.");
+        const uname = user.username.trim();
+        const local = { [AUTH_KEY]: JSON.stringify({ username: uname, sleeperUserId: user.user_id, createdAt: new Date().toISOString() }), od_locked_username_v2: uname };
+        if (localStorage.getItem('wr_guest_v1') !== '1') local[PROFILE_KEY] = JSON.stringify({ ...getProfile(), sleeperUsername: uname, sleeperUserId: user.user_id });
+        return { local, label: '@' + uname, event: 'sleeper_connected', username: uname, metadata: { sleeperUsername: uname } };
+      });
+    }
+    async function connectMfl() {
+      let input;
+      try { input = leagueInputs('mfl'); } catch (error) { showAlert('error', error.message); return; }
+      return runConnection('mfl', async signal => {
+        if (!window.MFL?.provider?.saveCredentials) throw new Error('The MFL connector did not load. Reload this page and try again.');
+        const connected = await window.MFL.provider.connect(input, {isCurrent:()=>bindingMatches() && !signal.aborted});
+        requireConnectionBinding();
+        const league = connected.leagues?.[0], creds = league?._platformCreds;
+        if (!league || !window.MFL.provider.isConnectionCurrent(creds)) throw new Error('MFL could not verify this connection. Try again.');
+        return { commit() {
+          requireConnectionBinding();
+          if (signal.aborted || !window.MFL.provider.isConnectionCurrent(creds)) throw new Error('Your connection changed. Retry before saving.');
+          window.MFL.provider.saveCredentials(league.id,{...creds,apiKey:null});
+        }, label: league.name, event: 'mfl_connected', metadata: {mflLeagueId:creds.leagueId} };
+      });
     }
 
     function toggleEspnPrivate() {
@@ -348,89 +435,71 @@
     }
 
     async function connectEspn() {
-      const idInput = document.getElementById('espnLeagueId');
-      const yearInput = document.getElementById('espnYear');
-      const leagueId = idInput.value.trim().replace(/\D/g, '');
-      const year = (yearInput.value.trim() || '2026').replace(/\D/g, '') || '2026';
+      let input;
+      try { input = leagueInputs('espn'); } catch (error) { showAlert('error', error.message); return; }
       const s2 = document.getElementById('espnS2').value.trim();
       const swid = document.getElementById('espnSwid').value.trim();
-      const btn = document.getElementById('btnEspn');
-      if (!leagueId) { showAlert('error', 'Enter your ESPN league ID — the number after leagueId= in your ESPN web address.'); idInput.focus(); return; }
-      btn.disabled = true; btn.textContent = 'Finding your league…';
-      const url = `${ESPN_BASE}/seasons/${year}/segments/0/leagues/${leagueId}?view=mTeam&view=mSettings`;
-      try {
-        let data = null;
-        if (s2 && swid) {
-          // Private league: the browser can't send ESPN cookies cross-site,
-          // so the server-side connector forwards them.
-          const res = await fetch(PROXY_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TRACK_KEY, 'apikey': TRACK_KEY },
+      if (!!s2 !== !!swid) { showAlert('error', 'Add both espn_s2 and SWID for a private ESPN league.'); return; }
+      return runConnection('espn', async signal => {
+        const { leagueId, year } = input;
+        const url = ESPN_BASE + '/seasons/' + year + '/segments/0/leagues/' + leagueId + '?view=mTeam&view=mSettings';
+        let data;
+        try {
+          data = await providerJson(s2 ? PROXY_URL : url, s2 ? {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TRACK_KEY, apikey: TRACK_KEY },
             body: JSON.stringify({ url, espnS2: s2, swid }),
-          });
-          if (!res.ok) throw Object.assign(new Error('proxy'), { status: res.status });
-          data = await res.json();
-        } else {
-          const res = await fetch(url);
-          if (res.status === 401 || res.status === 403) {
-            document.getElementById('espnPrivate').classList.add('show');
-            showAlert('error', 'That ESPN league is private. Add your espn_s2 and SWID cookies below and try again.');
-            btn.disabled = false; btn.textContent = 'Connect ESPN league';
-            document.getElementById('espnS2').focus();
-            return;
+          } : {}, signal);
+        } catch (error) {
+          if (error.status === 401 || error.status === 403) {
+            if (!s2) document.getElementById('espnPrivate').classList.add('show');
+            throw new Error(s2 ? 'ESPN rejected those cookies. Copy fresh espn_s2 and SWID values and try again.' : 'That ESPN league is private. Add your espn_s2 and SWID cookies below and try again.');
           }
-          if (!res.ok) throw Object.assign(new Error('espn'), { status: res.status });
-          data = await res.json();
+          throw error;
         }
-        const leagueName = data && data.settings && data.settings.name;
-        const teams = (data && data.teams || []).length;
-        if (!leagueName && !teams) {
-          showAlert('error', "We couldn't find that ESPN league for " + year + '. Double-check the league ID (the leagueId= number) and season.');
-          btn.disabled = false; btn.textContent = 'Connect ESPN league';
-          return;
-        }
-        localStorage.setItem('espn_league_id', leagueId);
-        localStorage.setItem('espn_year', year);
-        try { if (s2) sessionStorage.setItem('espn_s2', s2); if (swid) sessionStorage.setItem('espn_swid', swid); } catch (e) {}
-        idInput.disabled = true; yearInput.disabled = true;
-        markLinked('espn', leagueName || (teams + '-team league'));
-      } catch (err) {
-        if (err && (err.status === 401 || err.status === 403)) {
-          showAlert('error', 'ESPN rejected those cookies. Copy fresh espn_s2 and SWID values and try again.');
-        } else {
-          showAlert('error', "We couldn't reach ESPN right now. Check the league ID and try again in a minute.");
-        }
-        btn.disabled = false; btn.textContent = 'Connect ESPN league';
-      }
+        const name = data && data.settings && data.settings.name;
+        const teams = data && Array.isArray(data.teams) ? data.teams.length : 0;
+        if (data?.error || (!(typeof name === 'string' && name.trim()) && !teams)) throw new Error("We couldn't find that ESPN league for " + year + '. Double-check the league ID and season.');
+        return { local: { espn_league_id: leagueId, espn_year: year }, session: s2 ? { espn_s2: s2, espn_swid: swid } : {}, label: name || (teams + '-team league') };
+      });
     }
 
     function enterApp() {
-      if (!Object.keys(TABS).some(k => linked[k])) return;
-      const platforms = Object.keys(TABS).filter(k => linked[k]);
-      patchProfile({ platforms, onboardingComplete: true });
-      let connectedName = null;
-      try { connectedName = (JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}).username || null; } catch (e) {}
-      trackConnectEvent('entered_app', connectedName, { platforms: platforms.join('+') });
-      showAlert('success', 'You’re in! Loading Dynasty HQ…');
-      setTimeout(() => { window.location.href = destForUser(); }, 700);
+      if (entering || Object.values(pendingConnections).some(Boolean) || !Object.keys(TABS).some(k => linked[k])) return;
+      try {
+        requireConnectionBinding();
+        const platforms = Object.keys(TABS).filter(k => linked[k]);
+        saveConnection({ [PROFILE_KEY]: JSON.stringify({ ...getProfile(), platforms, onboardingComplete: true }) });
+        entering = true;
+        document.getElementById('enterBtn').disabled = true;
+        const connectedName = (JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}).username || null;
+        trackConnectEvent('entered_app', connectedName, { platforms: platforms.join('+') });
+        showAlert('success', 'Opening Dynasty HQ…');
+        setTimeout(() => {
+          if (bindingMatches()) window.location.href = destForUser();
+          else { entering = false; showAlert('error', 'Your account changed. Reload this page to continue.'); }
+        }, 700);
+      } catch (error) { showAlert('error', error.message); }
     }
 
     function signOut() {
       try {
-        localStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(AUTH_KEY);
-        // Clear the guest flag too — landing.html forwards mid-setup guests
-        // back here, so a lingering flag would trap them in a loop.
-        localStorage.removeItem('wr_guest_v1');
-      } catch {}
-      window.location.href = 'landing.html';
+        requireConnectionBinding();
+        Object.values(pendingConnections).forEach(controller => controller && controller.abort());
+        const profile = getProfile();
+        ['sleeperUsername', 'sleeperUserId', 'platforms', 'onboardingComplete'].forEach(key => delete profile[key]);
+        const local = { [PROFILE_KEY]: JSON.stringify(profile) };
+        [AUTH_KEY, 'wr_guest_v1', 'od_locked_username_v2', 'mfl_league_id', 'mfl_year', 'mfl_franchise_id', 'mfl_connection_owner_v1', 'espn_league_id', 'espn_year', SESSION_KEY].forEach(key => { local[key] = null; });
+        saveConnection(local, { espn_s2:null, espn_swid:null, mfl_api_key:null, mfl_api_key_context_v1:null, mfl_guest_owner_v1:null, mfl_write_cookie:null, mfl_write_host:null, mfl_write_context_v1:null });
+        window.location.href = 'landing.html?signout';
+      } catch (error) { showAlert('error', error.message); }
     }
 
     document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
+      if (e.key !== 'Enter' || document.activeElement?.disabled) return;
       const id = document.activeElement?.id;
-      if (id === 'sleeperName') connectSleeper();
-      if (id === 'mflLeagueId' || id === 'mflYear') connectMfl();
+      if (id === 'sleeperName') { e.preventDefault(); connectSleeper(); }
+      if (id === 'mflLeagueId' || id === 'mflYear') { e.preventDefault(); connectMfl(); }
+      if (['espnLeagueId', 'espnYear', 'espnS2', 'espnSwid'].includes(id)) { e.preventDefault(); connectEspn(); }
     });
   </script>
 </body>

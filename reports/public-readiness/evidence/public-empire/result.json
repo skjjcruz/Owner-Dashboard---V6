@@ -1,0 +1,50 @@
+[
+  {
+    "viewport": {
+      "width": 320,
+      "height": 740
+    },
+    "checks": [
+      "unknown rights have no phantom capital",
+      "loaded denominator visible",
+      "retry recovers completed-draft 2027–2029 rights",
+      "active global league preserved",
+      "correct league handoff",
+      "account interruption blocks followups",
+      "no horizontal overflow"
+    ],
+    "limits": "Actual Empire component, evidence coordinator and reviewed adapter/shared pick model; assessment scores, account and provider data are fixtures. No live writes."
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "checks": [
+      "unknown rights have no phantom capital",
+      "loaded denominator visible",
+      "retry recovers completed-draft 2027–2029 rights",
+      "active global league preserved",
+      "correct league handoff",
+      "account interruption blocks followups",
+      "no horizontal overflow"
+    ],
+    "limits": "Actual Empire component, evidence coordinator and reviewed adapter/shared pick model; assessment scores, account and provider data are fixtures. No live writes."
+  },
+  {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "checks": [
+      "unknown rights have no phantom capital",
+      "loaded denominator visible",
+      "retry recovers completed-draft 2027–2029 rights",
+      "active global league preserved",
+      "correct league handoff",
+      "account interruption blocks followups",
+      "no horizontal overflow"
+    ],
+    "limits": "Actual Empire component, evidence coordinator and reviewed adapter/shared pick model; assessment scores, account and provider data are fixtures. No live writes."
+  }
+]

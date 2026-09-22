@@ -1,0 +1,23 @@
+{
+  "source": "bd28446:js/app.js",
+  "findings": [
+    {
+      "case": "one of two league details fails",
+      "loaded": 1,
+      "listed": 2,
+      "error": null,
+      "status": "finished",
+      "issue": "failed league missing from denominator without visible coverage"
+    },
+    {
+      "case": "return-to-hub successful revalidation",
+      "before": "drafting",
+      "after": "missing status"
+    },
+    {
+      "case": "account changed while request pending",
+      "activeAccount": "account-b",
+      "publishedUser": "owner-a"
+    }
+  ]
+}

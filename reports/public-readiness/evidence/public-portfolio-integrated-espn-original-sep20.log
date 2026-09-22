@@ -1,0 +1,23 @@
+PASS restoresExactSavedSeasonWithoutChangingActiveLeague
+PASS chosenTeamSurvivesReloadAndFreshRosterIdentity
+PASS selectionIsScopedToAccountAndSeason
+PASS delayedAccountAndConnectionChangesCannotPublishOrWrite
+PASS storageBoundaryInvalidatesSameBytes
+PASS timeoutThenRetryIgnoresLateOriginalReply
+PASS missingPartialAndForeignPayloadsAreNotEmptySuccess
+PASS privateCredentialsStayInSessionAndReachProxy
+PASS unknownIdentityAndIncompleteCookiesFailBeforeProvider
+PASS appOwnerClaimsMustBeCompleteConsistentAndLive
+PASS failedTeamSaveAndUnknownTeamCannotClaimSelection
+PASS rejectedPrivateStorageRestoresPriorConnection
+PASS actualHubLoadCallbackPublishesOnlyNewestResponse
+(node:97124) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS actualLeagueDetailCarriesSelectedTeamAndRejectsLateAccount
+PASS actualLoaderAndProviderRejectForeignSeasonAndLateView
+PASS actualHubKeepsGoodDataOnFailureAndClearsInvalidAccount
+locator.waitFor: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for getByRole('alert').filter({ hasText: /ESPN/ }) to be visible[22m
+
+    at /Users/jacobc/Projects/warroom-readiness-public-auth/tests/public-espn-browser.cjs:28:64

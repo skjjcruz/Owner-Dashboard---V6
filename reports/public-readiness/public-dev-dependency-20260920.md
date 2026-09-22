@@ -1,0 +1,9 @@
+# Public development dependency repair — 2026-09-20
+
+Separate candidate `codex/readiness-public-dev-deps-20260920` from frozen public OAuth `012a897`. The only dependency change is the existing `brace-expansion` lock entry from5.0.7 to5.0.12, selected by `npm update brace-expansion --package-lock-only --ignore-scripts` within minimatch's unchanged `^5.0.5` range. No direct dependency, runtime source, workflow or package.json was changed.
+
+The official maintainer/GitHub-reviewed advisories identify5.0.7 as affected by [unbounded expansion memory use](https://github.com/advisories/GHSA-mh99-v99m-4gvg) and the [incomplete intermediate-array mitigation](https://github.com/advisories/GHSA-rgw5-rvv9-x895); the latter requires5.0.9 or later. The registry currently supplies5.0.12 and its verified package integrity. This transitive dependency belongs to ESLint/minimatch, not the shipped browser runtime. The newer package requires Node20 or22+, matching both existing CI and Pages Node20 workflows.
+
+An isolated clean `npm ci --ignore-scripts` succeeded. The [audit comparison](evidence/public-dev-deps-audit.json) changed from one high finding to zero findings. Under actual Node20.20.2, [all198 existing tests](evidence/public-dev-deps-tests-node20.log) and the [preview build](evidence/public-dev-deps-build-node20.log) passed. The build used explicit actual shared source `dedbb1614f08459905eef27d0f0b7bce27cd4e15`. Resolving the real ESLint configuration for `js/app.js` also passed. No unbounded memory-exhaustion probe was run against the user's active environment.
+
+Independent product-inventory review confirmed the one-package delta, CI/runtime compatibility, both primary advisories and zero audit findings; no material finding remains in this dependency change. The source frozen OAuth candidate remains unchanged, and root owns public integration/PR publication. No deployment or live-product readiness is claimed by this dependency repair.

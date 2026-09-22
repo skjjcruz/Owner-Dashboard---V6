@@ -1,0 +1,20 @@
+{
+  "baseline": "ec80420",
+  "failures": {
+    "activeLeagueRosterReplaced": [
+      {
+        "roster_id": 1,
+        "owner_id": "900",
+        "players": [
+          "111"
+        ]
+      }
+    ],
+    "wrongProviderEndpoint": "https://api.sleeper.app/v1/league/espn_7_2026/traded_picks",
+    "lateFollowupAfterAccountChange": [
+      "txns-after-account-change:111",
+      "txns-after-account-change:espn_7_2026"
+    ]
+  },
+  "limits": "Actual prior bootstrap, controlled fixtures only; no remote mutation."
+}

@@ -1,0 +1,80 @@
+{
+  "candidateHtmlInjected": true,
+  "candidatePath": "/Users/jacobc/Projects/warroom-readiness-public-auth/landing.html",
+  "runId": "readiness-20260920-f868bdff-2615-4cad-ad86-78ec10ecf7de",
+  "startedAt": "2026-09-20T16:31:41.555Z",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "blockedWrites": [
+    {
+      "method": "POST",
+      "path": "https://sxshiqyxhhifvtfqawbq.supabase.co/rest/v1/analytics_events"
+    },
+    {
+      "method": "POST",
+      "path": "https://sxshiqyxhhifvtfqawbq.supabase.co/rest/v1/analytics_events"
+    },
+    {
+      "method": "POST",
+      "path": "https://sxshiqyxhhifvtfqawbq.supabase.co/rest/v1/analytics_events"
+    },
+    {
+      "method": "POST",
+      "path": "https://sxshiqyxhhifvtfqawbq.supabase.co/rest/v1/analytics_events"
+    },
+    {
+      "method": "POST",
+      "path": "https://sxshiqyxhhifvtfqawbq.supabase.co/rest/v1/analytics_events"
+    }
+  ],
+  "checks": [
+    "Signed-out arrival reaches public landing",
+    "Real email/password sign-in establishes exact controlled identity and reaches league onboarding"
+  ],
+  "status": "passed",
+  "pageErrors": [],
+  "navigationSignInTitle": "Welcome back",
+  "url": "https://dhqfootball.com/connect-sleeper.html",
+  "body": "STEP 2 OF 2\nConnect your leagues\n\nYour account is set. Where do you play? Connect one or both.\n\nSleeper\nusername\nMyFantasyLeague\nleague ID\nESPN\nleague ID\nEnter Dynasty HQ →\nYou start free on every league — upgrade inside the app only if you want the full engine.\nNot you? Sign out",
+  "inputs": [
+    {
+      "id": "sleeperName",
+      "type": "text",
+      "placeholder": "Your Sleeper username"
+    },
+    {
+      "id": "mflLeagueId",
+      "type": "text",
+      "placeholder": "MFL league ID (e.g. 41208)"
+    },
+    {
+      "id": "mflYear",
+      "type": "text",
+      "placeholder": ""
+    },
+    {
+      "id": "espnLeagueId",
+      "type": "text",
+      "placeholder": "ESPN league ID"
+    },
+    {
+      "id": "espnYear",
+      "type": "text",
+      "placeholder": ""
+    },
+    {
+      "id": "espnS2",
+      "type": "text",
+      "placeholder": "espn_s2 cookie value"
+    },
+    {
+      "id": "espnSwid",
+      "type": "text",
+      "placeholder": "SWID cookie value {XXXXXXXX-...}"
+    }
+  ],
+  "overflow": false,
+  "completedAt": "2026-09-20T16:31:48.233Z"
+}

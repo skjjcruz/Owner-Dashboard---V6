@@ -1,0 +1,6 @@
+{"scenario":"oauth-race","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":2,"realAccountsUsed":false}
+{"scenario":"repair-race","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":2,"realAccountsUsed":false}
+{"scenario":"oauth-failure","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":2,"realAccountsUsed":false}
+{"scenario":"provider-start","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":2,"realAccountsUsed":false}
+{"scenario":"guest-espn","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":0,"realAccountsUsed":false}
+{"scenario":"fresh-espn","viewport":{"width":390,"height":844},"result":"pass","unexpectedExternalRequestsBlocked":0,"realAccountsUsed":false}

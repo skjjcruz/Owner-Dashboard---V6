@@ -1,0 +1,37 @@
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS failedSignOutCanRetry
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS unhealthySessionsCannotConnect
+PASS guestRouting
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS signOutClearsConnection
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS concurrentPlatforms
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS changedLegacyBinding
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS duplicateSubmission
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS changedAccount
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS signedOut
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS malformedIdentity
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS saveFailure
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS staleSignOut
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS requestTimeoutAndRetry
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS exactMflInput
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS mflFailureThenRetry
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS partialEspnCookies
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS privateEspn
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS pendingEnterAndLateNavigation

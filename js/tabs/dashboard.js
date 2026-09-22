@@ -749,6 +749,9 @@ function DashboardPanel({
     sleeperUserId,
     setActiveTab,
     transactions,
+    transactionStatus,
+    retryTransactions,
+    transactionRetrying,
     standings,
     currentLeague,
     leagueSkin,
@@ -1172,8 +1175,9 @@ function DashboardPanel({
                     )}
                 </div>
                 <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                <window.WrTxnFeedStatus status={transactionStatus} onRetry={retryTransactions} retrying={transactionRetrying} />
                 {(!transactions || transactions.length === 0) ? (
-                    <SkeletonRows count={size === 'narrow' ? 8 : size === 'lg' ? 5 : size === 'slim' ? 4 : 2} />
+                    transactionStatus ? (transactionStatus.status === 'ready' ? <div style={{ fontSize: '14px', color: S }}>{window.App.TransactionFeed.emptyMessage(transactionStatus)}</div> : null) : <SkeletonRows count={size === 'narrow' ? 8 : size === 'lg' ? 5 : size === 'slim' ? 4 : 2} />
                 ) : typeof window.WrTxnTickerList === 'function' ? (
                     /* Rows live in the shared widget (js/widgets/txn-ticker.js) so the
                        Free Agency ticker is a direct lift of this one. Tapping a row
@@ -1259,11 +1263,12 @@ function DashboardPanel({
                                 style={{ color: G, fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer' }}>See all {all.length} →</span>)
                             : <span style={{ color: S, fontSize: '0.78rem', opacity: 0.7 }}>{all.length} total</span>}
                         <button type="button" onClick={() => setTxnDetail(null)} aria-label="Close"
-                            style={{ marginLeft: 'auto', background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: W, cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: '5px 10px' }}>✕</button>
+                            style={{ minHeight: '44px', minWidth: '44px', marginLeft: 'auto', background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: W, cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: '5px 10px' }}>✕</button>
                     </div>
                     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '10px 14px' }}>
+                        <window.WrTxnFeedStatus status={transactionStatus} onRetry={retryTransactions} retrying={transactionRetrying} />
                         {txns.length === 0 ? (
-                            <div style={{ color: S, fontSize: '0.85rem', padding: '20px', textAlign: 'center' }}>No transactions yet.</div>
+                            <div style={{ color: S, fontSize: '0.85rem', padding: '20px', textAlign: 'center' }}>{transactionStatus ? (transactionStatus.status === 'ready' ? window.App.TransactionFeed.emptyMessage(transactionStatus) : 'Trade history is not confirmed.') : 'No transactions yet.'}</div>
                         ) : txns.map((txn, ti) => (
                             <div key={ti} style={{ padding: '11px 0', borderBottom: ti === txns.length - 1 ? 'none' : '1px solid var(--ov-3, rgba(255,255,255,0.06))' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px', flexWrap: 'wrap' }}>

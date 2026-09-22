@@ -1,0 +1,13 @@
+[ESPN] platform-provider.js not loaded — provider will not be registered
+PASS actualMapperToTickerOnlyPresentsExecutedHistory
+[ESPN] platform-provider.js not loaded — provider will not be registered
+PASS actualTradeCenterReceivesAndSendsMappedAssets
+PASS pendingRowsCannotPassAnExecutedFeedBoundary
+PASS unavailableIsPublishedWithoutForeignHistory
+PASS readyStaleAndConfirmedEmptyKeepDifferentMeaning
+PASS wrongMissingOrMalformedMetadataCannotPublishRows
+PASS nonEspnHistoryAndRowsRemainCompatible
+PASS actualStatusUiNeverCallsOutageEmpty
+PASS actualRecoveryLoaderSkipsUnrelatedPrivateFollowups
+PASS retryIsSingleFlightAndCannotStartForAnotherAccount
+10 actual transaction caller/UI groups; 0 failed

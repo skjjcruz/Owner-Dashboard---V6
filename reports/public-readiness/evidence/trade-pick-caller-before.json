@@ -1,0 +1,40 @@
+{
+  "source": "80933bb:js/trade-calc.js",
+  "cases": [
+    {
+      "name": "redraft local builder creates three years",
+      "actual": 48,
+      "expected": 16
+    },
+    {
+      "name": "actual caller caps redraft then creates three years",
+      "actual": 21,
+      "expected": 16
+    },
+    {
+      "name": "completed redraft receives future rights",
+      "actual": 48,
+      "expected": 0
+    },
+    {
+      "name": "missing ownership invents complete original ownership",
+      "actual": 12,
+      "expected": "unavailable"
+    },
+    {
+      "name": "unknown recipient silently retains original ownership",
+      "actual": 12,
+      "expected": "unavailable"
+    },
+    {
+      "name": "foreign league ownership moves current rights",
+      "actual": 11,
+      "expected": 12
+    },
+    {
+      "name": "consumed current slot remains because caller has no progress input",
+      "actual": 12,
+      "expected": 11
+    }
+  ]
+}

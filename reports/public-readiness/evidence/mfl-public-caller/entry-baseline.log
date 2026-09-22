@@ -1,0 +1,165 @@
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS explicitTeamSaveRetainsExactTargetAndOwner
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS reopensOwnedSelectionWithoutGlobalStateOrCloudWrite
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS unknownLegacyPointerIsPreservedForExplicitReconnect
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS changedPendingFlatPointerCannotMixTargets
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS changedAccountViewAndCancelRejectLateResponses
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS cloudBodyTimeoutPreservesDeviceAndNeverClaimsSynced
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS sameTabAccountSwitchRemovesPreviouslyShownTeams
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS standaloneConnectionUsesOwnedCanonicalSaveAndRollback
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+FAIL allEntryPathsRequireTheMountedAccountAndSavedTeam AssertionError [ERR_ASSERTION]: cardaccount
++ actual - expected ... Lines skipped
+
++ {
++   _availability: {
++     copies: 1,
++     rosterCount: {
++       mfl_101: 1
++     }
++   },
++   _mfl: true,
++   _mflDraftKind: '',
++   _mflDraftLimitHours: '',
++   _mflDraftPlayerPool: '',
++   _mflDraftTimer: '',
++   _mflFranchiseId: '0001',
++   _mflLeagueId: '12345',
++   _mflLockout: '',
++   _platformCreds: {
++     _mflOwner: 'app:account-a',
++     apiKey: null,
++     franchiseId: '0001',
++     leagueId: '12345',
++     year: '2025'
++   },
++   _source: 'mfl',
++   drafts: [],
++   id: 'mfl_12345_2025',
++   league_id: 'mfl_12345_2025',
++   losses: 0,
++   name: 'Controlled MFL',
++   roster_positions: [
++     'QB',
++     'BN'
++   ],
++   rosters: [
++     {
++       _mflPlayerIds: {
++         mfl_101: '101'
++       },
++       _owner_name: 'Fixture One',
++       _team_abbrev: '',
++       _team_name: 'Fixture One',
++       owner_id: '0001',
++       players: [
++         'mfl_101'
++       ],
++       reserve: [],
++       roster_id: '0001',
++       settings: {
++         fpts: 0,
++         fpts_against: 0,
++         fpts_against_decimal: 0,
+...
+- null
+...
+    at allEntryPathsRequireTheMountedAccountAndSavedTeam (/Users/jacobc/Projects/warroom-readiness-public-mfl-caller/tests/public-mfl-caller.cjs:13:800)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-caller/tests/public-mfl-caller.cjs:24:74
+[MFL] platform-provider.js not loaded — provider will not be registered
+FAIL observedAccountTransitionClosesTheAlreadyOpenedMflRoom AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected ... Lines skipped
+
++ {
++   _availability: {
++     copies: 1,
++     rosterCount: {
++       mfl_101: 1
++     }
++   },
++   _mfl: true,
++   _mflDraftKind: '',
++   _mflDraftLimitHours: '',
++   _mflDraftPlayerPool: '',
++   _mflDraftTimer: '',
++   _mflFranchiseId: '0001',
++   _mflLeagueId: '12345',
++   _mflLockout: '',
++   _platformCreds: {
++     _mflOwner: 'app:account-a',
++     apiKey: null,
++     franchiseId: '0001',
++     leagueId: '12345',
++     year: '2025'
++   },
++   _source: 'mfl',
++   drafts: [],
++   id: 'mfl_12345_2025',
++   league_id: 'mfl_12345_2025',
++   losses: 0,
++   name: 'Controlled MFL',
++   roster_positions: [
++     'QB',
++     'BN'
++   ],
++   rosters: [
++     {
++       _mflPlayerIds: {
++         mfl_101: '101'
++       },
++       _owner_name: 'Fixture One',
++       _team_abbrev: '',
++       _team_name: 'Fixture One',
++       owner_id: '0001',
++       players: [
++         'mfl_101'
++       ],
++       reserve: [],
++       roster_id: '0001',
++       settings: {
++         fpts: 0,
++         fpts_against: 0,
++         fpts_against_decimal: 0,
+...
+- null
+...
+    at observedAccountTransitionClosesTheAlreadyOpenedMflRoom (/Users/jacobc/Projects/warroom-readiness-public-mfl-caller/tests/public-mfl-caller.cjs:14:332)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-caller/tests/public-mfl-caller.cjs:24:74
+[MFL] platform-provider.js not loaded — provider will not be registered
+FAIL laterRenderCannotMountAnOldAccountRoom AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  assert(start>0)
+
+    at laterRenderCannotMountAnOldAccountRoom (/Users/jacobc/Projects/warroom-readiness-public-mfl-caller/tests/public-mfl-caller.cjs:15:540)
+    at async /Users/jacobc/Projects/warroom-readiness-public-mfl-caller/tests/public-mfl-caller.cjs:24:74
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS scopeRetirementIsSticky
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS duplicateReadAndTeamClickDoNotDuplicateCloudWrite
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS delayedLegacyCloudReadCannotWriteAcrossAccount
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS cloudSaveRequiresExactAckAndPreservesDeviceConnection
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS storageFailureKeepsPickerAndAllowsRetry
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS wrongFranchiseIsVisibleAndNoImplicitOwnerIsSelected
+[MFL] platform-provider.js not loaded — provider will not be registered
+PASS providerFailureIsNotSavedAndRetryWorks
+18 actual MFL caller groups; 3 failed

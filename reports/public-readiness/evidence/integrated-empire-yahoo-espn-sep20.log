@@ -1,0 +1,22 @@
+
+> owner-dashboard-v6@1.0.0 test:espn-transactions
+> node tests/espn-transaction-feed.cjs && node tests/espn-transaction-browser.cjs
+
+[ESPN] platform-provider.js not loaded — provider will not be registered
+(node:11415) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS actualMapperToTickerOnlyPresentsExecutedHistory
+[ESPN] platform-provider.js not loaded — provider will not be registered
+PASS actualTradeCenterReceivesAndSendsMappedAssets
+PASS pendingRowsCannotPassAnExecutedFeedBoundary
+PASS unavailableIsPublishedWithoutForeignHistory
+PASS readyStaleAndConfirmedEmptyKeepDifferentMeaning
+PASS wrongMissingOrMalformedMetadataCannotPublishRows
+PASS nonEspnHistoryAndRowsRemainCompatible
+PASS actualStatusUiNeverCallsOutageEmpty
+PASS actualRecoveryLoaderSkipsUnrelatedPrivateFollowups
+PASS retryIsSingleFlightAndCannotStartForAnotherAccount
+10 actual transaction caller/UI groups; 0 failed
+(node:11416) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+[{"viewport":{"width":320,"height":740},"requests":12,"checks":["unavailable differs from empty","reachable44px retry","actual provider maps owners and player IDs","failed refresh retains labeled stale rows","confirmed empty retry replaces stale rows","transaction detail opens and closes","foreign LI omitted","reload has no false cached success","no overflow"],"level":"actual provider, consumer publication block, retry callback and ticker; surrounding league shell fixture"},{"viewport":{"width":390,"height":844},"requests":12,"checks":["unavailable differs from empty","reachable44px retry","actual provider maps owners and player IDs","failed refresh retains labeled stale rows","confirmed empty retry replaces stale rows","transaction detail opens and closes","foreign LI omitted","reload has no false cached success","no overflow"],"level":"actual provider, consumer publication block, retry callback and ticker; surrounding league shell fixture"},{"viewport":{"width":844,"height":390},"requests":12,"checks":["unavailable differs from empty","reachable44px retry","actual provider maps owners and player IDs","failed refresh retains labeled stale rows","confirmed empty retry replaces stale rows","transaction detail opens and closes","foreign LI omitted","reload has no false cached success","no overflow"],"level":"actual provider, consumer publication block, retry callback and ticker; surrounding league shell fixture"}]

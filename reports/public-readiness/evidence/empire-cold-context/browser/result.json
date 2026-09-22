@@ -1,0 +1,70 @@
+{
+  "shared": "/Users/jacobc/Projects/dhq-shared-readiness-integrated",
+  "modules": [
+    "storage.js",
+    "dhq-core.js",
+    "pick-value-model.js",
+    "dhq-providers.js",
+    "points-ledger.js",
+    "one-brain.js",
+    "dhq-engine.js",
+    "intelligence-context.js",
+    "team-assess.js"
+  ],
+  "checks": [
+    {
+      "viewport": {
+        "width": 320,
+        "height": 740
+      },
+      "checks": [
+        "NFL context outage stays unavailable",
+        "retry calculates actual cold engine and assessments per league",
+        "different scoring produces different QB values and exposed mean",
+        "active S and LI unchanged",
+        "correct league handoff",
+        "reload works without foreground engine",
+        "account replacement cancels pending context",
+        "no horizontal overflow or header collision; narrow back control44px"
+      ],
+      "externalWrites": 0,
+      "scope": "Actual public UI and canonical modules; controlled provider and account fixtures, not a live league."
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "checks": [
+        "NFL context outage stays unavailable",
+        "retry calculates actual cold engine and assessments per league",
+        "different scoring produces different QB values and exposed mean",
+        "active S and LI unchanged",
+        "correct league handoff",
+        "reload works without foreground engine",
+        "account replacement cancels pending context",
+        "no horizontal overflow or header collision; narrow back control44px"
+      ],
+      "externalWrites": 0,
+      "scope": "Actual public UI and canonical modules; controlled provider and account fixtures, not a live league."
+    },
+    {
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "checks": [
+        "NFL context outage stays unavailable",
+        "retry calculates actual cold engine and assessments per league",
+        "different scoring produces different QB values and exposed mean",
+        "active S and LI unchanged",
+        "correct league handoff",
+        "reload works without foreground engine",
+        "account replacement cancels pending context",
+        "no horizontal overflow or header collision; narrow back control44px"
+      ],
+      "externalWrites": 0,
+      "scope": "Actual public UI and canonical modules; controlled provider and account fixtures, not a live league."
+    }
+  ]
+}

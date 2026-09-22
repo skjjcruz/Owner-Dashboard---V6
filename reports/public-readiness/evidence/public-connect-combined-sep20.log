@@ -1,0 +1,26 @@
+
+> owner-dashboard-v6@1.0.0 test:connect
+> node tests/public-connect.cjs && node tests/public-connect-browser.cjs
+
+PASS failedSignOutCanRetry
+PASS unhealthySessionsCannotConnect
+PASS guestRouting
+PASS signOutClearsConnection
+PASS concurrentPlatforms
+PASS changedLegacyBinding
+PASS duplicateSubmission
+PASS changedAccount
+PASS signedOut
+PASS malformedIdentity
+PASS saveFailure
+PASS staleSignOut
+PASS requestTimeoutAndRetry
+PASS exactMflInput
+PASS mflFailureThenRetry
+PASS partialEspnCookies
+PASS privateEspn
+PASS pendingEnterAndLateNavigation
+{"viewport":{"width":320,"height":740},"checks":["reachable labeled controls","no overflow","failed provider retry preserves input","duplicate Enter guarded","real timeout on320","stale A response preserves B","private ESPN fixture uses proxy and session-only cookies","completed connection remains current","save and reopen preserve provider choices"],"evidence":"local actual page with isolated provider fixtures and destination fixture"}
+{"viewport":{"width":390,"height":844},"checks":["reachable labeled controls","no overflow","failed provider retry preserves input","duplicate Enter guarded","real timeout on320","stale A response preserves B","private ESPN fixture uses proxy and session-only cookies","completed connection remains current","save and reopen preserve provider choices"],"evidence":"local actual page with isolated provider fixtures and destination fixture"}
+{"viewport":{"width":844,"height":390},"checks":["reachable labeled controls","no overflow","failed provider retry preserves input","duplicate Enter guarded","real timeout on320","stale A response preserves B","private ESPN fixture uses proxy and session-only cookies","completed connection remains current","save and reopen preserve provider choices"],"evidence":"local actual page with isolated provider fixtures and destination fixture"}
+{"viewport":{"width":390,"height":430},"checks":["reachable labeled controls","no overflow","failed provider retry preserves input","duplicate Enter guarded","real timeout on320","stale A response preserves B","private ESPN fixture uses proxy and session-only cookies","completed connection remains current","save and reopen preserve provider choices"],"evidence":"local actual page with isolated provider fixtures and destination fixture"}

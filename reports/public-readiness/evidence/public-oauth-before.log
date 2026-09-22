@@ -1,0 +1,32 @@
+FAIL delayedOAuthCannotOverwriteManualSignIn: Expected values to be strictly equal:
+
+'a' !== 'b'
+
+FAIL failedManualAttemptSupersedesBackgroundRestore: Expected values to be strictly equal:
++ actual - expected
+
++ {
++   token: 'header.eyJleHAiOjE3ODk5MjYyNjAsImFwcF9tZXRhZGF0YSI6eyJ1c2VyX2lkIjoiYSJ9fQ.signature',
++   user: {
++     displayName: 'a@example.invalid',
++     email: 'a@example.invalid',
++     id: 'a',
++     tier: 'free'
++   }
++ }
+- null
+
+FAIL delayedRefreshFailureCannotClearNewAccount: Cannot read properties of null (reading 'user')
+FAIL freshOAuthFailureCannotClaimCachedAccount: Expected values to be strictly equal:
++ actual - expected
+
++ 'connect-sleeper.html'
+- ''
+
+FAIL failedRefreshPreservesRecoverableSession: Expected values to be strictly deep-equal:
++ actual - expected
+
++ null
+- {
+-   token: 'header.eyJleHAiOjE3ODk5MjYyNjAsImFwcF9tZXRhZGF0YSI6eyJ1c2VyX2lkIjoiYSJ9fQ.signature'
+- }

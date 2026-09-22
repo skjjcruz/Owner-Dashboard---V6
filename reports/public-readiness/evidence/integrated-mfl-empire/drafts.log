@@ -1,0 +1,35 @@
+
+> owner-dashboard-v6@1.0.0 test:mfl-drafts
+> node tests/mfl-draft-context.cjs && node tests/mfl-draft-browser.cjs
+
+(node:28299) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS ownedCredentialsPreserveViewedLeagueDespiteForeignGlobalState
+PASS accountBCannotUseSavedAKeyOrCard
+PASS unknownSavedOwnerCannotBecomeAnExplicitPrivateKey
+PASS selectedYearAndTeamMustAgreeBeforeRequest
+PASS selectedCardMutationDuringAwaitIsStickyAndCannotPublish
+PASS lateHeaderAndRoomResponsesCannotPublishAfterAccountSwitch
+PASS keyTeamStorageAndViewChangesFenceHeldResponses
+PASS unownedGlobalFallbackIsNeverRetaggedAfterOutage
+PASS helperRejectsWrongMappedIdentity
+PASS scopeInvalidationStaysRetiredAfterOriginalBytesReturn
+PASS liveMirrorUsesOwnedKeyAndExactDraftUnit
+PASS malformedOrForeignAccountLiveDraftStopsBeforeTransport
+PASS actualCommandCenterOldMountCannotStartNewAccountMirror
+PASS actualCommandCenterCurrentMountDispatchesMappedPicksAndScopedCleanup
+PASS oldCleanupAndRejectedEntryCannotStopReplacementMirror
+PASS mirrorRequiresTheExplicitViewedLeagueToMatchDraftId
+PASS stoppedMirrorCannotEmitHeldPicksOrStatus
+PASS replacementRunKeepsItsOwnCursorEvenWhenOldRequestFinishesLast
+PASS slowPollDoesNotOverlapAndCanPollAfterSuccess
+PASS accountSwitchDuringLiveReadStopsWithoutPublishing
+PASS onStatusReplacementCannotInvokeOldPickCallback
+PASS sleeperStoppedResponseAlsoCannotCorruptReplacementRun
+PASS unchangedReconcilerRecoversMissingPicksWithoutSkippingThem
+23 actual MFL draft groups; 0 failed
+(node:28300) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS Chrome actual header/room effects + mirror outage, explicit retry and mapped picks
+PASS Chrome A response after B cannot publish or reuse the owned A key on remount
+PASS Chrome stopped read cannot emit; a fresh run mirrors the pick once

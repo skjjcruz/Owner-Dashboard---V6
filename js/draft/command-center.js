@@ -290,6 +290,10 @@
     }
 
     function DraftCommandCenter({ playersData, myRoster, currentLeague, draftRounds: propRounds, forcedMode, autoStartLiveToken }) {
+        const liveAccountRef = React.useRef(window.App?.PublicPortfolio?.capture());
+        const liveViewKey = [currentLeague?.league_id, currentLeague?.id, currentLeague?.season, currentLeague?._mflFranchiseId].join(':');
+        const liveViewRef = React.useRef(liveViewKey);
+        liveViewRef.current = liveViewKey;
         const stateFns = window.DraftCC.state;
 
         // Phase 5+: mount-time fetch for the league's drafts so upcomingSettings
@@ -896,6 +900,8 @@
             if (state.phase !== 'drafting') return;
             if (!state.sleeperDraftId) return;
             if (!window.DraftCC.liveSync) return;
+            const isCurrent = () => window.App?.PublicPortfolio?.current(liveAccountRef.current) && liveViewRef.current === liveViewKey;
+            if (!isCurrent()) return;
 
             const normPos = window.App?.normPos || (p => p);
             const getDHQ = (pid) => window.App?.LI?.playerScores?.[pid] || 0;
@@ -908,7 +914,7 @@
                 .map(p => p.sleeperPickNo ? ('no:' + p.sleeperPickNo) : null)
                 .filter(Boolean);
 
-            window.DraftCC.liveSync.start(state.sleeperDraftId, (sleeperPicks, snapshot) => {
+            const stopLiveSync = window.DraftCC.liveSync.start(state.sleeperDraftId, (sleeperPicks, snapshot) => {
                 const active = liveStateRef.current || state;
                 const activePlayersData = window.S?.players || {};
                 const mapped = (sleeperPicks || []).map(sleeperPick => {
@@ -965,6 +971,8 @@
             }, {
                 initialPickNo,
                 seenPickKeys,
+                league: currentLeague,
+                isCurrent,
                 onStatus: status => {
                     // Capture mid-draft pick trades. Only push to state when the set
                     // actually changes, so we don't re-render every 5s poll.
@@ -994,12 +1002,8 @@
                 },
             });
 
-            return () => {
-                if (window.DraftCC.liveSync?.isRunning?.()) {
-                    window.DraftCC.liveSync.stop();
-                }
-            };
-        }, [state.mode, state.phase, state.sleeperDraftId, state.userRosterId]);
+            return () => { stopLiveSync?.(); };
+        }, [state.mode, state.phase, state.sleeperDraftId, state.userRosterId, liveViewKey]);
 
         // ── Live-Sync ownership refresh ────────────────────────────────
         // When the live poll surfaces new pick trades, draftMeta.pickOwnership

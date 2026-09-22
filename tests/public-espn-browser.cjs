@@ -1,0 +1,43 @@
+'use strict';
+const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), http = require('node:http');
+const { chromium } = require('@playwright/test');
+const root = path.resolve(__dirname, '..'), out = process.env.ESPN_BROWSER_EVIDENCE || path.join(root, 'tmp/public-espn-browser');
+fs.mkdirSync(out, { recursive: true });
+const jwt = id => 'header.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now()/1000)+3600, sub: id, app_metadata: { user_id: id } })).toString('base64url') + '.fixture';
+const raw = { id: 123, seasonId: 2025, settings: { name: 'Controlled ESPN', size: 2, scoringSettings: { scoringItems: [{ statId: 53, points: 1 }] }, rosterSettings: { lineupSlotCounts: { 0: 1, 20: 1 } } }, members: [{ id: 'owner-a', displayName: 'Owner A' }, { id: 'owner-b', displayName: 'Owner B' }],
+    teams: [1,2].map(id => ({ id, primaryOwner: id === 1 ? 'owner-a' : 'owner-b', location: 'Fixture', nickname: String(id), record: { overall: { wins: id, losses: 3-id } }, roster: { entries: [] } })) };
+const styles = [...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m => m[0]).join('\n');
+const appOverride = process.env.PUBLIC_ESPN_APP_SOURCE ? require('@babel/standalone').transform(fs.readFileSync(process.env.PUBLIC_ESPN_APP_SOURCE, 'utf8'), { presets: [['react', { runtime: 'classic' }]], sourceType: 'script' }).code : null;
+const bootstrap = `const {useState,useEffect,useMemo,useRef,useCallback}=React;
+window.App={WR_KEYS:{LAST_LEAGUE_ID:'fixture-last-id',LAST_LEAGUE_NAME:'fixture-last-name',DEMO_MODE:'fixture-demo'},WrStorage:{get:k=>localStorage.getItem(k),set:(k,v)=>localStorage.setItem(k,v)}};
+window.S={platform:'sleeper',currentLeagueId:'active-original',rosters:['preserve'],players:{}};
+window.OD={getCurrentUsername:()=>null};window.wrLog=()=>{};window.getUserTier=()=> 'free';window.ErrorBoundary=p=>p.children;
+window.LeagueDetail=p=>{window.__handoff={id:p.league.id,team:p.league._espnTeamId,owner:App.EspnHub.selectedRoster(p.league,p.league.rosters)?.owner_id,season:p.league.season,tab:p.activeTab};return React.createElement('div',null,React.createElement('p',{id:'handoff'},JSON.stringify(window.__handoff)),React.createElement('button',{onClick:p.onBack},'Back to hub'));};`;
+const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${styles}</head><body><div id="root"></div><script src="/vendor/react.production.min.js"></script><script src="/vendor/react-dom.production.min.js"></script><script>${bootstrap}</script><script src="/js/theme.js"></script><script src="/reconai-shared/espn-api.js"></script><script src="/js/espn-hub.js"></script><script src="/js/public-portfolio.js"></script><script src="/dist-preview/compiled/js/app.js"></script></body></html>`;
+(async () => { let browser, server; const results = []; try {
+    server = http.createServer((req,res) => { const pathname = new URL(req.url,'http://localhost').pathname; if (pathname === '/fixture.html') { res.setHeader('Content-Type','text/html; charset=utf-8'); return res.end(html); } if (appOverride && pathname === '/dist-preview/compiled/js/app.js') { res.setHeader('Content-Type','application/javascript; charset=utf-8'); return res.end(appOverride); } const file = path.join(root, pathname); if (!file.startsWith(root + '/') || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.statusCode=404; return res.end(); } res.setHeader('Content-Type', file.endsWith('.js') ? 'application/javascript; charset=utf-8' : file.endsWith('.css') ? 'text/css' : 'image/png'); res.end(fs.readFileSync(file)); });
+    await new Promise(r=>server.listen(0,'127.0.0.1',r)); const origin='http://127.0.0.1:'+server.address().port;
+    browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});
+    for (const viewport of [{width:320,height:740},{width:390,height:844},{width:844,height:390}]) {
+        const context=await browser.newContext({viewport,hasTouch:true,isMobile:true}); let fail=true, wait=false, release, calls=0;
+        await context.addInitScript(session=>{if(!sessionStorage.getItem('fixture-boot')){localStorage.setItem('fw_session_v1',JSON.stringify(session));localStorage.setItem('espn_league_id','123');localStorage.setItem('espn_year','2025');sessionStorage.setItem('fixture-boot','1');}}, {token:jwt('account-a'),user:{id:'account-a'}});
+        await context.route('**/*', async route=> { const req=route.request(), url=new URL(req.url()); if(url.origin===origin) return route.continue(); if(url.hostname==='lm-api-reads.fantasy.espn.com'){assert.equal(req.method(),'GET');assert.match(url.pathname,/\/seasons\/2025\//);calls++;if(wait)await new Promise(r=>release=r);return route.fulfill({status:fail?503:200,headers:{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Credentials':'true'},contentType:'application/json',body:JSON.stringify(fail?{error:'fixture outage'}:raw)}).catch(()=>{});} return route.abort(); });
+        const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+        await page.goto(origin+'/fixture.html#league=espn_123_2025&tab=analytics');
+        if (process.env.PUBLIC_ESPN_BASELINE === '1') { await page.waitForTimeout(1500); await page.screenshot({path:path.join(out,'baseline-missing-connection.png'),fullPage:true}); assert.equal(calls,0); assert.equal(await page.getByRole('region',{name:'ESPN connection'}).count(),0); fs.writeFileSync(path.join(out,'baseline.json'),JSON.stringify({calls,missingEspnRecovery:true,errors})); console.log('REPRODUCED: saved ESPN pointer produces no fetch, no recovery and no team handoff'); await context.close(); break; }
+        await page.getByRole('alert').filter({hasText:/ESPN/}).waitFor();assert.equal(await page.getByRole('button',{name:'Fixture 2',exact:true}).count(),0);
+        fail=false;await page.getByRole('button',{name:'Retry ESPN',exact:true}).tap();await page.getByRole('button',{name:'Fixture 2',exact:true}).waitFor();
+        assert.equal(await page.getByText('Loading more leagues…',{exact:true}).count(),0,'completed ESPN load must not show the never-started Sleeper loader');
+        assert((await page.evaluate(()=>document.documentElement.scrollWidth))<=viewport.width+1);assert.equal(await page.evaluate(()=>S.currentLeagueId),'active-original');
+        await page.screenshot({path:path.join(out,viewport.width+'-team-choice.png'),fullPage:true});
+        await page.getByRole('button',{name:'Fixture 2',exact:true}).tap();await page.locator('#handoff').waitFor();
+        assert.deepEqual(await page.evaluate(()=>window.__handoff),{id:'espn_123_2025',team:'2',owner:'owner-b',season:'2025',tab:'analytics'});
+        await page.getByRole('button',{name:'Back to hub'}).tap();await page.reload();await page.getByRole('button',{name:'Open Fixture 2',exact:true}).waitFor();
+        await page.getByRole('button',{name:'Open Fixture 2',exact:true}).focus();await page.keyboard.press('Enter');await page.locator('#handoff').waitFor();assert.equal((await page.evaluate(()=>window.__handoff)).team,'2');
+        await page.getByRole('button',{name:'Back to hub'}).tap();wait=true;await page.getByRole('button',{name:'Refresh ESPN',exact:true}).tap();await page.waitForFunction(()=>document.body.textContent.includes('Loading your league and teams'));
+        await page.evaluate(session=>localStorage.setItem('fw_session_v1',JSON.stringify(session)),{token:jwt('account-b'),user:{id:'account-b'}});release();await page.getByRole('alert').filter({hasText:/changed/}).waitFor();assert.equal(await page.evaluate(()=>S.currentLeagueId),'active-original');
+        assert.equal(await page.getByRole('button',{name:'Open Fixture 2',exact:true}).count(),0,'old account league is removed after identity invalidation');
+        assert.equal(errors.length,0,errors.join('\n'));results.push({viewport,calls,checks:['failed load and retry','saved season','explicit team and deep-link handoff','selection persists through reload','keyboard league entry','late account response rejected','active league bridge preserved','no overflow'],limits:'actual hub and provider mapper; LeagueDetail render is a handoff fixture'});await context.close();
+    }
+    fs.writeFileSync(path.join(out,'result.json'),JSON.stringify(results,null,2));console.log(JSON.stringify(results));
+} finally { await browser?.close(); await new Promise(r=>server?server.close(r):r()); } })().catch(e=>{console.error(e.stack);process.exitCode=1;});
