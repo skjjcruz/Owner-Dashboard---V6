@@ -82,7 +82,7 @@
         // (restored 2026-08-21 — same line the pre-swap page carried; MFL-only
         // guests count too, 2026-08-31).
         var ga = null; try { ga = JSON.parse(localStorage.getItem('od_auth_v1') || 'null'); } catch (e) {}
-        if (localStorage.getItem('wr_guest_v1') === '1' && ((ga && ga.username) || localStorage.getItem('mfl_league_id'))) { window.location.replace('index.html'); return; }
+        if (localStorage.getItem('wr_guest_v1') === '1' && ((ga && ga.username) || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id'))) { window.location.replace('index.html'); return; }
         // Guest mid-setup (flag set, no league yet): resume at the connect
         // page instead of stranding them on the marketing page. An app
         // relaunch between tapping Guest and connecting a league used to
@@ -95,7 +95,8 @@
         var legacy  = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
         var onboarded = (profile && (profile.onboardingComplete === true || profile.sleeperUsername))
           || (legacy && legacy.username)
-          || localStorage.getItem('mfl_league_id');
+          || localStorage.getItem('mfl_league_id')
+          || localStorage.getItem('espn_league_id');
         // Brand-new accounts ALWAYS start at the connect-your-leagues page —
         // even on a device where a previous account already finished
         // onboarding. That progress is stored per DEVICE, so without this
@@ -114,6 +115,9 @@
           try { localStorage.removeItem('mfl_league_id'); } catch (e) {}
           try { localStorage.removeItem('mfl_year'); } catch (e) {}
           try { localStorage.removeItem('mfl_franchise_id'); } catch (e) {}
+          try { localStorage.removeItem('espn_league_id'); } catch (e) {}
+          try { localStorage.removeItem('espn_year'); } catch (e) {}
+          try { localStorage.removeItem('espn_team_id'); } catch (e) {}
           window.location.replace('connect-sleeper.html'); return;
         }
         if (!onboarded) { window.location.replace('connect-sleeper.html'); return; }
@@ -624,6 +628,10 @@
       try { localStorage.removeItem('mfl_league_id'); } catch {}
       try { localStorage.removeItem('mfl_year'); } catch {}
       try { localStorage.removeItem('mfl_franchise_id'); } catch {}
+      try { localStorage.removeItem('espn_league_id'); } catch {}
+      try { localStorage.removeItem('espn_year'); } catch {}
+      try { localStorage.removeItem('espn_team_id'); } catch {}
+      try { sessionStorage.removeItem('espn_s2'); sessionStorage.removeItem('espn_swid'); } catch {}
     }
     const FW_API_BASE = SUPABASE_URL + '/functions/v1';
 
@@ -691,7 +699,7 @@
         const profile = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
         const legacy = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
         if (profile?.onboardingComplete === true || profile?.sleeperUsername || legacy?.username
-          || localStorage.getItem('mfl_league_id')) return destForUser();
+          || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id')) return destForUser();
       } catch {}
       return CONNECT_URL;
     }
@@ -1027,7 +1035,7 @@
       mfl: { ask: 'Type your MFL league ID.', placeholder: 'Your MFL league ID', mode: 'numeric', auto: 'off',
              hint: 'Your league ID is the number after <b>L=</b> in your MFL web address.' },
       espn: { ask: 'Type your ESPN league ID.', placeholder: 'Your ESPN league ID', mode: 'numeric', auto: 'off',
-              hint: 'Your league ID is the number after <b>leagueId=</b> in your ESPN league\'s web address. Private leagues take one extra step.' }
+              hint: 'Your league ID is the number after <b>leagueId=</b> in your ESPN league\'s web address. Pasting the whole link works too. Private leagues take one extra step.' }
     };
     function say(msg) { note.textContent = msg; note.hidden = false; }
     function setPlatform(next) {
@@ -1056,7 +1064,10 @@
         v = v.replace(/^@/, '');
         if (!v) { say('Type your Sleeper username first. It is the name on your Sleeper profile, not your email.'); input.focus(); return; }
       } else {
-        v = v.replace(/\D/g, '');
+        // A pasted league link carries other numbers (the season, a team id),
+        // so take the league ID from its own key before stripping to digits.
+        var inLink = platform === 'mfl' ? v.match(/[?&]L=(\d+)/i) : v.match(/leagueId=(\d+)/i);
+        v = inLink ? inLink[1] : v.replace(/\D/g, '');
         if (!/^\d{3,12}$/.test(v)) {
           say(platform === 'mfl'
             ? 'Type your MFL league ID. It is the number after L= in your MFL web address, like 41208.'

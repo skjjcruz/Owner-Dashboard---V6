@@ -1881,7 +1881,9 @@
 
                 const myRosterData = currentLeague._mfl && currentLeague._mflFranchiseId
                     ? currentLeague.rosters.find(r => r.roster_id === currentLeague._mflFranchiseId)
-                    : currentLeague.rosters.find(r => r.owner_id === sleeperUserId);
+                    : currentLeague._espn && currentLeague._espnTeamId
+                        ? currentLeague.rosters.find(r => r.roster_id === currentLeague._espnTeamId)
+                        : currentLeague.rosters.find(r => r.owner_id === sleeperUserId);
                 setMyRoster(myRosterData);
 
                 // Compute standings immediately (no fetch needed)
@@ -2114,7 +2116,9 @@
             // Re-resolve myRosterData now that rosters may have changed
             const freshMyRoster = provider.id === 'mfl' && currentLeague._mflFranchiseId
                 ? rosters.find(r => r.roster_id === currentLeague._mflFranchiseId)
-                : rosters.find(r => r.owner_id === sleeperUserId) || myRosterData;
+                : provider.id === 'espn' && currentLeague._espnTeamId
+                    ? rosters.find(r => r.roster_id === currentLeague._espnTeamId)
+                    : rosters.find(r => r.owner_id === sleeperUserId) || myRosterData;
             if (freshMyRoster && freshMyRoster !== myRosterData) setMyRoster(freshMyRoster);
             const myRoster = freshMyRoster || myRosterData;
 

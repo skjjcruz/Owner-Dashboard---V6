@@ -870,6 +870,26 @@ test('front door: the one box hands what was typed to the connect page',
     }
   });
 
+test('espn: a connected ESPN league gets in, loads, and knows the team',
+  () => {
+    // Found 2026-09-25: an ESPN-only guest bounced forever between the app
+    // and the connect page (neither gate counted espn_league_id), and the app
+    // never reloaded the saved ESPN league at all.
+    const landing = fs.readFileSync(path.join(ROOT, 'landing.html'), 'utf8');
+    const connect = fs.readFileSync(path.join(ROOT, 'connect-sleeper.html'), 'utf8');
+    const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const app = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
+    const detail = fs.readFileSync(path.join(ROOT, 'js/league-detail.js'), 'utf8');
+    ok(index.includes("localStorage.getItem('espn_league_id')) ok = true"), 'app gate must let an ESPN-only guest in');
+    ok(connect.includes("|| localStorage.getItem('espn_league_id');"), 'connect gate must count an ESPN league as onboarded');
+    ok((landing.match(/localStorage\.getItem\('espn_league_id'\)/g) || []).length >= 3, 'landing gates must count an ESPN league');
+    ok(app.includes("localStorage.getItem('espn_league_id')") && app.includes('window.ESPN.fetchLeague('), 'app must reload the saved ESPN league on start');
+    ok(app.includes("_espnTeamId:") && detail.includes('currentLeague._espnTeamId'), 'the picked ESPN team must become My Team');
+    ok(connect.includes("localStorage.setItem('espn_team_id'") && connect.includes('id="espnTeams"'), 'connect page must ask which ESPN team is yours');
+    ok(connect.includes('id="espnHelp"') && connect.includes('Make League Viewable to Public'), 'private ESPN leagues must get the iPad-friendly way in');
+    ok(/leagueId=\(\\d\+\)/.test(connect) && /leagueId=\(\\d\+\)/.test(landing), 'a pasted ESPN link must yield the leagueId, not every digit in it');
+  });
+
 test('nfl scoreboard: production endpoint + failure backoff (contract)',
   () => {
     // The matchup/weather feed 404-ed in production for months: nothing ever
