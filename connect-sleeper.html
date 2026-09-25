@@ -157,6 +157,7 @@
     // sensitive is recorded.
     const ESPN_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl';
     const PROXY_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co/functions/v1/espn-proxy';
+    const MFL_PROXY_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co/functions/v1/mfl-proxy';
     const TABS = { sleeper: ['tabSleeper', 'paneSleeper', 'smSleeper', 'btnSleeper', 'sleeperName'], mfl: ['tabMfl', 'paneMfl', 'smMfl', 'btnMfl', 'mflLeagueId'], espn: ['tabEspn', 'paneEspn', 'smEspn', 'btnEspn', 'espnLeagueId'] };
     const NAMES = { sleeper: 'Sleeper', mfl: 'MFL', espn: 'ESPN' };
     const TRACK_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co/rest/v1/analytics_events';
@@ -322,8 +323,27 @@
       if (!leagueId) { showAlert('error', 'Enter your MFL league ID — the number after L= in your MFL web address.'); idInput.focus(); return; }
       btn.disabled = true; btn.textContent = 'Finding your league…';
       try {
-        const res = await fetch(`https://api.myfantasyleague.com/${encodeURIComponent(year)}/export?TYPE=league&L=${encodeURIComponent(leagueId)}&JSON=1`);
-        const data = res.ok ? await res.json() : null;
+        // MFL only lets its own site read its API from a browser, so a direct
+        // call from this page is always blocked — no MFL connect had ever
+        // succeeded here (found 2026-09-25). Ask through our server relay
+        // (the same mfl-proxy the app uses); fall back to a direct call only
+        // when the relay itself can't be reached.
+        const mflUrl = `https://api.myfantasyleague.com/${encodeURIComponent(year)}/export?TYPE=league&L=${encodeURIComponent(leagueId)}&JSON=1`;
+        let data = null;
+        let relayed = false;
+        try {
+          const pr = await fetch(MFL_PROXY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TRACK_KEY, 'apikey': TRACK_KEY },
+            body: JSON.stringify({ url: mflUrl }),
+          });
+          relayed = true;
+          data = pr.ok ? await pr.json() : null;
+        } catch (relayErr) { relayed = false; }
+        if (!relayed) {
+          const res = await fetch(mflUrl);
+          data = res.ok ? await res.json() : null;
+        }
         const leagueName = data && data.league && data.league.name;
         if (!leagueName) {
           showAlert('error', "We couldn't find that MFL league for " + year + '. Double-check the league ID (the L= number) and season.');
@@ -432,6 +452,29 @@
       if (id === 'sleeperName') connectSleeper();
       if (id === 'mflLeagueId' || id === 'mflYear') connectMfl();
     });
+
+    // ── Handoff from the one-page front door (owner ruling 2026-09-24) ──
+    // landing.html's one box leaves a one-time note of what the visitor
+    // typed (Sleeper username, MFL or ESPN league ID). Take it, open that
+    // platform, fill the box and connect — so nobody types it twice. When
+    // it connects, go straight in; when it doesn't, this page's own error
+    // shows with the value still in the box to fix.
+    (function takeFrontDoorHandoff() {
+      let h = null;
+      try {
+        h = JSON.parse(sessionStorage.getItem('dhq_connect_prefill') || 'null');
+        sessionStorage.removeItem('dhq_connect_prefill');
+      } catch (e) { h = null; }
+      if (!h || !h.value || !TABS[h.platform]) return;
+      if (h.ts && Date.now() - h.ts > 10 * 60 * 1000) return; // a stale note is ignored
+      const which = h.platform;
+      pick(which);
+      const input = document.getElementById(TABS[which][4]);
+      if (!input || input.disabled) return;
+      input.value = String(h.value).slice(0, 64);
+      const run = which === 'sleeper' ? connectSleeper : which === 'mfl' ? connectMfl : connectEspn;
+      Promise.resolve(run()).then(() => { if (linked[which]) enterApp(); }).catch(() => {});
+    })();
   </script>
 </body>
 </html>

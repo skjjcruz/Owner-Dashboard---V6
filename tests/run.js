@@ -854,6 +854,22 @@ test('guest lane: the whole loop survives (button, gates, connect page)',
     ok(connect.includes("localStorage.getItem('wr_guest_v1') !== '1'"), 'connect page must not patch an account profile for guests');
   });
 
+test('front door: the one box hands what was typed to the connect page',
+  () => {
+    // Owner ruling 2026-09-24: one box on landing.html (Sleeper username /
+    // MFL or ESPN league ID). It leaves a one-time note the connect page
+    // consumes to connect on its own, so nobody types it twice.
+    const landing = fs.readFileSync(path.join(ROOT, 'landing.html'), 'utf8');
+    const connect = fs.readFileSync(path.join(ROOT, 'connect-sleeper.html'), 'utf8');
+    ok(landing.includes("sessionStorage.setItem('dhq_connect_prefill'"), 'landing box must leave the handoff note');
+    ok(connect.includes("sessionStorage.getItem('dhq_connect_prefill'"), 'connect page must read the handoff note');
+    ok(connect.includes("sessionStorage.removeItem('dhq_connect_prefill')"), 'connect page must consume the note once');
+    ok(landing.includes('id="authSheet"') && landing.includes('id="auth"'), 'the sign-up sheet must carry the #auth form');
+    for (const id of ['authTitle', 'authSub', 'sleeperHint', 'btnJoin', 'btnGoogle', 'btnApple', 'toggleMode', 'forgotBtn', 'acctEmail', 'acctPassword', 'alertJoin', 'navSignin']) {
+      ok(landing.includes('id="' + id + '"'), 'landing must keep #' + id + ' for the sign-in handlers');
+    }
+  });
+
 test('nfl scoreboard: production endpoint + failure backoff (contract)',
   () => {
     // The matchup/weather feed 404-ed in production for months: nothing ever
@@ -1014,14 +1030,16 @@ test('no one-free-league gating remains in the league picker',
 test('landing copy advertises free on all leagues, not one',
   () => {
     // Owner ruling 2026-08-17: the marketing page dropped "free on Sleeper"
-    // claims entirely. The all-platforms line is now the kicker's
-    // "All your Sleeper and MFL teams in one place"; nothing may tie free
+    // claims entirely. The all-platforms line (see below) names every
+    // supported platform; nothing may tie free
     // to a single league or platform.
     const landing = fs.readFileSync(path.join(ROOT, 'landing.html'), 'utf8');
     ok(!/one Sleeper league/i.test(landing), 'landing must not say "one Sleeper league"');
     ok(!/Free — one league/i.test(landing), 'pricing note must not say "one league"');
     ok(!/free on Sleeper/i.test(landing), 'landing must not say "free on Sleeper"');
-    ok(/All your Sleeper and MFL teams in one place/i.test(landing), 'landing must carry the all-platforms kicker');
+    // Owner ruling 2026-09-24 (one-page front door): the all-platforms line
+    // is now the eyebrow "Built for Sleeper, MFL and ESPN leagues".
+    ok(/Built for Sleeper, MFL and ESPN leagues/i.test(landing), 'landing must carry the all-platforms line');
   });
 
 test('landing-pages.json copy advertises free on all leagues, not one',
