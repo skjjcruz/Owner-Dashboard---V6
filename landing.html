@@ -387,7 +387,7 @@
   }
 </style>
 <!-- Live update: reloads onto a new deploy at a safe moment (js/shared/live-update.js) -->
-<script src="js/shared/live-update.js?v=20260926lu1"></script>
+<script src="js/shared/live-update.js?v=20260926lu2"></script>
 </head>
 <body>
 <div class="brandwash" aria-hidden="true"></div>
@@ -1093,6 +1093,11 @@
     buttons.forEach(function (b) {
       b.addEventListener('click', function () { setPlatform(b.dataset.platform); input.focus(); });
     });
+    // Live update (js/shared/live-update.js): what's typed here is not saved
+    // until submit, and the focus guard stops covering it once the visitor
+    // taps away — hold the silent reload while the box has text. (The auth
+    // sheet is a modal, which already holds it while open.)
+    try { window.App.LiveUpdate.hold('landing-form', function () { return !!(input.value || '').trim(); }); } catch (e) { /* updater absent */ }
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var v = (input.value || '').trim();

@@ -590,7 +590,7 @@
         }
     </style>
 <!-- Live update: reloads onto a new deploy at a safe moment (js/shared/live-update.js) -->
-<script src="js/shared/live-update.js?v=20260926lu1"></script>
+<script src="js/shared/live-update.js?v=20260926lu2"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -1925,6 +1925,16 @@ function TradeCalculator() {
     const [tradePickIds,  setTradePickIds]  = useState({ A:[], B:[] });
     const [tradeFaab,     setTradeFaab]     = useState({ A:0, B:0 });
     const [tradeOwner,    setTradeOwner]    = useState({ A:null, B:null });
+    // Live update (js/shared/live-update.js): a half-built trade is in-memory
+    // only — hold the silent reload until the builder is cleared.
+    const luHoldTrade = tradeIds.A.length + tradeIds.B.length + tradePickIds.A.length + tradePickIds.B.length > 0
+        || tradeFaab.A > 0 || tradeFaab.B > 0;
+    useEffect(() => {
+        if (!luHoldTrade) return undefined;
+        const LU = () => window.App && window.App.LiveUpdate;
+        if (LU()) LU().hold('trade-builder');
+        return () => { if (LU()) LU().release('trade-builder'); };
+    }, [luHoldTrade]);
     const [searchText,    setSearchText]    = useState({ A:'', B:'' });
     const [showSearch,    setShowSearch]    = useState({ A:false, B:false });
     // Phase 3 — Grudge Tax

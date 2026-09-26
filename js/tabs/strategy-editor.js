@@ -114,6 +114,17 @@ function StrategyEditorTab({ currentLeague, myRoster, playersData, gmStrategy, s
     };
     const isCustom = draft.mode === 'custom';
 
+    // Live update (js/shared/live-update.js): unsaved strategy edits (sliders,
+    // presets, lists) live only in `draft` — hold the silent reload until Save
+    // or unmount.
+    const luHoldStrategy = JSON.stringify(draft) !== savedSnap;
+    React.useEffect(() => {
+        if (!luHoldStrategy) return undefined;
+        const LU = () => window.App && window.App.LiveUpdate;
+        if (LU()) LU().hold('strategy-editor');
+        return () => { if (LU()) LU().release('strategy-editor'); };
+    }, [luHoldStrategy]);
+
     const [syncStatus, setSyncStatus] = React.useState('idle'); // idle | saving | saved | error
     const [newSellRule, setNewSellRule] = React.useState('');
     const [untouchableSearch, setUntouchableSearch] = React.useState('');

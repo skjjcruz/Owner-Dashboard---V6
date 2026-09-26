@@ -180,6 +180,18 @@
         const [matesAccess, setMatesAccess] = React.useState(null); // Set of usernames with accounts
         const [giftLinks, setGiftLinks] = React.useState({}); // { username: { url, password } }
         const [giftingFor, setGiftingFor] = React.useState(null);
+        // Live update (js/shared/live-update.js): typed-but-unsaved form fields
+        // (a password change, a new display name) hold the silent reload until
+        // saved / cleared / closed — focus alone isn't enough once they tap away.
+        const _nameAtMount = React.useRef(initDisplayName || '');
+        const luHoldSettings = !!(currentPw || newPw || confirmPw)
+            || (displayName !== (initDisplayName || '') && displayName !== _nameAtMount.current);
+        React.useEffect(() => {
+            if (!luHoldSettings) return undefined;
+            const LU = () => window.App && window.App.LiveUpdate;
+            if (LU()) LU().hold('settings-form');
+            return () => { if (LU()) LU().release('settings-form'); };
+        }, [luHoldSettings]);
 
         // ── Phone tier (<768, iPhone program Phase 4) ──
         // WR.useViewport (js/shared/viewport.js) precedes the babel chain,

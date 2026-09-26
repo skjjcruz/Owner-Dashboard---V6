@@ -42,6 +42,15 @@ function ReportSubView({
     if (reportView === 'edit') { setPhEditStep(0); setPhEditOpen(true); }
   }, [reportView]);
 
+  // Live update (js/shared/live-update.js): the report being built/edited is
+  // unsaved until Save — hold the silent reload while the editor is open.
+  React.useEffect(() => {
+    if (reportView !== 'edit') return undefined;
+    const LU = () => window.App && window.App.LiveUpdate;
+    if (LU()) LU().hold('report-builder');
+    return () => { if (LU()) LU().release('report-builder'); };
+  }, [reportView]);
+
   function persistReports(next) { setReports(next); saveReportsToStorage(next); }
 
   function handleViewReport(report) {

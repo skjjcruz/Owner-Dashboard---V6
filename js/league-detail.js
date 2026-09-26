@@ -1688,6 +1688,16 @@
                 : [{ role: 'assistant', content: 'Ask me anything about your league, team, or players.' }];
         });
         const [reconInput, setReconInput] = useState('');
+        // Live update (js/shared/live-update.js): the thread itself is saved
+        // (LEAGUE_WR_KEYS.CHAT) and an answer in flight is guarded, but a typed,
+        // unsent question is not — hold the silent reload while one sits in the box.
+        const luHoldChat = !!reconInput.trim();
+        useEffect(() => {
+            if (!luHoldChat) return undefined;
+            const LU = () => window.App && window.App.LiveUpdate;
+            if (LU()) LU().hold('alex-chat-draft');
+            return () => { if (LU()) LU().release('alex-chat-draft'); };
+        }, [luHoldChat]);
 
         useEffect(() => {
             if (activeTab === 'analytics' && !analyticsData && window.App?.LI_LOADED) {

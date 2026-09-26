@@ -118,7 +118,7 @@
     }
   </style>
   <!-- Live update: reloads onto a new deploy at a safe moment (js/shared/live-update.js) -->
-  <script src="js/shared/live-update.js?v=20260926lu1"></script>
+  <script src="js/shared/live-update.js?v=20260926lu2"></script>
 </head>
 <body>
   <main class="card">
@@ -599,6 +599,20 @@
       } catch {}
       window.location.href = 'landing.html';
     }
+
+    // Live update (js/shared/live-update.js): once the visitor starts
+    // connecting, a silent reload would lose it — a typed ID or ESPN cookies
+    // (unsaved until Connect), a team picker waiting (the league is already
+    // stored, so the head check would drop them into the app with no team),
+    // or a platform linked but Enter not tapped (the rest of onboarding would
+    // be skipped). Hold until they go in.
+    try {
+      window.App.LiveUpdate.hold('connect', () => !!(mflPending || espnPending || Object.keys(linked).some(k => linked[k]) ||
+        ['sleeperName', 'mflLeagueId', 'espnLeagueId', 'espnS2', 'espnSwid'].some(id => {
+          const el = document.getElementById(id);
+          return el && !el.disabled && el.value.trim();
+        })));
+    } catch (e) { /* updater absent */ }
 
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;

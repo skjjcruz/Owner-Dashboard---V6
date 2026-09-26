@@ -757,6 +757,18 @@
         );
         const isDone = state.phase === 'complete';
 
+        // Live update (js/shared/live-update.js): a draft in progress (mock or
+        // live) is never reloaded out from under the user. The resume snapshot
+        // (saveToLocal) would restore it, but mid-pick timers, an open trade
+        // offer and the Alex stream would not survive — hold while drafting.
+        const luHoldDraft = state.phase === 'drafting';
+        React.useEffect(() => {
+            if (!luHoldDraft) return undefined;
+            const LU = () => window.App && window.App.LiveUpdate;
+            if (LU()) LU().hold('draft-in-progress');
+            return () => { if (LU()) LU().release('draft-in-progress'); };
+        }, [luHoldDraft]);
+
         // CPU auto-pick loop
         const cpuTimerRef = React.useRef(null);
         React.useEffect(() => {

@@ -956,6 +956,52 @@ test('live update: silent self-update — build id + version.json, every page po
     ok(lab.includes('fs.cpSync(DIST, LAB_DIR') && lab.includes("'version.json'"), 'Lab ships version.json');
   });
 
+test('live update: unsaved work holds the silent reload (QA 2026-09-26)',
+  () => {
+    // A reload keeps the URL + localStorage but wipes in-memory React state.
+    // Every screen whose work lives only in memory holds the update while it
+    // is dirty and releases it when applied / cleared / unmounted (effect
+    // cleanup). Plain pages register a predicate hold.
+    const holds = {
+      'js/tabs/lineup.js': 'gameday-lineup',
+      'js/trade-calc.js': 'trade-builder',
+      'trade-calculator.html': 'trade-builder',
+      'js/tabs/league-map.js': 'report-builder',
+      'js/tabs/strategy-editor.js': 'strategy-editor',
+      'js/settings.js': 'settings-form',
+      'js/tabs/trophy-room.js': 'trophy-room',
+      'js/league-detail.js': 'alex-chat-draft',
+      'js/draft/command-center.js': 'draft-in-progress',
+      'js/mock-draft.js': 'mock-draft',
+      'draft-warroom.html': 'draft-ai',
+      'free-agency.html': 'fa-target-form',
+    };
+    for (const [file, reason] of Object.entries(holds)) {
+      const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
+      ok(src.includes(".hold('" + reason + "')"), file + ' must hold live updates (' + reason + ')');
+      ok(src.includes(".release('" + reason + "')"), file + ' must release its hold on apply/clear/unmount (' + reason + ')');
+    }
+    const landing = fs.readFileSync(path.join(ROOT, 'landing.html'), 'utf8');
+    ok(landing.includes("LiveUpdate.hold('landing-form', function"), 'landing one-box text holds the reload');
+    const connect = fs.readFileSync(path.join(ROOT, 'connect-sleeper.html'), 'utf8');
+    ok(connect.includes("LiveUpdate.hold('connect', () =>") && connect.includes('mflPending || espnPending'), 'connect page: typed IDs / team picker / linked-not-entered hold the reload');
+    const fb = fs.readFileSync(path.join(ROOT, 'js/shared/feedback-hub.js'), 'utf8');
+    ok(fb.includes("modal.setAttribute('aria-modal', 'true')"), 'feedback/bug-report overlay is an aria-modal (guarded)');
+    const lu = fs.readFileSync(path.join(ROOT, 'js/shared/live-update.js'), 'utf8');
+    ok(/access_token\|refresh_token\|error_description\|dhq_session/.test(lu) && lu.includes("'auth-handoff'"), 'an OAuth / session handoff in the URL blocks the reload');
+    ok(lu.includes("wrapFn(root, 'dhqAI')") && lu.includes("wrapFn(root, 'callClaude')"), 'AI in flight covers dhqAI / callClaude (BYO-key path), not only OD.callAI');
+    ok(lu.includes('holdMaxMs: 7200000, holdAwayMs: 1800000'), 'hard cap: 2 h stale hold, 30 min away');
+    ok(lu.includes('UNREACHABLE') && lu.includes("'offline'"), 'never navigates when the page cannot be re-fetched / offline');
+    // Holds are a no-op before the updater loads, so it must load before any holder.
+    for (const pg of ['index.html', 'draft-warroom.html', 'free-agency.html', 'trade-calculator.html', 'landing.html', 'connect-sleeper.html']) {
+      const html = fs.readFileSync(path.join(ROOT, pg), 'utf8');
+      const at = html.indexOf('js/shared/live-update.js?v=');
+      const firstHold = Math.min(...Object.keys(holds).concat(['.hold(\'', 'js/draft/live-sync.js'])
+        .map(k => html.indexOf(k.endsWith('.js') ? 'src="' + k : k)).filter(i => i >= 0), Infinity);
+      ok(at > 0 && at < firstHold, pg + ': live-update.js must load before any screen that holds');
+    }
+  });
+
 test('draft storage: no orphan recaps, quota-safe mid-draft saves (2026-08-28)',
   () => {
     // The midnight live-draft quota failure: the resume-snapshot save bypassed

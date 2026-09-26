@@ -562,7 +562,7 @@
         }
     </style>
     <!-- Live update: reloads onto a new deploy at a safe moment (js/shared/live-update.js) -->
-    <script src="js/shared/live-update.js?v=20260926lu1"></script>
+    <script src="js/shared/live-update.js?v=20260926lu2"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -783,6 +783,16 @@
             const [dropTarget, setDropTarget]     = useState(false);
             const [editingCostId, setEditingCostId] = useState(null);
             const [editingCostVal, setEditingCostVal] = useState('');
+            // Live update (js/shared/live-update.js): targets are saved, but a
+            // half-filled add-target form or an open budget/cost edit is not —
+            // hold the silent reload while one is in progress.
+            const luHoldFa = !!(fName.trim() || fCost || quickCost || editingBudget || editingCostId != null);
+            useEffect(() => {
+                if (!luHoldFa) return undefined;
+                const LU = () => window.App && window.App.LiveUpdate;
+                if (LU()) LU().hold('fa-target-form');
+                return () => { if (LU()) LU().release('fa-target-form'); };
+            }, [luHoldFa]);
 
             // ---- Bootstrap ----
             useEffect(() => { boot(); }, []);

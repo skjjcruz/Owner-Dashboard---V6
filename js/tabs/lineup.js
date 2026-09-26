@@ -115,6 +115,21 @@ function LineupTab({
     const lineupKey = (currentLeague && (currentLeague.league_id || currentLeague.id) || '') + '|' + ((myRoster && myRoster.starters) || []).join(',');
     React.useEffect(() => { setWorkingAssign(currentAssign); setOpenSlot(null); setSwapShade(null); }, [lineupKey]);
 
+    // Live update (js/shared/live-update.js): the working lineup lives only in
+    // memory, so while it differs from the platform lineup the silent reload
+    // is held — released on Reset, a league/starters change, or unmount. A
+    // lineup we know is clean (the MFL auto-seed below, which re-seeds the same
+    // after a reload, or one just pushed to MFL) doesn't hold.
+    const lineupCleanRef = React.useRef(null);
+    const luHoldLineup = workingAssign !== lineupCleanRef.current
+        && startingSlots.some(sl => String(workingAssign[sl.idx] || '') !== String(currentAssign[sl.idx] || ''));
+    React.useEffect(() => {
+        if (!luHoldLineup) return undefined;
+        const LU = () => window.App && window.App.LiveUpdate;
+        if (LU()) LU().hold('gameday-lineup');
+        return () => { if (LU()) LU().release('gameday-lineup'); };
+    }, [luHoldLineup]);
+
     // Load real NFL matchup context (opponent + Vegas implied total/spread +
     // weather) for the current week, then recompute projections once it lands.
     React.useEffect(() => {
@@ -355,6 +370,7 @@ function LineupTab({
                 host: mflHost || undefined,
                 apiKey: mflApiKey,
             });
+            lineupCleanRef.current = workingAssign; // saved on MFL: no longer unsaved work
             setSubmit({ status: 'done', msg: 'Lineup submitted to MFL for Week ' + result.week + '.' });
         } catch (e) {
             const msg = (e && e.message) || 'MFL rejected the lineup — set it on MFL directly.';
@@ -381,7 +397,7 @@ function LineupTab({
         result.optimal.starters.forEach(s => { (byName[s.slot] = byName[s.slot] || []).push(s.pid); });
         const next = {};
         startingSlots.forEach(sl => { const arr = byName[sl.slotName]; if (arr && arr.length) next[sl.idx] = String(arr.shift()); });
-        if (Object.keys(next).length) setWorkingAssign(next);
+        if (Object.keys(next).length) { lineupCleanRef.current = next; setWorkingAssign(next); }
     }, [lineupKey, isMfl, _optReady]);
 
     // No whole-tab gate: the partial free/Pro split above (`pro`) supersedes

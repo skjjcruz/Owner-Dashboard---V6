@@ -168,7 +168,7 @@
         }
     </style>
     <!-- Live update: reloads onto a new deploy at a safe moment (js/shared/live-update.js) -->
-    <script src="js/shared/live-update.js?v=20260926lu1"></script>
+    <script src="js/shared/live-update.js?v=20260926lu2"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -420,6 +420,16 @@
             const [aiLoading,   setAiLoading]   = useState(false);
             const [aiError,     setAiError]     = useState(null);
             const [aiChatInput, setAiChatInput] = useState('');
+            // Live update (js/shared/live-update.js): an Alex analysis on screen
+            // (never stored — it cost a query) or a typed, unsent question is lost
+            // on reload — hold the silent reload while either is present.
+            const luHoldAi = !!(aiAnalysis || aiChatInput.trim());
+            useEffect(() => {
+                if (!luHoldAi) return undefined;
+                const LU = () => window.App && window.App.LiveUpdate;
+                if (LU()) LU().hold('draft-ai');
+                return () => { if (LU()) LU().release('draft-ai'); };
+            }, [luHoldAi]);
             // Scout-free vs Pro (js/shared/pro-gate.js, loaded above the React
             // chain). Ranked-by-fit recs + Ask AI are Pro; raw board/pick values
             // stay free. The trigger gate here matters because BYOK users bypass

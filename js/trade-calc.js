@@ -1177,6 +1177,17 @@
         const [alexVerdict, setAlexVerdict] = useState(null);
         const lastTradeLogRef = useRef('');
         const tradeStartedRef = useRef(false);
+        // Live update (js/shared/live-update.js): a half-built trade (assets on
+        // either side) exists only in memory — hold the silent reload until the
+        // builder is cleared or the Trade Center unmounts.
+        const luHoldTrade = tradeIds.A.length + tradeIds.B.length + tradePickIds.A.length + tradePickIds.B.length > 0
+            || tradeFaab.A > 0 || tradeFaab.B > 0;
+        useEffect(() => {
+            if (!luHoldTrade) return undefined;
+            const LU = () => window.App && window.App.LiveUpdate;
+            if (LU()) LU().hold('trade-builder');
+            return () => { if (LU()) LU().release('trade-builder'); };
+        }, [luHoldTrade]);
         useEffect(() => {
             const hasA = tradeIds.A.length > 0 || tradePickIds.A.length > 0 || tradeFaab.A > 0;
             const hasB = tradeIds.B.length > 0 || tradePickIds.B.length > 0 || tradeFaab.B > 0;

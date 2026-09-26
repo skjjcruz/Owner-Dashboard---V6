@@ -84,6 +84,17 @@ function TrophyRoomTab({ currentLeague, leagueSkin, playersData, myRoster, sleep
         try { setHof(JSON.parse(localStorage.getItem(HOF_KEY) || '[]')); } catch { setHof([]); }
     }, [HOF_KEY]);
     const [hofDraft, setHofDraft] = useState({ scope: 'team', name: '', category: '', year: new Date().getFullYear(), note: '' });
+    // Live update (js/shared/live-update.js): a half-typed Hall of Fame entry,
+    // pasted-but-unparsed Chronicles text, or a generated season recap (never
+    // stored) is lost on reload — hold the silent reload while any is on screen.
+    const luHoldTrophy = !!((hofDraft.name + hofDraft.category + hofDraft.note).trim()
+        || (importText.trim() && importStatus !== 'done') || recapText);
+    useEffect(() => {
+        if (!luHoldTrophy) return undefined;
+        const LU = () => window.App && window.App.LiveUpdate;
+        if (LU()) LU().hold('trophy-room');
+        return () => { if (LU()) LU().release('trophy-room'); };
+    }, [luHoldTrophy]);
     function saveHof(next) {
         setHof(next);
         try { localStorage.setItem(HOF_KEY, JSON.stringify(next)); } catch {}

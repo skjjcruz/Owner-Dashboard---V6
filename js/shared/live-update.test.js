@@ -11,7 +11,7 @@ const flush = () => new Promise(r => setTimeout(r, 0));
 // A fake page: clock, visibility, guard, version.json, served HTML, storage.
 function rig(opts = {}) {
   const f = {
-    t: 1_000_000, own: 'own' in opts ? opts.own : V1, hidden: false, unsafe: null,
+    t: 1_790_000_000_000, own: 'own' in opts ? opts.own : V1, hidden: false, unsafe: null,
     latest: { build: V2, critical: false }, fetchFails: false, served: V2,
     hist: [], navs: [], tracks: [], timers: [], fetches: 0, tune: opts.tune || null,
   };
@@ -19,9 +19,9 @@ function rig(opts = {}) {
     now: () => f.t,
     own: () => f.own,
     hidden: () => f.hidden,
-    unsafe: () => f.unsafe,
-    fetchLatest: () => { f.fetches++; return f.fetchFails ? Promise.reject(new Error('404')) : Promise.resolve(f.latest); },
-    prefetch: () => Promise.resolve(f.served),
+    unsafe: () => (typeof f.unsafe === 'function' ? f.unsafe() : f.unsafe),
+    fetchLatest: () => { f.fetches++; if (f.fetchImpl) return f.fetchImpl(); return f.fetchFails ? Promise.reject(new Error('404')) : Promise.resolve(f.latest); },
+    prefetch: () => { f.prefetches = (f.prefetches || 0) + 1; return f.prefetchImpl ? f.prefetchImpl() : Promise.resolve(f.served); },
     navigate: (mode, target) => f.navs.push({ mode, target }),
     track: opts.track || ((name, meta) => f.tracks.push({ name, meta })),
     store: { get: () => JSON.parse(JSON.stringify(f.hist)), set: v => { f.hist = JSON.parse(JSON.stringify(v)); } },
@@ -311,4 +311,158 @@ test('tracking failure never breaks the updater', () => {
   f.hist = [{ from: V1, to: V2, at: f.t - 5000, why: 'resume', mode: 'reload' }];
   assert.equal(f.u.start(), true);
   assert.equal(f.hist[0].rep, 1);
+});
+
+// ── QA hardening (2026-09-26): unsaved work, offline, clocks, stalls ─────────
+const HOUR = 60 * MIN;
+const never = () => new Promise(() => {});
+const fire = (f, ms) => f.timers.filter(x => x.once && x.ms === ms && !x.fired).forEach(x => { x.fired = true; x.fn(); });
+
+test('offline / 404 page: the prefetch fails → never navigate; retry after a minute', async () => {
+  const f = await booted();
+  f.prefetchImpl = () => Promise.reject(new TypeError('Failed to fetch'));
+  f.u.touch(); await run(f, 5 * MIN);
+  assert.equal(f.prefetches, 1, 'idle reached: one attempt');
+  assert.equal(f.navs.length, 0, 'a reload now would land on an error page');
+  await run(f, 45000);
+  assert.equal(f.prefetches, 1, 'no HTML re-fetch every heartbeat while unreachable');
+  await run(f, 30000);
+  assert.equal(f.prefetches, 2, 'retried after a minute');
+  f.prefetchImpl = null;
+  await run(f, 75000);
+  assert.deepEqual(f.why(), ['idle'], 'back online: applies');
+});
+
+test('stalled page prefetch: times out (20s) instead of wedging apply() forever', async () => {
+  const f = await booted();
+  f.prefetchImpl = never;
+  f.u.touch(); await run(f, 4 * MIN + 45000);
+  f.tick(15000); const p = f.u.beat();            // idle ≥ 5 min → apply(), prefetch hangs
+  await flush();
+  assert.equal(f.u.st.applying, true);
+  fire(f, LU.CFG.prefetchTimeoutMs);
+  const d = await p;
+  assert.equal(d.act + ':' + d.why, 'wait:unreachable');
+  assert.equal(f.u.st.applying, false, 'released by the timeout');
+  assert.equal(f.navs.length, 0);
+  f.prefetchImpl = null;
+  await run(f, 75000);
+  assert.equal(f.navs.length, 1);
+});
+
+test('stalled version.json probe: a newer probe runs after 30s; the stale answer is ignored', async () => {
+  const f = rig();
+  f.u.start();
+  let late;
+  f.fetchImpl = () => new Promise(r => { late = r; });
+  f.tick(10000); f.u.check('load'); await flush();
+  assert.equal(f.u.st.busy, true);
+  f.fetchImpl = null; f.latest = { build: V1 };
+  f.tick(20000); await f.u.check('focus');
+  assert.equal(f.fetches, 1, 'still inside the 30s window: no second probe');
+  f.tick(15000); await f.u.check('focus');
+  assert.equal(f.fetches, 2, 'the hung probe no longer blocks checks');
+  late({ build: 'b999-stale' }); await flush();
+  assert.equal(f.u.st.latest.build, V1, 'superseded answer dropped');
+});
+
+test('clock set backwards: polling, the idle rule and the loop guard keep working', async () => {
+  const f = await booted();
+  f.t -= 24 * HOUR;                                // user / NTP moves the clock back a day
+  await run(f, 5 * MIN + 15000);
+  assert.deepEqual(f.why(), ['idle'], 'idle measured in real elapsed time');
+  const g = rig();                                 // history written "tomorrow" no longer rate-limits
+  g.hist = [1, 2, 3].map(i => ({ from: 'x', to: 'y' + i, at: g.t + 24 * HOUR - i * 1000, rep: 1 }));
+  g.u.start(); g.tick(10000); await g.u.check('load');
+  await run(g, 6 * MIN);
+  assert.equal(g.navs.length, 1);
+  const h = await booted({ noDeploy: true });      // polling resumes at once after the jump
+  const n = h.fetches;
+  h.t -= 2 * HOUR; await run(h, 6 * MIN);
+  assert.ok(h.fetches > n, 'still polls');
+});
+
+test('deploy that REVERTS to an older build still reloads (ids differ)', async () => {
+  const f = rig({ own: V2 });
+  f.served = V1; f.latest = { build: V2 }; f.u.start(); f.tick(10000); await f.u.check('load');
+  f.latest = { build: V1 }; f.tick(20000); await f.u.check('focus');
+  await run(f, 5 * MIN + 15000);
+  assert.deepEqual(f.navs, [{ mode: 'reload', target: V1 }]);
+});
+
+test('critical must be boolean true ("false" / "1" strings are not critical)', () => {
+  const base = { own: V1, hidden: false, hiddenFor: 0, resumeAway: 5000, idleFor: 0, unsafe: null, loop: null };
+  assert.equal(LU.decide({ ...base, latest: { build: V2, critical: 'false' } }, LU.CFG).act, 'wait');
+  assert.equal(LU.decide({ ...base, latest: { build: V2, critical: true } }, LU.CFG).act, 'reload');
+});
+
+test('holds: block every trigger; re-hold keeps the start time; release on unmount lets it through', async () => {
+  const f = await booted();
+  f.u.hold('gameday-lineup');
+  const at = f.u.st.holds['gameday-lineup'].at;
+  f.tick(1000); f.u.hold('gameday-lineup');
+  assert.equal(f.u.st.holds['gameday-lineup'].at, at, 'a re-render re-hold does not reset the age');
+  f.u.touch(); f.hidden = true; await f.u.hide();
+  await run(f, 10 * MIN);
+  f.hidden = false; await f.u.resume(); await run(f, 10 * MIN);
+  assert.equal(f.navs.length, 0);
+  f.u.release('gameday-lineup'); await flush();
+  assert.deepEqual(f.why(), ['idle']);
+});
+
+test('predicate hold (plain pages): blocks while fn() is truthy; a throwing fn counts as held', async () => {
+  const f = await booted();
+  let dirty = true;
+  f.u.hold('connect-form', () => dirty);
+  await run(f, 10 * MIN);
+  assert.equal(f.navs.length, 0);
+  dirty = false; await run(f, 15000);
+  assert.equal(f.navs.length, 1);
+  const g = await booted();
+  g.u.hold('broken', () => { throw new Error('x'); });
+  await run(g, 10 * MIN);
+  assert.equal(g.navs.length, 0, 'unknown state: keep holding');
+});
+
+test('hard cap: a hold on work untouched ≥ 2 h is ignored only after ≥ 30 min away', async () => {
+  const f = await booted();
+  f.u.hold('strategy-editor');
+  await run(f, 3 * HOUR);                          // left on screen, untouched: idle rule never overrides a hold
+  assert.equal(f.navs.length, 0, 'visible idle never beats a hold');
+  f.hidden = true; await f.u.hide();
+  f.tick(29 * MIN); f.hidden = false; await f.u.resume();
+  assert.equal(f.navs.length, 0, 'away 29 min: still held');
+  f.hidden = true; await f.u.hide();
+  f.tick(31 * MIN); f.hidden = false; await f.u.resume();
+  assert.deepEqual(f.why(), ['resume'], 'stale hold + long absence: update applies');
+
+  const g = await booted();                        // touched recently → the work is fresh
+  g.u.hold('trade-builder');
+  await run(g, 3 * HOUR); g.u.touch();
+  g.hidden = true; await g.u.hide(); g.tick(40 * MIN); g.hidden = false; await g.u.resume();
+  assert.equal(g.navs.length, 0, 'work touched 40 min ago stays protected');
+
+  const h = await booted();                        // the cap never overrides a live guard
+  h.u.hold('x'); await run(h, 3 * HOUR); h.unsafe = 'typing';
+  h.hidden = true; await h.u.hide(); h.tick(HOUR); h.hidden = false; await h.u.resume();
+  assert.equal(h.navs.length, 0);
+});
+
+test('a throwing guard or a corrupted reload log never throws out of the updater', async () => {
+  const f = await booted();
+  f.unsafe = () => { throw new Error('dom gone'); };
+  await run(f, 6 * MIN);
+  assert.equal(f.navs.length, 0, 'unknown guard state: wait');
+  const g = rig();
+  g.hist = { not: 'an array' };
+  assert.equal(g.u.start(), true);
+  g.tick(10000); await g.u.check('load');
+  assert.equal(LU.loopBlock({ bad: 1 }, V1, V2, 0, LU.CFG), null);
+});
+
+test('hidden with no visibility event (hiddenAt unset): starts counting at the next beat', async () => {
+  const f = await booted();
+  f.u.touch(); f.hidden = true;                    // no hide() call
+  await run(f, 2 * MIN + 30000);
+  assert.deepEqual(f.why(), ['hidden']);
 });

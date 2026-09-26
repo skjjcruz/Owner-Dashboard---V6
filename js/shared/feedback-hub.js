@@ -158,6 +158,10 @@
   function mountOverlay(modal) {
     injectStyles(); // launcher no longer auto-mounts, so styles ride with any entry point
     closeOverlay();
+    // role=dialog + aria-modal: a real modal for assistive tech, and the
+    // live-update guard (js/shared/live-update.js) holds the silent reload
+    // while a half-written report / idea is open.
+    if (!modal.getAttribute('role')) { modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); }
     var ov = el('div', { class: 'dhqfb-ov', onclick: function (e) { if (e.target === ov) closeOverlay(); } }, [modal]);
     document.body.appendChild(ov);
     _openOverlay = ov;

@@ -232,6 +232,16 @@ function MockDraftSimulator({ playersData, myRoster, currentLeague, draftRounds:
     const [posFilter, setPosFilter] = useState('');
     const [search,    setSearch]    = useState('');
     const timerRef = useRef(null);
+    // Live update (js/shared/live-update.js): this mock draft (and its results
+    // screen) lives only in memory — hold the silent reload until it is reset
+    // to setup or unmounted.
+    const luHoldMock = phase !== 'setup' && !!ds;
+    useEffect(() => {
+        if (!luHoldMock) return undefined;
+        const LU = () => window.App && window.App.LiveUpdate;
+        if (LU()) LU().hold('mock-draft');
+        return () => { if (LU()) LU().release('mock-draft'); };
+    }, [luHoldMock]);
 
     const userIdx    = draftPos - 1;
     const current    = ds ? ds.pickOrder[ds.currentIdx] : null;

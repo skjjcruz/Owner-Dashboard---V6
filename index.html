@@ -2976,7 +2976,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- 1a2. Shared viewport seam — WR.useViewport() hook + WR.viewport() snapshot (plain JS; must precede components.js and all tab files) -->
 <script src="js/shared/viewport.js?v=20260826wake1"></script>
 <!-- 1a3. Live update — picks up a new deploy in a running page / resumed app (plain JS; replaces update-sentinel.js) -->
-<script src="js/shared/live-update.js?v=20260926lu1"></script>
+<script src="js/shared/live-update.js?v=20260926lu2"></script>
 <!-- 1b. Format/phase skin contract for league-type-aware modules -->
 <script src="js/league-skin.js?v=20260817chp1"></script>
 <!-- 2. Shared components: UpgradeGate, GMMessage, PlayerInlineCard -->
@@ -3019,7 +3019,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 
 <script src="js/shared/wr-ai-context.js?v=20260610a"></script>
 <!-- Feedback hub — floating launcher, bug reports + crash capture, feature voting board -->
-<script src="js/shared/feedback-hub.js?v=20260711fb2"></script>
+<script src="js/shared/feedback-hub.js?v=20260926qa1"></script>
 <!-- NFL draft capital dataset — window.WR_DRAFT_PROFILE — static historical
      [year, round, overall, team] by Sleeper id (Sleeper's API has none).
      Regenerate with scripts/build-draft-profile.cjs. -->
@@ -3052,15 +3052,15 @@ WRShared.preloadMany(WR_SHARED_FILES);
      boot. js/module-loader.js injects executable copies, in DOM order within each
      group, when the owning surface first calls wrLoadModuleGroup('<group>'). -->
 <script src="js/module-loader.js?v=20260612modlazy1"></script>
-<script type="text/babel" src="js/settings.js?v=20260927b135"></script>
-<script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20260927b135"></script>
+<script type="text/babel" src="js/settings.js?v=20260926qa1"></script>
+<script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20260926qa1"></script>
 <script type="text/babel" src="js/post-draft.js?v=20260907b112"></script>
 <script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260926b134"></script>
 <!-- Season Odds panel loads with Game Day (owner ruling 2026-07-30) — must
      precede lineup.js in the group so window.WrSeasonOdds exists on first render. -->
 <script type="text/babel" data-wr-defer="lineup" src="js/components/season-odds-panel.js?v=20260927b135"></script>
 <script type="text/babel" src="js/components/chop-block-panel.js?v=20260926b134"></script>
-<script type="text/babel" data-wr-defer="lineup" src="js/tabs/lineup.js?v=20260927b135"></script>
+<script type="text/babel" data-wr-defer="lineup" src="js/tabs/lineup.js?v=20260926qa1"></script>
 <!-- 4b. Draft Command Center modules — group "draft" (~28 scripts, ~1.26MB),
      loaded on first Draft-tab open. -->
 <script type="text/babel" data-wr-defer="draft" src="js/draft/styles.js?v=20260427font1"></script>
@@ -3089,7 +3089,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="draft" src="js/draft/live-sync.js?v=20260926lu1"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/live-decision-engine.js?v=20260601draftux"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/analyst-mock.js?v=20260531voice1"></script>
-<script type="text/babel" data-wr-defer="draft" src="js/draft/command-center.js?v=20260927b135"></script>
+<script type="text/babel" data-wr-defer="draft" src="js/draft/command-center.js?v=20260926qa1"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft-room.js?v=20260907b116"></script>
 <!-- 5. League detail tab components (extracted from league-detail.js) -->
 <!-- v2 widget modules (load before dashboard.js which consumes them) -->
@@ -3115,12 +3115,12 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/tabs/flash-brief.js?v=20260927b135"></script>
 <!-- Group "analysis": analytics.js embeds LeagueMapTab, so both defer together
      (league-map.js first — DOM order is execution order within a group). -->
-<script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20260927b135"></script>
+<script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20260926qa1"></script>
 <script type="text/babel" data-wr-defer="myteam" src="js/tabs/my-team.js?v=20260927b135"></script>
 <!-- Compare: extracted from My Roster's former sub-view, now a top-level ROSTER-group tab. -->
 <script type="text/babel" data-wr-defer="compare" src="js/tabs/compare.js?v=20260927b135"></script>
 <script type="text/babel" data-wr-defer="analysis" src="js/tabs/analytics.js?v=20260927b135"></script>
-<script type="text/babel" data-wr-defer="trophies" src="js/tabs/trophy-room.js?v=20260927b135"></script>
+<script type="text/babel" data-wr-defer="trophies" src="js/tabs/trophy-room.js?v=20260926qa1"></script>
 <script type="text/babel" src="js/tabs/calendar.js?v=20260827cal4"></script>
 <!-- Alex Insights (Option A): top-level tab for behavioral analysis + AI settings -->
 <script type="text/babel" data-wr-defer="alex" src="js/tabs/alex-insights.js?v=20260926b134"></script>
@@ -3131,9 +3131,9 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- 6. Strategy editor: calls shared GMStrategy API, no logic duplication.
      Only consumed by alex-insights' Strategy sub-view, so it rides the same
      "alex" lazy group — inert at boot, loaded on first GM's Office / Strategy open. -->
-<script type="text/babel" data-wr-defer="alex" src="js/tabs/strategy-editor.js?v=20260927b135"></script>
+<script type="text/babel" data-wr-defer="alex" src="js/tabs/strategy-editor.js?v=20260926qa1"></script>
 <!-- 7. League detail: coordinator shell, depends on all above -->
-    <script type="text/babel" src="js/league-detail.js?v=20260927b135"></script>
+    <script type="text/babel" src="js/league-detail.js?v=20260926qa1"></script>
 <!-- 8. App: OwnerDashboard + ReactDOM.render (loads last) -->
 <script type="text/babel" src="js/app.js?v=20260925espn1"></script>
 
