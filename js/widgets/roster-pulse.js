@@ -19,7 +19,20 @@
     // Proper ordinal suffix — '92nd', '33rd', not '92th'.
     const ordinalSuffix = (n) => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; return s[(v - 20) % 10] || s[v] || s[0]; };
 
-    function RosterPulseWidget({ size, primaryMetric, myRoster, rankedTeams, sleeperUserId, currentLeague, playersData, computeKpiValue, setActiveTab, navigateWidget }) {
+    // Seasonal (one-year) formats: redraft (Sleeper settings.type 0), Chopped/
+    // guillotine (3), best ball, DFS. Dynasty/keeper/unknown fail open (keep
+    // every vital they have today).
+    const SEASONAL_TYPES = new Set(['redraft', 'chopped', 'best_ball', 'dfs']);
+    function resolveSeasonalType(leagueSkin, currentLeague) {
+        const lid = String(currentLeague?.league_id || currentLeague?.id || '');
+        let skin = leagueSkin || window.App?.LeagueSkin?.getCurrent?.() || null;
+        const skinLid = String(skin?.profile?.leagueId || '');
+        if (skin && skinLid && lid && skinLid !== lid) skin = null; // stale skin from another league
+        const type = skin?.type || ({ 0: 'redraft', 3: 'chopped' })[Number(currentLeague?.settings?.type)] || '';
+        return SEASONAL_TYPES.has(type) ? type : null;
+    }
+
+    function RosterPulseWidget({ size, primaryMetric, myRoster, rankedTeams, sleeperUserId, currentLeague, leagueSkin, playersData, computeKpiValue, setActiveTab, navigateWidget }) {
         const theme = window.WrTheme?.get?.() || {};
         const colors = theme.colors || {};
         const fonts = theme.fonts || {};
@@ -77,6 +90,55 @@
         const dynastyKv = kv('dynasty-rank');
         const windowKv = kv('window');
         const cliffKv = kv('aging-cliff');
+
+        // ── Format: seasonal leagues swap the dynasty-only vitals ──
+        // Compete WINDOW (years of age runway), DYNASTY (total assets + future
+        // picks) and aging CLIFF describe multi-year value — in a one-season
+        // league there is no next year to protect. They swap for season vitals
+        // the app already computes from Sleeper data: the team's record (or
+        // points for in Chopped, which has no matchups), FAAB left, and
+        // strength of schedule. Dynasty/keeper leagues are untouched.
+        const seasonalType = resolveSeasonalType(leagueSkin, currentLeague);
+        const isSeasonal = !!seasonalType;
+        const recordVital = (() => {
+            const st = myRoster?.settings || {};
+            const pf = (Number(st.fpts) || 0) + (Number(st.fpts_decimal) || 0) / 100;
+            const pfTxt = pf > 0 ? pf.toFixed(1) + ' PF' : '';
+            if (seasonalType === 'chopped') {
+                return { label: 'POINTS', value: pf > 0 ? pf.toFixed(1) : '—', color: colors.accent, sub: 'points for' };
+            }
+            const w = Number(st.wins) || 0, l = Number(st.losses) || 0, t = Number(st.ties) || 0;
+            const played = w + l + t;
+            return {
+                label: 'RECORD',
+                value: played ? (w + '-' + l + (t ? '-' + t : '')) : '0-0',
+                color: !played ? colors.textMuted : w > l ? colors.positive : w < l ? colors.negative : colors.accent,
+                sub: pfTxt || 'this season',
+            };
+        })();
+        // FAAB left, straight from Sleeper: the budget is a LEAGUE setting
+        // (settings.waiver_budget, FAAB when waiver_type === 2) and the spend
+        // is the roster's settings.waiver_budget_used. (The shared
+        // 'faab-efficiency' KPI reads the budget off the roster, where Sleeper
+        // never puts it, so it reports "No FAAB" in FAAB leagues.)
+        const faabVital = (() => {
+            const ls = currentLeague?.settings || {};
+            const budget = Number(ls.waiver_budget) || 0;
+            const isFaab = budget > 0 && (ls.waiver_type == null || Number(ls.waiver_type) === 2);
+            if (!isFaab) return { label: 'FAAB', value: '—', color: colors.textMuted, sub: 'no FAAB' };
+            const used = Number(myRoster?.settings?.waiver_budget_used) || 0;
+            const left = Math.max(0, budget - used);
+            return {
+                label: 'FAAB',
+                value: '$' + left.toLocaleString(),
+                color: left > budget * 0.5 ? colors.positive : left > budget * 0.25 ? colors.accent : colors.negative,
+                sub: 'of $' + budget.toLocaleString(),
+            };
+        })();
+        const seasonVital = (key, label) => {
+            const k = kv(key);
+            return { label, value: k.value, color: k.color || colors.accent, sub: k.sub || '' };
+        };
 
         // ── Elite players (hoisted so any size can reveal them on click) ──
         // Same test the ELITES count uses: window.App.isElitePlayer.
@@ -239,7 +301,9 @@
                         <MiniBarChart data={healthSparkData} highlight={health} colors={colors} fonts={fonts} fs={fs} height={42} />
                         <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
                             <Badge label={contenderKv.value} color={contenderKv.color || colors.accent} theme={theme} />
-                            <Badge label={windowKv.value + ' window'} color={windowKv.color || colors.textMuted} theme={theme} />
+                            {isSeasonal
+                                ? <Badge label={recordVital.value + (recordVital.label === 'POINTS' ? ' PF' : '')} color={recordVital.color || colors.textMuted} theme={theme} />
+                                : <Badge label={windowKv.value + ' window'} color={windowKv.color || colors.textMuted} theme={theme} />}
                             {pro && <Badge label={tier} color={tierCol} theme={theme} />}
                         </div>
                     </div>
@@ -285,9 +349,13 @@
                 { label: 'HEALTH', value: healthKv.value, color: healthKv.color || healthCol, sub: (pro ? tier + ' · ' : '') + '#' + (powerRank || '—') },
                 { label: 'ELITES', value: eliteKv.value, color: eliteKv.color || colors.positive, sub: 'top-tier' },
                 { label: 'CONTEND.', value: contenderKv.value, color: contenderKv.color || colors.accent, sub: contenderKv.sub || 'this season' },
-                { label: 'WINDOW', value: windowKv.value, color: windowCol, sub: windowSub },
+                isSeasonal ? recordVital : { label: 'WINDOW', value: windowKv.value, color: windowCol, sub: windowSub },
             ];
-            const vitals6 = [
+            const vitals6 = isSeasonal ? [
+                ...vitals4,
+                faabVital,
+                seasonVital('sched-sos', 'SOS'),
+            ] : [
                 ...vitals4,
                 { label: 'DYNASTY', value: dynastyKv.value, color: dynastyKv.color || colors.accent, sub: dynastyKv.sub || '' },
                 { label: 'CLIFF', value: cliffKv.value, color: cliffKv.color || colors.negative, sub: 'aging' },

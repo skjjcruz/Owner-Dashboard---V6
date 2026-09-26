@@ -21,6 +21,49 @@ window._wrCompareRawCache = window._wrCompareRawCache || {};
 // 4-team field (100+ cells) projects each player once per week, not per render.
 const _cmpProjMemo = {};
 
+// ── Final weeks only (owner report 2026-09-26) ─────────────────────
+// The last fantasy week whose scores are FINAL for this league's season.
+// The week in progress never counts: CTB The One read "2026 W3 L 0.00-18.50"
+// and "Streak: Lost 1" off a week-3 matchup that had barely kicked off.
+// Past seasons (league complete / NFL state already on a later season) are
+// all final (99). In season: weeks before the app's current fantasy week
+// (App.WeeklyProj.currentWeek — the same cut the Game Day schedule uses),
+// capped by Sleeper's own settings.last_scored_leg when the league reports it.
+function _cmpFinalThroughWeek(league, nflState, curWeek) {
+    const ALL = 99;
+    if (!league) return 0;
+    if (league.status === 'complete') return ALL;
+    const lgSeason = Number(league.season) || 0;
+    const nflSeason = Number(nflState && nflState.season) || 0;
+    if (lgSeason && nflSeason && nflSeason > lgSeason) return ALL;
+    if (String((nflState && nflState.season_type) || '') === 'pre') return 0;
+    let through = Number(curWeek) > 0 ? Number(curWeek) - 1 : 0;
+    const lsl = league.settings ? league.settings.last_scored_leg : null;
+    if (lsl != null && lsl !== '' && isFinite(Number(lsl))) through = Math.min(through, Number(lsl));
+    return Math.max(0, through);
+}
+
+// Head-to-head W-L-T over final weeks, from a resolveSeasonOpponents() map
+// ({ [week]: { oppRosterId, myPts, oppPts } }) — the same rows and the same
+// "has an actual score" rule the Game Day schedule counts its record from, so
+// the two screens agree. Median games (league_average_match) are not matchup
+// rows, so they never land here. Returns null when a final week's matchup has
+// no score yet (caller falls back to the league's labeled standings record).
+function _cmpH2hRecordFromSchedule(oppMap, finalThrough) {
+    const rec = { w: 0, l: 0, t: 0 };
+    for (const wk of Object.keys(oppMap || {})) {
+        if (Number(wk) > finalThrough) continue;
+        const e = oppMap[wk];
+        if (!e) continue;
+        const my = Number(e.myPts) || 0, opp = Number(e.oppPts) || 0;
+        if (!(my > 0 || opp > 0)) return null;
+        if (my > opp) rec.w += 1; else if (my < opp) rec.l += 1; else rec.t += 1;
+    }
+    return rec;
+}
+window._cmpFinalThroughWeek = _cmpFinalThroughWeek;
+window._cmpH2hRecordFromSchedule = _cmpH2hRecordFromSchedule;
+
 function CompareTab({
     currentLeague,
     leagueSkin,
@@ -155,6 +198,42 @@ function CompareTab({
         try { return localStorage.getItem('wr_compare_division_' + (leagueId || 'default')) || ''; } catch { return ''; }
     });
     const [h2hState, setH2hState] = React.useState({ loading: false, meetings: [], error: null, loadedFor: null });
+    // Last FINAL week of this league's season — gates both the H2H meetings
+    // and the season records below (the week in progress never counts).
+    const finalThrough = _cmpFinalThroughWeek(currentLeague, window.S?.nflState,
+        window.App?.WeeklyProj?.currentWeek ? window.App.WeeklyProj.currentWeek() : window.S?.currentWeek);
+    // Season records the way the Game Day schedule counts them: head-to-head
+    // over final weeks. roster.settings wins/losses (the league's standings
+    // record) also count one median game per week in league_average_match
+    // leagues — The One read "4-0 / 1-3" in Duel beside Game Day's "2-0 / 1-1".
+    const [seasonRecs, setSeasonRecs] = React.useState({ key: null, byRoster: null });
+    const _recPlatform = currentLeague?._platform || (currentLeague?._mfl ? 'mfl' : currentLeague?._espn ? 'espn' : currentLeague?._yahoo ? 'yahoo' : 'sleeper');
+    const _recRosterIds = (currentLeague?.rosters || []).map(r => String(r.roster_id)).join(',');
+    const seasonRecKey = leagueId + '|' + finalThrough + '|' + _recRosterIds;
+    React.useEffect(() => {
+        let cancelled = false;
+        const M = window.App?.Matchup;
+        // Only platforms whose schedule carries real scores (Sleeper, MFL);
+        // elsewhere the standings record stays (no median concept there).
+        if (!leagueId || !_recRosterIds || !M?.resolveSeasonOpponents || (_recPlatform !== 'sleeper' && _recPlatform !== 'mfl')) {
+            setSeasonRecs({ key: seasonRecKey, byRoster: null });
+            return;
+        }
+        const pws = Number(currentLeague?.settings?.playoff_week_start) || 15;
+        const lastWeek = Math.min(finalThrough, Math.max(1, Math.min(18, pws - 1)));
+        const weeks = Array.from({ length: Math.max(0, lastWeek) }, (_, i) => i + 1);
+        const ids = _recRosterIds.split(',');
+        Promise.all(ids.map(rid => (weeks.length
+            ? M.resolveSeasonOpponents({ league: currentLeague, myRosterId: rid, weeks })
+            : Promise.resolve({})).then(map => [rid, _cmpH2hRecordFromSchedule(map, finalThrough)]).catch(() => [rid, null])))
+            .then(pairs => {
+                if (cancelled) return;
+                const byRoster = {};
+                pairs.forEach(([rid, rec]) => { if (rec) byRoster[rid] = rec; });
+                setSeasonRecs({ key: seasonRecKey, byRoster });
+            });
+        return () => { cancelled = true; };
+    }, [seasonRecKey, _recPlatform]);
     const [heatPos, setHeatPos] = React.useState(null); // phone Position Heatmap: selected position (null → first)
     const [searchPos, setSearchPos] = React.useState('ALL');   // phone add-player search: position-group filter
     const [searchTeam, setSearchTeam] = React.useState('ALL'); // phone add-player search: owned-by-team filter (rosterId)
@@ -293,7 +372,9 @@ function CompareTab({
         async function loadRawChain() {
             const sleeperBase = 'https://api.sleeper.app/v1';
             const cached = window._wrCompareRawCache[rootLeagueId];
-            if (cached && Date.now() - cached.ts < 6 * 60 * 60 * 1000 && Array.isArray(cached.seasons)) {
+            // finalThrough in the check: the current season's rows were fetched
+            // with live points — once another week goes final, re-pull them.
+            if (cached && cached.finalThrough === finalThrough && Date.now() - cached.ts < 6 * 60 * 60 * 1000 && Array.isArray(cached.seasons)) {
                 return cached.seasons;
             }
 
@@ -329,12 +410,13 @@ function CompareTab({
                 return { leagueId: seasonEntry.leagueId, season, rosters, weeklyMatchups };
             }))).filter(Boolean);
 
-            window._wrCompareRawCache[rootLeagueId] = { ts: Date.now(), seasons };
+            window._wrCompareRawCache[rootLeagueId] = { ts: Date.now(), finalThrough, seasons };
             return seasons;
         }
 
         async function loadHistoricalH2H() {
-            const cacheKey = 'wr_compare_h2h_v3_' + rootLeagueId + '_' + myOwnerId + '_' + theirOwnerId;
+            // v4 + finalThrough: v3 cached meetings counted the week in progress.
+            const cacheKey = 'wr_compare_h2h_v4_' + rootLeagueId + '_' + myOwnerId + '_' + theirOwnerId + '_' + finalThrough;
             try {
                 const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
                 if (cached && Date.now() - cached.ts < 6 * 60 * 60 * 1000 && Array.isArray(cached.meetings)) {
@@ -356,7 +438,11 @@ function CompareTab({
                     || (sameId(seasonEntry.leagueId, rootLeagueId) ? rosters.find(r => sameId(r.roster_id, theirRoster?.roster_id)) : null);
                 if (!historicalMine || !historicalTheirs) continue;
 
+                // The live season counts FINAL weeks only (older seasons are
+                // complete). A week in progress is not a meeting yet.
+                const seasonFinalThrough = sameId(seasonEntry.leagueId, rootLeagueId) ? finalThrough : 99;
                 seasonEntry.weeklyMatchups.forEach(({ week, rows }) => {
+                    if (week > seasonFinalThrough) return;
                     const grouped = {};
                     rows.forEach(row => {
                         if (!row || row.roster_id == null || row.matchup_id == null) return;
@@ -400,7 +486,7 @@ function CompareTab({
             });
 
         return () => { cancelled = true; };
-    }, [leagueId, compareScope, compareTeamId, myRoster?.owner_id, myRoster?.roster_id, currentLeague?.rosters?.length]);
+    }, [leagueId, compareScope, compareTeamId, myRoster?.owner_id, myRoster?.roster_id, currentLeague?.rosters?.length, finalThrough]);
 
     // Position rank by DHQ across every scored player (e.g. "WR #14"), for the
     // Players-mode cards. Built once over the scored-player universe; recomputes
@@ -442,6 +528,21 @@ function CompareTab({
     const getOwnerName = (roster, fallback) => {
         const user = (currentLeague?.users || []).find(u => sameId(u.user_id, roster?.owner_id));
         return user?.metadata?.team_name || user?.display_name || fallback || ('Team ' + (roster?.roster_id ?? ''));
+    };
+    // Season record for display: head-to-head over final weeks (seasonRecs)
+    // once resolved; until then — or where the schedule can't be read — the
+    // league's standings record, labeled when it carries median games.
+    const leagueHasMedian = Number(currentLeague?.settings?.league_average_match) > 0;
+    const recordOf = (roster) => {
+        const rs = roster?.settings || {};
+        const sw = Number(rs.wins) || 0, sl = Number(rs.losses) || 0, st = Number(rs.ties) || 0;
+        const standingsRec = sw + '-' + sl + (st ? '-' + st : '');
+        const h = seasonRecs.key === seasonRecKey && seasonRecs.byRoster ? seasonRecs.byRoster[String(roster?.roster_id)] : null;
+        if (h) {
+            const text = h.w + '-' + h.l + (h.t ? '-' + h.t : '');
+            return { text, alt: text !== standingsRec ? standingsRec + (leagueHasMedian ? ' w/ median' : ' standings') : null };
+        }
+        return { text: standingsRec + (leagueHasMedian ? ' w/ median' : ''), alt: null };
     };
     const leagueSeason = parseInt(currentLeague?.season, 10) || new Date().getFullYear();
     const draftRounds = Number(currentLeague?.settings?.draft_rounds || 5);
@@ -719,7 +820,7 @@ function CompareTab({
             rosterId: String(roster.roster_id),
             isMine: !!isMine,
             name: isMine ? myName : (teamOption?.name || getOwnerName(roster, 'Team ' + roster.roster_id)),
-            record: (roster.settings?.wins || 0) + '-' + (roster.settings?.losses || 0),
+            record: recordOf(roster).text,
             division: getDivisionKey(roster),
             total,
             starterTotal,
@@ -1999,7 +2100,7 @@ function CompareTab({
                 <select className="wr-module-select" value={compareTeamId || ''} onChange={e => setCompareTeamId(e.target.value || null)} style={selectStyle}>
                   <option value="">Select team to compare...</option>
                   {opponentOptions.map(t => (
-                    <option key={t.rosterId} value={String(t.rosterId)}>{t.name} ({t.wins || 0}-{t.losses || 0})</option>
+                    <option key={t.rosterId} value={String(t.rosterId)}>{t.name} ({recordOf(t.roster).text})</option>
                   ))}
                 </select>
             ) : compareScope === 'players' ? (_phoneKit ? (
@@ -2028,12 +2129,11 @@ function CompareTab({
             const theirTotal = getRosterTotal(theirRoster);
             const totalDhq = Math.max(1, myTotal + theirTotal);
             const myDhqPct = (myTotal / totalDhq) * 100;
-            const myWins = myRoster.settings?.wins || 0;
-            const myLosses = myRoster.settings?.losses || 0;
-            const theirWins = theirRoster.settings?.wins || 0;
-            const theirLosses = theirRoster.settings?.losses || 0;
-            const myWinPct = (myWins + myLosses) > 0 ? myWins / (myWins + myLosses) : 0;
-            const theirWinPct = (theirWins + theirLosses) > 0 ? theirWins / (theirWins + theirLosses) : 0;
+            // Head-to-head over final weeks (same count as the Game Day
+            // schedule); the median-inclusive standings record rides along
+            // as a labeled caption where there's room.
+            const myRec = recordOf(myRoster);
+            const theirRec = recordOf(theirRoster);
             const myColor = 'var(--gold)';
             const theirColor = 'var(--k-7c6bf8, #7c6bf8)';
             const statsRef = statsData || {};
@@ -2273,7 +2373,7 @@ function CompareTab({
                 <div style={{ marginBottom: '12px' }}>
                     <WrHeroCard kicker="Matchup Read" headline={verdict.toUpperCase()}
                         facts={<React.Fragment>
-                            <div>{myName} {myWins}-{myLosses} vs {theirName} {theirWins}-{theirLosses}{gm.hasStrategy ? ' · ' + gmPostureFrame.label : ''}</div>
+                            <div>{myName} {myRec.text} vs {theirName} {theirRec.text}{gm.hasStrategy ? ' · ' + gmPostureFrame.label : ''}</div>
                             <div>{biggestEdges[0] ? posLabel(biggestEdges[0].pos) : 'Roster'} is the biggest swing: {(biggestEdges[0]?.diff || 0) > 0 ? '+' : ''}{(biggestEdges[0]?.diff || 0).toLocaleString()} {valueShortLabel}.</div>
                         </React.Fragment>} />
                 </div>
@@ -2284,7 +2384,7 @@ function CompareTab({
                         <div>
                             <div style={labelStyle}>You</div>
                             <div style={{ fontFamily: 'var(--font-title)', fontSize: '1.35rem', color: myColor, fontWeight: 800, letterSpacing: 0 }}>{myName}</div>
-                            <div style={{ ...mono, fontSize: '0.82rem', color: 'var(--silver)' }}>{myWins}-{myLosses} current record</div>
+                            <div style={{ ...mono, fontSize: '0.82rem', color: 'var(--silver)' }}>{myRec.text} current record{myRec.alt ? ' · ' + myRec.alt : ''}</div>
                         </div>
                         <div style={{ textAlign: 'center' }}>
                             <div style={{ ...labelStyle, marginBottom: '4px' }}>Matchup Read</div>
@@ -2302,7 +2402,7 @@ function CompareTab({
                         <div style={{ textAlign: 'right' }}>
                             <div style={labelStyle}>Opponent</div>
                             <div style={{ fontFamily: 'var(--font-title)', fontSize: '1.35rem', color: theirColor, fontWeight: 800, letterSpacing: 0 }}>{theirName}</div>
-                            <div style={{ ...mono, fontSize: '0.82rem', color: 'var(--silver)' }}>{theirWins}-{theirLosses} current record</div>
+                            <div style={{ ...mono, fontSize: '0.82rem', color: 'var(--silver)' }}>{theirRec.text} current record{theirRec.alt ? ' · ' + theirRec.alt : ''}</div>
                         </div>
                     </div>
                     )}

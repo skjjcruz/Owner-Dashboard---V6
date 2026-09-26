@@ -104,6 +104,13 @@ function AnalyticsPanel({
     };
     const resolvedLeagueSkin = leagueSkin || _seasonCtx.leagueSkin || window.App?.LeagueSkin?.getCurrent?.() || null;
     const skinFeatures = resolvedLeagueSkin?.features || {};
+    // One-season formats (redraft = Sleeper settings.type 0, Chopped/guillotine
+    // = 3, best ball, DFS): multi-year reads — the 5-year outlook, the aging
+    // cliff, future-pick capital — describe seasons this league doesn't have.
+    // Dynasty/keeper/unknown fail open and keep every panel.
+    const _seasonalFormat = resolvedLeagueSkin
+        ? ['redraft', 'chopped', 'best_ball', 'dfs'].includes(resolvedLeagueSkin.type)
+        : [0, 3].includes(Number(currentLeague?.settings?.type));
     const rosterState = window.App?.getRosterDataState?.({ roster: myRoster, rosters: _SS.rosters, currentLeague }) || { isUsable: true };
     // Redraft → build ROS values so analytics roster-strength / rankings reflect
     // rest-of-season production (no-op → DHQ for dynasty/keeper).
@@ -846,7 +853,8 @@ function AnalyticsPanel({
                 });
             });
             // Draft capital — ranked by its own urgency (a surplus is informational, a deficit is real).
-            if (picks) {
+            // Not in one-season formats: there is no future-pick horizon to hold.
+            if (picks && !_seasonalFormat) {
                 const pickSev = pickNet >= 0 ? 'low' : (picks.status === 'deficit' ? 'high' : 'medium');
                 evidenceRows.push({
                     kicker: 'Draft Capital',
@@ -934,8 +942,9 @@ function AnalyticsPanel({
                 </div>
                 )}
 
-                {/* ── 5-YEAR OUTLOOK (moved from Projections) ── */}
-                {(() => {
+                {/* ── 5-YEAR OUTLOOK (moved from Projections) — multi-year, so
+                    dynasty/keeper only ── */}
+                {!_seasonalFormat && (() => {
                     const proj = d.projection;
                     const win = d.window;
                     if (!proj || !proj.length) return null;
@@ -968,8 +977,8 @@ function AnalyticsPanel({
                     );
                 })()}
 
-                {/* ── AGING CLIFF ALERT (moved from Projections) ── */}
-                {(() => {
+                {/* ── AGING CLIFF ALERT (moved from Projections) — dynasty/keeper only ── */}
+                {!_seasonalFormat && (() => {
                     const S2 = _SS;
                     const ps2 = window.App?.PlayerValue?.valueMap ? window.App.PlayerValue.valueMap() : (window.App?.LI?.playerScores || {});
                     const pm2 = window.App?.LI?.playerMeta || {};

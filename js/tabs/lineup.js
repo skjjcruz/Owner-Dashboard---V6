@@ -194,59 +194,53 @@ function LineupTab({
         return () => { alive = false; };
     }, [lineupKey, ctxTick, _projReady, Object.values(workingAssign).filter(Boolean).join(',')]);
 
-    // Alex's game-day note: a stable weekly briefing off the CURRENT lineup +
-    // matchup (not the working edits). Seeded template renders instantly; AI
-    // upgrades it in the background when reachable (falls back to the template).
-    function buildNoteFacts() {
-        if (!result || !result.optimal) return null;
-        const proj = result.projections;
-        const curIds = Object.values(currentAssign).filter(Boolean);
-        // MFL never exposes platform starters (starters:[]) — fall back to the
-        // optimal lineup so the note forecasts the same lineup as the hero.
-        // With the fallback there IS no visible bench gap: benchPts reads 0 and
-        // no upgrade is pitched (a delta vs an empty platform lineup would
-        // claim the whole optimal total is "stranded on the bench").
-        const noPlatformLineup = !curIds.length;
-        const noteIds = noPlatformLineup ? result.optimal.starters.map(s => String(s.pid)) : curIds;
-        const curTotal = noteIds.reduce((s, pid) => { const p = proj[pid]; return s + (p && p.available ? (p.points[result.objective] || 0) : 0); }, 0);
-        const benchPts = noPlatformLineup ? 0 : Math.round((result.optimal.total - curTotal) * 10) / 10;
-        let topStart = null;
-        if (!noPlatformLineup) (result.delta && result.delta.startInstead || []).forEach(s => { if (!topStart || s.pts > topStart.pts) topStart = s; });
-        let winPct = null, oppName = null, margin = null;
-        const M = window.App && window.App.Matchup;
-        if (M && oppResult && oppResult.res) {
-            const oppOpt = oppResult.res.optimal.starters.map(s => s.pid);
-            const fc = M.forecast(M.dist(noteIds, proj, 'median'), M.dist(oppOpt, oppResult.res.projections, 'median'));
-            winPct = fc.winPct; margin = fc.margin;
-            const users = (currentLeague && currentLeague.users) || [];
-            const u = users.find(x => String(x.user_id) === String(oppResult.roster.owner_id));
-            oppName = (oppResult.roster.metadata && oppResult.roster.metadata.team_name) || (u && u.display_name) || ('Team ' + oppResult.roster.roster_id);
-        }
-        const injuries = noteIds.map(pid => { const p = proj[pid]; const st = p && p.injuryStatus; return st ? { name: pmeta(pid).name, status: st } : null; }).filter(Boolean);
-        const topName = topStart ? pmeta(topStart.pid).name : null;
-        const byeWatch = (seasonData && seasonData.byeWatch) || [];
-        const topBye = byeWatch.length ? byeWatch[0] : null;   // worst upcoming bye week
-        return {
-            week: result.week, benchPts, topStart, topName, winPct, oppName, margin, injuries, mode: result.mode, topBye,
-            ctx: { week: result.week, winPct, margin, opponent: oppName, pointsLeftOnBench: benchPts, topUpgrade: topName, topUpgradeSlot: topStart ? topStart.slot : null, injuries: injuries.map(i => i.name + ' (' + i.status + ')'), byeWatch: byeWatch.slice(0, 3).map(b => ({ week: b.week, count: b.count, unfilled: b.unfilled, reason: b.reason, positions: b.positions })), objective: result.objective, mode: result.mode },
-        };
-    }
+    // Alex's game-day note. It says what the screen says: its facts are
+    // built further down the render (see "Alex note facts") from the very
+    // values the Win% tile, the optimizer card and its swap list show — the
+    // lineup in the slots, on DHQ's numbers once they are in, the platform's
+    // while DHQ loads (and then the note says so). It used to run its own
+    // compute here (Sleeper-only optimizer, the platform lineup, win% vs the
+    // opponent's IDEAL lineup) and contradicted the tiles (owner report
+    // 2026-09-26: "~15%, 2.1 on bench" beside 1% / +16.1).
+    // The seeded template renders instantly; on DHQ numbers the AI upgrades
+    // it in the background when reachable (falls back to the template).
+    const noteFactsRef = React.useRef(null);  // this render's facts (null when there is no note to show)
+    const noteSigRef = React.useRef('');      // the facts the note on screen was written from
+    const noteTimerRef = React.useRef(null);  // pending AI upgrade
+    noteFactsRef.current = null;
     function seededNote(f) {
         const AV = window.AlexVoice;
         if (!AV) return '';
         const seed = (currentLeague && (currentLeague.league_id || currentLeague.id) || '') + '|w' + f.week;
+        // Same label the screen puts on its fallback numbers.
+        const src = f.onDhq ? '' : f.provLabel + ' numbers while DHQ loads — ';
         let lead;
         if (f.winPct != null && f.oppName) {
-            // Thresholds match the hero's win% coloring: ≥55 favored, ≤45 uphill.
-            if (f.winPct >= 55) lead = AV.pick(seed + 'a', ['You’re favored this week', 'The numbers like your side', 'You’ve got the edge this week']) + ' — about ' + f.winPct + '% to beat ' + f.oppName + '.';
-            else if (f.winPct > 45) lead = AV.pick(seed + 'a', ['Coin-flip week', 'This one’s tight', 'Dead heat']) + ' against ' + f.oppName + ' (~' + f.winPct + '%).';
-            else lead = AV.pick(seed + 'a', ['Uphill week', 'You’re the underdog', 'Tough draw']) + ' vs ' + f.oppName + ' (~' + f.winPct + '%) — chase ceiling.';
+            // Thresholds match the Win% tile's coloring: ≥55 favored, ≤45 uphill.
+            // The percentage is the tile's, word for word.
+            if (f.winPct >= 55) lead = AV.pick(seed + 'a', ['You’re favored this week', 'The numbers like your side', 'You’ve got the edge this week']) + ' — ' + f.winPct + '% to beat ' + f.oppName + '.';
+            else if (f.winPct > 45) lead = AV.pick(seed + 'a', ['Coin-flip week', 'This one’s tight', 'Dead heat']) + ' against ' + f.oppName + ' (' + f.winPct + '%).';
+            else lead = AV.pick(seed + 'a', ['Uphill week', 'You’re the underdog', 'Tough draw']) + ' vs ' + f.oppName + ' (' + f.winPct + '%) — chase ceiling.';
         } else {
             lead = AV.pick(seed + 'a', ['Let’s set the week', 'Here’s your week', 'Locking in the lineup']) + '.';
         }
         let mid;
-        if (f.benchPts >= 1 && f.topName) mid = ' ' + AV.pick(seed + 'b', ['You’re leaving ' + f.benchPts + ' on the bench', 'There’s ' + f.benchPts + ' sitting on your bench', f.benchPts + ' points are stranded on the bench']) + ' — ' + f.topName + (f.topStart && f.topStart.slot ? ' into your ' + String(f.topStart.slot).replace('_', ' ') : '') + ' is the move.';
-        else mid = ' ' + AV.pick(seed + 'b', ['Lineup’s optimal', 'Nothing left on the table', 'Your best is already in']) + ' — no changes needed.';
+        if (!f.starters) {
+            mid = ' Your starting slots are empty — Apply Optimal fills them.';
+        } else if (f.swaps.length) {
+            // The optimizer card's "+X" and its swap list: the biggest swap
+            // is named; more than one says how many the card lists.
+            const top = f.swaps.reduce((a, b) => (b.gain > a.gain ? b : a), f.swaps[0]);
+            const slot = String(top.slot || '').replace('_', ' ');
+            const move = top.in && top.out ? top.in + ' in for ' + top.out + (slot ? ' at ' + slot : '')
+                : top.in ? top.in + ' into your ' + (slot ? 'empty ' + slot : 'lineup')
+                    : 'sitting ' + top.out;
+            const pts = f.benchPts.toFixed(1);
+            mid = ' ' + AV.pick(seed + 'b', ['You’re leaving ' + pts + ' on the bench', 'There’s ' + pts + ' sitting on your bench', pts + ' points are stranded on the bench'])
+                + (f.swaps.length === 1 ? ' — ' + move + ' is the move.' : ' across ' + f.swaps.length + ' swaps — ' + move + ' is the biggest.');
+        } else {
+            mid = ' ' + AV.pick(seed + 'b', ['Lineup’s optimal', 'Nothing left on the table', 'Your best is already in']) + ' — no changes needed.';
+        }
         let tail = '';
         if (f.injuries && f.injuries.length) tail = ' ' + AV.pick(seed + 'c', ['Keep an eye on', 'Watch', 'Monitor']) + ' ' + AV.joinNatural(f.injuries.map(i => i.name)) + '.';
         let byeTail = '';
@@ -263,41 +257,38 @@ function LineupTab({
                 byeTail = ' ' + AV.pick(seed + 'd', ['Plan ahead —', 'Heads up —', 'Down the road —']) + ' Week ' + b.week + ' you can’t field a full lineup as rostered, so line up cover.';
             }
         }
-        return (lead + mid + tail + byeTail).trim();
+        return (src + lead + mid + tail + byeTail).trim();
     }
+    // Runs after every render and rewrites the note only when its facts
+    // changed (the facts are computed after the early returns below, so they
+    // cannot sit in a deps array).
     React.useEffect(() => {
-        // Composed note guard: the seeded copy is itself a rec ("X is the
-        // move"), so the whole note is Pro-only — free renders no note (and
-        // never builds facts, so no optimizer output is computed for free).
-        // Future format carve-outs (cross-track C5) compose in here, e.g.
-        // `pro && isDynastyFormat`. The AV.enhance AI upgrade below is
-        // additionally behind hasAmbientAI() (ambient-AI policy seam) — a Pro
-        // user without AI still keeps the seeded template.
-        const noteAllowed = pro;
-        if (!noteAllowed) { setNote(''); return; }
-        if (!_projReady) return;                 // wait for real projections (avoid a stale AI-note cache)
-        const facts = buildNoteFacts();
-        if (!facts) { setNote(''); return; }
-        const seeded = seededNote(facts);
+        const f = noteFactsRef.current;
+        const sig = f ? f.sig : '';
+        if (sig === noteSigRef.current) return;
+        noteSigRef.current = sig;
+        clearTimeout(noteTimerRef.current);
+        if (!f) { setNote(''); return; }
+        const seeded = seededNote(f);
         setNote(seeded);
-        let alive = true;
+        // AI upgrade only on DHQ's numbers (never cache prose written off the
+        // loading fallback), behind the ambient-AI policy seam, and after the
+        // facts sit still for a moment — edits and DHQ batches re-render often.
         const AV = window.AlexVoice;
-        if (AV && AV.enhance && (typeof AV.hasAmbientAI !== 'function' || AV.hasAmbientAI())) {
-            // Bucket win% into the cache key so a materially different matchup
-            // outlook re-generates rather than reusing an early note. v2: the
-            // facts source changed (optimal-lineup fallback) — don't let notes
-            // cached off the old empty-lineup facts survive the fix.
-            const wpBucket = facts.winPct == null ? 'na' : Math.round(facts.winPct / 10);
+        if (!f.onDhq || !AV || !AV.enhance || (typeof AV.hasAmbientAI === 'function' && !AV.hasAmbientAI())) return;
+        noteTimerRef.current = setTimeout(() => {
             AV.enhance({
                 type: 'start-sit',
-                message: 'Give me a punchy 1-2 sentence game-day coaching note for my fantasy team this week. Are we favored? Any must-start upgrade sitting on the bench? Any injuries to watch, or an upcoming bye-week hole to plan for? Natural prose, no lists, no sign-off.',
-                context: JSON.stringify(facts.ctx),
+                message: 'Give me a punchy 1-2 sentence game-day coaching note for my fantasy team this week. Are we favored? Any must-start upgrade sitting on the bench? Any injuries to watch, or an upcoming bye-week hole to plan for? Use only the players and numbers in the context, exactly as given — winPct and pointsLeftOnBench are what the screen shows. Recommend only a swap listed in swaps; if swaps is empty the lineup is already optimal. Natural prose, no lists, no sign-off.',
+                context: JSON.stringify(f.ctx),
                 fallback: seeded,
-                cacheKey: 'gd-note-v2-' + lineupKey + '-w' + facts.week + '-' + wpBucket + (facts.topBye ? '-b' + facts.topBye.week + (facts.topBye.unfilled ? 'x' : '') : ''),
-            }).then(txt => { if (alive && txt && typeof txt === 'string') setNote(txt); }).catch(() => {});
-        }
-        return () => { alive = false; };
-    }, [lineupKey, ctxTick, oppRosterId, _projReady, seasonData]);
+                // v3: keyed on the exact facts, so a note is never reused
+                // across a different win %, bench total or swap list.
+                cacheKey: 'gd-note-v3-' + (AV.hashStr ? AV.hashStr(sig) : sig),
+            }).then(txt => { if (noteSigRef.current === sig && txt && typeof txt === 'string') setNote(txt); }).catch(() => {});
+        }, 1500);
+    });
+    React.useEffect(() => () => clearTimeout(noteTimerRef.current), []);
 
     // MFL is the only platform with a public lineup-write API (Sleeper has none).
     const _plat = (window.App && window.App.Matchup && window.App.Matchup._platform) ? window.App.Matchup._platform(currentLeague) : 'sleeper';
@@ -762,6 +753,46 @@ function LineupTab({
 
             matchup = { fc, sfc: sleeperFc, dhq: !!dhqMatchup, oppName, oppCurTotal, oppIdealTotal: dhqMatchup ? dhqMatchup.oppIdeal : oppResult.res.optimal.total, oppProj, h2h, posStrength, myEdges, slotCount: h2h.length };
         }
+    }
+
+    // ── Alex note facts: the numbers this screen shows, nothing else ──
+    // Win % / opponent = the Win% tile (matchup.fc); points on the bench =
+    // the optimizer card's "+X" (benchPts); swaps = the card's swap list
+    // (recSwaps, empty exactly when the card reads optimal). All of them on
+    // the lineup in the slots and on the same source: DHQ once its lineup
+    // check and matchup are in, the platform's numbers until then (onDhq
+    // false → the note carries the same "DHQ loading" label as the screen).
+    // Phone only — the note renders nowhere else (desktop dropped it, #229).
+    if (pro && isPhone && (_projReady || dhqOk)) {
+        const ids = Object.values(workingAssign).filter(Boolean).map(String);
+        const DQ = window.App && window.App.DhqProj;
+        const provLabel = DQ && DQ.provLabel ? DQ.provLabel() : 'Sleeper';
+        const onDhq = dhqOk && (!matchup || matchup.dhq);
+        const optimalNow = isOptimal || !recSwaps.length;
+        const swaps = optimalNow ? [] : recSwaps.map(sw => ({
+            slot: sw.sl ? sw.sl.slotName : '', outPid: sw.cur || '', inPid: sw.opt || '',
+            out: sw.cur ? pmeta(sw.cur).name : null, in: sw.opt ? pmeta(sw.opt).name : null,
+            gain: Math.round((Number(sw.gain) || 0) * 10) / 10,
+        }));
+        const winPct = matchup && matchup.fc ? (matchup.fc.winPct == null ? null : matchup.fc.winPct) : null;
+        const margin = matchup && matchup.fc && matchup.fc.margin != null ? Math.round(matchup.fc.margin * 10) / 10 : null;
+        const oppName = matchup ? matchup.oppName : null;
+        const injuries = ids.map(pid => { const p = result.projections[pid]; const st = p && p.injuryStatus; return st ? { name: pmeta(pid).name, status: st } : null; }).filter(Boolean);
+        const byeWatch = (seasonData && seasonData.byeWatch) || [];
+        const topBye = byeWatch.length ? byeWatch[0] : null;   // worst upcoming bye week
+        const benchOut = optimalNow ? 0 : benchPts;
+        const f = { week: result.week, onDhq, provLabel, starters: ids.length, winPct, margin, oppName, benchPts: benchOut, swaps, injuries, topBye, mode: result.mode };
+        f.ctx = {
+            week: result.week, projections: onDhq ? 'DHQ' : provLabel + ' (DHQ still loading)',
+            winPct, margin, opponent: oppName, pointsLeftOnBench: benchOut, lineupOptimal: optimalNow,
+            swaps: swaps.map(s => ({ slot: String(s.slot).replace('_', ' '), out: s.out, in: s.in, gain: s.gain })),
+            injuries: injuries.map(i => i.name + ' (' + i.status + ')'),
+            byeWatch: byeWatch.slice(0, 3).map(b => ({ week: b.week, count: b.count, unfilled: b.unfilled, reason: b.reason, positions: b.positions })),
+            mode: result.mode,
+        };
+        f.sig = JSON.stringify([currentLeague && (currentLeague.league_id || currentLeague.id), result.week, onDhq ? 'dhq' : provLabel, ids.slice().sort(), winPct, benchOut,
+            swaps.map(s => s.slot + ':' + s.outPid + '>' + s.inPid), f.ctx.injuries, topBye ? [topBye.week, topBye.count, !!topBye.unfilled, topBye.reason || '', topBye.positions || []] : null, result.mode]);
+        noteFactsRef.current = f;
     }
 
     // ── MFL lineup push card (write to MyFantasyLeague) ──

@@ -1136,7 +1136,32 @@ function DashboardPanel({
     // ══════════════════════════════════════════════════════════════
     // TRANSACTION TICKER
     // ══════════════════════════════════════════════════════════════
+    // Never print a raw id (owner report 2026-09-26: MFL rows read "+Player
+    // mfl_17107"). A player with no name in the league's player data (Sleeper
+    // DB + the platform's own export, merged in league-detail) is left off
+    // its row; a row left with nothing to show is dropped.
+    function tickerTransactions() {
+        const hasName = pid => {
+            const p = playersData && playersData[pid];
+            return !!(p && (p.full_name || p.first_name || p.last_name));
+        };
+        const keep = o => {
+            const out = {};
+            Object.keys(o || {}).forEach(pid => { if (hasName(pid)) out[pid] = o[pid]; });
+            return out;
+        };
+        return (transactions || []).map(t => {
+            const had = Object.keys(t.adds || {}).length + Object.keys(t.drops || {}).length;
+            const adds = keep(t.adds), drops = keep(t.drops);
+            const has = Object.keys(adds).length + Object.keys(drops).length;
+            if (has === had) return t;
+            if (!has && !(t.draft_picks || []).length) return null;
+            return { ...t, adds, drops };
+        }).filter(Boolean);
+    }
+
     function renderTransactionTicker(size) {
+        const transactions = tickerTransactions();
         // Row budget per size: each entry is ~46px (2 lines). md = 1 grid row
         // (160px) fits 2 entries after the header; lg (2 rows, ~330px) fits 5;
         // slim (2 rows) ~4. Narrow is the deep-feed view: its card is capped
@@ -1196,7 +1221,7 @@ function DashboardPanel({
     // a trade BOTH sides — each owner and exactly what they received (players +
     // picks). Players are tappable into the player card. Backdrop / ✕ / Esc close.
     function renderTransactionDetailModal() {
-        const all = transactions || [];
+        const all = tickerTransactions();
         // A specific tapped transaction opens focused (just that deal); the
         // header / "See all" chip open the full list. true = show all.
         const focused = (txnDetail && txnDetail !== true) ? txnDetail : null;
@@ -1685,6 +1710,7 @@ function DashboardPanel({
             return React.createElement(RPW, {
                 size, primaryMetric, myRoster, rankedTeams, sleeperUserId, currentLeague,
                 playersData, computeKpiValue, setActiveTab, navigateWidget,
+                leagueSkin: resolvedLeagueSkin,
             });
         }
         // Lineup Check → LineupCheckWidget (js/widgets/lineup-check.js)

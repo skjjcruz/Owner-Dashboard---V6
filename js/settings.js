@@ -197,17 +197,51 @@
             } catch { return false; }
         }, []);
 
-        const currentTier = React.useMemo(() => {
-            try {
-                const p = JSON.parse(localStorage.getItem('od_profile_v1') || '{}');
-                const appTier = typeof window.getUserTier === 'function' ? window.getUserTier() : null;
-                return appTier || p.tier || 'free';
-            } catch { return 'free'; }
+        // ── Plan: the SAME sources the rest of the app gates on ──────
+        // isPro = window.wrIsPro() (js/shared/pro-gate.js → shared tier.js
+        // isScoutPro(): paid, trial, owner accounts and the 2026 free season
+        // all count). The plan NAME comes from getUserTier() (core.js). Both
+        // are re-read when the async server tier lands (dhq:tier-resolved) —
+        // a mount-time snapshot could hold a paying subscriber's pre-resolve
+        // 'free'. (Settings used to render "Upgrade" unconditionally, Pro too.)
+        const [, setTierEpoch] = React.useState(0);
+        React.useEffect(() => {
+            const bump = () => setTierEpoch(n => n + 1);
+            if (window.App && window.App._userTierResolved) bump();
+            window.addEventListener('dhq:tier-resolved', bump);
+            return () => window.removeEventListener('dhq:tier-resolved', bump);
         }, []);
+        const currentTier = (() => {
+            try {
+                // Server-resolved tier only — a localStorage profile tier is
+                // user-editable and never grants a plan (tier.js rule).
+                const appTier = typeof window.getUserTier === 'function' ? window.getUserTier() : null;
+                return appTier || 'free';
+            } catch { return 'free'; }
+        })();
+        const isPro = typeof window.wrIsPro === 'function' ? !!window.wrIsPro() : currentTier !== 'free';
+        // Pro only because of the season-wide unlock (no paid product tier on
+        // the profile): say so — the plan is real, but nobody paid for it.
+        const freeSeasonEnds = (() => {
+            try {
+                const FS = window.DHQ_FREE_SEASON;
+                if (!isPro || currentTier === 'commissioner' || !FS || !FS.active || !FS.active()) return null;
+                if (['commissioner', 'pro', 'warroom', 'scout'].includes(window.App && window.App._productTier)) return null;
+                return new Date(Number(FS.ENDS) - 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+            } catch { return null; }
+        })();
 
-        const tierLabel = { free: 'Dynasty HQ Free', trial: 'Dynasty HQ Trial', scout: 'Scout', warroom: 'Dynasty HQ', pro: 'Dynasty HQ Pro', power: 'Dynasty HQ Power', paid: 'Paid' };
-        const tierColor = { free: 'var(--silver)', trial: 'var(--silver)', scout: 'var(--silver)', warroom: 'var(--gold)', pro: 'var(--gold)', power: 'var(--k-a855f7, #a855f7)', paid: 'var(--gold)' };
-        const tierBg    = { free: 'rgba(192,192,192,0.12)', trial: 'rgba(192,192,192,0.12)', scout: 'rgba(192,192,192,0.12)', warroom: 'var(--acc-fill2, rgba(212,175,55,0.12))', pro: 'var(--acc-fill2, rgba(212,175,55,0.12))', power: 'rgba(168,85,247,0.12)', paid: 'var(--acc-fill2, rgba(212,175,55,0.12))' };
+        const tierLabel = { free: 'Dynasty HQ Free', trial: 'Dynasty HQ Trial', scout: 'Scout', warroom: 'Dynasty HQ', pro: 'Dynasty HQ Pro', power: 'Dynasty HQ Power', paid: 'Paid', commissioner: 'Dynasty HQ Commissioner' };
+        const tierColor = { free: 'var(--silver)', trial: 'var(--silver)', scout: 'var(--silver)', warroom: 'var(--gold)', pro: 'var(--gold)', power: 'var(--k-a855f7, #a855f7)', paid: 'var(--gold)', commissioner: 'var(--gold)' };
+        const tierBg    = { free: 'rgba(192,192,192,0.12)', trial: 'rgba(192,192,192,0.12)', scout: 'rgba(192,192,192,0.12)', warroom: 'var(--acc-fill2, rgba(212,175,55,0.12))', pro: 'var(--acc-fill2, rgba(212,175,55,0.12))', power: 'rgba(168,85,247,0.12)', paid: 'var(--acc-fill2, rgba(212,175,55,0.12))', commissioner: 'var(--acc-fill2, rgba(212,175,55,0.12))' };
+        // An unrecognised tier name never reads "Free" on a Pro account.
+        const planKey = tierLabel[currentTier] ? currentTier : (isPro ? 'pro' : 'free');
+        const planName = tierLabel[planKey];
+        const freeSeasonNote = freeSeasonEnds ? (
+            <div style={{ marginTop: '-0.45rem', marginBottom: '0.85rem', fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)' }}>
+                Free for the 2026 season — through {freeSeasonEnds}.
+            </div>
+        ) : null;
 
         function goToManagePlan() {
             window.location.href = 'upgrade.html';
@@ -464,13 +498,18 @@
                                 <div style={sectionTitle}>PLAN</div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
                                     <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)' }}>Current plan:</span>
-                                    <span style={{ fontSize: 'var(--text-body, 1rem)', fontWeight: 700, color: tierColor[currentTier] || 'var(--silver)', background: tierBg[currentTier] || 'rgba(192,192,192,0.12)', padding: '0.15rem 0.55rem', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                                        {tierLabel[currentTier] || 'Dynasty HQ Free'}
+                                    <span style={{ fontSize: 'var(--text-body, 1rem)', fontWeight: 700, color: tierColor[planKey] || 'var(--silver)', background: tierBg[planKey] || 'rgba(192,192,192,0.12)', padding: '0.15rem 0.55rem', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                        {planName}
                                     </span>
                                 </div>
+                                {freeSeasonNote}
                                 <div style={_phone ? { display: 'grid', gridTemplateColumns: '1fr', gap: '0.5rem' } : { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                                    <button onClick={goToManagePlan} style={{ ...btnPrimary, fontSize: 'var(--text-label, 0.75rem)' }}>Upgrade</button>
-                                    <button onClick={goToManagePlan} style={{ ...btnOutline, fontSize: 'var(--text-label, 0.75rem)' }}>Change Plan</button>
+                                    {isPro ? (
+                                        <button onClick={manageBilling} disabled={billingBusy} style={{ ...btnOutline, fontSize: 'var(--text-label, 0.75rem)' }}>{billingBusy ? 'Opening…' : 'Manage plan'}</button>
+                                    ) : (<>
+                                        <button onClick={goToManagePlan} style={{ ...btnPrimary, fontSize: 'var(--text-label, 0.75rem)' }}>Upgrade</button>
+                                        <button onClick={goToManagePlan} style={{ ...btnOutline, fontSize: 'var(--text-label, 0.75rem)' }}>Change Plan</button>
+                                    </>)}
                                     <button onClick={goToManagePlan} style={{ ...btnOutline, fontSize: 'var(--text-label, 0.75rem)' }}>Gift Sub</button>
                                 </div>
                             </div>
@@ -539,7 +578,7 @@
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: '10px' }}>
                             <div style={{ minWidth: 0 }}>
                                 <div style={labelStyle} >Plan</div>
-                                <div style={{ marginTop: '2px', fontSize: 'var(--text-body, 1rem)', fontWeight: 700, color: tierColor[currentTier] || 'var(--silver)' }}>{tierLabel[currentTier] || 'Dynasty HQ Free'}</div>
+                                <div style={{ marginTop: '2px', fontSize: 'var(--text-body, 1rem)', fontWeight: 700, color: tierColor[planKey] || 'var(--silver)' }}>{planName}</div>
                             </div>
                             <button onClick={manageBilling} disabled={billingBusy} style={{ ...btnOutline, flex: 'none', padding: '0.5rem 0.9rem' }}>{billingBusy ? 'Opening…' : 'Manage'}</button>
                         </div>
@@ -758,12 +797,13 @@
                         <div style={sectionTitle}>CURRENT PLAN</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
                             <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)' }}>Current plan:</span>
-                            <span style={{ fontSize: 'var(--text-body, 1rem)', fontWeight: 700, color: tierColor[currentTier] || 'var(--silver)', background: tierBg[currentTier] || 'rgba(192,192,192,0.12)', padding: '0.15rem 0.55rem', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                                {tierLabel[currentTier] || 'Dynasty HQ Free'}
+                            <span style={{ fontSize: 'var(--text-body, 1rem)', fontWeight: 700, color: tierColor[planKey] || 'var(--silver)', background: tierBg[planKey] || 'rgba(192,192,192,0.12)', padding: '0.15rem 0.55rem', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                {planName}
                             </span>
                         </div>
+                        {freeSeasonNote}
                         <div style={_phone ? { display: 'grid', gridTemplateColumns: '1fr', gap: '0.5rem' } : { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                            <button onClick={goToManagePlan} style={{ ...btnPrimary, fontSize: 'var(--text-label, 0.75rem)' }}>Upgrade</button>
+                            {!isPro && <button onClick={goToManagePlan} style={{ ...btnPrimary, fontSize: 'var(--text-label, 0.75rem)' }}>Upgrade</button>}
                             <button onClick={manageBilling} disabled={billingBusy} style={{ ...btnOutline, fontSize: 'var(--text-label, 0.75rem)' }}>{billingBusy ? 'Opening…' : 'Manage / Cancel'}</button>
                             <button onClick={goToManagePlan} style={{ ...btnOutline, fontSize: 'var(--text-label, 0.75rem)' }}>Gift Sub</button>
                         </div>
