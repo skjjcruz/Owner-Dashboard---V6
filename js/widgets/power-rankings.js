@@ -53,6 +53,34 @@
         return VIEW_META[view]?.help || 'Score';
     }
 
+    // Which roster in THIS league is mine — for every platform. The Sleeper
+    // user id alone found nothing on ESPN / MFL (no Sleeper owner there), so
+    // the widget said "YOUR RANK not found" beside a brief that said "ranked
+    // 3rd". Order: the team the owner picked for this MFL / ESPN league, the
+    // Sleeper owner match, then the league's resolved my-roster (S.myRosterId,
+    // only when S is on this league). Returns a roster_id string or null —
+    // never a guess.
+    function resolveMyRosterId(currentLeague, sleeperUserId) {
+        const rosters = currentLeague?.rosters || [];
+        const inLeague = id => id != null && id !== '' && rosters.some(r => String(r.roster_id) === String(id));
+        if (currentLeague?._mfl && inLeague(currentLeague._mflFranchiseId)) return String(currentLeague._mflFranchiseId);
+        if (currentLeague?._espn && inLeague(currentLeague._espnTeamId)) return String(currentLeague._espnTeamId);
+        if (sleeperUserId != null && sleeperUserId !== '') {
+            const own = rosters.find(r => String(r.owner_id) === String(sleeperUserId));
+            if (own) return String(own.roster_id);
+        }
+        const S = window.S || {};
+        const onThisLeague = !S.currentLeagueId || !currentLeague?.id || String(S.currentLeagueId) === String(currentLeague.id);
+        if (onThisLeague && inLeague(S.myRosterId)) return String(S.myRosterId);
+        if (onThisLeague && S.myUserId != null) {
+            const own = rosters.find(r => String(r.owner_id) === String(S.myUserId));
+            if (own) return String(own.roster_id);
+        }
+        return null;
+    }
+    window.App = window.App || {};
+    window.App.resolveMyRosterId = window.App.resolveMyRosterId || resolveMyRosterId;
+
     function average(nums) {
         const clean = nums.filter(n => Number.isFinite(n));
         return clean.length ? clean.reduce((s, n) => s + n, 0) / clean.length : 0;
@@ -112,7 +140,9 @@
         const cur = views[view] || views.blended;
         const inSeason = !!cur.inSeason;
         const total = cur.data.length || 0;
-        const myIndex = cur.data.findIndex(t => t.ownerId === sleeperUserId);
+        const myRosterId = resolveMyRosterId(currentLeague, sleeperUserId);
+        const isMine = t => !!t && myRosterId != null && String(t.rosterId) === myRosterId;
+        const myIndex = cur.data.findIndex(isMine);
         const myRank = myIndex >= 0 ? myIndex + 1 : null;
         const myTeam = myIndex >= 0 ? cur.data[myIndex] : null;
         const leader = cur.data[0];
@@ -274,7 +304,7 @@
         }
 
         function TeamRow({ t, rank, dense = false, micro = false, showTrend = false }) {
-            const isMe = t.ownerId === sleeperUserId;
+            const isMe = isMine(t);
             const val = cur.valFn(t);
             const color = teamTone(val, rank, total);
             const gapToLead = Math.max(0, leaderVal - val);
@@ -446,8 +476,8 @@
                                 title: (i + 1) + '. ' + getTeamName(t) + ' - ' + cur.showFn(t) + (inSeason ? ' · ' + cur.pfFn(t) : ''),
                                 style: {
                                     flex: 1,
-                                    background: t.ownerId === sleeperUserId ? TONE.gold : teamTone(cur.barFn(t), i + 1, total),
-                                    opacity: t.ownerId === sleeperUserId ? 1 : 0.56,
+                                    background: isMine(t) ? TONE.gold : teamTone(cur.barFn(t), i + 1, total),
+                                    opacity: isMine(t) ? 1 : 0.56,
                                     borderRight: i < total - 1 ? '1px solid rgba(0,0,0,0.35)' : 'none',
                                 }
                             }))
@@ -471,7 +501,7 @@
                     ...top3.map((t, i) => {
                         const rank = i + 1;
                         const val = cur.valFn(t);
-                        const isMe = t.ownerId === sleeperUserId;
+                        const isMe = isMine(t);
                         return React.createElement('div', {
                             key: t.rosterId || rank,
                             style: {
@@ -669,7 +699,7 @@
                         ...top3.map((t, i) => {
                             const rank = i + 1;
                             const val = cur.valFn(t);
-                            const isMe = t.ownerId === sleeperUserId;
+                            const isMe = isMine(t);
                             return React.createElement('div', {
                                 key: t.rosterId || rank,
                                 style: {

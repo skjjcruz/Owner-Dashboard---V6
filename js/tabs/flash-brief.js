@@ -112,7 +112,11 @@ function IntelligenceBriefWidget({
     // to "#7 elites badge". Fall back to the list position only if the engine
     // hasn't produced a rank yet.
     const myRank = rosterState.isUsable
-        ? ((myAssess && myAssess.powerRank) || ((rankedTeams || []).findIndex(t => t.userId === sleeperUserId) + 1))
+        // Fallback matches by roster, not the Sleeper user id — ESPN / MFL
+        // rosters have no Sleeper owner, so a user-id match never found them.
+        ? ((myAssess && myAssess.powerRank) || (myRoster?.roster_id != null
+            ? ((rankedTeams || []).findIndex(t => String(t.rosterId) === String(myRoster.roster_id)) + 1)
+            : 0))
         : 0;
     const scores = window.App?.LI?.playerScores || {};
     const ownerProfiles = window.App?.LI?.ownerProfiles || {};
@@ -524,15 +528,27 @@ function IntelligenceBriefWidget({
         const chip = (t) => React.createElement('span', { key: t, style: { display: 'inline-block', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.82em', fontWeight: 700, padding: '0 6px', borderRadius: '4px', margin: '0 3px 0 0', background: 'rgba(232,106,90,0.13)', color: 'var(--bad, #e86a5a)', border: '1px solid rgba(232,106,90,0.28)' } }, t);
 
         // Roster capacity — read live from the league + your roster.
+        // Count players the same way the limit is defined. Platforms put IR
+        // and taxi in different places: Sleeper keeps them out of
+        // roster_positions (settings.reserve_slots / taxi_slots); ESPN and
+        // Yahoo list IR slots inside roster_positions; MFL's roster size
+        // excludes IR and taxi and has no slot count for them at all. So IR /
+        // taxi players only count when the limit has room for them; counting
+        // an IR stash against an IR-less limit printed "16 of 15".
         const rosterPositions = currentLeague?.roster_positions || [];
-        const activeCap = rosterPositions.length;
-        const taxiCap = currentLeague?.settings?.taxi_slots || 0;
-        const irCap = currentLeague?.settings?.reserve_slots || 0;
-        const totalCap = activeCap + taxiCap + irCap;
+        const isIrSlot = p => /^(IR|IL|RES|RESERVE)$/i.test(String(p || ''));
+        const isTaxiSlot = p => /^TAXI$/i.test(String(p || ''));
+        const irInPositions = rosterPositions.filter(isIrSlot).length;
+        const taxiInPositions = rosterPositions.filter(isTaxiSlot).length;
+        const activeCap = rosterPositions.length - irInPositions - taxiInPositions;
+        const taxiCap = (currentLeague?.settings?.taxi_slots || 0) + taxiInPositions;
+        const irCap = (currentLeague?.settings?.reserve_slots || 0) + irInPositions;
         const taxiCount = (myRoster?.taxi || []).length;
         const irCount = (myRoster?.reserve || []).length;
-        const totalPlayers = (myRoster?.players || []).length;
-        const activeCount = Math.max(0, totalPlayers - taxiCount - irCount);
+        const allPlayers = (myRoster?.players || []).length;
+        const activeCount = Math.max(0, allPlayers - taxiCount - irCount);
+        const totalCap = activeCap + taxiCap + irCap;
+        const totalPlayers = activeCount + (taxiCap > 0 ? taxiCount : 0) + (irCap > 0 ? irCount : 0);
 
         const weakPos = needs.map(n => (typeof n === 'string' ? n : n?.pos)).filter(Boolean).slice(0, 4);
         const hasWaiverNames = !!(waiverTarget || (keyDrops && keyDrops.length));
@@ -551,8 +567,11 @@ function IntelligenceBriefWidget({
         }
         // Line 3 — roster count → My Roster.
         if (activeCap > 0) {
-            const detail = taxiCap > 0
-                ? [' — ', val(activeCount + '/' + activeCap, 'var(--silver)'), ' active · ', val(taxiCount + '/' + taxiCap, 'var(--silver)'), ' taxi']
+            // Break the total down whenever it holds more than active slots.
+            const detail = (taxiCap > 0 || (irCap > 0 && irCount > 0))
+                ? [' — ', val(activeCount + '/' + activeCap, 'var(--silver)'), ' active',
+                    ...(taxiCap > 0 ? [' · ', val(taxiCount + '/' + taxiCap, 'var(--silver)'), ' taxi'] : []),
+                    ...(irCap > 0 && irCount > 0 ? [' · ', val(irCount + '/' + irCap, 'var(--silver)'), ' IR'] : [])]
                 : [];
             lines.push({ key: 'roster', icon: '💪', target: 'myteam', src: 'My Roster',
                 body: ['Roster: ', val(String(totalPlayers), 'var(--white)'), ' of ', val(String(totalCap), 'var(--white)'), ...detail] });

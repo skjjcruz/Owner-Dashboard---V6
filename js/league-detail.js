@@ -1256,7 +1256,8 @@
                     return { value: total.toLocaleString(), sub: 'Total DHQ', color: 'var(--gold)', sparkData: allTotals };
                 }
                 case 'health-score': {
-                    const ranked = rankedTeams.find(t => t.userId === sleeperUserId);
+                    // By roster, not Sleeper user id — ESPN / MFL have no Sleeper owner.
+                    const ranked = myRoster?.roster_id != null ? rankedTeams.find(t => String(t.rosterId) === String(myRoster.roster_id)) : null;
                     const hs = ranked?.healthScore || 0;
                     const allHS = rankedTeams.map(t => t.healthScore || 0).sort((a,b) => a-b);
                     return { value: hs || '\u2014', sub: 'Score', color: hs >= 90 ? 'var(--k-d4af37, #d4af37)' : hs >= 80 ? 'var(--k-2ecc71, #2ecc71)' : hs >= 70 ? 'var(--gold)' : 'var(--k-e74c3c, #e74c3c)', sparkData: allHS };
@@ -2578,9 +2579,12 @@
         }
 
         function getOwnerName(rosterId) {
-            const roster = currentLeague.rosters?.find(r => r.roster_id === rosterId);
-            const user = currentLeague.users?.find(u => u.user_id === roster?.owner_id);
-            return user?.display_name || user?.username || 'Unknown';
+            // Ids compared as strings: MFL franchise ids ('0006') and ESPN team
+            // ids arrive as strings from some feeds and numbers from others.
+            const roster = rosterId == null ? null : currentLeague.rosters?.find(r => String(r.roster_id) === String(rosterId));
+            const user = roster ? currentLeague.users?.find(u => String(u.user_id) === String(roster.owner_id)) : null;
+            // MFL / ESPN: the platform's own team name when there is no user row.
+            return user?.display_name || user?.username || roster?._owner_name || roster?.metadata?.team_name || 'Unknown';
         }
 
         // GM Onboarding wizard — conversational strategy setup

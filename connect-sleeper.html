@@ -144,6 +144,11 @@
         <input class="input" id="mflLeagueId" placeholder="MFL league ID (e.g. 41208)" inputmode="numeric" autocomplete="off">
         <input class="input" id="mflYear" value="2026" aria-label="Season" inputmode="numeric" autocomplete="off">
       </div>
+      <div class="espn-box" id="mflTeams" hidden>
+        <h2 id="mflTeamsTitle">Which team is yours?</h2>
+        <div class="team-list" id="mflTeamList"></div>
+        <button class="skip-team" type="button" onclick="finishMfl(null)">I&rsquo;m not in this league, just looking</button>
+      </div>
       <button class="btn-link" id="btnMfl" onclick="connectMfl()">Connect MFL league</button>
       <p class="hint">Your league ID is the <strong>number in your MFL web address</strong> (the part after <strong>L=</strong>). We&rsquo;ll load that league and its history.</p>
     </div>
@@ -396,13 +401,59 @@
         }
         localStorage.setItem('mfl_league_id', leagueId);
         localStorage.setItem('mfl_year', year);
+        // A team saved from an earlier connect is not known to be this league's.
+        try { localStorage.removeItem('mfl_franchise_id'); } catch (e) {}
         idInput.disabled = true; yearInput.disabled = true;
-        trackConnectEvent('mfl_connected', null, { mflLeagueId: leagueId });
-        markLinked('mfl', leagueName);
+        mflPending = { leagueId, year, leagueName };
+        // Which franchise is yours? Same step as ESPN — without it the app
+        // has no "my team" in an MFL league (Roster Pulse paused, rank not
+        // found). The league export lists every franchise by name; owner
+        // names only show when the league makes them public.
+        const raw = data.league.franchises && data.league.franchises.franchise;
+        const franchises = (Array.isArray(raw) ? raw : raw ? [raw] : []).filter(f => f && f.id);
+        if (!franchises.length) { finishMfl(null); return; }
+        const list = document.getElementById('mflTeamList');
+        list.textContent = '';
+        franchises.slice().sort((a, b) => mflTeamName(a).localeCompare(mflTeamName(b))).forEach(f => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'team-pick';
+          b.textContent = mflTeamName(f);
+          const owner = String(f.owner_name || '').trim();
+          if (owner && owner !== mflTeamName(f)) { const o = document.createElement('span'); o.className = 'own'; o.textContent = owner; b.appendChild(o); }
+          b.addEventListener('click', () => finishMfl(f.id, mflTeamName(f)));
+          list.appendChild(b);
+        });
+        document.getElementById('mflTeamsTitle').textContent = 'Which team is yours in ' + leagueName + '?';
+        document.getElementById('mflTeams').hidden = false;
+        btn.textContent = 'League found — pick your team';
       } catch (err) {
         showAlert('error', "We couldn't reach MyFantasyLeague. If your league is private, open it in your browser once, then try again — or add it later from inside the app.");
         btn.disabled = false; btn.textContent = 'Connect MFL league';
       }
+    }
+
+    // MFL franchise names come back HTML-escaped in some leagues (&amp;, &#39;).
+    function mflTeamName(f) {
+      const t = document.createElement('textarea');
+      t.innerHTML = String((f && f.name) || '');
+      return t.value.trim() || ('Team ' + (f && f.id));
+    }
+    let mflPending = null;      // { leagueId, year, leagueName } while a team is being picked
+    let mflAutoEnter = false;   // came from the front door: go straight in once linked
+
+    // Lock in the MFL league once the franchise is known (or skipped). The app
+    // reads mfl_franchise_id as "my team" when it rehydrates the league.
+    function finishMfl(franchiseId, teamName) {
+      if (!mflPending) return;
+      try {
+        if (franchiseId != null) localStorage.setItem('mfl_franchise_id', String(franchiseId));
+        else localStorage.removeItem('mfl_franchise_id');
+      } catch (e) {}
+      document.getElementById('mflTeams').hidden = true;
+      trackConnectEvent('mfl_connected', null, { mflLeagueId: mflPending.leagueId, teamPicked: franchiseId != null });
+      markLinked('mfl', teamName || mflPending.leagueName);
+      mflPending = null;
+      if (mflAutoEnter) enterApp();
     }
 
     function toggleEspnPrivate() {
@@ -575,8 +626,10 @@
       if (!input || input.disabled) return;
       input.value = String(h.value).slice(0, 64);
       const run = which === 'sleeper' ? connectSleeper : which === 'mfl' ? connectMfl : connectEspn;
-      // ESPN links after the team is picked, so it enters from finishEspn().
+      // ESPN and MFL link after the team is picked, so they enter from
+      // finishEspn() / finishMfl().
       if (which === 'espn') { espnAutoEnter = true; run(); return; }
+      if (which === 'mfl') { mflAutoEnter = true; run(); return; }
       Promise.resolve(run()).then(() => { if (linked[which]) enterApp(); }).catch(() => {});
     })();
   </script>
