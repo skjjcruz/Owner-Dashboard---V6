@@ -241,7 +241,7 @@
     // Tier split (Phase 2, owner ruling): grade/label/diff/side totals + raw roster-impact
     // values stay free; acceptance %, psych taxes, posture/DNA/behavior chips are Pro
     // (wrIsPro() only — never canAccess).
-    function TcVerdictPanel({ leagueHasPicks, verdictColor, diffDisplay, grade, totalA, totalB, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, FAAB_RATE, likelihoodColor, likelihood, netTaxTotal, manualBehaviorFit, otherOwnerId, theirPosture, otherDnaKey, otherDna, manualBehaviorProfile, psychTaxes, grudgeTax, gmFloor, gmModeLabel, gmViability, gmWarnings }) {
+    function TcVerdictPanel({ leagueHasPicks, valueLabel, verdictColor, diffDisplay, grade, totalA, totalB, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, FAAB_RATE, likelihoodColor, likelihood, netTaxTotal, manualBehaviorFit, otherOwnerId, theirPosture, otherDnaKey, otherDna, manualBehaviorProfile, psychTaxes, grudgeTax, gmFloor, gmModeLabel, gmViability, gmWarnings }) {
         const _pro = typeof window.wrIsPro === 'function' ? window.wrIsPro() : true;
         // Owner ruling (restored): the 8-factor psych-tax table + approach line render
         // ALWAYS-VISIBLE at the bottom of the panel — the old collapsed 'Why? ▾'
@@ -257,13 +257,14 @@
                     <span style={{ fontFamily:'var(--font-mono)', fontSize:'1.05rem', fontWeight:600, color: verdictColor }}>{diffDisplay}</span>
                     <span style={{ fontSize:'0.74rem', color:'var(--silver)', opacity:0.655 }}>(gave {totalA.toLocaleString()} / received {totalB.toLocaleString()})</span>
                 </div>
-                {/* No-picks league: three cells reflow evenly instead of leaving the
-                    4-col grid's Pick Capital slot empty. */}
-                <div className="tc-ta-impact-grid" style={leagueHasPicks === false ? { gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' } : undefined}>
+                {/* No-picks league: Pick Capital is gone, so Acceptance spans two
+                    tracks — a full row on the 2-col phone grid, the last half of
+                    the 4-col desktop grid — and no slot is left empty. */}
+                <div className="tc-ta-impact-grid">
                     <div>
                         <span>Roster Impact</span>
                         <strong>{rosterImpactLabel}</strong>
-                        <em>{starterValueDelta >= 0 ? '+' : ''}{Math.round(starterValueDelta).toLocaleString()} player DHQ</em>
+                        <em>{starterValueDelta >= 0 ? '+' : ''}{Math.round(starterValueDelta).toLocaleString()} player {valueLabel || 'DHQ'}</em>
                     </div>
                     {leagueHasPicks !== false && <div>
                         <span>Pick Capital</span>
@@ -273,16 +274,16 @@
                     <div>
                         <span>FAAB</span>
                         <strong>{faabDelta >= 0 ? '+' : ''}${faabDelta}</strong>
-                        <em>{Math.round(faabDelta * FAAB_RATE).toLocaleString()} DHQ equiv.</em>
+                        <em>{Math.round(faabDelta * FAAB_RATE).toLocaleString()} {valueLabel || 'DHQ'} equiv.</em>
                     </div>
                     {_pro ? (
-                        <div>
+                        <div style={leagueHasPicks === false ? { gridColumn: 'span 2' } : undefined}>
                             <span>Acceptance</span>
                             <strong style={{ color: likelihoodColor }}>{likelihood}%</strong>
                             <em>{netTaxTotal >= 0 ? '+' : ''}{netTaxTotal}% psych · {manualBehaviorFit ? `${manualBehaviorFit.acceptanceDelta >= 0 ? '+' : ''}${manualBehaviorFit.acceptanceDelta}% behavior` : '0% behavior'}</em>
                         </div>
                     ) : (
-                        <div>
+                        <div style={leagueHasPicks === false ? { gridColumn: 'span 2' } : undefined}>
                             <span>Acceptance</span>
                             <strong style={{ color: 'var(--gold)' }}>{'🔒'} Pro</strong>
                             <em>psych-modeled odds</em>
@@ -662,6 +663,11 @@
         }, [currentLeague, playersData, statsData, timeRecomputeTs]);
         const skinVocabulary = resolvedLeagueSkin?.vocabulary || {};
         const valueSourceLabel = resolvedLeagueSkin?.features?.showDynastyValue === false ? 'format-adjusted values' : 'dynasty valuations';
+        // Column label for player values — says what getPlayerValue actually
+        // returned: rest-of-season value (ROS) in redraft/chopped once the ROS
+        // map is built for this league, dynasty DHQ everywhere else. The finder
+        // used to print "DHQ" over ROS numbers in redraft leagues.
+        const valueColLabel = (skinVocabulary.valueShortLabel === 'ROS' && window.App?.PlayerValue?.rosState?.()) ? 'ROS' : 'DHQ';
         let WEEKLY_TARGET = 243;
         // Shared roster-construction constants from window.App.PlayerValue
         const { IDEAL_ROSTER, DRAFT_ROUNDS, PICK_HORIZON,
@@ -4112,7 +4118,7 @@
                 ? (finderPool.done ? 'league-wide scan' : `scanning ${finderPool.scanned}/${finderPool.total}…`)
                 : selectedPartner ? `vs ${selectedPartner.ownerName}` : 'no partner scored yet';
             const assetBrowserSorts = [
-                { key:'dhq', label:'DHQ' },
+                { key:'dhq', label: valueColLabel },
                 { key:'age', label:'Age' },
                 { key:'owner', label:'Owned Team' },
                 { key:'points', label:'Last FP' },
@@ -4428,7 +4434,7 @@
                                     <div className="tc-dhq-asset-row tc-dhq-asset-head" role="row">
                                         <span>Player</span>
                                         <span>Pos</span>
-                                        <span>DHQ</span>
+                                        <span>{valueColLabel}</span>
                                         <span>Age</span>
                                         <span>Current owned team</span>
                                         <span>Last FP</span>
@@ -4769,7 +4775,7 @@
                                 breakdown, likelihood bar) — same TcVerdictPanel the phone
                                 builder sheet mounts, restored here so the desktop builder
                                 shows the Psychological Tax Breakdown by default too. */}
-                            {_verdict.hasTrade && React.createElement(TcVerdictPanel, { ..._verdict, FAAB_RATE, leagueHasPicks })}
+                            {_verdict.hasTrade && React.createElement(TcVerdictPanel, { ..._verdict, FAAB_RATE, leagueHasPicks, valueLabel: valueColLabel })}
                         </section>
                     )}
                     {/* League Teams inline — narrow/portrait only (rail is hidden <1281px). */}
@@ -5301,7 +5307,7 @@
             ];
             const intentLabel = (finderIntents.find(i => i.key === finderQuery.intent) || finderIntents[0]).label;
             const assetBrowserSorts = [
-                { key: 'dhq', label: 'DHQ' },
+                { key: 'dhq', label: valueColLabel },
                 { key: 'age', label: 'Age' },
                 { key: 'owner', label: 'Owned Team' },
                 { key: 'points', label: 'Last FP' },
@@ -5452,7 +5458,7 @@
                         tag={row.ownerLabel + (rookieBits.length ? ' · ' + rookieBits.join(' · ') : '')}
                         // "+" rides a fixed right slot (was the tag-line verdict:
                         // its x-position followed the owner-name length).
-                        slots={[{ label: 'DHQ', value: row.value.toLocaleString(), w: '44px' }, { label: 'AGE', value: row.age || '—', tone: 'mute' }, { label: '', value: phPlusChip(row), w: '36px' }]}
+                        slots={[{ label: valueColLabel, value: row.value.toLocaleString(), w: '44px' }, { label: 'AGE', value: row.age || '—', tone: 'mute' }, { label: '', value: phPlusChip(row), w: '36px' }]}
                         accent={focusPlayerPid != null && String(focusPlayerPid) === String(row.pid) ? 'gold' : undefined}
                         onClick={() => {
                             // Row tap = focus the finder on this asset (desktop selectAssetFocus).
@@ -5707,7 +5713,7 @@
                         </div>
                         {_verdict.hasTrade
                             ? <React.Fragment>
-                                {React.createElement(TcVerdictPanel, { ..._verdict, FAAB_RATE, leagueHasPicks })}
+                                {React.createElement(TcVerdictPanel, { ..._verdict, FAAB_RATE, leagueHasPicks, valueLabel: valueColLabel })}
                                 {renderAlexVerdict()}
                             </React.Fragment>
                             : <div className="tc-dhq-empty">Add assets to either side — the verdict updates live.</div>}
