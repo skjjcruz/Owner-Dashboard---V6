@@ -1,8 +1,7 @@
 # Vendored third-party runtime libraries
 
-These files are **self-hosted on purpose**. The app's HTML entry points
-(`index.html`, `draft-warroom.html`, `free-agency.html`, `trade-calculator.html`)
-load React and ReactDOM from here via same-origin `<script src="vendor/…">` tags
+These files are **self-hosted on purpose**. The app's HTML entry point
+(`index.html`) loads React and ReactDOM from here via same-origin `<script src="vendor/…">` tags
 instead of a public CDN.
 
 ## Why

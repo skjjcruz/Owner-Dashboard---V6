@@ -931,7 +931,7 @@ test('live update: silent self-update — build id + version.json, every page po
     ok(/STAMP_ONLY = \['landing\.html', 'connect-sleeper\.html', 'upgrade\.html'\]/.test(bd), 'plain pages are stamped too');
     ok(bd.includes('DHQ_UPDATE_CRITICAL') && bd.includes('DHQ_UPDATE_NOTES'), 'critical/notes overrides');
     ok(bd.includes('does not load ${LIVE_UPDATE_SRC}'), 'a stamped page that does not load the updater fails the build');
-    const pages = ['index.html', 'draft-warroom.html', 'free-agency.html', 'trade-calculator.html', 'landing.html', 'connect-sleeper.html', 'upgrade.html'];
+    const pages = ['index.html', 'landing.html', 'connect-sleeper.html', 'upgrade.html'];
     for (const pg of pages) {
       const html = fs.readFileSync(path.join(ROOT, pg), 'utf8');
       ok(html.includes('<script src="js/shared/live-update.js?v='), pg + ' must load js/shared/live-update.js');
@@ -969,16 +969,12 @@ test('live update: unsaved work holds the silent reload (QA 2026-09-26)',
     const holds = {
       'js/tabs/lineup.js': 'gameday-lineup',
       'js/trade-calc.js': 'trade-builder',
-      'trade-calculator.html': 'trade-builder',
       'js/tabs/league-map.js': 'report-builder',
       'js/tabs/strategy-editor.js': 'strategy-editor',
       'js/settings.js': 'settings-form',
       'js/tabs/trophy-room.js': 'trophy-room',
       'js/league-detail.js': 'alex-chat-draft',
       'js/draft/command-center.js': 'draft-in-progress',
-      'js/mock-draft.js': 'mock-draft',
-      'draft-warroom.html': 'draft-ai',
-      'free-agency.html': 'fa-target-form',
     };
     for (const [file, reason] of Object.entries(holds)) {
       const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
@@ -997,13 +993,26 @@ test('live update: unsaved work holds the silent reload (QA 2026-09-26)',
     ok(lu.includes('holdMaxMs: 7200000, holdAwayMs: 1800000'), 'hard cap: 2 h stale hold, 30 min away');
     ok(lu.includes('UNREACHABLE') && lu.includes("'offline'"), 'never navigates when the page cannot be re-fetched / offline');
     // Holds are a no-op before the updater loads, so it must load before any holder.
-    for (const pg of ['index.html', 'draft-warroom.html', 'free-agency.html', 'trade-calculator.html', 'landing.html', 'connect-sleeper.html']) {
+    for (const pg of ['index.html', 'landing.html', 'connect-sleeper.html']) {
       const html = fs.readFileSync(path.join(ROOT, pg), 'utf8');
       const at = html.indexOf('js/shared/live-update.js?v=');
       const firstHold = Math.min(...Object.keys(holds).concat(['.hold(\'', 'js/draft/live-sync.js'])
         .map(k => html.indexOf(k.endsWith('.js') ? 'src="' + k : k)).filter(i => i >= 0), Infinity);
       ok(at > 0 && at < firstHold, pg + ': live-update.js must load before any screen that holds');
     }
+  });
+
+test('retired standalone pages are redirect stubs to the app (2026-09-26)',
+  () => {
+    // draft-warroom / free-agency / trade-calculator moved into app tabs; the
+    // old URLs stay alive only so bookmarks land in index.html.
+    for (const pg of ['draft-warroom.html', 'free-agency.html', 'trade-calculator.html']) {
+      const html = fs.readFileSync(path.join(ROOT, pg), 'utf8');
+      ok(html.includes("location.replace('index.html' + location.search + location.hash)"), pg + ' redirects to index.html');
+      ok(html.includes('http-equiv="refresh" content="0; url=index.html"'), pg + ' redirects without JS too');
+      ok(!/<script src=/.test(html) && html.length < 2000, pg + ' is a stub (loads nothing)');
+    }
+    ok(!fs.existsSync(path.join(ROOT, 'js/mock-draft.js')), 'js/mock-draft.js retired with draft-warroom.html');
   });
 
 test('draft storage: no orphan recaps, quota-safe mid-draft saves (2026-08-28)',

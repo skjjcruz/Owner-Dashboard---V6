@@ -6,7 +6,7 @@
     // ══════════════════════════════════════════════════════════════════════════
 
     // ══════════════════════════════════════════════════════════════════════════
-    // FREE AGENCY TAB — migrated from free-agency.html
+    // FREE AGENCY TAB — migrated from the retired free-agency.html
     // ══════════════════════════════════════════════════════════════════════════
     // Phase 6 deferred: FA column registry — mirrors the My Roster column contract so
     // SavedViewBar's `columns` slot round-trips correctly between surfaces.

@@ -12,7 +12,7 @@
 // (points-ledger / one-brain / values-v2 / intent-reads).
 // ══════════════════════════════════════════════════════════════════
     // ══════════════════════════════════════════════════════════════════════════
-    // TRADE CALCULATOR TAB — migrated from trade-calculator.html
+    // TRADE CALCULATOR TAB — migrated from the retired trade-calculator.html
     // ══════════════════════════════════════════════════════════════════════════
 
     // ── tcTab canonical surfaces + legacy alias map (Phase 2 nav re-cut) ──

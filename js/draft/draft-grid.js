@@ -6,7 +6,7 @@
 // badges, DNA-label chips under team names, and the "on the clock"
 // pulse on the current cell.
 //
-// Ports the table structure from js/mock-draft.js:448–490 and upgrades
+// Ports the table structure from the retired js/mock-draft.js and upgrades
 // with persona labels and a bottom "On The Clock" card.
 //
 // Depends on: styles.js, state.js, persona.js (for DNA label chips)

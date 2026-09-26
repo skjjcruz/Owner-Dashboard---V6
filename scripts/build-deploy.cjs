@@ -32,7 +32,9 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(ROOT, 'dist-deploy');
 
 // Every HTML entry point that loads @babel/standalone + type="text/babel" scripts.
-const ENTRIES = ['index.html', 'draft-warroom.html', 'free-agency.html', 'trade-calculator.html'];
+// (draft-warroom / free-agency / trade-calculator were retired 2026-09-26 into
+// tiny redirect stubs to index.html — nothing to compile or stamp.)
+const ENTRIES = ['index.html'];
 // Plain (no-Babel) pages that also self-update: they get the same ?v= content
 // hashing and the build stamp, and ship from dist-deploy/ like the entries.
 const STAMP_ONLY = ['landing.html', 'connect-sleeper.html', 'upgrade.html'];

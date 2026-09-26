@@ -22,7 +22,7 @@
  *
  *  Plain JS (no JSX/Babel). Script-tag AFTER the WRShared tier chain
  *  (reconai-shared tier.js), before any tab code that gates on wrIsPro().
- *  Loaded by index.html, free-agency.html, and draft-warroom.html.
+ *  Loaded by index.html.
  */
 (function () {
   'use strict';

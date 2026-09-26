@@ -34,7 +34,7 @@
     // ══════════════════════════════════════════════════════════════════════════
 
     // ══════════════════════════════════════════════════════════════════════════
-    // DRAFT TAB — migrated from draft-warroom.html
+    // DRAFT TAB — migrated from the retired draft-warroom.html
     // ══════════════════════════════════════════════════════════════════════════
     function DraftTab({ playersData, statsData, myRoster, currentLeague, leagueSkin, sleeperUserId, setReconPanelOpen, sendReconMessage, timeRecomputeTs, viewMode }) {
         // Scout-free vs Pro (js/shared/pro-gate.js). Fail-open so the tab never
