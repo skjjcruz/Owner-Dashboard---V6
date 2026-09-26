@@ -420,24 +420,71 @@ function LineupTab({
     const activeIds = ((myRoster && myRoster.players) || []).filter(id => id && !resSet.has(id) && !taxiSet.has(id)).map(String);
     const usedPids = new Set(Object.values(workingAssign).filter(Boolean).map(String));
 
+    // Bench, IR and taxi, listed the way Sleeper does (owner ruling
+    // 2026-09-24): each section ordered by position, then by DHQ projection
+    // within a position. IR and taxi rows are dimmed.
+    const BENCH_POS_ORDER = { QB: 0, RB: 1, WR: 2, TE: 3, K: 4, DEF: 5, DL: 6, LB: 7, DB: 8 };
+    const benchPosRank = pid => {
+        const pos = normPos((playersData[pid] || {}).position) || (playersData[pid] || {}).position;
+        return BENCH_POS_ORDER[pos] != null ? BENCH_POS_ORDER[pos] : 9;
+    };
+    const dhqMedian = pid => {
+        const DQ = window.App && window.App.DhqProj, d = DQ && DQ.get(pid);
+        return d ? Number(d.median) || 0 : -1;
+    };
+    const benchSort = (a, b) => benchPosRank(a) - benchPosRank(b) || dhqMedian(b) - dhqMedian(a);
+    const benchList = activeIds.filter(pid => !usedPids.has(pid)).sort(benchSort);
+    const irList = ((myRoster && myRoster.reserve) || []).map(String).filter(pid => pid && !usedPids.has(pid)).sort(benchSort);
+    const taxiList = ((myRoster && myRoster.taxi) || []).map(String).filter(pid => pid && !usedPids.has(pid)).sort(benchSort);
+    // Desktop table section under the starters: a header row, then one row per player.
+    const benchSection = (label, list) => list.length ? (
+        <React.Fragment key={'sec' + label}>
+            <div style={{ padding: '9px 14px 6px', fontSize: fz('0.62rem'), letterSpacing: '0.07em', color: SILVER, fontWeight: 600, borderBottom: `1px solid ${LINE}`, background: 'var(--ov-2, rgba(255,255,255,0.02))' }}>{label === 'BN' ? 'BENCH' : label}</div>
+            {list.map(pid => (
+                <div key={label + pid} style={{ display: 'grid', gridTemplateColumns: GRID, gap: '8px', padding: isPhone ? '9px 14px' : '7px 14px', alignItems: 'center', borderBottom: `1px solid ${LINE}`, opacity: label === 'BN' ? 1 : 0.72 }}>
+                    <span style={{ fontSize: '0.64rem', fontWeight: 700, color: SILVER, letterSpacing: '0.04em' }}>{label}</span>
+                    <PlayerCells pid={pid} chip={null} bare />
+                </div>
+            ))}
+        </React.Fragment>
+    ) : null;
+
     function eligibleFor(slot) {
+        // Every Sleeper position counts, so DL/LB edge rushers show under DL.
         return activeIds
-            .filter(pid => slot.elig.includes(normPos((playersData[pid] || {}).position) || (playersData[pid] || {}).position))
+            .filter(pid => ((playersData[pid] || {}).fantasy_positions || []).concat([normPos((playersData[pid] || {}).position) || (playersData[pid] || {}).position]).some(pos => slot.elig.includes(pos)))
             .filter(pid => !usedPids.has(pid) || String(workingAssign[slot.idx]) === pid)
             .sort((a, b) => objPts(b) - objPts(a));
     }
 
-    // Totals (objective-based, matching the solver).
-    const workingTotal = Object.values(workingAssign).filter(Boolean).reduce((s, pid) => s + objPts(pid), 0);
-    const optimalTotal = result.optimal.total;
+    // Totals (objective-based, matching the solver) on the platform's numbers.
+    const sleeperWorkingTotal = Object.values(workingAssign).filter(Boolean).reduce((s, pid) => s + objPts(pid), 0);
+    const sleeperOptimalTotal = result.optimal.total;
+    // The top box runs on DHQ's projections (owner ruling 2026-09-23):
+    // App.DhqProj.lineupCheck gives DHQ's best lineup, placed with the fewest
+    // moves, against the lineup in the slots. Null until every player involved
+    // has a DHQ number; the platform's totals stand in only while DHQ loads.
+    const dhqCheck = window.App && window.App.DhqProj && window.App.DhqProj.lineupCheck ? window.App.DhqProj.lineupCheck(myRoster, currentLeague, workingAssign) : null;
+    const dhqOptimal = dhqCheck ? dhqCheck.optimal : null;
+    const dhqOk = !!dhqCheck;
+    const workingTotal = dhqOk ? dhqCheck.delta.currentTotal : sleeperWorkingTotal;
+    const optimalTotal = dhqOk ? dhqCheck.delta.optimalTotal : sleeperOptimalTotal;
     const benchPts = Math.round((optimalTotal - workingTotal) * 10) / 10;
     const isOptimal = benchPts <= 0.05;
     const _scaleMax = Math.max(1, ...result.optimal.starters.map(s => { const p = projOf(s.pid); return (p && p.points && p.points.ceiling) || 0; }));
 
     // The optimizer's per-slot assignment (the same walk on every tier).
-    function optimalAssign() {
+    // Defaults to DHQ's best lineup once it's in. App.DhqProj.assignSlots
+    // places the chosen starters with the fewest moves from the lineup in the
+    // slots; the slot-name walk below is the fallback.
+    function optimalAssign(lineup) {
+        const opt = lineup || (dhqOk ? dhqOptimal : result.optimal), DQ = window.App && window.App.DhqProj;
+        if (DQ && DQ.assignSlots && opt && opt.starters) {
+            const placed = DQ.assignSlots(opt.starters.map(s => String(s.pid)), startingSlots, workingAssign);
+            if (placed) return placed;
+        }
         const byName = {};
-        result.optimal.starters.forEach(s => { (byName[s.slot] = byName[s.slot] || []).push(s.pid); });
+        opt.starters.forEach(s => { (byName[s.slot] = byName[s.slot] || []).push(s.pid); });
         const next = {};
         startingSlots.forEach(sl => { const arr = byName[sl.slotName]; if (arr && arr.length) next[sl.idx] = String(arr.shift()); });
         return next;
@@ -467,6 +514,16 @@ function LineupTab({
         setSwapShade(d.out.length || d.inn.length ? { in: new Set(d.inn), out: new Set(d.out) } : null);
         setWorkingAssign(next); setOpenSlot(null);
     }
+    // DHQ's best lineup straight from App.DhqProj.optimalFor (same slot
+    // solver; IR and taxi never start; every Sleeper position counts).
+    function applyDhqOptimal() {
+        const dhqLineup = window.App && window.App.DhqProj ? window.App.DhqProj.optimalFor(myRoster, currentLeague && currentLeague.roster_positions) : null;
+        if (!dhqLineup) return;
+        const next = optimalAssign(dhqLineup);
+        const d = lineupDiff(workingAssign, next);
+        setSwapShade(d.out.length || d.inn.length ? { in: new Set(d.inn), out: new Set(d.out) } : null);
+        setWorkingAssign(next); setOpenSlot(null);
+    }
 
     // Recommended swaps (Pro): the optimizer's lineup diffed against the
     // working lineup. Until the owner applies them, the starters it would
@@ -477,6 +534,30 @@ function LineupTab({
     const recSwaps = recDiff.swaps;
     const recOut = new Set(recDiff.out);
     const recIn = new Set(recDiff.inn);
+    // Per-slot replacement notes (owner report 2026-09-24): for each starter
+    // the recommended lineup changes, who takes his slot, where that player
+    // comes from if he already starts, and where he moves if he stays in.
+    // e.g. "Move to DL · Replace with Eric Wilson" / "Replace with Aaron Donald (from IDP FLEX)".
+    const replaceMap = (() => {
+        const map = {};
+        if (!pro || isOptimal) return map;
+        const next = optimalAssign();
+        const nextSet = new Set(Object.values(next).filter(Boolean).map(String));
+        const slotOfCur = {};
+        startingSlots.forEach(sl => { if (workingAssign[sl.idx]) slotOfCur[String(workingAssign[sl.idx])] = sl; });
+        startingSlots.forEach(sl => {
+            const cur = workingAssign[sl.idx], nw = next[sl.idx];
+            if (!cur || !nw || String(cur) === String(nw)) return;
+            const from = slotOfCur[String(nw)];
+            const moveTo = nextSet.has(String(cur)) ? startingSlots.find(s2 => String(next[s2.idx] || '') === String(cur)) : null;
+            map[String(cur)] = { pid: String(nw), from: from ? from.slotName.replace('_', ' ') : null, moveTo: moveTo ? moveTo.slotName.replace('_', ' ') : null };
+        });
+        return map;
+    })();
+    const replaceText = pid => {
+        const r = replaceMap[String(pid)];
+        return r ? (r.moveTo ? 'Move to ' + r.moveTo + ' · ' : '') + 'Replace with ' + pmeta(r.pid).name + (r.from ? ' (from ' + r.from + ')' : '') : '';
+    };
     const RED_BG = 'color-mix(in srgb, ' + RED + ' 16%, transparent)';
     const GREEN_BG = 'color-mix(in srgb, ' + GREEN + ' 16%, transparent)';
     // starter row: 'out' = the optimizer wants him out (red); 'in' = Apply Optimal just put him in (green)
@@ -534,11 +615,16 @@ function LineupTab({
     // ({ label, color }) — the optimizer's "recommend replacing" / "swapped in"
     // reads beside the name, never in the narrow slot column where it collided
     // with long slot labels (owner ask 2026-09-17).
-    function PlayerCells({ pid, chip }) {
+    // rep: this row is the recommended replacement in a slot panel.
+    // bare: a bench / panel row, so no "Replace with X" note of its own.
+    // A starter with a replacement note lays the name cell out as one line:
+    // name and stats on the left, the note pushed right; the stats trim with
+    // an ellipsis when space runs short, never the name or the note.
+    function PlayerCells({ pid, chip, rep, bare }) {
         if (!pid) {
             return (<React.Fragment>
                 <span style={{ color: SILVER, opacity: 0.6, fontStyle: 'italic' }}>Empty — tap to set</span>
-                <span />{pro ? <span /> : null}{!isPhone ? <React.Fragment><span /><span /><span /></React.Fragment> : null}
+                <span /><span />{pro ? <span /> : null}{!isPhone ? <React.Fragment><span /><span /><span /></React.Fragment> : null}
             </React.Fragment>);
         }
         const meta = pmeta(pid);
@@ -552,18 +638,26 @@ function LineupTab({
         const weather = proj && proj.weather;
         const num = (v, c) => <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: c || SILVER }}>{v}</span>;
         return (<React.Fragment>
-            <span style={{ minWidth: 0, overflow: 'hidden' }}>
+            <span style={rep || (!bare && replaceMap[String(pid)]) ? { minWidth: 0, overflow: 'hidden', display: 'flex', alignItems: 'baseline', gap: '12px' } : { minWidth: 0, overflow: 'hidden' }}>
+                <span style={rep || (!bare && replaceMap[String(pid)]) ? { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 } : null}>
                 <span style={{ color: unavail ? SILVER : TEXT, fontWeight: 500, textDecoration: unavail ? 'line-through' : 'none' }}>{meta.name}</span>
-                {chip && chip.label ? <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '8px', padding: '1px 7px', borderRadius: '4px', border: '1px solid ' + chip.color, color: chip.color, fontSize: fz('0.56rem'), fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{chip.label}</span> : null}
+                {/* the red "Recommend replacing" chip gave way to the Replace note */}
+                {chip && chip.label && chip.label !== 'Recommend replacing' ? <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '8px', padding: '1px 7px', borderRadius: '4px', border: '1px solid ' + chip.color, color: chip.color, fontSize: fz('0.56rem'), fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{chip.label}</span> : null}
                 <span style={{ color: SILVER, fontSize: '0.7rem', marginLeft: '6px' }}>{meta.pos}{meta.team ? ' · ' + meta.team : ''}</span>
                 {opp && opp.abbr ? <span style={{ color: SILVER, fontSize: '0.66rem', marginLeft: '6px', opacity: 0.85 }}>{opp.home ? 'vs ' : '@ '}{opp.abbr}</span> : null}
                 {wxTag(weather)}
                 {status ? <span style={{ color: status === 'BYE' ? SILVER : AMBER, fontSize: fz('0.62rem'), marginLeft: '6px', fontWeight: 700 }}>{status}</span> : null}
+                </span>
+                {rep ? <span style={{ marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap', color: GREEN, fontSize: fz('0.66rem'), fontStyle: 'italic', opacity: 0.9 }}>Recommended Replacement</span>
+                    : !bare && replaceMap[String(pid)] ? <span style={{ marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap', color: SILVER, fontSize: fz('0.66rem'), fontStyle: 'italic', opacity: 0.85 }}>{replaceText(pid)}</span>
+                    : null}
             </span>
             <span style={{ textAlign: 'right' }}>
                 <span style={{ color: TEXT, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{pts ? (pts[objective] || 0).toFixed(1) : '—'}</span>
-                {pro && pts ? <span style={{ display: 'block', color: SILVER, opacity: 0.6, fontSize: fz('0.56rem'), fontVariantNumeric: 'tabular-nums' }}>{pts.floor.toFixed(0)}–{pts.ceiling.toFixed(0)}</span> : null}
+                {null /* the floor–ceiling range under the projection is gone (owner ruling 2026-09-23) */}
             </span>
+            {/* DHQ's projection, its own column beside the platform's */}
+            <span style={{ textAlign: 'right', color: 'var(--gold, #d4af37)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—'}</span>
             {pro ? <span style={{ textAlign: 'center' }}><span title={opp && opp.abbr ? ('vs ' + opp.abbr) : ('Matchup ' + grade)} style={{ fontWeight: 700, color: gradeColor(grade), fontSize: '0.78rem' }}>{grade}</span></span> : null}
             {!isPhone ? (<React.Fragment>
                 {num(fs ? fs.rollingPPG.toFixed(1) : '—', TEXT)}
@@ -578,7 +672,8 @@ function LineupTab({
         <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: '8px', padding: '7px 14px', borderBottom: `1px solid ${LINE}`, fontSize: fz('0.58rem'), letterSpacing: '0.05em', color: SILVER, textTransform: 'uppercase' }}>
             <span title="Roster slot">Slot</span>
             <span title="Player · position · NFL team · this week's opponent">Player</span>
-            <span title={projTip} style={{ textAlign: 'right' }}>Proj</span>
+            <span title={projTip} style={{ textAlign: 'right' }}>{(window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper') + ' Proj'}</span>
+            <span title="DHQ projection (the DHQ matchup engine)" style={{ textAlign: 'right', color: 'var(--gold, #d4af37)' }}>DHQ Proj</span>
             {pro ? <span title="Matchup grade A (great) → F (tough), from the opponent's Vegas implied total" style={{ textAlign: 'center' }}>Mtch</span> : null}
             {!isPhone ? (<React.Fragment>
                 <span title={'Rolling average over the last ' + (formWindow === 'season' ? 'full season' : formWindow + ' weeks') + ' (actual points)'} style={{ textAlign: 'right' }}>{formWinLabel}</span>
@@ -600,8 +695,18 @@ function LineupTab({
             const oppOpt = oppResult.res.optimal.starters;
             const myDist = M.dist(myStarters, result.projections, 'median');
             const oppDist = M.dist(oppOpt.map(s => s.pid), oppProj, 'median');
-            const fc = M.forecast(myDist, oppDist);
-            const oppCurTotal = M.dist((oppResult.roster.starters || []).filter(Boolean), oppProj, 'median').mean;
+            // The box compares the lineups both teams have set (owner ruling
+            // 2026-09-24): you = the lineup in your slots, them = their current
+            // starters. DHQ's numbers once App.DhqProj.matchup has them all;
+            // the platform's forecast stands in until then and stays as the
+            // small comparison line.
+            const myIds = myStarters.map(String);
+            const oppCurIds = (oppResult.roster.starters || []).filter(pid => pid && String(pid) !== '0').map(String);
+            const sleeperFc = M.forecast(M.dist(myIds, result.projections, 'median'), M.dist(oppCurIds, oppProj, 'median'));
+            const dhqMatchup = window.App && window.App.DhqProj ? window.App.DhqProj.matchup(myIds, oppResult.roster, currentLeague && currentLeague.roster_positions) : null;
+            const fc = dhqMatchup ? dhqMatchup.fc : sleeperFc;
+            const sleeperOppCur = M.dist((oppResult.roster.starters || []).filter(Boolean), oppProj, 'median').mean;
+            const oppCurTotal = dhqMatchup ? dhqMatchup.oppCur : sleeperOppCur;
             const users = (currentLeague && currentLeague.users) || [];
             const u = users.find(x => String(x.user_id) === String(oppResult.roster.owner_id));
             const oppName = (oppResult.roster.metadata && oppResult.roster.metadata.team_name) || (u && u.metadata && u.metadata.team_name) || (u && u.display_name) || ('Team ' + oppResult.roster.roster_id);
@@ -627,7 +732,7 @@ function LineupTab({
             oppOpt.forEach(s => { const p = normPos((playersData[s.pid] || {}).position) || '?'; theirByPos[p] = (theirByPos[p] || 0) + medOf(s.pid, oppProj); });
             const posStrength = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'].filter(p => myByPos[p] || theirByPos[p]).map(p => ({ pos: p, mine: myByPos[p] || 0, theirs: theirByPos[p] || 0 }));
 
-            matchup = { fc, oppName, oppCurTotal, oppIdealTotal: oppResult.res.optimal.total, oppProj, h2h, posStrength, myEdges, slotCount: h2h.length };
+            matchup = { fc, sfc: sleeperFc, dhq: !!dhqMatchup, oppName, oppCurTotal, oppIdealTotal: dhqMatchup ? dhqMatchup.oppIdeal : oppResult.res.optimal.total, oppProj, h2h, posStrength, myEdges, slotCount: h2h.length };
         }
     }
 
@@ -750,11 +855,15 @@ function LineupTab({
 
                 {/* Week-by-week schedule */}
                 <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderRadius: '6px', overflow: 'hidden' }}>
-                    <div style={{ padding: '9px 14px', borderBottom: `1px solid ${LINE}`, fontSize: fz('0.64rem'), letterSpacing: '0.07em', color: SILVER, fontWeight: 600 }}>SCHEDULE</div>
+                    <div style={{ padding: '9px 14px', borderBottom: `1px solid ${LINE}`, fontSize: fz('0.64rem'), letterSpacing: '0.07em', color: SILVER, fontWeight: 600 }}>SCHEDULE
+                        {/* DHQ projects one week at a time, so later weeks stay on the platform's lines. */}
+                        <span style={{ fontWeight: 400, letterSpacing: 0, opacity: 0.75 }}>{' · this week DHQ · later weeks ' + (window.App && window.App.DhqProj && window.App.DhqProj.provLabel ? window.App.DhqProj.provLabel() : 'Sleeper')}</span>
+                    </div>
                     {scheduleUnset ? (
                         <div style={{ padding: '10px 14px', color: SILVER, fontSize: '0.74rem', opacity: 0.8, lineHeight: 1.5 }}>{pro ? 'Opponents + weekly win% appear here once your league posts the schedule.' : 'Opponents appear here once your league posts the schedule.'}</div>
                     ) : d && d.weeks ? d.weeks.map(w => {
-                        const wp = pro ? w.winPct : null; // weekly win% is a Pro likelihood read
+                        // weekly win% is a Pro likelihood read; this week's matches the DHQ matchup box
+                        const wp = pro ? (w.isCurrent && !w.result && matchup && matchup.dhq && matchup.fc && matchup.fc.winPct != null ? matchup.fc.winPct : w.winPct) : null;
                         const color = w.result ? (w.result === 'W' ? GREEN : w.result === 'L' ? RED : SILVER) : (wp == null ? SILVER : wp >= 55 ? GREEN : wp <= 45 ? RED : GOLD);
                         const bye = w.byes || {};
                         return (
@@ -790,7 +899,8 @@ function LineupTab({
         const MONO = 'var(--font-mono, "JetBrains Mono", monospace)';
         const MICRO = 'var(--text-micro, 0.6875rem)';
         const SLOT_SHORT = { SUPER_FLEX: 'SF', REC_FLEX: 'RF', FLEX: 'FLX', WRTQ: 'WRT', IDP_FLEX: 'IDP', WILDCARD: 'WC' };
-        const dispSlots = [...startingSlots].sort((a, b) => (SLOT_DISPLAY_ORDER[a.slotName] ?? 50) - (SLOT_DISPLAY_ORDER[b.slotName] ?? 50));
+        // Starters in the league's own slot order (roster_positions), as Sleeper lists them.
+        const dispSlots = [...startingSlots];
 
         // Working-vs-platform dirtiness drives the ActionBar (P6). MFL rosters
         // never expose platform starters (currentAssign = {}), so any set slot
@@ -839,12 +949,22 @@ function LineupTab({
             const tag = [slotLabel, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, status || null].filter(Boolean).join(' · ');
             const atRisk = !!status || (proj && proj.available === false);
             const shade = starterShade(pid);
-            return <AssetRow key={sl.idx} pos={meta.pos || '?'} name={meta.name} tag={(shade === 'out' ? 'RECOMMEND REPLACING · ' : shade === 'in' ? 'SWAPPED IN · ' : '') + tag}
-                slots={[{ label: 'PROJ', value: pts ? (pts[objective] || 0).toFixed(1) : '—' }]}
+            return <AssetRow key={sl.idx} pos={meta.pos || '?'} name={meta.name} tag={(shade === 'out' ? (replaceMap[String(pid)] ? replaceText(pid) + ' · ' : 'Replace · ') : shade === 'in' ? 'SWAPPED IN · ' : '') + tag}
+                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—' }]}
                 verdict={pro ? gradeChip((proj && proj.matchupGrade) || '—') : null}
                 accent={open ? 'gold' : atRisk ? 'risk' : undefined}
                 style={shadeCardStyle(shade)}
                 onClick={() => setOpenSlot(open ? null : sl.idx)} />;
+        };
+        // Bench / IR / taxi row (label = BN, IR or TAXI): both projections and form.
+        const benchRow = (pid, label) => {
+            const meta = pmeta(pid), proj = projOf(pid), pts = proj && proj.points;
+            const opp = proj && proj.opponent;
+            const status = (proj && proj.injuryStatus) || (playersData[pid] || {}).injury_status || '';
+            const fs = formOf(pid);
+            return <AssetRow key={label + pid} pos={meta.pos || '?'} name={meta.name}
+                tag={[label, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, status || null].filter(Boolean).join(' · ')}
+                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]} />;
         };
 
         // Eligible-player picker (openSlot) — a WR.Sheet instead of the
@@ -853,7 +973,25 @@ function LineupTab({
         // Form/Hi/Lo columns stay dropped from phone rows).
         const openSl = openSlot != null ? startingSlots.find(sl => sl.idx === openSlot) : null;
         const openPid = openSl ? (workingAssign[openSl.idx] || null) : null;
-        const openElig = openSl ? eligibleFor(openSl) : [];
+        // The slot panel: players available for the slot in DHQ projection
+        // order, minus the player already in it and anyone who cannot play
+        // (Out, IR, PUP, suspended, NA, on bye). DHQ's recommended
+        // replacement for the player in the slot goes first.
+        const openElig = openSl ? (slot => {
+            const DQ = window.App && window.App.DhqProj;
+            const dhqMed = pid => { const d = DQ && DQ.get(pid); return d ? Number(d.median) || 0 : -1; };
+            const cur = workingAssign[slot.idx];
+            const OUT = { Out: 1, IR: 1, PUP: 1, Sus: 1, NA: 1, COV: 1 };
+            const list = eligibleFor(slot)
+                .filter(pid => String(pid) !== String(cur || '') && !(playersData[pid] && OUT[playersData[pid].injury_status]) && !((projOf(pid) || {}).injuryStatus === 'BYE'))
+                .sort((a, b) => dhqMed(b) - dhqMed(a));
+            const recPid = cur && replaceMap[String(cur)] && replaceMap[String(cur)].pid;
+            if (recPid) {
+                const at = list.indexOf(recPid);
+                if (at > 0) { list.splice(at, 1); list.unshift(recPid); }
+            }
+            return list;
+        })(openSl) : [];
         const openFs = openPid ? formOf(openPid) : null;
         const pickRow = (epid) => {
             const isCur = String(openPid) === String(epid);
@@ -861,13 +999,13 @@ function LineupTab({
             const status = (proj && proj.injuryStatus) || '';
             const opp = proj && proj.opponent;
             const fs = formOf(epid);
-            const bshade = isCur ? null : benchShade(epid);
+            const isRec = !isCur && openPid && (replaceMap[String(openPid)] || {}).pid === String(epid);
             return <AssetRow key={epid} pos={meta.pos || '?'} name={meta.name}
-                tag={[isCur ? 'IN' : bshade === 'rec' ? 'RECOMMENDED' : bshade === 'moved' ? 'BENCHED' : null, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, status || null].filter(Boolean).join(' · ')}
-                slots={[{ label: 'PROJ', value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]}
+                tag={[isCur ? 'IN' : isRec ? 'Recommended Replacement' : null, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, status || null].filter(Boolean).join(' · ')}
+                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(epid) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]}
                 verdict={pro ? gradeChip((proj && proj.matchupGrade) || '—') : null}
                 accent={isCur ? 'gold' : undefined}
-                style={shadeCardStyle(bshade === 'rec' ? 'out' : bshade === 'moved' ? 'in' : null)}
+                style={isRec ? { background: 'color-mix(in srgb, ' + GREEN + ' 9%, transparent)', border: '1px solid color-mix(in srgb, ' + GREEN + ' 45%, transparent)', borderRadius: '9px', overflow: 'hidden' } : undefined}
                 onClick={() => { setWorkingAssign(w => ({ ...w, [openSl.idx]: epid })); setOpenSlot(null); }} />;
         };
 
@@ -882,7 +1020,7 @@ function LineupTab({
         ) : (
             <HeroCard kicker={'Week ' + result.week + ' · Game Day'}
                 headline={'YOUR LINEUP ' + workingTotal.toFixed(1) + ' PTS'}
-                facts={matchup ? 'vs ' + matchup.oppName + (matchup.oppCurTotal > 0 ? ' · them ' + matchup.oppCurTotal.toFixed(1) + ' (current lineup)' : '') : 'Tap a slot below to set your starters — the total updates live.'}>
+                facts={matchup ? 'vs ' + matchup.oppName + (matchup.oppCurTotal > 0 ? ' · them ' + matchup.oppCurTotal.toFixed(1) + ' (current lineup)' : '') : 'Press Apply Optimal for DHQ\'s best lineup — the total updates live.'}>
                 {GatedRow ? <div style={{ marginTop: '10px' }}><GatedRow title="Lineup optimizer" sub="Optimal lineup + points left on bench, floor–ceiling bands, matchup grades and win odds" feature={STARTSIT_FEAT} /></div> : null}
             </HeroCard>
         );
@@ -915,11 +1053,11 @@ function LineupTab({
                 {phoneView === 'odds' ? (
                     // No bracket in a chopped league — survival IS the odds view.
                     leagueSkin?.features?.showPlayoffOdds === false
-                        ? (window.WrChopBlock ? <window.WrChopBlock active currentLeague={currentLeague} myRoster={myRoster} /> : null)
+                        ? (window.WrChopBlock ? <window.WrChopBlock active currentLeague={currentLeague} myRoster={myRoster} myStarters={Object.values(workingAssign).filter(Boolean)} /> : null)
                     : window.WrSeasonOdds
                         ? <window.WrSeasonOdds active currentLeague={currentLeague} myRoster={myRoster}
                             playersData={playersData} statsData={statsData} stats2025Data={stats2025Data}
-                            leagueSkin={leagueSkin} pro={pro} onSummary={onSimSummary} />
+                            leagueSkin={leagueSkin} pro={pro} onSummary={onSimSummary} myStarters={Object.values(workingAssign).filter(Boolean)} />
                         : null
                 ) : phoneView === 'week' ? (<React.Fragment>
                 {/* Matchup + breakdown LEAD the week view (owner ask). Free
@@ -963,7 +1101,11 @@ function LineupTab({
 
                 {/* Optimizer + working lineup, below the matchup lead. */}
                 {heroEl}
-                <CardList groups={[{ label: 'Starters', sub: 'Proj ' + workingTotal.toFixed(1), rows: dispSlots.map(slotRow) }]} />
+                {/* Starters, then Bench, IR and Taxi as Sleeper lists them. */}
+                <CardList groups={[
+                    { label: 'Starters', sub: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper') + ' ' + sleeperWorkingTotal.toFixed(1) + (window.App && window.App.DhqProj ? ' · DHQ ' + window.App.DhqProj.sum(Object.values(workingAssign).filter(Boolean)) : ''), rows: dispSlots.map(slotRow) },
+                    ...[['Bench', benchList, 'BN'], ['IR', irList, 'IR'], ['Taxi', taxiList, 'TAXI']].filter(g => g[1].length).map(g => ({ label: g[0], rows: g[1].map(pid => benchRow(pid, g[2])) })),
+                ]} />
                 </React.Fragment>) : (<React.Fragment>
                 {/* Season view — outlook + week-by-week schedule (renderRail
                     carries every existing free/Pro gate). */}
@@ -1074,12 +1216,12 @@ function LineupTab({
                 {gdSeg}
                 {leagueSkin?.features?.showPlayoffOdds === false
                     ? (window.WrChopBlock
-                        ? <window.WrChopBlock active currentLeague={currentLeague} myRoster={myRoster} />
+                        ? <window.WrChopBlock active currentLeague={currentLeague} myRoster={myRoster} myStarters={Object.values(workingAssign).filter(Boolean)} />
                         : <div style={{ color: SILVER, fontSize: '0.8rem' }}>Chopping Block module not loaded.</div>)
                     : window.WrSeasonOdds
                     ? <window.WrSeasonOdds active currentLeague={currentLeague} myRoster={myRoster}
                         playersData={playersData} statsData={statsData} stats2025Data={stats2025Data}
-                        leagueSkin={leagueSkin} pro={pro} onSummary={onSimSummary} />
+                        leagueSkin={leagueSkin} pro={pro} onSummary={onSimSummary} myStarters={Object.values(workingAssign).filter(Boolean)} />
                     : <div style={{ color: SILVER, fontSize: '0.8rem' }}>Season odds module not loaded.</div>}
             </div>
         );

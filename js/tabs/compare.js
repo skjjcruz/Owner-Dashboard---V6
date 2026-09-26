@@ -640,10 +640,9 @@ function CompareTab({
         // The week the app shows (the current week once its lines load).
         const wk = WP && WP.displayWeek ? (Number(WP.displayWeek()) || 1) : WP && WP.currentWeek ? WP.currentWeek() : (window.S?.currentWeek || 1);
         const season = (window.S?.nflState && window.S.nflState.season) || window.S?.season || '';
-        // The memo key knows whether the week's lines have loaded, and from which platform.
-        const loaded = (WP && WP.hasProjWeek && WP.hasProjWeek(wk)) ? 'L' : '-';
-        const src = (WP && WP.platformSource && WP.platformSource(wk)) || '';
-        return { wk, prefix: leagueId + '|' + season + '|' + wk + '|' + loaded + src + '|' };
+        // The memo key knows whether the week's lines have loaded ('L') and
+        // which platform's numbers they are.
+        return { wk, prefix: leagueId + '|' + season + '|' + wk + '|' + ((WP && WP.hasProjWeek && WP.hasProjWeek(wk)) ? 'L' : '-') + ((WP && WP.platformSource && WP.platformSource(wk)) || '') + '|' };
     })();
     const projForField = (pid) => {
         const WP = window.App && window.App.WeeklyProj;

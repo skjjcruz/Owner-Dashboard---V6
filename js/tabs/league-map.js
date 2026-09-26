@@ -2492,7 +2492,7 @@ function LeagueMapTab({
                                     }
                                     case 'proj': {
                                         const v = projOf(x);
-                                        return <span key={c.key} style={{ color: v != null && v > 0 ? 'var(--white)' : 'var(--silver)', fontFamily: 'var(--font-body)' }}>{v != null && v > 0 ? v : '\u2014'}{window.App && window.App.DhqProj ? <span title="DHQ projection (Sleeper first)" style={{ display: 'block', fontSize: '0.6rem', fontWeight: 700, color: 'var(--gold, #d4af37)' }}>{'DHQ ' + window.App.DhqProj.fmt(x)}</span> : null}</span>;
+                                        return <span key={c.key} style={{ color: v != null && v > 0 ? 'var(--white)' : 'var(--silver)', fontFamily: 'var(--font-body)' }}>{v != null && v > 0 ? v : '\u2014'}{window.App && window.App.DhqProj ? <span title="DHQ projection (Sleeper first)" style={{ display: 'block', fontSize: '0.6rem', fontWeight: 700, color: 'var(--gold, #d4af37)' }}>{'DHQ ' + window.App.DhqProj.fmt(x.pid)}</span> : null}</span>;
                                     }
                                     case 'adp': {
                                         const a = adpOf(x);
