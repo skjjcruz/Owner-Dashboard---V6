@@ -71,10 +71,13 @@
             });
         }, [allAssess]);
 
-        const currentRoster = (currentLeague?.rosters || []).find(r => String(r.owner_id) === String(sleeperUserId));
+        // My team on every platform (MFL/ESPN have no Sleeper owner id).
+        const myRid = window.App?.resolveMyRosterId ? window.App.resolveMyRosterId(currentLeague, sleeperUserId) : null;
+        const isMyRosterId = rid => (myRid != null ? String(rid) === myRid : (currentLeague?.rosters || []).find(r => r.roster_id === rid)?.owner_id === sleeperUserId);
+        const currentRoster = (currentLeague?.rosters || []).find(r => myRid != null ? String(r.roster_id) === myRid : String(r.owner_id) === String(sleeperUserId));
         const rosterState = window.App?.getRosterDataState?.({ roster: currentRoster, currentLeague, rosters: currentLeague?.rosters }) || { isUsable: true };
         const total = powerRanked.length || 0;
-        const myRank = powerRanked.findIndex(a => a.rosterId && (currentLeague?.rosters || []).find(r => r.roster_id === a.rosterId)?.owner_id === sleeperUserId) + 1;
+        const myRank = powerRanked.findIndex(a => a.rosterId && isMyRosterId(a.rosterId)) + 1;
         // Exclude DHQ-merged historical trades (_fromDHQ) — the feed shouldn't
         // count prior-season history as league activity.
         const txnCount = Array.isArray(transactions) ? transactions.filter(t => !t?._fromDHQ).length : 0;
@@ -161,7 +164,7 @@
                     </div>
                     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         {top5.map((a, i) => {
-                            const isMe = a.rosterId && (currentLeague?.rosters || []).find(r => r.roster_id === a.rosterId)?.owner_id === sleeperUserId;
+                            const isMe = a.rosterId && isMyRosterId(a.rosterId);
                             const name = getOwnerName ? getOwnerName(a.rosterId) : ('Team ' + (i + 1));
                             const pct = ((a.healthScore || 0) / maxH) * 100;
                             // tier colors encode the verdict — neutral for free
@@ -243,7 +246,7 @@
                         <span style={{ fontSize: fs(0.54), color: colors.textFaint, textTransform: 'uppercase', fontFamily: fonts.ui, minWidth: 22, textAlign: 'right' }}>HP</span>
                     </div>
                     {rows.map((a, i) => {
-                        const isMe = a.rosterId && (currentLeague?.rosters || []).find(r => r.roster_id === a.rosterId)?.owner_id === sleeperUserId;
+                        const isMe = a.rosterId && isMyRosterId(a.rosterId);
                         const name = getOwnerName ? getOwnerName(a.rosterId) : ('Team ' + (i + 1));
                         const tc = tierCol(a.tier);
                         const scores = window.App?.LI?.playerScores || {};
@@ -394,7 +397,7 @@
             const ownerData = all.map(a => {
                 const roster = (currentLeague?.rosters || []).find(r => r.roster_id === a.rosterId);
                 const dhq = roster ? (roster.players || []).reduce((s, pid) => s + (scores[pid] || 0), 0) : 0;
-                const isMe = roster?.owner_id === sleeperUserId;
+                const isMe = roster ? isMyRosterId(roster.roster_id) : false;
                 return { name: getOwnerName ? getOwnerName(a.rosterId) : 'Team', dhq, healthScore: a.healthScore || 0, tier: a.tier, isMe };
             });
             const maxDHQ = Math.max(...ownerData.map(o => o.dhq), 1);

@@ -62,7 +62,10 @@
         }, []);
 
         const tiers = React.useMemo(() => groupByTier(assessments), [assessments]);
-        const mine = assessments.find(a => a.ownerId === sleeperUserId);
+        // My team on every platform (MFL/ESPN have no Sleeper owner id).
+        const myRid = window.App?.resolveMyRosterId ? window.App.resolveMyRosterId(currentLeague, sleeperUserId) : null;
+        const isMine = a => (myRid != null ? String(a?.rosterId) === myRid : a?.ownerId === sleeperUserId);
+        const mine = assessments.find(isMine);
         const myTier = mine?.tier || null;
 
         // Primary YOUR-team framing = GM Strategy posture; tier is secondary.
@@ -214,7 +217,7 @@
                     ? React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.45, fontStyle: 'italic' } }, '—')
                     : React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '4px' } },
                         ...teams.slice(0, limit).map(team => {
-                            const isMe = team.ownerId === sleeperUserId;
+                            const isMe = isMine(team);
                             const user = findUser(team.rosterId, currentLeague);
                             const av = avatarUrl(user?.avatar);
                             return React.createElement('span', {
@@ -268,7 +271,7 @@
                 if ((b.totalDHQ || 0) !== (a.totalDHQ || 0)) return (b.totalDHQ || 0) - (a.totalDHQ || 0);
                 return String(a.rosterId).localeCompare(String(b.rosterId));
             });
-            const myIdx = ranked.findIndex(a => a.ownerId === sleeperUserId);
+            const myIdx = ranked.findIndex(isMine);
             if (myIdx === -1) return { above: [], below: [], myRank: null };
             const myRank = myIdx + 1;
             const above = ranked.slice(Math.max(0, myIdx - n), myIdx).map((a, i) => ({ ...a, rank: myIdx - n + i + 1 }));
