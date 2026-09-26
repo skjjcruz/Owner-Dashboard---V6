@@ -890,6 +890,17 @@ test('espn: a connected ESPN league gets in, loads, and knows the team',
     ok(/leagueId=\(\\d\+\)/.test(connect) && /leagueId=\(\\d\+\)/.test(landing), 'a pasted ESPN link must yield the leagueId, not every digit in it');
   });
 
+test('mfl: the connect page asks which team is yours and the app uses it',
+  () => {
+    // 2026-09-26: MFL guests never picked a franchise, so Home had no 'my team'
+    // (Roster Pulse paused, Power Rankings without a YOU row).
+    const connect = fs.readFileSync(path.join(ROOT, 'connect-sleeper.html'), 'utf8');
+    const app = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
+    ok(connect.includes('id="mflTeams"'), 'connect page must offer the MFL team picker');
+    ok(connect.includes("localStorage.setItem('mfl_franchise_id'"), 'the picked MFL franchise must be stored');
+    ok(app.includes("localStorage.getItem('mfl_franchise_id')"), 'the app must read the picked MFL franchise as my team');
+  });
+
 test('nfl scoreboard: production endpoint + failure backoff (contract)',
   () => {
     // The matchup/weather feed 404-ed in production for months: nothing ever
