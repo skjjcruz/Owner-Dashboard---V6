@@ -2456,6 +2456,8 @@ WRShared.preloadMany(WR_SHARED_FILES);
            inside it), so no z-index can slot the tag beneath them — step it
            aside instead while any bottom-anchored overlay is up. */
         body:has(.wr-phone-dock) #dhq-build-tag { bottom:calc(var(--wr-bottom-inset) + 2px) !important; right:4px !important; }
+        /* The franchise board's bottom bar (no league dock): same lift, clear of the home indicator. */
+        body:has(.hub-bottombar):not(:has(.wr-phone-dock)) #dhq-build-tag { bottom:calc(var(--sab, 0px) + 68px) !important; right:4px !important; }
         body:has(.wr-sheet-backdrop, [aria-modal="true"], .wr-alex-panel, .wr-dhq-bubble, .wr-phone-actionbar, .wr-corner-toast, .wr-settings-modal) #dhq-build-tag { visibility:hidden !important; }
 
         /* iOS zoom-on-focus guard: Safari zooms any focused input under
