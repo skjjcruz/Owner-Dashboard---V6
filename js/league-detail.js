@@ -295,9 +295,13 @@
         ];
     }
     // Shared active test (sidebar + dock): the Strategy editor lives under
-    // GM's Office, so 'strategy' lights the 'alex' item.
+    // GM's Office, so 'strategy' lights the 'alex' item; Calendar is a
+    // Trophy Room sub-view (the 'calendar' route renders TrophyRoomTab with
+    // initialView 'calendar'), so it lights 'trophies' — nothing was lit.
     function navItemIsActive(item, activeTab) {
-        return !!item.tab && (activeTab === item.tab || (item.tab === 'alex' && activeTab === 'strategy'));
+        return !!item.tab && (activeTab === item.tab
+            || (item.tab === 'alex' && activeTab === 'strategy')
+            || (item.tab === 'trophies' && activeTab === 'calendar'));
     }
 
     // ── Phone bottom dock (≤767 only) ──

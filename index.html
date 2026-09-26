@@ -2566,6 +2566,11 @@ WRShared.preloadMany(WR_SHARED_FILES);
            — the third tile clearly peeks (reads as "swipe") instead of being
            shaved a few px short of whole. */
         .wr-kpi-strip.tr-leaders-strip > * { flex: 0 0 calc((100% - 16px) / 2.4); min-width: 0; box-sizing: border-box; }
+        /* Same peek for the other swipe strips that showed only a sliver of
+           the next tile (read as cut, not "swipe"): GM's Office KPIs and the
+           Trophy Room strips (All-Time stats banner, My Trophies stats,
+           Chronicles RS record). */
+        .wr-kpi-strip.gmoff-kpis > *, .trophy-room-root .wr-kpi-strip > * { flex: 0 0 calc((100% - 16px) / 2.4); min-width: 0; box-sizing: border-box; }
 
         /* dvh audit (plan Phase 3): full-height overlay tracks the visual
            viewport so Safari's collapsing URL bar can't clip the bottom.
@@ -3083,7 +3088,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="draft" src="js/draft/live-sync.js?v=20260516p6redo"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/live-decision-engine.js?v=20260601draftux"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/analyst-mock.js?v=20260531voice1"></script>
-<script type="text/babel" data-wr-defer="draft" src="js/draft/command-center.js?v=20260926b134"></script>
+<script type="text/babel" data-wr-defer="draft" src="js/draft/command-center.js?v=20260926g2"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft-room.js?v=20260907b116"></script>
 <!-- 5. League detail tab components (extracted from league-detail.js) -->
 <!-- v2 widget modules (load before dashboard.js which consumes them) -->
@@ -3109,12 +3114,12 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/tabs/flash-brief.js?v=20260926b134"></script>
 <!-- Group "analysis": analytics.js embeds LeagueMapTab, so both defer together
      (league-map.js first — DOM order is execution order within a group). -->
-<script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20260926b134"></script>
+<script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20260926g2"></script>
 <script type="text/babel" data-wr-defer="myteam" src="js/tabs/my-team.js?v=20260926b134"></script>
 <!-- Compare: extracted from My Roster's former sub-view, now a top-level ROSTER-group tab. -->
 <script type="text/babel" data-wr-defer="compare" src="js/tabs/compare.js?v=20260926b134"></script>
-<script type="text/babel" data-wr-defer="analysis" src="js/tabs/analytics.js?v=20260926b134"></script>
-<script type="text/babel" data-wr-defer="trophies" src="js/tabs/trophy-room.js?v=20260926b134"></script>
+<script type="text/babel" data-wr-defer="analysis" src="js/tabs/analytics.js?v=20260926g2"></script>
+<script type="text/babel" data-wr-defer="trophies" src="js/tabs/trophy-room.js?v=20260926g2"></script>
 <script type="text/babel" src="js/tabs/calendar.js?v=20260827cal4"></script>
 <!-- Alex Insights (Option A): top-level tab for behavioral analysis + AI settings -->
 <script type="text/babel" data-wr-defer="alex" src="js/tabs/alex-insights.js?v=20260926b134"></script>
@@ -3125,9 +3130,9 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- 6. Strategy editor: calls shared GMStrategy API, no logic duplication.
      Only consumed by alex-insights' Strategy sub-view, so it rides the same
      "alex" lazy group — inert at boot, loaded on first GM's Office / Strategy open. -->
-<script type="text/babel" data-wr-defer="alex" src="js/tabs/strategy-editor.js?v=20260926b134"></script>
+<script type="text/babel" data-wr-defer="alex" src="js/tabs/strategy-editor.js?v=20260926g2"></script>
 <!-- 7. League detail: coordinator shell, depends on all above -->
-    <script type="text/babel" src="js/league-detail.js?v=20260926b134"></script>
+    <script type="text/babel" src="js/league-detail.js?v=20260926g2"></script>
 <!-- 8. App: OwnerDashboard + ReactDOM.render (loads last) -->
 <script type="text/babel" src="js/app.js?v=20260925espn1"></script>
 

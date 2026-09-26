@@ -673,7 +673,7 @@ function TrophyRoomTab({ currentLeague, leagueSkin, playersData, myRoster, sleep
                 React.createElement('input', { value: hofDraft.scope === scope ? hofDraft.name : '', onChange: e => setHofDraft({ ...hofDraft, scope, name: e.target.value }), placeholder: scope === 'team' ? 'Player or moment name' : 'Player, team, or moment', style: { ...(_phone ? { gridColumn: '1 / -1', minWidth: 0 } : null), padding: '6px 8px', minHeight: '44px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--white)', fontSize: '0.76rem', fontFamily: 'inherit' } }),
                 React.createElement('input', { value: hofDraft.scope === scope ? hofDraft.category : '', onChange: e => setHofDraft({ ...hofDraft, scope, category: e.target.value }), placeholder: 'Category (e.g., QB, Draft Steal)', style: { ...(_phone ? { gridColumn: '1 / -1', minWidth: 0 } : null), padding: '6px 8px', minHeight: '44px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--white)', fontSize: '0.76rem', fontFamily: 'inherit' } }),
                 React.createElement('input', { type: 'number', value: hofDraft.scope === scope ? hofDraft.year : '', onChange: e => setHofDraft({ ...hofDraft, scope, year: e.target.value }), placeholder: 'Year', style: { ...(_phone ? { minWidth: 0 } : null), padding: '6px 8px', minHeight: '44px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--white)', fontSize: '0.76rem', fontFamily: 'inherit' } }),
-                React.createElement('button', { onClick: () => addHof(scope), disabled: hofDraft.scope !== scope || !hofDraft.name.trim(), style: { padding: '6px 12px', minHeight: '44px', background: (hofDraft.scope === scope && hofDraft.name.trim()) ? 'var(--gold)' : 'var(--acc-line1, rgba(212,175,55,0.2))', color: (hofDraft.scope === scope && hofDraft.name.trim()) ? 'var(--black)' : 'var(--silver)', border: 'none', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, cursor: (hofDraft.scope === scope && hofDraft.name.trim()) ? 'pointer' : 'not-allowed', fontFamily: 'inherit' } }, 'Induct')
+                React.createElement('button', { onClick: () => addHof(scope), disabled: hofDraft.scope !== scope || !hofDraft.name.trim(), style: { padding: '6px 12px', minHeight: '44px', background: (hofDraft.scope === scope && hofDraft.name.trim()) ? 'var(--gold)' : 'var(--acc-line1, rgba(212,175,55,0.2))', color: (hofDraft.scope === scope && hofDraft.name.trim()) ? 'var(--black)' : 'var(--silver)', border: 'none', borderRadius: '4px', fontSize: _phone ? 'var(--text-label, 12px)' : '0.72rem', fontWeight: 700, cursor: (hofDraft.scope === scope && hofDraft.name.trim()) ? 'pointer' : 'not-allowed', fontFamily: 'inherit' } }, 'Induct')
             )
         );
     }
@@ -966,6 +966,10 @@ ${importText.substring(0, 8000)}`;
             return Object.values(g).sort((a, b) => (b.titles - a.titles) || (b.pts - a.pts));
         })();
         const _posLabelOf = (window.App && window.App.posLabel) || (p => p);
+        // Raw Sleeper slot codes ("SUPER_FLEX", "IDP_FLEX") read as debug text;
+        // same short forms the Game Day lineup uses (SF), underscores → spaces.
+        const _SLOT_LBL = { SUPER_FLEX: 'SF', IDP_FLEX: 'IDP FLEX', REC_FLEX: 'REC FLEX', WRRB_FLEX: 'W/R FLEX' };
+        const _slotLabelOf = s => _SLOT_LBL[s] || _posLabelOf(String(s || '').replace(/_/g, ' '));
 
         return React.createElement('div', null,
             // ── Stats banner ──
@@ -1010,8 +1014,13 @@ ${importText.substring(0, 8000)}`;
                                     React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)' } }, Math.round(p.totalPoints) + ' pts'),
                                 ),
                             ),
-                            React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.85, lineHeight: 1.3 } },
-                                p.championships.map(c => c.season + ' (' + (c.ownerName || '?').slice(0, 14) + ')').join(' · '),
+                            // Full owner names (the old 14-char slice cut "Dirty Mike and
+                            // the Boys" to "Dirty Mike and" with no ellipsis): each title
+                            // is its own nowrap chip that CSS-ellipsizes only if it
+                            // can't fit the card width.
+                            React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', columnGap: '6px', rowGap: '1px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.85, lineHeight: 1.3, minWidth: 0 } },
+                                p.championships.map((c, ci) => React.createElement('span', { key: ci, title: c.season + ' · ' + (c.ownerName || '?'), style: { maxWidth: '100%', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
+                                    (ci ? '· ' : '') + c.season + ' (' + (c.ownerName || '?') + ')')),
                             ),
                         );
                     }),
@@ -1035,9 +1044,9 @@ ${importText.substring(0, 8000)}`;
                             key: slot, onClick: () => { if (typeof window.openPlayerModal === 'function') window.openPlayerModal(p.pid); },
                             style: { padding: '8px 10px', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid ' + wrAlpha(posCol, '44'), borderRadius: '6px', cursor: 'pointer' },
                         },
-                            React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: posCol, textTransform: 'uppercase', letterSpacing: '0.08em' } }, slot),
+                            React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: posCol, textTransform: 'uppercase', letterSpacing: '0.08em' } }, _slotLabelOf(slot)),
                             React.createElement('div', { style: { fontSize: '0.85rem', fontWeight: 700, color: 'var(--white)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '3px' } }, p.name),
-                            React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.75, marginTop: '1px' } }, p.season + ' · ' + (p.ownerName || '').slice(0, 14)),
+                            React.createElement('div', { title: p.ownerName || '', style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.75, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, p.season + ' · ' + (p.ownerName || '')),
                             React.createElement('div', { style: { fontSize: '0.92rem', fontWeight: 700, color: 'var(--gold)', fontFamily: 'JetBrains Mono, monospace', marginTop: '4px' } }, p.points.toFixed(1) + ' pts'),
                         );
                     }),
@@ -1174,7 +1183,7 @@ Make it feel like a real sports story. Give it a compelling headline. End with a
             view === 'league' && React.createElement('button', {
                 key: 'recap-btn',
                 onClick: generateSeasonRecap, disabled: recapStatus === 'generating',
-                style: { width: '100%', marginBottom: 'var(--space-md, 12px)', padding: '6px 12px', minHeight: '44px', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: '6px', color: 'var(--gold)', fontSize: '0.7rem', fontWeight: 700, cursor: recapStatus === 'generating' ? 'wait' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' },
+                style: { width: '100%', marginBottom: 'var(--space-md, 12px)', padding: '6px 12px', minHeight: '44px', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius: '6px', color: 'var(--gold)', fontSize: _phone ? 'var(--text-label, 12px)' : '0.7rem', fontWeight: 700, cursor: recapStatus === 'generating' ? 'wait' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' },
             }, !isPro ? '🔒 Season Recap — Pro' : recapStatus === 'generating' ? 'Alex is writing…' : '✨ Season Recap'),
         );
     }

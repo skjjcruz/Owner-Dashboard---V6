@@ -4800,7 +4800,7 @@
                     const myPct = recap?.percentile ?? (totals.length ? Math.round(((totals.length - myRank) / Math.max(1, totals.length - 1)) * 100) : 0);
 
         return (
-                            <div style={{
+                            <div {...(inline ? {} : { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Draft recap' })} style={{
                                 width: '100%', maxWidth: '1080px',
                                 ...(inline ? {} : { maxHeight: '92vh', overflowY: 'auto', overscrollBehavior: 'contain', boxShadow: '0 32px 96px rgba(0,0,0,0.8)' }),
                                 background: 'var(--k-0a0b0d, #0a0b0d)', border: (inline ? '1px' : '2px') + ' solid ' + wrAlpha(gradeColor, '55'),
@@ -4808,19 +4808,22 @@
                             }}>
                                 {/* Phone close (✕): the overlay otherwise only closes on a
                                     backdrop tap, which the phone sheet leaves almost no room
-                                    for. Zero-height sticky rail so it stays pinned while the
-                                    report scrolls. */}
+                                    for. It rides a sticky HEADER ROW (title left, ✕ right)
+                                    so it stays reachable while the report scrolls without
+                                    floating over a team row's grade letter — the old
+                                    zero-height rail parked a solid ✕ on top of content. */}
                                 {isPhone && !inline && onClose && (
-                                    <div style={{ position: 'sticky', top: 0, height: 0, zIndex: 3, display: 'flex', justifyContent: 'flex-end', overflow: 'visible' }}>
+                                    <div style={{ position: 'sticky', top: 0, zIndex: 3, display: 'flex', alignItems: 'center', gap: '8px', minHeight: '52px', padding: '4px 6px 4px 14px', background: 'var(--k-0a0b0d, #0a0b0d)', borderBottom: '1px solid var(--ov-4, rgba(255,255,255,0.06))', borderRadius: '14px 14px 0 0' }}>
+                                        <div style={{ flex: 1, minWidth: 0, fontSize: '0.7rem', color: 'var(--gold)', letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Draft Complete — Recap</div>
                                         <button type="button" onClick={onClose} aria-label="Close draft recap" title="Close"
-                                            style={{ marginTop: '8px', marginRight: '8px', width: '40px', height: '40px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: '50%', border: '1px solid var(--ov-6, rgba(255,255,255,0.18))', background: 'var(--k-0a0b0d, rgba(10,11,13,0.92))', color: 'var(--white)', fontSize: '1.05rem', lineHeight: 1, cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }}>
+                                            style={{ width: '44px', height: '44px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: '50%', border: 'none', background: 'transparent', color: 'var(--white)', fontSize: '1.05rem', lineHeight: 1, cursor: 'pointer' }}>
                                             ✕
                                         </button>
                                     </div>
                                 )}
                                 {/* Hero */}
-                                <div style={{ padding: inline ? '20px 14px' : isPhone ? (onClose ? '8px 14px 18px' : '18px 14px') : '28px 32px', borderBottom: '1px solid var(--ov-4, rgba(255,255,255,0.06))', background: 'linear-gradient(135deg, ' + gradeColor + '15, transparent 70%)' }}>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--gold)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '6px', ...(isPhone && !inline && onClose ? { paddingRight: '48px', minHeight: '48px', display: 'flex', alignItems: 'center', marginBottom: '4px' } : {}) }}>Draft Complete — Recap</div>
+                                <div style={{ padding: inline ? '20px 14px' : isPhone ? (onClose ? '14px 14px 18px' : '18px 14px') : '28px 32px', borderBottom: '1px solid var(--ov-4, rgba(255,255,255,0.06))', background: 'linear-gradient(135deg, ' + gradeColor + '15, transparent 70%)' }}>
+                                    {!(isPhone && !inline && onClose) && <div style={{ fontSize: '0.7rem', color: 'var(--gold)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '6px' }}>Draft Complete — Recap</div>}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: isPhone ? '14px' : '24px', ...(isPhone ? { flexWrap: 'wrap' } : {}) }}>
                                         <div style={{ textAlign: 'center', flexShrink: 0 }}>
                                             <div style={{ fontFamily: FONT_DISPL, fontSize: isPhone ? '4rem' : '5.5rem', fontWeight: 700, color: gradeColor, lineHeight: 1 }}>{recapPro ? (grade.letter || '—') : '🔒'}</div>
@@ -5005,7 +5008,8 @@
                                     )}
                                     {teamRecaps.length ? (
                                         <div style={{ display: 'grid', gap: '6px' }}>
-                                            {teamRecaps.slice(0, 12).map(team => {
+                                            {/* Every team — a 16-team league lost #13-16 (incl. the user's own #15) to a 12-row cap. */}
+                                            {teamRecaps.map(team => {
                                                 const isUser = String(team.rosterId) === String(userRosterId);
                                                 const topPlayer = team.topPick || team.picks?.[0];
                                                 const gradeCol = team.grade?.startsWith('A') ? 'var(--k-2ecc71, #2ecc71)' : team.grade?.startsWith('B') ? 'var(--gold)' : team.grade?.startsWith('C') ? 'var(--k-f0a500, #f0a500)' : 'var(--k-e74c3c, #e74c3c)';
@@ -6752,7 +6756,12 @@
                 <div style={{
                     position: 'sticky', top: 'var(--sat, 0px)', zIndex: 60,
                     display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-                    minHeight: 52, padding: '7px 12px 7px 52px', marginBottom: 8,
+                    // Left 52px reserved the phone hamburger's corner — but the
+                    // one-row phone header (WR.Sheet kit live) removes that
+                    // hamburger, so the slot sat empty (most visibly on the
+                    // "Draft complete · Loading the final board…" card). Only
+                    // reserve it when the hamburger can actually render.
+                    minHeight: 52, padding: '7px 12px 7px ' + ((window.WR && window.WR.Sheet) ? '12px' : '52px'), marginBottom: 8,
                     // Your turn is unmistakable: the whole card tints red, not just the border.
                     background: userUp
                         ? 'linear-gradient(90deg, rgba(231,76,60,0.18), rgba(231,76,60,0.05) 55%, var(--black, #0a0a0a))'

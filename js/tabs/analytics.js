@@ -886,7 +886,7 @@ function AnalyticsPanel({
                         <span>Priority Evidence</span>
                         <strong>Rooms To Fix First</strong>
                         {isPro ? <React.Fragment>
-                            <p>Roster-construction gaps ranked by urgency — what should drive your Trade Center and Free Agency moves. Hover a row for the underlying detail.</p>
+                            <p>Roster-construction gaps ranked by urgency — what should drive your Trade Center and Free Agency moves. {_phone ? 'Tap' : 'Hover'} a row for the underlying detail.</p>
                             <AnalyticsDataStack rows={gapRows} compact />
                         </React.Fragment> : <ProLock label="Priority Evidence" sub="Roster gaps ranked by urgency — the fix-first queue is a Pro read." />}
                     </div>
@@ -948,15 +948,18 @@ function AnalyticsPanel({
                         <div style={{ ...aCardStyle, marginTop: '12px' }}>
                             <div style={aHeaderStyle}><span>YOUR 5-YEAR OUTLOOK</span><span style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', opacity: 0.6, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>Model estimate — ages today's roster, no future trades/draft</span></div>
                             {proj.map((p, i) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                                    <span style={{ color: 'var(--silver)', fontFamily: 'var(--font-body)', minWidth: '40px', fontSize: 'var(--text-body, 1rem)' }}>{p.year}</span>
+                                // Phone: fixed-width year + tier columns so every bar
+                                // gets the same track (a long "Deep Rebuild 🔴" label
+                                // shrank its bar, so lengths weren't comparable).
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: _phone ? '8px' : '12px', marginBottom: '8px' }}>
+                                    <span style={{ color: 'var(--silver)', fontFamily: 'var(--font-body)', minWidth: '40px', fontSize: 'var(--text-body, 1rem)', ...(_phone ? { width: '40px', flexShrink: 0 } : null) }}>{p.year}</span>
                                     <div style={{ flex: 1, position: 'relative', height: '24px', background: 'var(--ov-3, rgba(255,255,255,0.05))', borderRadius: '6px', overflow: 'hidden' }}>
                                         <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: (p.projectedDHQ / maxDHQ * 100) + '%', background: tierColor(p.tier), borderRadius: '6px', opacity: 0.6, transition: 'width 0.5s ease' }} />
                                         <div style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: 'var(--text-label, 0.75rem)', fontFamily: 'var(--font-body)', color: 'var(--white)', fontWeight: 700, whiteSpace: 'nowrap' }}>
                                             {p.projectedDHQ.toLocaleString()} DHQ
                                         </div>
                                     </div>
-                                    <span style={{ color: tierColor(p.tier), fontFamily: 'var(--font-body)', fontSize: 'var(--text-body, 1rem)', minWidth: '90px', textAlign: 'right' }}>
+                                    <span style={{ color: tierColor(p.tier), fontFamily: 'var(--font-body)', fontSize: 'var(--text-body, 1rem)', minWidth: '90px', textAlign: 'right', ...(_phone ? { width: '104px', minWidth: 0, flexShrink: 0, fontSize: 'var(--text-label, 0.75rem)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } : null) }}>
                                         {isPro ? p.tier : ''} {isPro ? (p.tier === 'Rebuilding' || p.tier === 'Deep Rebuild' ? '\uD83D\uDD34' : p.tier === 'Playoff Team' ? '\u26A0\uFE0F' : '') : ''}
                                     </span>
                                 </div>
@@ -981,12 +984,15 @@ function AnalyticsPanel({
                         <div style={{ ...aCardStyle, marginTop: '12px' }}>
                             <div style={aHeaderStyle}><span>AGING CLIFF ALERT</span></div>
 	                            <div style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', opacity: 0.6, marginBottom: '10px', lineHeight: 1.5 }}>Players within 2 years of their position's value-window end with 2000+ DHQ value. These are your highest-risk assets for dynasty value decline.</div>
-                            <div style={{ display: 'flex', gap: '24px', marginBottom: '12px' }}>
-                                <div style={{ textAlign: 'center' }}>
+                            {/* Phone: the two stat columns split the width evenly with
+                                label-size captions ("League avg" broke across lines,
+                                the cliff caption ran 3 lines). */}
+                            <div style={{ display: 'flex', gap: _phone ? '12px' : '24px', marginBottom: '12px' }}>
+                                <div style={{ textAlign: 'center', ...(_phone ? { flex: '1 1 0', minWidth: 0 } : null) }}>
                                     <div style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '1.6rem', color: arPct2 > 30 ? badColor : arPct2 > 15 ? warnColor : goodColor }}>{arPct2}%</div>
-	                                    <div style={{ fontSize: 'var(--text-body, 1rem)', color: 'var(--silver)' }}>Your DHQ near value cliff by {(parseInt(S2?.season) || 2026) + 2}</div>
+	                                    <div style={{ fontSize: _phone ? 'var(--text-label, 0.75rem)' : 'var(--text-body, 1rem)', color: 'var(--silver)', ...(_phone ? { lineHeight: 1.35 } : null) }}>Your DHQ near value cliff by {(parseInt(S2?.season) || 2026) + 2}</div>
                                 </div>
-                                <div style={{ textAlign: 'center' }}>
+                                <div style={{ textAlign: 'center', ...(_phone ? { flex: '1 1 0', minWidth: 0 } : null) }}>
                                     {(() => {
                                         let lgT = 0, lgA = 0;
                                         (S2?.rosters || []).forEach(r => {
@@ -1004,7 +1010,7 @@ function AnalyticsPanel({
                                         const lgP = lgT > 0 ? Math.round(lgA / lgT * 100) : 0;
                                         return <>
                                             <div style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '1.6rem', color: 'var(--gold)' }}>{lgP}%</div>
-                                            <div style={{ fontSize: 'var(--text-body, 1rem)', color: 'var(--silver)' }}>League avg</div>
+                                            <div style={{ fontSize: _phone ? 'var(--text-label, 0.75rem)' : 'var(--text-body, 1rem)', color: 'var(--silver)', whiteSpace: 'nowrap' }}>League avg</div>
                                         </>;
                                     })()}
                                 </div>

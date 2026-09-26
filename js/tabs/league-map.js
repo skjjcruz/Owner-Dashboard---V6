@@ -189,7 +189,7 @@ function ReportSubView({
                   {r.groupBy && <span> {'\u00B7'} grouped by {r.groupBy}</span>}
                 </div>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); handleEditReport(r); }} style={{ background: 'none', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', padding: '3px 8px', color: 'var(--silver)', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'var(--font-body)', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Edit</button>
+              <button onClick={(e) => { e.stopPropagation(); handleEditReport(r); }} style={{ background: 'none', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', padding: '3px 8px', color: 'var(--silver)', cursor: 'pointer', fontSize: _phone ? 'var(--text-micro, 11px)' : '0.7rem', fontFamily: 'var(--font-body)', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Edit</button>
               {!r.id.startsWith('default_') && <button onClick={(e) => { e.stopPropagation(); handleDeleteReport(r.id); }} style={{ background: 'none', border: '1px solid rgba(231,76,60,0.3)', borderRadius: '4px', padding: '3px 8px', color: 'var(--bad)', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'var(--font-body)', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Del</button>}
             </div>
           ))}
@@ -2799,13 +2799,16 @@ function LeagueMapTab({
                         <div className="analytics-evidence-meta">{filteredRows.length.toLocaleString()} picks</div>
                     </div>
                 )}
-                <div className="analytics-filter-row">
+                {/* Phone: an even 2-up grid (two selects, then the four status
+                    chips 2×2) at the 11px floor — the flex wrap left ragged rows
+                    of 9.7px chips. */}
+                <div className="analytics-filter-row" style={_phone ? { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px' } : undefined}>
                     {/* Phone: 38px tap targets on the filter row (CSS default ~26px). */}
-                    <select value={pickYearFilter} onChange={e => setPickYearFilter(e.target.value)} style={_phone ? { minHeight: '38px' } : undefined}>
+                    <select value={pickYearFilter} onChange={e => setPickYearFilter(e.target.value)} style={_phone ? { minHeight: '38px', minWidth: 0, width: '100%' } : undefined}>
                         <option value="all">All Years</option>
                         {years.map(yr => <option key={yr} value={yr}>{yr}</option>)}
                     </select>
-                    <select value={pickOwnerFilter} onChange={e => setPickOwnerFilter(e.target.value)} style={_phone ? { minHeight: '38px', maxWidth: '100%' } : undefined}>
+                    <select value={pickOwnerFilter} onChange={e => setPickOwnerFilter(e.target.value)} style={_phone ? { minHeight: '38px', maxWidth: '100%', minWidth: 0, width: '100%' } : undefined}>
                         <option value="all">All Owners</option>
                         {(currentLeague.rosters || []).map(r => <option key={r.roster_id} value={r.roster_id}>{getOwnerName(r.roster_id)}</option>)}
                     </select>
@@ -2818,7 +2821,7 @@ function LeagueMapTab({
                     // 'Moved' (league-wide traded picks) is dropped on phone (owner
                     // ask) — Acquired/Traded Away cover the decisions that matter.
                     ].filter(([key]) => !_phone || key !== 'traded').map(([key, label]) => (
-                        <button key={key} onClick={() => setPickStatusFilter(key)} className={pickStatusFilter === key ? 'is-active' : ''} style={_phone ? { minHeight: '38px', padding: '6px 11px' } : undefined}>{label}</button>
+                        <button key={key} onClick={() => setPickStatusFilter(key)} className={pickStatusFilter === key ? 'is-active' : ''} style={_phone ? { minHeight: '38px', padding: '6px 8px', fontSize: 'var(--text-micro, 11px)', whiteSpace: 'nowrap', minWidth: 0 } : undefined}>{label}</button>
                     ))}
                 </div>
                 {_analyticsEmbed && !_phone && (

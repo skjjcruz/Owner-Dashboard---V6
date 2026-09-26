@@ -218,13 +218,15 @@ function StrategyEditorTab({ currentLeague, myRoster, playersData, gmStrategy, s
     );
 
     // ── Pill selector ─────────────────────────────────────────────────────────
-    const PillGroup = ({ options, value, onChange, fullWidth }) => (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+    // cols (phone): an even N-up grid instead of a ragged flex wrap.
+    const PillGroup = ({ options, value, onChange, fullWidth, cols }) => (
+        <div style={cols ? { display: 'grid', gridTemplateColumns: 'repeat(' + cols + ', minmax(0, 1fr))', gap: 6 } : { display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {options.map(opt => {
                 const active = value === opt.value;
                 return (
                     <button key={opt.value} onClick={() => onChange(opt.value)} style={{
-                        padding: '12px 16px',
+                        padding: cols ? '6px 4px' : '12px 16px',
+                        minWidth: 0,
                         minHeight: 44,
                         border: active ? '1px solid var(--gold)' : '1px solid var(--ov-6, rgba(255,255,255,0.12))',
                         borderRadius: 6,
@@ -429,10 +431,18 @@ function StrategyEditorTab({ currentLeague, myRoster, playersData, gmStrategy, s
                 </div>
                 <div style={{ marginTop: 14 }}>
                     <div style={styles.subLabel}>Quick set</div>
+                    {/* Phone: three presets wrapped 2 + 1 at uneven widths — an
+                        even 3-up grid with the name over its % instead. */}
                     <PillGroup
-                        options={[{ value: 82, label: 'Conservative · 82%' }, { value: 75, label: 'Balanced · 75%' }, { value: 58, label: 'Aggressive · 58%' }]}
+                        options={[['Conservative', 82], ['Balanced', 75], ['Aggressive', 58]].map(([n, v]) => ({
+                            value: v,
+                            label: _phone
+                                ? <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.2 }}><span style={{ fontSize: 'var(--text-label)', whiteSpace: 'nowrap' }}>{n}</span><span style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700 }}>{v}%</span></span>
+                                : n + ' · ' + v + '%',
+                        }))}
                         value={draft.acceptanceFloor}
                         onChange={v => set('acceptanceFloor', v)}
+                        cols={_phone ? 3 : undefined}
                     />
                 </div>
             </div>
