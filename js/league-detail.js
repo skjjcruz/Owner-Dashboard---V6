@@ -1059,6 +1059,9 @@
         const [transactions, setTransactions] = useState([]);
         const [rankedTeams, setRankedTeams] = useState([]);
         const [dhqStatus, setDhqStatus] = useState({ loading: false, step: '', progress: 0 });
+        // Phone-only × on the DHQ loading strip (the button is display:none
+        // off-phone, so this can only flip true on phones). Re-armed per build.
+        const [dhqBubbleHidden, setDhqBubbleHidden] = useState(false);
         const [loadStage, setLoadStage] = useState('');
         const [editingKpi, setEditingKpi] = useState(null); // index being edited, null = not editing
         const [leagueSelectedTeam, setLeagueSelectedTeam] = useState(null);
@@ -2016,6 +2019,7 @@
                 await new Promise(r => setTimeout(r, 0));
 
                 if (typeof window.App?.loadLeagueIntel === 'function' && !window.App.LI_LOADED) {
+                    setDhqBubbleHidden(false);
                     setDhqStatus({ loading: true, step: 'Analyzing league history...', progress: 20 });
                     try {
                         await window.App.loadLeagueIntel();
@@ -3243,7 +3247,7 @@
             <div className={'app-container ' + leagueSkinClassName} data-league-skin-type={leagueSkin?.type || 'unknown'} data-league-skin-theme={leagueSkin?.theme?.id || 'war-room-default'} onWheel={rerouteWheelToPage} style={{ paddingBottom: '60px' }}>
                 {/* DHQ Loading Bubble — .wr-dhq-bubble: phone tier repoints it
                     above the bottom dock (index.html PHONE TIER block). */}
-                {dhqStatus.loading && (
+                {dhqStatus.loading && !dhqBubbleHidden && (
                     <div className="wr-dhq-bubble" style={{
                         position: 'fixed', bottom: '24px', left: '80px', zIndex: 300,
                         background: 'var(--black)', border: '2px solid var(--acc-line3, rgba(212,175,55,0.4))',
@@ -3252,16 +3256,18 @@
                         animation: 'fadeSlideUp 0.3s ease'
                     }}>
                         <style>{`@keyframes fadeSlideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes dhqSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                            <div style={{
+                        <div className="wr-dhq-bubble-head" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                            <div className="wr-dhq-bubble-spin" style={{
                                 width: '20px', height: '20px', border: '2px solid var(--acc-line2, rgba(212,175,55,0.3))',
                                 borderTopColor: 'var(--gold)', borderRadius: '50%',
                                 animation: 'dhqSpin 0.8s linear infinite'
                             }}></div>
-                            <div>
-                                <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-body, 1rem)', color: 'var(--gold)', fontWeight: 700, letterSpacing: '0.04em' }}>BUILDING LEAGUE INTELLIGENCE</div>
-                                <div style={{ fontSize: 'var(--text-body, 1rem)', color: 'var(--silver)', marginTop: '2px' }}>{dhqStatus.step}</div>
+                            <div className="wr-dhq-bubble-text">
+                                <div className="wr-dhq-bubble-title" style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-body, 1rem)', color: 'var(--gold)', fontWeight: 700, letterSpacing: '0.04em' }}>BUILDING LEAGUE INTELLIGENCE</div>
+                                <div className="wr-dhq-bubble-step" style={{ fontSize: 'var(--text-body, 1rem)', color: 'var(--silver)', marginTop: '2px' }}>{dhqStatus.step}</div>
                             </div>
+                            {/* Phone-only dismiss (index.html PHONE TIER shows it) */}
+                            <button type="button" className="wr-dhq-bubble-close" aria-label="Hide progress" onClick={() => setDhqBubbleHidden(true)} style={{ display: 'none' }}>{'\u2715'}</button>
                         </div>
                         <div style={{ background: 'var(--ov-4, rgba(255,255,255,0.06))', borderRadius: '4px', height: '4px', overflow: 'hidden' }}>
                             <div style={{
@@ -3270,7 +3276,7 @@
                                 borderRadius: '4px', transition: 'width 0.5s ease'
                             }}></div>
                         </div>
-                        <div style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', marginTop: '6px', opacity: 0.6 }}>
+                        <div className="wr-dhq-bubble-note" style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', marginTop: '6px', opacity: 0.6 }}>
                             {dhqStatus.progress < 50 ? 'Analyzing league history, stats, drafts, and transactions. First load takes ~15 seconds, then it\'s cached.' :
                              dhqStatus.progress < 80 ? 'Scoring every player in your league\'s scoring system...' :
                              'Almost done — blending market data and computing trade values.'}
@@ -3305,6 +3311,11 @@
                     .wr-main-content{margin-left:0 !important;width:100% !important;max-width:100vw;overflow-x:clip;overflow-y:visible;box-sizing:border-box;padding-top:var(--wr-dev-banner-height,0px)}
                 }
                 @media(max-width:767px){
+                    /* Closed drawer: phone widens it to 232px (index.html), so the
+                       -220px tablet offset left a 12px sliver peeking at the left
+                       edge and eating taps. Park it fully off-canvas (width + 1px
+                       border + slack) and take it out of hit-testing while closed. */
+                    .wr-sidebar:not(.open){left:-240px !important;visibility:hidden}
                     /* Phone header: compact two-zone layout — title + SWITCH share the
                        top line, and the status badges flow inline (wrapping) on the
                        line(s) below, instead of one full-width row per badge (which
@@ -4143,7 +4154,7 @@
                 Phone (≤767): all three modes collapse into ONE full-width
                 bottom sheet (top-rounded, gold hairline top, keyboard-aware
                 via the alexKb bottom offset). Tablet/desktop: untouched. */}
-            {reconPanelOpen && <div style={alexPhone ? {
+            {reconPanelOpen && <div className={alexPhone ? 'wr-alex-panel' : undefined} style={alexPhone ? {
               // Sit ABOVE the phone dock when the keyboard is closed (owner ask:
               // the chat was covering the nav bar). Keyboard-open keeps bottom at
               // the keyboard top (the dock hides with the keyboard anyway).

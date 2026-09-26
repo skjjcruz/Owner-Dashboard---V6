@@ -409,9 +409,11 @@ function StrategyEditorTab({ currentLeague, myRoster, playersData, gmStrategy, s
             {/* ── Trade Acceptance Floor (always visible — drives the Trade Center) ── */}
             <div style={styles.card}>
                 <SectionHeader title="Trade Acceptance Floor" sub="The minimum acceptance an offer must clear for the Trade Center to call it Playable. Lower = chase more long-shot deals; higher = only safe, fair offers. Seeded by your aggression — drag to fine-tune." />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap', ...(_phone ? { rowGap: 4 } : null) }}>
                     <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '2.1rem', fontWeight: 700, color: 'var(--gold)', minWidth: 90, lineHeight: 1 }}>{draft.acceptanceFloor}%</div>
-                    <div style={{ flex: 1, minWidth: 220 }}>
+                    {/* Phone: slider takes its own full-width row so the two end
+                        labels have room (they ran together beside the number). */}
+                    <div style={{ flex: 1, minWidth: _phone ? '100%' : 220 }}>
                         <input
                             type="range" min="55" max="90" step="1"
                             value={draft.acceptanceFloor}
@@ -419,7 +421,7 @@ function StrategyEditorTab({ currentLeague, myRoster, playersData, gmStrategy, s
                             aria-label="Trade acceptance floor"
                             style={{ width: '100%', accentColor: 'var(--gold)', cursor: 'pointer', height: 32 }}
                         />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-micro)', color: 'var(--ov-8, rgba(255,255,255,0.4))', fontFamily: 'var(--font-body)', marginTop: 2 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-micro)', color: 'var(--ov-8, rgba(255,255,255,0.4))', fontFamily: 'var(--font-body)', marginTop: 2, ...(_phone ? { gap: 12 } : null) }}>
                             <span>55% · chase long-shots</span>
                             <span>only safe deals · 90%</span>
                         </div>

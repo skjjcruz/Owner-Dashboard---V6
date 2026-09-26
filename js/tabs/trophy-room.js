@@ -319,7 +319,7 @@ function TrophyRoomTab({ currentLeague, leagueSkin, playersData, myRoster, sleep
     function renderAllTimeLeadersCard() {
         return React.createElement('div', { style: { ...cardStyle, marginBottom: 0 } },
             React.createElement('div', { style: headerStyle }, 'ALL-TIME LEADERS'),
-            React.createElement('div', _phone ? { className: 'wr-kpi-strip' } : { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' } },
+            React.createElement('div', _phone ? { className: 'wr-kpi-strip tr-leaders-strip' } : { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' } },
                 _leaderCard('Most Titles', owners, o => o.championships, o => o.champSeasons.join(', ')),
                 _leaderCard('Most Wins', owners, o => o.wins, o => o.wins + '-' + o.losses),
                 _leaderCard('Most Playoffs', owners, o => o.playoffAppearances || 0, o => (o.playoffAppearances || 0) + ' runs'),
@@ -667,10 +667,12 @@ function TrophyRoomTab({ currentLeague, leagueSkin, playersData, myRoster, sleep
                     ))
                 ),
             // Add form (scope-aware)
-            React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '6px' } },
-                React.createElement('input', { value: hofDraft.scope === scope ? hofDraft.name : '', onChange: e => setHofDraft({ ...hofDraft, scope, name: e.target.value }), placeholder: scope === 'team' ? 'Player or moment name' : 'Player, team, or moment', style: { padding: '6px 8px', minHeight: '44px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--white)', fontSize: '0.76rem', fontFamily: 'inherit' } }),
-                React.createElement('input', { value: hofDraft.scope === scope ? hofDraft.category : '', onChange: e => setHofDraft({ ...hofDraft, scope, category: e.target.value }), placeholder: 'Category (e.g., QB, Draft Steal)', style: { padding: '6px 8px', minHeight: '44px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--white)', fontSize: '0.76rem', fontFamily: 'inherit' } }),
-                React.createElement('input', { type: 'number', value: hofDraft.scope === scope ? hofDraft.year : '', onChange: e => setHofDraft({ ...hofDraft, scope, year: e.target.value }), placeholder: 'Year', style: { padding: '6px 8px', minHeight: '44px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--white)', fontSize: '0.76rem', fontFamily: 'inherit' } }),
+            // Phone: name + category get full-width rows (placeholders were
+            // truncated at 2-3 per row); Year + Induct share the last row.
+            React.createElement('div', { style: { display: 'grid', gridTemplateColumns: _phone ? '1fr 1fr' : 'repeat(auto-fit, minmax(120px, 1fr))', gap: '6px' } },
+                React.createElement('input', { value: hofDraft.scope === scope ? hofDraft.name : '', onChange: e => setHofDraft({ ...hofDraft, scope, name: e.target.value }), placeholder: scope === 'team' ? 'Player or moment name' : 'Player, team, or moment', style: { ...(_phone ? { gridColumn: '1 / -1', minWidth: 0 } : null), padding: '6px 8px', minHeight: '44px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--white)', fontSize: '0.76rem', fontFamily: 'inherit' } }),
+                React.createElement('input', { value: hofDraft.scope === scope ? hofDraft.category : '', onChange: e => setHofDraft({ ...hofDraft, scope, category: e.target.value }), placeholder: 'Category (e.g., QB, Draft Steal)', style: { ...(_phone ? { gridColumn: '1 / -1', minWidth: 0 } : null), padding: '6px 8px', minHeight: '44px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--white)', fontSize: '0.76rem', fontFamily: 'inherit' } }),
+                React.createElement('input', { type: 'number', value: hofDraft.scope === scope ? hofDraft.year : '', onChange: e => setHofDraft({ ...hofDraft, scope, year: e.target.value }), placeholder: 'Year', style: { ...(_phone ? { minWidth: 0 } : null), padding: '6px 8px', minHeight: '44px', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--white)', fontSize: '0.76rem', fontFamily: 'inherit' } }),
                 React.createElement('button', { onClick: () => addHof(scope), disabled: hofDraft.scope !== scope || !hofDraft.name.trim(), style: { padding: '6px 12px', minHeight: '44px', background: (hofDraft.scope === scope && hofDraft.name.trim()) ? 'var(--gold)' : 'var(--acc-line1, rgba(212,175,55,0.2))', color: (hofDraft.scope === scope && hofDraft.name.trim()) ? 'var(--black)' : 'var(--silver)', border: 'none', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, cursor: (hofDraft.scope === scope && hofDraft.name.trim()) ? 'pointer' : 'not-allowed', fontFamily: 'inherit' } }, 'Induct')
             )
         );
@@ -1264,10 +1266,13 @@ Make it feel like a real sports story. Give it a compelling headline. End with a
                 React.createElement('span', { style: { flex: 1 } }, 'ALL-TIME STANDINGS'),
                 React.createElement('span', { style: { fontSize: micro, color: 'var(--silver)', textTransform: 'none', letterSpacing: 0 } }, ranked.length, ' owner', ranked.length === 1 ? '' : 's'),
             ),
-            React.createElement('div', { className: 'wr-sticky-table-wrap' },
+            // Right-edge fade = "more columns →" hint; hidden once scrolled
+            // to the end (or when everything already fits).
+            React.createElement('div', { style: { position: 'relative' } },
+            React.createElement('div', { className: 'wr-sticky-table-wrap', ref: el => { if (el) _syncStandingsFade(el); }, onScroll: e => _syncStandingsFade(e.currentTarget) },
                 React.createElement('table', { className: 'wr-sticky-table', style: { width: '100%', borderCollapse: 'collapse' } },
                     React.createElement('thead', null, React.createElement('tr', null,
-                        React.createElement('th', { style: { ...thS, textAlign: 'left', minWidth: '124px' } }, 'Owner'),
+                        React.createElement('th', { style: { ...thS, textAlign: 'left' } }, 'Owner'),
                         ['Rec', 'Win%', 'Titles', 'R-Up', 'PO', 'PF', 'PA'].map(hd => React.createElement('th', { key: hd, style: thS }, hd)),
                     )),
                     React.createElement('tbody', null, ranked.map((o, i) => {
@@ -1279,10 +1284,15 @@ Make it feel like a real sports story. Give it a compelling headline. End with a
                             onClick: () => { if (!o.isFormer) { setSelectedOwner(o.rosterId); setView('personal'); } },
                             style: { cursor: o.isFormer ? 'default' : 'pointer', opacity: o.isFormer ? 0.65 : 1 },
                         },
-                            React.createElement('td', { style: { ...tdS, textAlign: 'left', borderLeft: isMe ? '2px solid var(--gold)' : '2px solid transparent' } },
-                                React.createElement('span', { style: { fontFamily: mono, fontSize: micro, color: i < 3 ? 'var(--gold)' : 'var(--silver)', fontWeight: 700, marginRight: '7px' } }, i + 1),
-                                React.createElement('span', { style: { fontFamily: 'var(--font-body)', fontSize: '0.78rem', fontWeight: 600, color: isMe ? 'var(--gold)' : 'var(--white)' } },
+                            React.createElement('td', { style: { ...tdS, textAlign: 'left', whiteSpace: 'normal', borderLeft: isMe ? '2px solid var(--gold)' : '2px solid transparent' } },
+                                // Fixed-width, wrapping owner cell: long team names used to
+                                // stretch this column to ~60% of the screen (nowrap), pushing
+                                // Titles and everything after it out of view.
+                                React.createElement('div', { style: { display: 'flex', alignItems: 'baseline', width: '118px', lineHeight: 1.3 } },
+                                React.createElement('span', { style: { fontFamily: mono, fontSize: micro, color: i < 3 ? 'var(--gold)' : 'var(--silver)', fontWeight: 700, marginRight: '7px', flex: 'none' } }, i + 1),
+                                React.createElement('span', { style: { fontFamily: 'var(--font-body)', fontSize: '0.78rem', fontWeight: 600, color: isMe ? 'var(--gold)' : 'var(--white)', minWidth: 0, overflowWrap: 'anywhere' } },
                                     o.ownerName, isMe ? ' ★' : '', o.isFormer ? ' (former)' : ''),
+                                ),
                                 React.createElement('div', { style: { fontFamily: 'var(--font-body)', fontSize: micro, color: 'var(--silver)', opacity: 0.6, marginLeft: '15px' } }, (o.tenure || 0) + ' season' + ((o.tenure || 0) === 1 ? '' : 's')),
                             ),
                             React.createElement('td', { style: { ...tdS, color: 'var(--white)', fontWeight: 600 } }, o.wins + '-' + o.losses),
@@ -1296,7 +1306,13 @@ Make it feel like a real sports story. Give it a compelling headline. End with a
                     })),
                 ),
             ),
+            React.createElement('div', { 'aria-hidden': 'true', style: { position: 'absolute', top: '1px', bottom: '1px', right: '1px', width: '28px', pointerEvents: 'none', background: 'linear-gradient(90deg, transparent, var(--black, #121217))', borderRadius: '0 var(--card-radius-sm, 8px) var(--card-radius-sm, 8px) 0', transition: 'opacity 0.2s' } }),
+            ),
         );
+    }
+    function _syncStandingsFade(el) {
+        const fade = el.nextSibling;
+        if (fade) fade.style.opacity = (el.scrollLeft + el.clientWidth >= el.scrollWidth - 2) ? '0' : '1';
     }
 
     // All-time champion roster → P1 AssetRows: pos badge · seasons tag ·
@@ -1338,7 +1354,7 @@ Make it feel like a real sports story. Give it a compelling headline. End with a
         style: { padding: '6px 12px', minHeight: '44px', fontSize: '0.72rem', fontWeight: 700, borderRadius: '6px', border: '1px solid ' + (view === tabKey ? 'var(--gold)' : 'var(--ov-6, rgba(255,255,255,0.1))'), background: view === tabKey ? 'var(--gold)' : 'transparent', color: view === tabKey ? 'var(--black)' : 'var(--silver)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }
     }, label);
 
-    return React.createElement('div', { style: { padding: '0' } },
+    return React.createElement('div', { className: 'trophy-room-root', style: { padding: '0' } },
         // Tab toolbar — view toggle on the left, Season Recap CTA on the right (League view only)
         _phone ? _renderPhoneToolbar() :
         React.createElement('div', { style: { display: 'flex', gap: 'var(--space-sm, 8px)', marginBottom: 'var(--space-md, 12px)', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', alignItems: 'center', flexWrap: 'wrap' } },

@@ -892,7 +892,7 @@
                         // Phone: compact card density; the .gmoff-phone-ins
                         // wrapper class drives the full-width CTA (scoped CSS).
                         const cardIns = _phone ? { ...cardBase, compact: true } : cardBase;
-                        return h('div', { key: i, className: _phone ? 'gmoff-phone-ins' : undefined, style: { position: 'relative' } },
+                        return h('div', { key: i, className: _phone ? 'gmoff-phone-ins' + (ins.recommendationWhy?.length > 0 ? ' gmoff-has-why' : '') : undefined, style: { position: 'relative' } },
                         h(InsightCard, ins.isAi ? {
                             ...cardIns,
                             // Learning loop: thumbs feed the ai_feedback rollup that
@@ -904,6 +904,7 @@
                             },
                         } : cardIns),
                         ins.recommendationWhy?.length > 0 && h('div', {
+                            className: 'gmoff-why',
                             style: {
                                 display: 'flex', flexWrap: 'wrap', gap: '5px',
                                 margin: '6px 2px 0',
@@ -1017,7 +1018,7 @@
         const posColor = (p) => POS_COLORS[p] || 'var(--k-d0d0d0, #d0d0d0)';
 
         const HBar = ({ label, labelColor, value, max, valStr, barColor, rightText }) =>
-            h('div', { style: { display: 'grid', gridTemplateColumns: '110px 1fr 60px', gap: '10px', alignItems: 'center', marginBottom: '6px' } },
+            h('div', { className: 'gmoff-hbar', style: { display: 'grid', gridTemplateColumns: '110px 1fr 60px', gap: '10px', alignItems: 'center', marginBottom: '6px' } },
                 h('div', { style: { fontSize: 'var(--text-label, 0.75rem)', color: labelColor || 'var(--silver)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, label),
                 h('div', { style: { height: '10px', background: 'var(--ov-3, rgba(255,255,255,0.04))', borderRadius: '3px', overflow: 'hidden', position: 'relative' } },
                     h('div', { style: { width: Math.max(0, Math.min(100, (value / max) * 100)) + '%', height: '100%', background: barColor || 'var(--gold)', borderRadius: '3px', transition: 'width 0.2s' } })
@@ -1029,7 +1030,7 @@
         // `interpretation` is the differentiator vs. Analytics: the same data
         // is there, but here Alex tells you what it *means* for your play.
         const Panel = ({ title, subtitle, interpretation, interpColor, children, empty }) => h(Card, { padding: 'var(--card-pad-lg)', style: { marginBottom: 'var(--space-md)' } },
-            h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: interpretation ? '8px' : '14px' } },
+            h('div', { className: 'gmoff-panel-head', style: { display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: interpretation ? '8px' : '14px' } },
                 h('h3', { style: { fontFamily: 'var(--font-title)', fontSize: 'var(--text-title, 1.125rem)', fontWeight: 700, margin: 0, letterSpacing: 0 } }, title),
                 subtitle && h('span', { style: { fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', opacity: 0.6, fontFamily: 'var(--font-mono)' } }, '\u2014 ' + subtitle)
             ),
@@ -1719,7 +1720,7 @@
                     sliderRow('Max alerts per week', 'Caps how many cards Alex shows in Overview. Lower = curated.', 'maxAlertsPerWeek', 1, 20, 1),
                     sliderRow('Min projected-points delta', 'Smallest swing (in projected fantasy points) Alex bothers flagging on lineup or waiver moves.', 'minPointsDelta', 0, 10, 0.5, v => Number(v).toFixed(1) + ' pts'),
                     h('div', { style: { fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', opacity: 0.55, marginTop: '4px', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-title)', fontWeight: 700 } }, 'Quick presets'),
-                    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' } },
+                    h('div', { className: 'gmoff-presets', style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' } },
                         presetButton('Conservative', 'Only flag 85%+ confidence \u00B7 ~3 alerts/week',
                             () => ({ ...DEFAULT_SETTINGS, alertThreshold: 85, maxAlertsPerWeek: 3, minPointsDelta: 4 })),
                         presetButton('Balanced', 'Tuned defaults \u00B7 70% threshold \u00B7 ~6 alerts/week',
@@ -1933,6 +1934,22 @@
             // content column (the root's last div child) > direct-child CTA
             // button. The feedback thumbs sit one div deeper — untouched.
             + '.gmoff-phone-ins > div > div:last-child > button{width:100%;justify-content:center;}'
+            // Why-chips were floating outside the card: fold them into it as a
+            // footer band (card loses its bottom corners + border, chips row
+            // takes the card surface/border and the bottom radius).
+            + '.gmoff-has-why > div:first-child{border-bottom:0 !important;border-bottom-left-radius:0 !important;border-bottom-right-radius:0 !important;}'
+            + '.gmoff-has-why > div:first-child > div:first-child{border-bottom-left-radius:0 !important;border-bottom-right-radius:0 !important;}'
+            + '.gmoff-has-why > .gmoff-why{margin:0 !important;padding:0 16px 14px;background:var(--off-black, var(--k-1a1a1a, #1a1a1a));border:1px solid var(--ov-4, rgba(255,255,255,0.06));border-top:0;border-radius:0 0 12px 12px;}'
+            // Patterns bars: fixed 110/60 columns wrapped "3 picks · 0% hit"
+            // with the dot starting a line — value column sizes to content.
+            + '.gmoff-hbar{grid-template-columns:minmax(52px,84px) minmax(40px,1fr) minmax(46px,auto) !important;gap:8px !important;}'
+            + '.gmoff-hbar > div:last-child{white-space:nowrap;}'
+            // Panel titles: subtitle drops under the title instead of
+            // squeezing it into a 2-3 line column beside it.
+            + '.gmoff-panel-head{flex-wrap:wrap;row-gap:2px !important;}'
+            + '.gmoff-panel-head > h3{flex:0 1 auto;}'
+            // Model › Quick presets: one per row (3-up wrapped to 3-4 lines).
+            + '.gmoff-presets{grid-template-columns:1fr !important;}'
             + '}';
         document.head.appendChild(el);
     })();

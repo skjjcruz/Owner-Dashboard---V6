@@ -2435,6 +2435,28 @@ WRShared.preloadMany(WR_SHARED_FILES);
            its inline left:80px was desktop-sidebar clearance. */
         .wr-corner-toast { bottom:calc(12px + var(--wr-bottom-inset)) !important; right:12px !important; }
         .wr-dhq-bubble { bottom:calc(12px + var(--wr-bottom-inset)) !important; left:12px !important; right:12px !important; min-width:0 !important; }
+        /* DHQ bubble → slim progress strip (phone audit B): the desktop card
+           covered ~140px of content for the whole build and sat on z 300,
+           ABOVE bottom sheets (200). Here it drops under the sheet/action-bar
+           layers, loses the long explainer, and gains a × (JSX renders it
+           display:none; shown only here). Title + step + bar are kept. */
+        .wr-dhq-bubble { bottom:calc(8px + var(--wr-bottom-inset)) !important; z-index:140 !important; padding:7px 6px 8px 12px !important; border-width:1px !important; border-radius:var(--card-radius-sm, 8px) !important; box-shadow:0 4px 16px rgba(0,0,0,0.5) !important; }
+        .wr-dhq-bubble-head { gap:8px !important; margin-bottom:6px !important; }
+        .wr-dhq-bubble-spin { width:14px !important; height:14px !important; flex:none; }
+        .wr-dhq-bubble-text { flex:1 1 auto; min-width:0; }
+        .wr-dhq-bubble-title { font-size:var(--text-label, 0.75rem) !important; line-height:1.25; }
+        .wr-dhq-bubble-step { font-size:var(--text-label, 0.75rem) !important; line-height:1.25; margin-top:1px !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .wr-dhq-bubble-note { display:none !important; }
+        .wr-dhq-bubble-close { display:inline-flex !important; align-items:center; justify-content:center; flex:none; width:36px; height:36px; margin:-6px 0 -6px 0; padding:0; background:none; border:0; color:var(--silver); opacity:0.7; font-size:0.9rem; cursor:pointer; }
+
+        /* Build tag (#dhq-build-tag, end of <body>): its desktop bottom-right
+           corner lands on the dock's last label and on sheet footers here.
+           Ride just above the dock instead. The league shell's .app-container
+           is its own z:1 stacking context (sheets, strip and toasts all live
+           inside it), so no z-index can slot the tag beneath them — step it
+           aside instead while any bottom-anchored overlay is up. */
+        body:has(.wr-phone-dock) #dhq-build-tag { bottom:calc(var(--wr-bottom-inset) + 2px) !important; right:4px !important; }
+        body:has(.wr-sheet-backdrop, [aria-modal="true"], .wr-alex-panel, .wr-dhq-bubble, .wr-phone-actionbar, .wr-corner-toast, .wr-settings-modal) #dhq-build-tag { visibility:hidden !important; }
 
         /* iOS zoom-on-focus guard: Safari zooms any focused input under
            16px. Phone tier only (plan D7). */
@@ -2534,6 +2556,14 @@ WRShared.preloadMany(WR_SHARED_FILES);
            token in JS; the class-styled roots normalize here. */
         .fa-page { padding-left: var(--wr-phone-gutter, 12px) !important; padding-right: var(--wr-phone-gutter, 12px) !important; }
         .draft-cc-scope { padding-left: var(--wr-phone-gutter, 12px) !important; padding-right: var(--wr-phone-gutter, 12px) !important; }
+        /* GM's Office (+ its Strategy sub-view) and Trophy Room / Calendar
+           roots shipped with no side padding — first letters sat on the
+           screen edge. Same gutter as Draft / Analytics. */
+        .gm-office-shell, .trophy-room-root { padding-left: var(--wr-phone-gutter, 12px) !important; padding-right: var(--wr-phone-gutter, 12px) !important; box-sizing: border-box; }
+        /* Trophy Room › All-Time Leaders snap strip: tiles sized so ~2.4 fit
+           — the third tile clearly peeks (reads as "swipe") instead of being
+           shaved a few px short of whole. */
+        .wr-kpi-strip.tr-leaders-strip > * { flex: 0 0 calc((100% - 16px) / 2.4); min-width: 0; box-sizing: border-box; }
 
         /* dvh audit (plan Phase 3): full-height overlay tracks the visual
            viewport so Safari's collapsing URL bar can't clip the bottom.
