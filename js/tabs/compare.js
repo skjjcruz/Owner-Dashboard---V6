@@ -1056,7 +1056,7 @@ function CompareTab({
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', marginBottom: '10px' }}>
                         <div>
                             <div style={{ fontFamily: 'var(--font-body)', fontSize: '0.72rem', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Full Breakdown</div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--silver)', opacity: 0.62, marginTop: '2px' }}>Player-level rooms across {profiles.length} teams. Click any player to open the card.</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--silver)', opacity: 0.62, marginTop: '2px' }}>Player-level rooms across {profiles.length} teams. {isPhone ? 'Tap' : 'Click'} any player to open the card.</div>
                         </div>
                         <div style={{ ...mono, color: 'var(--silver)', fontSize: '0.72rem' }}>{profiles.length} teams</div>
                     </div>
@@ -1634,8 +1634,16 @@ function CompareTab({
             // ~45px into view at 375 (at 110px it sat entirely off-screen with
             // no hint that the matrix scrolls). Label column 92px so two-line
             // labels ("Wk 3 Sleeper / Proj") never wrap to a third line.
-            const phColW = N >= 3 ? 84 : 110;
-            const phLabelW = 92;
+            // Phone fit pass 2026-09-26: at 84/92 + 10px gaps three players
+            // overflowed a 375 panel by ~41px, cutting the third column
+            // mid-value ("4,2", "Pri"). 3+ players now run 77px columns, an
+            // 80px label column (fits "EXPERIENCE") and 6px gaps = 329px, so
+            // all three sit fully in a 375 panel (333px inner); a 4th swipes.
+            // Those narrow cells wrap at spaces/hyphens ("Post-/Window").
+            const phNarrow = N >= 3;
+            const phColW = phNarrow ? 77 : 110;
+            const phLabelW = phNarrow ? 80 : 92;
+            const phGap = phNarrow ? 6 : 10;
             const gt = isPhone
                 ? 'minmax(' + phLabelW + 'px, 0.62fr) repeat(' + N + ', minmax(' + phColW + 'px, 1fr))'
                 // Desktop/tablet: a matching spacer column on the RIGHT balances the
@@ -1644,7 +1652,7 @@ function CompareTab({
                 : 'minmax(94px, 0.62fr) repeat(' + N + ', minmax(0, 1fr)) minmax(94px, 0.62fr)';
             // Explicit px floor so every row spans the full scroll width (row
             // borders stay continuous mid-scroll): 84px label + N*(110px + 10px gap).
-            const rowMinW = isPhone ? (phLabelW + N * (phColW + 10)) + 'px' : undefined;
+            const rowMinW = isPhone ? (phLabelW + N * (phColW + phGap)) + 'px' : undefined;
             const fieldMaxDhq = Math.max(0, ...list.map(p => p.dhq || 0));
 
             // Metric defs. dir high/low picks the winner; numeric rows also print a
@@ -1785,7 +1793,7 @@ function CompareTab({
                 const vals = m.values.map(v => Number(v) || 0);
                 const best = winners.size ? (m.dir === 'high' ? Math.max(...vals) : Math.min(...vals.filter(v => v > 0))) : 0;
                 return (
-                    <div key={m.label} style={{ display: 'grid', gridTemplateColumns: gt, minWidth: rowMinW, gap: '10px', alignItems: m.wrap ? 'flex-start' : 'center', padding: isPhone ? '8px 0' : '8px 2px', borderTop: '1px solid var(--ov-3, rgba(255,255,255,0.05))' }}>
+                    <div key={m.label} style={{ display: 'grid', gridTemplateColumns: gt, minWidth: rowMinW, gap: isPhone ? phGap + 'px' : '10px', alignItems: m.wrap ? 'flex-start' : 'center', padding: isPhone ? '8px 0' : '8px 2px', borderTop: '1px solid var(--ov-3, rgba(255,255,255,0.05))' }}>
                         <div className={isPhone ? 'wr-stick-col' : undefined} style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.05em', ...(isPhone ? { opacity: 1, alignSelf: 'stretch', display: 'flex', alignItems: m.wrap ? 'flex-start' : 'center', paddingLeft: '8px', paddingRight: '4px', letterSpacing: '0.02em', lineHeight: 1.3 } : null) }}>{m.label}</div>
                         {list.map((p, i) => {
                             const win = winners.has(i);
@@ -1798,7 +1806,7 @@ function CompareTab({
                             const showGap = m.numeric && best > 0 && !win && vals[i] > 0;
                             return (
                                 <div key={i} style={{ textAlign: 'center', minWidth: 0 }}>
-                                    <div style={{ ...mono, fontWeight: 850, fontSize: '0.84rem', color: col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    <div style={{ ...mono, fontWeight: 850, fontSize: '0.84rem', color: col, ...(isPhone && phNarrow ? { lineHeight: 1.25, overflowWrap: 'anywhere' } : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }) }}>
                                         {m.display[i]}{win ? <span style={{ marginLeft: '4px', fontSize: '0.56rem', color: isPhone ? 'var(--gold)' : 'var(--good)' }}>▲</span> : null}
                                     </div>
                                     {showGap ? <div style={{ ...mono, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.5, marginTop: '1px' }}>−{m.gapFmt ? m.gapFmt(best - vals[i]) : (best - vals[i])}</div> : null}
@@ -1868,12 +1876,12 @@ function CompareTab({
                     {/* Phone (P7): the matrix rides the shared sticky-table classes —
                         scoped scroll wrap + pinned metric column — with a name header
                         row (the hero strip no longer carries the column headers). */}
-                    {isPhone && N >= 3 ? (
+                    {isPhone && N >= 4 ? (
                         <div style={{ ...mono, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.7, textAlign: 'right', margin: '0 2px 5px' }}>Swipe for all {N} players →</div>
                     ) : null}
                     <div className={isPhone ? 'wr-sticky-table-wrap wr-sticky-table' : undefined} style={{ ...panelStyle, padding: isPhone ? '4px 0 12px' : '4px 16px 12px', marginBottom: '12px', overflowX: 'auto', ...(isPhone ? { WebkitOverflowScrolling: 'touch' } : null) }}>
                         {isPhone ? (
-                            <div style={{ display: 'grid', gridTemplateColumns: gt, minWidth: rowMinW, gap: '10px', alignItems: 'center', padding: '8px 0 2px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: gt, minWidth: rowMinW, gap: phGap + 'px', alignItems: 'center', padding: '8px 0 2px' }}>
                                 <div className="wr-stick-col" style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', textTransform: 'uppercase', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', paddingLeft: '8px', paddingRight: '4px', alignSelf: 'stretch' }}>Metric</div>
                                 {list.map(pl => {
                                     const isLead = (pl.dhq || 0) === fieldMaxDhq && fieldMaxDhq > 0;
@@ -2322,7 +2330,9 @@ function CompareTab({
                             <div key={card.label} style={{ padding: '10px', background: 'rgba(0,0,0,0.28)', border: '1px solid var(--ov-4, rgba(255,255,255,0.07))', borderRadius: '7px', ...(isPhone ? { width: '156px' } : null) }}>
                                 <div style={labelStyle}>{card.label}</div>
                                 <div style={{ ...mono, fontSize: '1rem', fontWeight: 800, color: card.color, marginTop: '5px' }}>{card.value}</div>
-                                <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.64, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.sub}</div>
+                                {/* Phone: the 156px tile cut "74,200 vs 90,660 incl. pi…" —
+                                    the sub line wraps to a second line there instead. */}
+                                <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.64, marginTop: '2px', ...(isPhone ? { lineHeight: 1.3 } : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }) }}>{card.sub}</div>
                             </div>
                         ))}
                     </div>
@@ -2486,7 +2496,7 @@ function CompareTab({
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: '0.72rem', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                             Full Roster by Position{histSeason ? (histGridActive ? ' — ' + histSeason + ' rosters' : ' — ' + histSeason + ' rosters unavailable, showing current') : ''}
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.62 }}>Click any player to open the player card.</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.62 }}>{isPhone ? 'Tap' : 'Click'} any player to open the player card.</div>
                     </div>
                     {gridSummaries.map(summary => {
                         const maxLen = Math.max(summary.myAtPos.length, summary.theirAtPos.length);
@@ -2507,19 +2517,16 @@ function CompareTab({
                                             <span style={{ fontWeight: 800, color: summary.diff > 0 ? 'var(--good)' : summary.diff < 0 ? 'var(--bad)' : 'var(--silver)' }}>{summary.diff > 0 ? '+' : ''}{summary.diff.toLocaleString()}</span>
                                         </div>
                                     </div>
-                                    {/* Phone: the 11px % labels can't fit inside a 6px bar
-                                        (rendered half-cut) — they flank the bar instead. */}
-                                    <div style={isPhone ? { display: 'flex', alignItems: 'center', gap: '6px' } : undefined}>
-                                    {isPhone && <span style={{ ...mono, fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, color: 'var(--gold)', flexShrink: 0, minWidth: '28px' }}>{Math.round(myPosPct)}%</span>}
-                                    <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--ov-3, rgba(255,255,255,0.04))', ...(isPhone ? { flex: 1, minWidth: 0 } : null) }}>
-                                        <div title={'You: ' + Math.round(myPosPct) + '%'} style={{ width: myPosPct + '%', background: 'linear-gradient(90deg, var(--gold), var(--acc-line4, rgba(212,175,55,0.78)))', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: isPhone ? 0 : '4px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--k-0a0a0a, #0a0a0a)', fontWeight: 800 }}>
-                                            {!isPhone && myPosPct >= 18 ? Math.round(myPosPct) + '%' : ''}
-                                        </div>
-                                        <div title={'Them: ' + Math.round(100 - myPosPct) + '%'} style={{ width: (100 - myPosPct) + '%', background: 'linear-gradient(90deg, rgba(124,107,248,0.76), var(--k-7c6bf8, #7c6bf8))', display: 'flex', alignItems: 'center', paddingLeft: isPhone ? 0 : '4px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--k-0a0a0a, #0a0a0a)', fontWeight: 800 }}>
-                                            {!isPhone && (100 - myPosPct) >= 18 ? Math.round(100 - myPosPct) + '%' : ''}
-                                        </div>
+                                    {/* The 11px % labels can't fit inside a 6px bar (they
+                                        rendered half-cut) — they flank the bar instead, on
+                                        every tier (desktop too, fit pass 2026-09-26). */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ ...mono, fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, color: 'var(--gold)', flexShrink: 0, minWidth: '28px' }}>{Math.round(myPosPct)}%</span>
+                                    <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--ov-3, rgba(255,255,255,0.04))', flex: 1, minWidth: 0 }}>
+                                        <div title={'You: ' + Math.round(myPosPct) + '%'} style={{ width: myPosPct + '%', background: 'linear-gradient(90deg, var(--gold), var(--acc-line4, rgba(212,175,55,0.78)))' }} />
+                                        <div title={'Them: ' + Math.round(100 - myPosPct) + '%'} style={{ width: (100 - myPosPct) + '%', background: 'linear-gradient(90deg, rgba(124,107,248,0.76), var(--k-7c6bf8, #7c6bf8))' }} />
                                     </div>
-                                    {isPhone && <span style={{ ...mono, fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, color: 'var(--k-7c6bf8, #7c6bf8)', flexShrink: 0, minWidth: '28px', textAlign: 'right' }}>{Math.round(100 - myPosPct)}%</span>}
+                                    <span style={{ ...mono, fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, color: 'var(--k-7c6bf8, #7c6bf8)', flexShrink: 0, minWidth: '28px', textAlign: 'right' }}>{Math.round(100 - myPosPct)}%</span>
                                     </div>
                                 </div>
                                 {(() => {

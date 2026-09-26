@@ -823,6 +823,37 @@ function LineupTab({
             // count===0 = a roster-gap hole, not a bye week — never say "0 on bye".
             return Object.keys(c).map(p => c[p] > 1 ? c[p] + ' ' + p + 's' : p).join(', ') || (bw.count > 0 ? bw.count + ' on bye' : 'lineup hole');
         };
+        // NOW = head-to-head record over COMPLETED weeks, counted off the
+        // schedule rows below it, so the outlook, the schedule and the Luck
+        // Ledger agree. summary.record is the roster's standings record
+        // (roster.settings wins/losses), which in a league-median league
+        // (league_average_match) also counts one median game per week —
+        // The One read "NOW 1-3" beside a 1-1 schedule at week 3. When the
+        // two differ, the standings record rides along as a caption. Falls
+        // back to summary.record if any past matchup lacks a final score.
+        const nowRec = (() => {
+            const s = d && d.summary;
+            if (!s || !s.record) return null;
+            const past = ((d && d.weeks) || []).filter(w => w.isPast && !w.bye);
+            if (!past.length || past.some(w => !w.result)) return { main: s.record, alt: null };
+            const n = r => past.filter(w => w.result === r).length;
+            const t = n('T');
+            const h2h = n('W') + '-' + n('L') + (t ? '-' + t : '');
+            if (h2h === s.record) return { main: s.record, alt: null };
+            const median = !!(currentLeague && currentLeague.settings && Number(currentLeague.settings.league_average_match) > 0);
+            // The fallback proj record (no sim yet) is standings W/L + future
+            // H2H win odds; re-base it on the same H2H record so it counts
+            // one game per week like the schedule ("3.4-12.6" over 14 weeks).
+            const [sw, sl] = String(s.record).split('-').map(Number);
+            const r1 = x => Math.round(x * 10) / 10;
+            const proj = (s.projWins != null && s.projLosses != null && isFinite(sw) && isFinite(sl))
+                ? r1(n('W') + s.projWins - sw) + '-' + r1(n('L') + s.projLosses - sl) + (t ? '-' + t : '') : null;
+            return { main: h2h, alt: s.record + (median ? ' w/ median' : ' standings'), proj };
+        })();
+        const nowCell = nowRec ? (
+            <div><div style={{ fontSize: fz('0.6rem'), color: SILVER, letterSpacing: '0.04em' }}>NOW</div><div style={{ fontWeight: 700, color: TEXT }}>{nowRec.main}</div>
+                {nowRec.alt ? <div style={{ fontSize: fz('0.6rem'), color: SILVER, marginTop: '1px', whiteSpace: 'nowrap' }}>{nowRec.alt}</div> : null}</div>
+        ) : null;
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', position: isNarrow ? 'static' : 'sticky', top: '16px' }}>
                 {/* Season outlook (or a pre-season placeholder when no schedule yet) */}
@@ -834,7 +865,7 @@ function LineupTab({
                         <React.Fragment>
                             {d && d.summary && d.summary.record ? (
                                 <div style={{ display: 'flex', gap: '16px', margin: '8px 0 10px' }}>
-                                    <div><div style={{ fontSize: fz('0.6rem'), color: SILVER, letterSpacing: '0.04em' }}>NOW</div><div style={{ fontWeight: 700, color: TEXT }}>{d.summary.record}</div></div>
+                                    {nowCell}
                                 </div>
                             ) : <div style={{ height: '8px' }} />}
                             {GatedRow ? <GatedRow title="Season projection" sub="Projected record, points-for and weekly win odds" feature={STARTSIT_FEAT} /> : null}
@@ -849,13 +880,13 @@ function LineupTab({
                                     the sim models real scoring distributions and seeding, and two
                                     different projected records on one screen reads as a bug. */}
                                 <span style={{ fontSize: '1.5rem', fontWeight: 800, color: GOLD, fontVariantNumeric: 'tabular-nums' }}>
-                                    {simSummary ? simSummary.projWins + '-' + simSummary.projLosses : d.summary.projRecord}
+                                    {simSummary ? simSummary.projWins + '-' + simSummary.projLosses : (nowRec && nowRec.proj) || d.summary.projRecord}
                                 </span>
                                 <span style={{ fontSize: fz('0.64rem'), color: SILVER }}>proj record</span>
                                 {simSummary ? <span style={{ fontSize: fz('0.64rem'), color: GOLD, fontWeight: 700 }}>· {simSummary.playoffPct}% playoffs</span> : null}
                             </div>
                             <div style={{ display: 'flex', gap: '16px', marginTop: '9px' }}>
-                                <div><div style={{ fontSize: fz('0.6rem'), color: SILVER, letterSpacing: '0.04em' }}>NOW</div><div style={{ fontWeight: 700, color: TEXT }}>{d.summary.record}</div></div>
+                                {nowCell}
                                 <div><div style={{ fontSize: fz('0.6rem'), color: SILVER, letterSpacing: '0.04em' }}>PROJ PF</div><div style={{ fontWeight: 700, color: TEXT, fontVariantNumeric: 'tabular-nums' }}>{d.summary.projPF}</div></div>
                                 {d.summary.winPct != null ? <div><div style={{ fontSize: fz('0.6rem'), color: SILVER, letterSpacing: '0.04em' }}>WIN%</div><div style={{ fontWeight: 700, color: TEXT }}>{d.summary.winPct}%</div></div> : null}
                             </div>
@@ -977,6 +1008,16 @@ function LineupTab({
         // Row tag (slot · team · opponent · status) that wraps between its
         // parts instead of cutting the last one ("SUPER FLEX · LAR · @…"):
         // each part stays whole, a second line only when 375px runs out.
+        // Injury status → the short tag Sleeper itself shows (Q / D / OUT /
+        // IR…), same map as My Roster's phone board: a full "Questionable"
+        // pushed "IDP FLEX · LAR · @ DEN · Questionable" to 3–4 lines and
+        // the grade chip down with it (phone fit pass 2026-09-26).
+        const injShort = (st) => {
+            if (!st) return st;
+            const k = String(st).trim().toLowerCase();
+            const map = { questionable: 'Q', doubtful: 'D', out: 'OUT', probable: 'P', suspended: 'SUS', sus: 'SUS', 'injured reserve': 'IR', ir: 'IR', pup: 'PUP', na: 'NA', cov: 'COV' };
+            return map[k] || String(st).slice(0, 4);
+        };
         const wrapTag = (parts) => {
             const list = parts.filter(Boolean);
             return (
@@ -1008,7 +1049,7 @@ function LineupTab({
             const atRisk = !!status || (proj && proj.available === false);
             const shade = starterShade(pid);
             const row = <AssetRow key={sl.idx} pos={meta.pos || '?'} name={meta.name}
-                tag={wrapTag([slotLabel, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, status || null])}
+                tag={wrapTag([slotLabel, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, injShort(status) || null])}
                 slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—' }]}
                 verdict={pro ? gradeChip((proj && proj.matchupGrade) || '—') : null}
                 accent={open ? 'gold' : atRisk ? 'risk' : undefined}
@@ -1039,7 +1080,7 @@ function LineupTab({
             const status = (proj && proj.injuryStatus) || (playersData[pid] || {}).injury_status || '';
             const fs = formOf(pid);
             return <AssetRow key={label + pid} pos={meta.pos || '?'} name={meta.name}
-                tag={wrapTag([label, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, status || null])}
+                tag={wrapTag([label, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, injShort(status) || null])}
                 slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]} />;
         };
 
@@ -1076,8 +1117,11 @@ function LineupTab({
             const opp = proj && proj.opponent;
             const fs = formOf(epid);
             const isRec = !isCur && openPid && (replaceMap[String(openPid)] || {}).pid === String(epid);
+            // "Best swap" (was "Recommended Replacement": one no-wrap tag
+            // part the 375px tag column hard-cut to "Recommended Repl").
+            // The green-outlined row already marks it as DHQ's pick.
             return <AssetRow key={epid} pos={meta.pos || '?'} name={meta.name}
-                tag={wrapTag([isCur ? 'IN' : isRec ? 'Recommended Replacement' : null, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, status || null])}
+                tag={wrapTag([isCur ? 'IN' : isRec ? 'Best swap' : null, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, injShort(status) || null])}
                 slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(epid) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]}
                 verdict={pro ? gradeChip((proj && proj.matchupGrade) || '—') : null}
                 accent={isCur ? 'gold' : undefined}

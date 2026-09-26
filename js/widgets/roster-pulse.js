@@ -33,6 +33,14 @@
         // the page's lifetime, so hook order never changes).
         const _rpVp = (window.WR && window.WR.useViewport) ? window.WR.useViewport() : { isPhone: false };
         const _rpPhone = !!_rpVp.isPhone;
+        // Desktop with a mouse: the header "Roster" button stays header-
+        // height. Its 44px touch floor (with -12px margins) reached up into
+        // the card's hover ×/⚙ widget controls and they overlapped its top.
+        // It also stops 52px short of the right edge: the × / ⚙ circles
+        // (dashboard.js widget chrome, top-right 66px × 22px) land in that
+        // gap on hover instead of on the button. Touch tiers (phone, iPad)
+        // keep the 44px target (no hover controls there).
+        const _rpMouse = !_rpPhone && !_rpVp.isCoarse;
 
         // ── GM Strategy (single source of truth) ────────────────
         const gm = window.WR.GmMode.useGmEffects(currentLeague);
@@ -296,7 +304,7 @@
                         <span style={{ fontFamily: fonts.display, fontSize: fs(1.0), fontWeight: 700, color: colors.accent, letterSpacing: '0.07em', textTransform: 'uppercase', flex: 1 }}>Roster Pulse</span>
                         {/* free keeps the raw rank; the tier verdict word is Pro */}
                         <Badge label={(pro ? tier + ' · ' : '') + '#' + (powerRank || '—')} color={pro ? tierCol : colors.accent} theme={theme} />
-                        <button onClick={openMyRoster} title="Open My Roster" style={{ padding: '3px 8px', minHeight: '44px', marginTop: '-12px', marginBottom: _rpPhone ? 0 : '-12px', marginRight: _rpPhone ? '20px' : undefined, display: 'flex', alignItems: 'center', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.22))', borderRadius: '5px', cursor: 'pointer', fontSize: fs(0.58), fontFamily: fonts.ui, fontWeight: 700, whiteSpace: 'nowrap' }}>Roster</button>
+                        <button onClick={openMyRoster} title="Open My Roster" style={{ padding: '3px 8px', minHeight: _rpMouse ? '26px' : '44px', marginTop: _rpMouse ? 0 : '-12px', marginBottom: _rpPhone || _rpMouse ? 0 : '-12px', marginRight: _rpPhone ? '20px' : _rpMouse ? '52px' : undefined, display: 'flex', alignItems: 'center', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.22))', borderRadius: '5px', cursor: 'pointer', fontSize: fs(0.58), fontFamily: fonts.ui, fontWeight: 700, whiteSpace: 'nowrap' }}>Roster</button>
                     </div>
 
                     {/* Vital signs grid */}

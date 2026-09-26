@@ -236,6 +236,12 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
     const teamCell = isPhone
         ? { fontFamily: 'var(--font-body)', fontWeight: 600, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.25, wordBreak: 'break-word' }
         : { fontFamily: 'var(--font-body)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+    // Phone: a one-word name has no space to wrap at, so the 2-line clamp
+    // broke it mid-word ("Agamemnonmaxxin / g" at 375) — a single word
+    // ellipsizes on one line instead; multi-word names keep the 2-line wrap.
+    const teamCellFor = (name) => (isPhone && !/\s/.test(String(name || '').trim()))
+        ? { fontFamily: 'var(--font-body)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.25, minWidth: 0 }
+        : teamCell;
     const myRowStyle = { background: 'rgba(212,175,55,0.07)', boxShadow: `inset 3px 0 0 ${GOLD}`, color: TEXT };
     const swing = sim && sim.leverage ? Math.abs((sim.leverage.ifWin ?? 0) - (sim.leverage.ifLose ?? 0)) : 0;
 
@@ -260,7 +266,7 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
                             </div>
                             {sim.rows.map(r => (
                                 <div key={r.rosterId} style={{ ...oddsGrid, ...rowLine, ...(String(r.rosterId) === myId ? myRowStyle : {}) }}>
-                                    <span style={teamCell}>{r.name}</span>
+                                    <span style={teamCellFor(r.name)} title={r.name}>{r.name}</span>
                                     {isPhone ? null : <span style={{ textAlign: 'right' }}>{r.record}</span>}
                                     <span style={{ textAlign: 'right', color: String(r.rosterId) === myId ? GOLD : undefined }}>{r.playoffPct}%</span>
                                     {sim.byeSlots ? <span style={{ textAlign: 'right' }}>{r.byePct != null ? r.byePct + '%' : '—'}</span> : isPhone ? null : <span />}
@@ -334,7 +340,7 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
                         </div>
                         {luckRows.map(r => (
                             <div key={r.rosterId} style={{ ...luckGrid, ...rowLine, ...(String(r.rosterId) === myId ? myRowStyle : {}) }}>
-                                <span style={teamCell}>{r.name}</span>
+                                <span style={teamCellFor(r.name)} title={r.name}>{r.name}</span>
                                 <span style={{ textAlign: 'right' }}>{r.wins}-{r.losses}{r.ties ? '-' + r.ties : ''}</span>
                                 <span style={{ textAlign: 'right' }}>{r.allPlayW}-{r.allPlayL}</span>
                                 {/* toFixed(1) on both — tabular mono columns, and a bare 3

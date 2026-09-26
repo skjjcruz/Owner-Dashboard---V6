@@ -1508,12 +1508,15 @@ function MyTeamTab({
     const label = r.injury ? _phoneInjShort(r.injury) : _slotLabel(r);
     // Owner palette (2026-09-19): green starter · amber bench · red IR or
     // injury · blue taxi. Smaller than the verdict pill it replaced.
+    // 10px floor (was 0.58rem ≈ 7.8px on the 13.5px phone root); tracking and side
+    // padding trimmed so "STARTER" grows only ~4px and still fits
+    // "TEAM · AGE" + chip beside the stat cluster at 375.
     const col = r.injury || r.section === 'ir' ? 'var(--bad, #e74c3c)'
       : r.section === 'starter' ? 'var(--good, #2ecc71)'
       : r.section === 'taxi' ? 'var(--info, #4aa3ff)'
       : 'var(--warn, #f0a500)';
     return (
-      <span title={r.injury ? String(r.injury) : undefined} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, lineHeight: 1.3, padding: '1px 5px', borderRadius: '3px', border: '1px solid ' + wrAlpha(col, '80'), color: col, letterSpacing: '0.03em', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>
+      <span title={r.injury ? String(r.injury) : undefined} style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, lineHeight: 1.25, padding: '1px 4px', borderRadius: '3px', border: '1px solid ' + wrAlpha(col, '80'), color: col, letterSpacing: '0.01em', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>
         {label}
       </span>
     );
