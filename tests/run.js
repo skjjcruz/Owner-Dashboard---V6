@@ -918,11 +918,13 @@ test('nfl scoreboard: production endpoint + failure backoff (contract)',
     ok(card.includes('Object.keys(map).length) setScoutTick'), 'scouting tab must not re-tick (and re-fetch) on empty loads');
   });
 
-test('live update: deploy stamps a build id + version.json; every page polls it (2026-09-26)',
+test('live update: silent self-update — build id + version.json, every page polls it (2026-09-26)',
   () => {
-    // A running page (browser tab, iOS shell resumed from background) must pick
-    // up a new deploy without a relaunch. The deploy stamps the build id into
-    // each self-updating page and writes version.json; live-update.js polls it.
+    // Owner ruling 2026-08-27: users must receive shipped builds without
+    // force-quitting the app; no button, no banner. The deploy stamps the build
+    // id into each self-updating page and writes version.json; live-update.js
+    // (which replaces update-sentinel.js) polls it and reloads only on a long
+    // absence, a resume after one, or a long idle.
     const bd = fs.readFileSync(path.join(ROOT, 'scripts/build-deploy.cjs'), 'utf8');
     ok(bd.includes("'version.json'"), 'build-deploy must write dist-deploy/version.json');
     ok(bd.includes('<meta name="dhq-build" content="${build}">'), 'build-deploy must stamp <meta name="dhq-build">');
@@ -942,6 +944,10 @@ test('live update: deploy stamps a build id + version.json; every page polls it 
     ok(lu.includes('meta[name="dhq-build"]'), 'own build read from the stamped meta tag');
     ok(lu.includes("'[aria-modal=\"true\"],.wr-sheet-backdrop,dialog[open]'"), 'open sheet/modal blocks the reload');
     ok(lu.includes('[data-draft-pid]') && lu.includes('liveSync'), 'a draft blocks the reload');
+    ok(lu.includes('2026-08-27') && lu.includes('no button, no banner'), 'header cites the owner ruling');
+    ok(!/createElement|innerHTML|textContent\s*=|role=|toast|overlay/i.test(lu.replace(/^\s*\/\/.*$/gm, '')), 'no visible UI at all: no toast, no button, no overlay');
+    ok(lu.includes('minAwayMs: 120000') && lu.includes('idleMs: 300000') && lu.includes('critAwayMs: 0') && lu.includes('critIdleMs: 60000'), 'thresholds: away 2 min, idle 5 min, critical any-resume / 60s idle');
+    ok(lu.includes('root.WR_UPDATE_TUNING'), 'thresholds tunable via window.WR_UPDATE_TUNING');
     const ls = fs.readFileSync(path.join(ROOT, 'js/draft/live-sync.js'), 'utf8');
     ok(ls.includes("('live-draft')") && ls.includes('holdUpdates(true)') && ls.includes('holdUpdates(false)'), 'live draft sync holds updates');
     const wf = fs.readFileSync(path.join(ROOT, '.github/workflows/deploy.yml'), 'utf8');

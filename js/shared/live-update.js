@@ -1,27 +1,31 @@
-// js/shared/live-update.js — live update: a running page (browser tab, or the
-// iOS shell resumed from background) picks up a new deploy without a relaunch.
-// Replaces update-sentinel.js. Plain JS, no build step, no dependencies.
+// js/shared/live-update.js — SILENT live update. Replaces update-sentinel.js.
+// Owner ruling 2026-08-27: users must receive shipped builds without
+// force-quitting the app; no button, no banner. So there is no UI at all —
+// a running page (browser tab, or the iOS shell resumed from background)
+// reloads onto a new deploy only at a moment that reads as a normal resume.
 //
 // The deploy stamps <meta name="dhq-build"> into each page and writes
 // version.json beside it (scripts/build-deploy.cjs). This polls version.json
-// and, when the build differs, applies it only at a safe moment:
-//   a. page hidden                        → reload now (nobody is looking)
-//   b. just resumed, not touched yet      → "Updating DHQ…" overlay + reload
-//   c. in use                             → toast (Refresh / ×); applies at the
-//      next hidden/resume. critical:true  → 30s countdown, then first safe moment.
-// Never auto-reloads while typing, a sheet/modal is open, a draft is live/mounted,
-// an AI call is in flight, or a screen holds updates (App.LiveUpdate.hold(reason)).
-// No meta tag (local dev) → does nothing. Loop guard: a target that didn't land
-// waits 10 min; max 3 auto reloads/hour; the retry bypasses caches (?lu=).
+// (load +10s, every 5 min while visible, on resume/focus/online/hide); when the
+// build differs, it reloads when:
+//   a. hidden ≥ 2 min and timers still run (desktop tab)   → reload while hidden
+//   b. resumed after ≥ 2 min away (visible / pageshow / focus after hidden /
+//      heartbeat gap > 60s — iOS freezes timers, no native resume event)
+//   c. visible, no pointerdown/keydown/touchstart/scroll for 5 min
+//   d. critical:true → any resume, or idle ≥ 60s
+// A quick app-switch (< 2 min) never reloads. Never while typing, a sheet/modal
+// is open, a draft is live/mounted, an AI call is in flight, or a screen holds
+// updates (App.LiveUpdate.hold(reason)). No meta tag (local dev) → inert.
+// Loop guard: a target that didn't land waits 10 min (retry bypasses caches via
+// ?lu=), max 3 auto reloads/hour. Thresholds: window.WR_UPDATE_TUNING.
 (function (root) {
     'use strict';
 
     var CFG = {
-        loadDelayMs: 10000, pollMs: 300000, beatMs: 15000, wakeGapMs: 60000,
-        freshMs: 3000, resumeFreshMs: 15000, minGapMs: 15000, maxBackoffMs: 1800000,
-        staleMs: 600000, maxPerHour: 3, criticalMs: 30000,
+        minAwayMs: 120000, idleMs: 300000, critAwayMs: 0, critIdleMs: 60000,
+        loadDelayMs: 10000, pollMs: 300000, beatMs: 15000, wakeGapMs: 60000, resumeWindowMs: 15000,
+        minGapMs: 15000, maxBackoffMs: 1800000, staleMs: 600000, maxPerHour: 3,
     };
-    var RESUME = { visible: 1, pageshow: 1, wake: 1 };
 
     // ── Pure decision logic (unit-tested in live-update.test.js) ──────────────
     function isPending(own, latest) {
@@ -37,118 +41,113 @@
         if (last && last.to === target && own !== target && now - last.at < cfg.staleMs) return 'stale';
         return null;
     }
-    // s: { own, latest, hidden, fresh, unsafe, loop, dismissed, criticalDue }
-    function decide(s) {
+    // s: { own, latest, hidden, hiddenFor, resumeAway (ms away, null = not a
+    //      fresh resume), idleFor, unsafe, loop }; c: thresholds
+    function decide(s, c) {
         if (!s.own) return { act: 'none', why: 'dev' };
         if (!isPending(s.own, s.latest)) return { act: 'none', why: 'current' };
         if (s.loop) return { act: 'none', why: s.loop };
-        if (s.hidden) return s.unsafe ? { act: 'wait', why: s.unsafe } : { act: 'reload', why: 'hidden' };
-        if (s.fresh && !s.unsafe) return { act: 'reload', overlay: true, why: 'resume' };
-        if (s.latest.critical && s.criticalDue && !s.unsafe) return { act: 'reload', overlay: true, why: 'critical' };
-        if (s.dismissed) return { act: 'wait', why: 'dismissed' };
-        return { act: 'toast', critical: !!s.latest.critical, why: s.unsafe || 'active' };
+        if (s.unsafe) return { act: 'wait', why: s.unsafe };
+        var crit = !!s.latest.critical, away = crit ? c.critAwayMs : c.minAwayMs, idle = crit ? c.critIdleMs : c.idleMs;
+        if (s.hidden) return s.hiddenFor >= away ? { act: 'reload', why: 'hidden' } : { act: 'wait', why: 'away-short' };
+        if (s.resumeAway != null && s.resumeAway >= away) return { act: 'reload', why: 'resume' };
+        if (s.idleFor >= idle) return { act: 'reload', why: 'idle' };
+        return { act: 'wait', why: 'active' };
     }
 
     // ── Controller over an injected environment (browser below, fakes in tests)
     // env: now, own, hidden, unsafe, fetchLatest, prefetch, navigate, track,
-    //      store{get,set}, ui{toast,hideToast,overlay}, after, every
+    //      store{get,set}, after, every.  tune: object or () => object (live).
     function createUpdater(env, tune) {
-        var cfg = {}, k;
-        for (k in CFG) cfg[k] = tune && tune[k] != null ? tune[k] : CFG[k];
-        var st = { own: null, latest: null, lastCheck: -1e15, errors: 0, nextAt: 0, busy: false,
-            resumeAt: 0, touch: 0, dismissed: false, critAt: 0, applying: false, beatAt: 0, ticking: false, holds: {} };
-
-        function unsafe() {
-            var h = Object.keys(st.holds);
-            return h.length ? 'hold:' + h[0] : env.unsafe();
+        function cfg() {
+            var t = typeof tune === 'function' ? tune() : tune, c = {}, k;
+            for (k in CFG) c[k] = t && t[k] != null ? t[k] : CFG[k];
+            return c;
         }
-        function snapshot(fromResume) {
-            var t = env.now(), L = st.latest, pend = isPending(st.own, L);
-            if (pend && L.critical && !st.critAt) st.critAt = t;
+        var st = { own: null, latest: null, lastCheck: -1e15, errors: 0, nextAt: 0, busy: false, applying: false,
+            hiddenAt: 0, resumeAt: 0, resumeAway: null, activity: 0, beatAt: 0, holds: {} };
+
+        function snapshot(c) {
+            var t = env.now(), pend = isPending(st.own, st.latest), hidden = env.hidden();
+            var h = Object.keys(st.holds);
             return {
-                own: st.own, latest: L, hidden: env.hidden(), unsafe: unsafe(), dismissed: st.dismissed,
-                fresh: st.resumeAt > 0 && st.touch < st.resumeAt && t - st.resumeAt <= (fromResume ? cfg.resumeFreshMs : cfg.freshMs),
-                loop: pend ? loopBlock(env.store.get(), st.own, L.build, t, cfg) : null,
-                criticalDue: !!(pend && L.critical && t - st.critAt >= cfg.criticalMs),
+                own: st.own, latest: st.latest, hidden: hidden,
+                hiddenFor: hidden && st.hiddenAt ? t - st.hiddenAt : 0,
+                // a resume counts until the user touches something (or the window lapses)
+                resumeAway: st.resumeAt && st.activity < st.resumeAt && t - st.resumeAt <= c.resumeWindowMs ? st.resumeAway : null,
+                idleFor: t - st.activity,
+                unsafe: h.length ? 'hold:' + h[0] : env.unsafe(),
+                loop: pend ? loopBlock(env.store.get(), st.own, st.latest.build, t, c) : null,
             };
         }
         function evaluate(trig) {
-            var d = decide(snapshot(!!RESUME[trig]));
+            var d = decide(snapshot(cfg()), cfg());
             d.trigger = trig;
-            if (d.act === 'reload') return apply(d.why, d.overlay, false, trig);
-            if (d.act === 'toast') {
-                var left = d.critical ? Math.max(0, Math.ceil((st.critAt + cfg.criticalMs - env.now()) / 1000)) : null;
-                env.ui.toast({ critical: d.critical, secs: left });
-                if (d.critical && !st.ticking) {
-                    st.ticking = true;
-                    env.every(1000, function () { if (!st.ticking) return false; if (!st.applying) evaluate('tick'); });
-                }
-            } else if (d.act === 'none' || d.why === 'dismissed') {
-                if (d.act === 'none') st.ticking = false; // a dismissed critical keeps counting down
-                env.ui.hideToast();
-            }
-            return d;
+            return d.act === 'reload' ? apply(d.why, trig) : d;
         }
-        function apply(why, overlay, manual, trig) {
-            if (st.applying || !isPending(st.own, st.latest)) return Promise.resolve({ act: 'busy' });
+        function apply(why, trig) {
+            if (st.applying) return Promise.resolve({ act: 'busy' });
             st.applying = true;
             var target = st.latest.build, own = st.own;
-            if (overlay) env.ui.overlay(true);
             return Promise.resolve().then(env.prefetch).then(null, function () { return null; }).then(function (served) {
-                if (!manual) { // the fetch took time: the user may have started typing or come back
-                    var d = decide(snapshot(!!RESUME[trig]));
-                    if (d.act !== 'reload') { st.applying = false; env.ui.overlay(false); return evaluate(trig); }
-                    if (d.overlay) env.ui.overlay(true);
-                }
+                var c = cfg(), d = decide(snapshot(c), c); // the fetch took time: re-verify
+                if (d.act !== 'reload') { st.applying = false; return d; }
                 var t = env.now(), hist = lastHour(env.store.get(), t);
                 var tried = hist.some(function (h) { return h.to === target; });
                 // Served HTML is still the old build, or a plain reload already failed → cache-bust.
                 var mode = served === own || tried ? 'bust' : 'reload';
-                hist.push({ from: own, to: target, at: t, why: manual ? 'manual' : why, mode: mode });
+                hist.push({ from: own, to: target, at: t, why: d.why, mode: mode });
                 env.store.set(hist);
-                st.ticking = false;
-                env.ui.hideToast();
                 env.navigate(mode, target);
-                env.after(30000, function () { st.applying = false; env.ui.overlay(false); }); // navigation never happened
-                return { act: 'reload', why: why, mode: mode };
+                env.after(30000, function () { st.applying = false; }); // navigation never happened
+                return { act: 'reload', why: d.why, mode: mode, trigger: trig };
             });
         }
         function check(trig) {
             if (!st.own) return Promise.resolve({ act: 'none', why: 'dev' });
-            // resume/online bypass the error back-off; those + hidden (the best moment to apply) use a 5s gap
-            var t = env.now(), eager = RESUME[trig] || trig === 'online', soon = eager || trig === 'hidden';
-            if (st.busy || st.applying || t - st.lastCheck < (soon ? 5000 : cfg.minGapMs) || (!eager && t < st.nextAt)) {
+            var c = cfg(), t = env.now(), eager = trig === 'resume' || trig === 'online';
+            var soon = eager || trig === 'hidden';
+            if (st.busy || st.applying || t - st.lastCheck < (soon ? 5000 : c.minGapMs) || (!eager && t < st.nextAt)) {
                 return Promise.resolve(evaluate(trig));
             }
             st.busy = true; st.lastCheck = t;
             return Promise.resolve().then(env.fetchLatest).then(function (v) {
                 if (!v || typeof v.build !== 'string' || !v.build) throw new Error('bad version.json');
-                st.busy = false; st.errors = 0; st.nextAt = 0;
-                if (!st.latest || st.latest.build !== v.build) st.critAt = 0;
-                st.latest = v;
+                st.busy = false; st.errors = 0; st.nextAt = 0; st.latest = v;
                 return evaluate(trig);
             }).catch(function () { // 404 / offline / parse error: quiet exponential back-off
                 st.busy = false; st.errors++;
-                st.nextAt = env.now() + Math.min(cfg.maxBackoffMs, cfg.pollMs * Math.pow(2, st.errors - 1));
+                st.nextAt = env.now() + Math.min(c.maxBackoffMs, c.pollMs * Math.pow(2, st.errors - 1));
                 return evaluate(trig);
             });
         }
-        function resume(trig) {
-            st.resumeAt = st.beatAt = env.now(); st.dismissed = false;
-            return isPending(st.own, st.latest) ? Promise.resolve(evaluate(trig)) : check(trig);
+        function hide() {
+            if (!st.hiddenAt) st.hiddenAt = env.now();
+            return check('hidden'); // learn about a deploy now; decide() waits out minAwayMs
         }
-        // Timers freeze while iOS backgrounds the shell (no native resume event):
-        // a wall-clock gap far beyond the heartbeat interval means we just woke.
+        function resume(away) {
+            var t = env.now();
+            st.resumeAway = away != null ? away : (st.hiddenAt ? t - st.hiddenAt : 0);
+            st.resumeAt = st.beatAt = t; st.hiddenAt = 0;
+            return check('resume');
+        }
+        // Heartbeat. Timers freeze while iOS backgrounds the shell: a wall-clock
+        // gap far beyond the interval means we just woke (away ≈ the gap).
         function beat() {
-            var t = env.now(), gap = t - st.beatAt;
+            var c = cfg(), t = env.now(), gap = t - st.beatAt;
             st.beatAt = t;
-            if (gap > cfg.wakeGapMs && !env.hidden()) return resume('wake');
-            if (!env.hidden() && t - st.lastCheck >= cfg.pollMs) return check('poll');
-            return Promise.resolve(null);
+            if (env.hidden()) { // desktop tabs keep (throttled) timers: reload once away long enough
+                if (!st.hiddenAt || t - st.hiddenAt < (st.latest && st.latest.critical ? c.critAwayMs : c.minAwayMs)) return Promise.resolve(null);
+                if (isPending(st.own, st.latest)) return Promise.resolve(evaluate('hidden-long'));
+                return t - st.lastCheck >= c.pollMs ? check('hidden-long') : Promise.resolve(null);
+            }
+            if (gap > c.wakeGapMs) return resume(gap);
+            if (t - st.lastCheck >= c.pollMs) return check('poll');
+            return Promise.resolve(isPending(st.own, st.latest) ? evaluate('beat') : null); // idle rule
         }
         function arrived() { // runs on the reloaded page: log the applied update once
             var t = env.now(), hist = env.store.get(), last = hist[hist.length - 1];
-            if (!last || last.rep || last.from === st.own || t - last.at > cfg.staleMs) return null;
+            if (!last || last.rep || last.from === st.own || t - last.at > cfg().staleMs) return null;
             last.rep = 1;
             env.store.set(hist);
             var meta = { from: last.from, to: last.to, landed: st.own, ok: st.own === last.to, trigger: last.why, mode: last.mode };
@@ -156,25 +155,22 @@
             return meta;
         }
         return {
-            cfg: cfg, st: st, check: check, evaluate: evaluate, beat: beat, resume: resume, arrived: arrived,
+            cfg: cfg, st: st, check: check, evaluate: evaluate, beat: beat, hide: hide, resume: resume, arrived: arrived,
             start: function () {
                 st.own = env.own() || null;
                 if (!st.own) return false;
-                st.beatAt = env.now();
+                var c = cfg();
+                st.beatAt = st.activity = env.now();
+                if (env.hidden()) st.hiddenAt = st.beatAt;
                 arrived();
-                env.after(cfg.loadDelayMs, function () { check('load'); });
-                env.every(cfg.beatMs, beat);
+                env.after(c.loadDelayMs, function () { check('load'); });
+                env.every(c.beatMs, beat);
                 return true;
             },
-            touch: function () { st.touch = env.now(); },
-            hidden: function () { return isPending(st.own, st.latest) ? Promise.resolve(evaluate('hidden')) : check('hidden'); },
-            apply: function () { return apply('manual', true, true, 'manual'); },
-            dismiss: function () { st.dismissed = true; env.ui.hideToast(); },
+            touch: function () { st.activity = env.now(); },
+            focus: function () { return st.hiddenAt && !env.hidden() ? resume() : check('focus'); },
             hold: function (r) { st.holds[r || 'screen'] = 1; },
-            release: function (r) {
-                delete st.holds[r || 'screen'];
-                return isPending(st.own, st.latest) ? evaluate('release') : null;
-            },
+            release: function (r) { delete st.holds[r || 'screen']; return isPending(st.own, st.latest) ? evaluate('release') : null; },
         };
     }
 
@@ -185,7 +181,7 @@
     if (!doc || !root.fetch) return;
 
     // ── Browser wiring ────────────────────────────────────────────────────────
-    var loc = root.location, KEY = 'dhq_lu_log_v1', aiN = 0, toastEl = null, ovEl = null, lu;
+    var loc = root.location, KEY = 'dhq_lu_log_v1', aiN = 0;
     function ss(k, v) {
         try {
             if (v === undefined) return JSON.parse(root.sessionStorage.getItem(k) || '[]') || [];
@@ -223,50 +219,6 @@
         var m = /<meta\s+name=["']dhq-build["']\s+content=["']([^"']+)["']/i.exec(html || '');
         return m ? m[1] : null;
     }
-    function css() {
-        if (doc.getElementById('dhq-lu-css')) return;
-        var s = doc.createElement('style');
-        s.id = 'dhq-lu-css';
-        s.textContent = '#dhq-lu-toast{position:fixed;z-index:var(--wr-z-toast,202);right:16px;bottom:calc(16px + var(--wr-bottom-inset,env(safe-area-inset-bottom,0px)));display:flex;align-items:center;gap:8px;max-width:calc(100vw - 32px);padding:6px 6px 6px 14px;background:var(--black,#0a0a0a);color:#e8e8e8;border:1px solid rgba(212,175,55,.5);border-radius:var(--card-radius-sm,8px);box-shadow:0 8px 24px rgba(0,0,0,.55);font:600 13px/1.3 var(--font-body,-apple-system,system-ui,sans-serif)}' +
-            '#dhq-lu-toast button{font:inherit;cursor:pointer;border:0;border-radius:var(--card-radius-xs,5px);padding:7px 11px;min-height:32px}' +
-            '#dhq-lu-toast .go{background:var(--gold,#D4AF37);color:#0a0a0a;font-weight:700}#dhq-lu-toast .x{background:none;color:#8a8a8a;padding:7px 9px}' +
-            '@media (max-width:767px){#dhq-lu-toast{right:auto;bottom:auto;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 62px);width:max-content}}' +
-            '#dhq-lu-ov{position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;background:rgba(10,10,10,.9);color:var(--gold,#D4AF37);font:700 15px/1.4 var(--font-body,-apple-system,system-ui,sans-serif);letter-spacing:.03em}';
-        (doc.head || doc.documentElement).appendChild(s);
-    }
-    var ui = {
-        toast: function (o) {
-            if (!doc.body) return;
-            css();
-            if (!toastEl) {
-                toastEl = doc.createElement('div');
-                toastEl.id = 'dhq-lu-toast';
-                toastEl.setAttribute('role', 'status');
-                toastEl.setAttribute('aria-live', 'polite');
-                toastEl.innerHTML = '<span></span><button type="button" class="go">Refresh</button><button type="button" class="x" aria-label="Dismiss update notice">×</button>';
-                toastEl.querySelector('.go').onclick = function () { lu.apply(); };
-                toastEl.querySelector('.x').onclick = function () { lu.dismiss(); };
-                doc.body.appendChild(toastEl);
-            }
-            // Phone: sit just under the app header when one is on screen (CSS fallback otherwise).
-            var h = doc.querySelector('header'), r = h && h.getBoundingClientRect();
-            toastEl.style.top = root.innerWidth <= 767 && r && r.bottom > 0 && r.bottom < 160 ? Math.round(r.bottom + 8) + 'px' : '';
-            toastEl.firstChild.textContent = o.critical
-                ? (o.secs > 0 ? 'Important DHQ update · applying in ' + o.secs + 's' : 'Important DHQ update · applying next pause')
-                : 'DHQ has an update';
-        },
-        hideToast: function () { if (toastEl) { toastEl.remove(); toastEl = null; } },
-        overlay: function (on) {
-            if (!on) { if (ovEl) { ovEl.remove(); ovEl = null; } return; }
-            if (ovEl || !doc.body) return;
-            css();
-            ovEl = doc.createElement('div');
-            ovEl.id = 'dhq-lu-ov';
-            ovEl.setAttribute('role', 'status');
-            ovEl.textContent = 'Updating DHQ…';
-            doc.body.appendChild(ovEl);
-        },
-    };
     function track(name, meta) {
         meta.surface = surface();
         var tries = 0;
@@ -278,7 +230,7 @@
             if (++tries < 30) root.setTimeout(go, 2000); // shared engine loads async
         })();
     }
-    lu = createUpdater({
+    var lu = createUpdater({
         now: function () { return Date.now(); },
         own: function () { var m = doc.querySelector('meta[name="dhq-build"]'); return m && m.content; },
         hidden: function () { return doc.visibilityState === 'hidden'; },
@@ -299,13 +251,9 @@
         },
         track: track,
         store: { get: function () { return ss(KEY); }, set: function (v) { ss(KEY, v); } },
-        ui: ui,
         after: function (ms, fn) { root.setTimeout(fn, ms); },
-        every: function (ms, fn) {
-            var id = root.setInterval(function () { if (fn() === false) root.clearInterval(id); }, ms);
-            return id;
-        },
-    }, root.DHQ_LU_TUNING);
+        every: function (ms, fn) { return root.setInterval(fn, ms); },
+    }, function () { return root.WR_UPDATE_TUNING; });
 
     // Tidy the ?lu= cache-bust param off the URL (hash route untouched).
     if (/[?&]lu=/.test(loc.search) && root.history && root.history.replaceState) {
@@ -315,15 +263,18 @@
     root.App = root.App || {};
     root.App.LiveUpdate = {
         hold: lu.hold, release: lu.release, check: function () { return lu.check('manual'); },
-        apply: lu.apply, state: function () { return lu.st; }, decide: decide, isPending: isPending,
+        state: function () { return lu.st; }, decide: decide, isPending: isPending,
     };
     if (!lu.start()) return; // unstamped page (local dev): stay inert
-    var on = function (t, ev, fn) { t.addEventListener(ev, fn, { passive: true, capture: true }); };
-    ['pointerdown', 'keydown', 'touchstart', 'wheel'].forEach(function (ev) { on(doc, ev, lu.touch); });
-    doc.addEventListener('visibilitychange', function () {
-        if (doc.visibilityState === 'hidden') lu.hidden(); else lu.resume('visible');
+    ['pointerdown', 'keydown', 'touchstart', 'wheel'].forEach(function (ev) {
+        doc.addEventListener(ev, lu.touch, { passive: true, capture: true });
     });
-    root.addEventListener('pageshow', function (e) { if (e.persisted) lu.resume('pageshow'); });
-    root.addEventListener('focus', function () { lu.check('focus'); });
+    root.addEventListener('scroll', lu.touch, { passive: true, capture: true });
+    doc.addEventListener('visibilitychange', function () {
+        if (doc.visibilityState === 'hidden') lu.hide(); else lu.resume();
+    });
+    root.addEventListener('pagehide', function () { lu.hide(); });
+    root.addEventListener('pageshow', function (e) { if (e.persisted) lu.resume(); });
+    root.addEventListener('focus', lu.focus);
     root.addEventListener('online', function () { lu.check('online'); });
 })(typeof window !== 'undefined' ? window : globalThis);

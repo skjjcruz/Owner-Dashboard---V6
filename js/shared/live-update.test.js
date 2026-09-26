@@ -5,13 +5,15 @@ const assert = require('node:assert/strict');
 const LU = require('./live-update.js');
 
 const V1 = 'b135-aaaaaaaaaa', V2 = 'b136-bbbbbbbbbb';
+const MIN = 60000;
+const flush = () => new Promise(r => setTimeout(r, 0));
 
-// A fake page: clock, visibility, guard, version.json, served HTML, storage, UI.
+// A fake page: clock, visibility, guard, version.json, served HTML, storage.
 function rig(opts = {}) {
   const f = {
     t: 1_000_000, own: 'own' in opts ? opts.own : V1, hidden: false, unsafe: null,
     latest: { build: V2, critical: false }, fetchFails: false, served: V2,
-    hist: [], navs: [], tracks: [], toasts: [], overlay: false, timers: [], fetches: 0,
+    hist: [], navs: [], tracks: [], timers: [], fetches: 0, tune: opts.tune || null,
   };
   const env = {
     now: () => f.t,
@@ -23,19 +25,28 @@ function rig(opts = {}) {
     navigate: (mode, target) => f.navs.push({ mode, target }),
     track: opts.track || ((name, meta) => f.tracks.push({ name, meta })),
     store: { get: () => JSON.parse(JSON.stringify(f.hist)), set: v => { f.hist = JSON.parse(JSON.stringify(v)); } },
-    ui: {
-      toast: o => f.toasts.push(o), hideToast: () => f.toasts.push('hide'),
-      overlay: on => { f.overlay = on; },
-    },
     after: (ms, fn) => f.timers.push({ ms, fn, once: true }),
     every: (ms, fn) => f.timers.push({ ms, fn }),
   };
-  const u = LU.createUpdater(env, opts.tune);
-  f.u = u;
-  f.lastToast = () => f.toasts[f.toasts.length - 1];
+  f.u = LU.createUpdater(env, () => f.tune); // live tuning, like window.WR_UPDATE_TUNING
   f.tick = ms => { f.t += ms; };
+  f.why = () => f.hist.map(h => h.why);
   return f;
 }
+// Load the page, let the load check see the current build, then deploy V2.
+async function booted(opts) {
+  const f = rig(opts);
+  f.latest = { build: V1 };
+  f.u.start();
+  f.tick(10000); await f.u.check('load');
+  if (opts && opts.noDeploy) return f;
+  f.latest = opts && opts.critical ? { build: V2, critical: true } : { build: V2 };
+  f.tick(20000); await f.u.check('focus');        // the page learns about the deploy
+  await f.u.beat();
+  return f;
+}
+// Advance the clock in 15s heartbeats (timers running normally).
+async function run(f, ms) { for (let t = 0; t < ms; t += 15000) { f.tick(15000); await f.u.beat(); } }
 
 // ── pure logic ───────────────────────────────────────────────────────────────
 test('pending detection: only a different, well-formed build is pending', () => {
@@ -43,39 +54,43 @@ test('pending detection: only a different, well-formed build is pending', () => 
   assert.equal(LU.isPending(V1, { build: V1 }), false);
   assert.equal(LU.isPending(V1, null), false);
   assert.equal(LU.isPending(V1, { build: '' }), false);
-  assert.equal(LU.isPending(V1, { tag: 'b136' }), false);
   assert.equal(LU.isPending(null, { build: V2 }), false, 'unstamped page never pending');
 });
 
-test('policy table: hidden → reload, fresh resume → overlay reload, active → toast', () => {
-  const base = { own: V1, latest: { build: V2 }, hidden: false, fresh: false, unsafe: null, loop: null, dismissed: false, criticalDue: false };
-  assert.deepEqual(LU.decide({ ...base, hidden: true }), { act: 'reload', why: 'hidden' });
-  assert.deepEqual(LU.decide({ ...base, fresh: true }), { act: 'reload', overlay: true, why: 'resume' });
-  assert.equal(LU.decide(base).act, 'toast');
-  assert.equal(LU.decide({ ...base, dismissed: true }).act, 'wait');
-  assert.equal(LU.decide({ ...base, own: null }).why, 'dev');
-  assert.equal(LU.decide({ ...base, latest: { build: V1 } }).why, 'current');
-  // guard beats every auto path
-  assert.deepEqual(LU.decide({ ...base, hidden: true, unsafe: 'typing' }), { act: 'wait', why: 'typing' });
-  assert.equal(LU.decide({ ...base, fresh: true, unsafe: 'modal' }).act, 'toast', 'unsafe resume only offers the toast');
-  assert.equal(LU.decide({ ...base, hidden: true, loop: 'stale' }).act, 'none');
-  // critical: countdown toast, then reload once due and safe
-  const crit = { ...base, latest: { build: V2, critical: true } };
-  assert.deepEqual(LU.decide(crit), { act: 'toast', critical: true, why: 'active' });
-  assert.equal(LU.decide({ ...crit, criticalDue: true }).why, 'critical');
-  assert.equal(LU.decide({ ...crit, criticalDue: true, unsafe: 'live-draft' }).act, 'toast');
-  assert.equal(LU.decide({ ...crit, criticalDue: true, dismissed: true }).act, 'reload', '× cannot defer a critical update past its countdown');
+test('policy table (silent): away ≥ 2 min, resume after ≥ 2 min, idle ≥ 5 min; critical shortens', () => {
+  const c = LU.CFG;
+  const base = { own: V1, latest: { build: V2 }, hidden: false, hiddenFor: 0, resumeAway: null, idleFor: 0, unsafe: null, loop: null };
+  const d = s => LU.decide({ ...base, ...s }, c);
+  assert.deepEqual(d({ hidden: true, hiddenFor: 2 * MIN }), { act: 'reload', why: 'hidden' });
+  assert.equal(d({ hidden: true, hiddenFor: 119000 }).act, 'wait', 'hidden < 2 min: wait');
+  assert.deepEqual(d({ resumeAway: 2 * MIN }), { act: 'reload', why: 'resume' });
+  assert.equal(d({ resumeAway: 90000 }).act, 'wait', 'quick app-switch never reloads');
+  assert.deepEqual(d({ idleFor: 5 * MIN }), { act: 'reload', why: 'idle' });
+  assert.deepEqual(d({ idleFor: 4 * MIN }), { act: 'wait', why: 'active' });
+  assert.equal(d({ own: null }).why, 'dev');
+  assert.equal(d({ latest: { build: V1 } }).why, 'current');
+  for (const u of ['typing', 'modal', 'live-draft', 'hold:x']) {
+    assert.deepEqual(d({ hidden: true, hiddenFor: 60 * MIN, unsafe: u }), { act: 'wait', why: u });
+    assert.equal(d({ resumeAway: 60 * MIN, idleFor: 60 * MIN, unsafe: u }).act, 'wait');
+  }
+  assert.equal(d({ hidden: true, hiddenFor: 60 * MIN, loop: 'stale' }).act, 'none');
+  const crit = { latest: { build: V2, critical: true } };
+  assert.equal(d({ ...crit, resumeAway: 0 }).why, 'resume', 'critical: any resume');
+  assert.equal(d({ ...crit, hidden: true, hiddenFor: 0 }).why, 'hidden');
+  assert.equal(d({ ...crit, idleFor: 60000 }).why, 'idle', 'critical: idle ≥ 60s');
+  assert.equal(d({ ...crit, idleFor: 59000 }).act, 'wait');
+  assert.equal(d({ ...crit, idleFor: 60 * MIN, unsafe: 'modal' }).act, 'wait', 'critical still honours the guard');
 });
 
 test('loop guard: stale target waits 10 min, max 3 reloads per hour', () => {
   const cfg = LU.CFG, now = 10_000_000;
   const tried = [{ from: V1, to: V2, at: now - 60_000 }];
-  assert.equal(LU.loopBlock(tried, V1, V2, now, cfg), 'stale', 'reloaded for V2 but still on V1');
-  assert.equal(LU.loopBlock(tried, V1, V2, now + cfg.staleMs, cfg), null, 'retry after 10 min');
+  assert.equal(LU.loopBlock(tried, V1, V2, now, cfg), 'stale');
+  assert.equal(LU.loopBlock(tried, V1, V2, now + cfg.staleMs, cfg), null);
   assert.equal(LU.loopBlock(tried, V1, 'b137-c', now, cfg), null, 'a newer deploy is a new target');
   const three = [1, 2, 3].map(i => ({ from: 'x' + i, to: 'y' + i, at: now - i * 60_000 }));
   assert.equal(LU.loopBlock(three, V1, V2, now, cfg), 'rate');
-  assert.equal(LU.loopBlock(three, V1, V2, now + 3_600_000, cfg), null, 'window slides');
+  assert.equal(LU.loopBlock(three, V1, V2, now + 3_600_000, cfg), null);
 });
 
 // ── controller over the fake page ────────────────────────────────────────────
@@ -83,204 +98,190 @@ test('dev / unstamped page: inert — no timers, no fetch, no reload', async () 
   const f = rig({ own: null });
   assert.equal(f.u.start(), false);
   assert.equal(f.timers.length, 0);
-  await f.u.check('load');
-  await f.u.resume('visible');
+  await f.u.check('load'); await f.u.resume(10 * MIN);
   assert.equal(f.fetches, 0);
   assert.equal(f.navs.length, 0);
 });
 
-test('start: load check after ~10s and a 15s heartbeat', () => {
+test('start: load check after ~10s and a 15s heartbeat; no UI surface in the API', () => {
   const f = rig();
   assert.equal(f.u.start(), true);
   assert.deepEqual(f.timers.map(x => x.ms), [10000, 15000]);
+  for (const k of ['toast', 'apply', 'dismiss', 'overlay']) assert.equal(f.u[k], undefined, k);
 });
 
-test('(c) active user: toast, no reload; Refresh applies now; × dismisses until next resume', async () => {
-  const f = rig();
-  f.u.start();
-  f.u.touch();
-  f.tick(10000);
-  await f.u.check('load');
-  assert.equal(f.navs.length, 0, 'never reloads under an active user');
-  assert.deepEqual(f.lastToast(), { critical: false, secs: null });
-  f.u.dismiss();
-  assert.equal(f.lastToast(), 'hide');
-  f.tick(20000);
-  await f.u.check('focus');
-  assert.equal(f.lastToast(), 'hide', 'dismissed toast stays away');
-  await f.u.apply();
-  assert.equal(f.navs.length, 1, 'Refresh applies immediately');
-  assert.equal(f.hist[0].why, 'manual');
-});
-
-test('(a) pending then page hidden → reload immediately, no overlay', async () => {
-  const f = rig();
-  f.u.start(); f.u.touch(); f.tick(10000);
-  await f.u.check('load');
-  f.hidden = true;
-  await f.u.hidden();
+test('(c) visible and in use: no reload until 5 min without interaction', async () => {
+  const f = await booted();
+  for (let i = 0; i < 20; i++) { await run(f, MIN); f.u.touch(); }
+  assert.equal(f.navs.length, 0, '20 minutes of use: never reloaded');
+  await run(f, 4 * MIN);
+  assert.equal(f.navs.length, 0, '4 min idle: still waiting');
+  await run(f, MIN);
   assert.deepEqual(f.navs, [{ mode: 'reload', target: V2 }]);
-  assert.equal(f.overlay, false);
-  assert.deepEqual(f.hist.map(h => [h.from, h.to, h.why]), [[V1, V2, 'hidden']]);
+  assert.deepEqual(f.why(), ['idle']);
 });
 
-test('(b) resume with no interaction → overlay + reload; interaction after resume → toast', async () => {
-  const f = rig();
-  f.u.start(); f.u.touch(); f.tick(60000);
-  await f.u.resume('visible');
-  assert.equal(f.overlay, true, '"Updating DHQ…" shown');
+test('(a) hidden: no immediate reload; reloads once hidden ≥ 2 min with timers running', async () => {
+  const f = await booted();
+  f.u.touch(); f.hidden = true;
+  await f.u.hide();
+  assert.equal(f.navs.length, 0, 'not on hide');
+  assert.equal(f.u.st.latest.build, V2, 'but it learned about the deploy');
+  await run(f, 105000);
+  assert.equal(f.navs.length, 0, 'hidden 1m45s: waiting');
+  await run(f, 15000);
   assert.equal(f.navs.length, 1);
-
-  const g = rig();
-  g.u.start(); g.tick(60000);
-  g.u.st.latest = { build: V2 }; // already known pending
-  g.u.st.resumeAt = g.t; g.tick(4000); g.u.touch(); // user tapped 4s after resume
-  await g.u.check('focus');
-  assert.equal(g.navs.length, 0);
-  assert.equal(g.lastToast().critical, false);
+  assert.deepEqual(f.why(), ['hidden']);
 });
 
-test('(b) heartbeat gap > 60s (timers frozen by iOS) is treated as a resume', async () => {
-  const f = rig();
-  f.u.start(); f.u.touch();
-  f.latest = { build: V1 };
-  f.tick(10000); await f.u.check('load');          // load check: current
-  f.tick(5000); await f.u.beat();                  // normal beat: nothing
-  assert.equal(f.fetches, 1);
-  f.latest = { build: V2 };                        // deploy lands while backgrounded
-  f.tick(5 * 60000);                               // app sat in background, timers frozen
-  await f.u.beat();
-  assert.equal(f.fetches, 2, 'woke → checked');
-  assert.equal(f.overlay, true);
-  assert.equal(f.navs.length, 1, 'untouched since wake → overlay reload');
-  assert.equal(f.hist[0].why, 'resume');
+test('(a) hidden with nothing pending: no refetch every beat', async () => {
+  const f = await booted({ noDeploy: true });
+  f.hidden = true; f.tick(20000); await f.u.hide();
+  const n = f.fetches;
+  for (let i = 0; i < 8; i++) { f.tick(15000); await f.u.beat(); }
+  assert.equal(f.fetches, n, '2 min of hidden beats, no fetch');
+  f.tick(4 * MIN); await f.u.beat();
+  assert.equal(f.fetches, n + 1, 'polls again at the 5-min cadence');
+});
 
-  const g = rig();                                 // woke, but user already interacting & typing
-  g.u.start(); g.tick(120000); g.unsafe = 'typing';
-  await g.u.beat();
+test('(b) resume after ≥ 2 min away → reload; quick app-switch never reloads', async () => {
+  const f = await booted();
+  f.u.touch(); f.hidden = true; await f.u.hide();
+  f.tick(30000); f.hidden = false; await f.u.resume();
+  assert.equal(f.navs.length, 0, '30s app-switch');
+  f.u.touch(); f.hidden = true; f.tick(1000); await f.u.hide();
+  f.tick(3 * MIN); f.hidden = false; // iOS: timers frozen, so the hidden-beat never ran
+  await f.u.resume();
+  assert.equal(f.navs.length, 1);
+  assert.deepEqual(f.why(), ['resume']);
+});
+
+test('(b) resume counts only until the user touches something', async () => {
+  const f = await booted();
+  f.u.touch(); f.hidden = true; await f.u.hide();
+  f.tick(3 * MIN); f.hidden = false; f.unsafe = 'modal';
+  await f.u.resume();
+  assert.equal(f.navs.length, 0, 'guard blocked the resume reload');
+  f.tick(2000); f.u.touch(); f.unsafe = null;
+  f.tick(1000); await f.u.beat();
+  assert.equal(f.navs.length, 0, 'user is now active: back to the idle rule');
+});
+
+test('(b) heartbeat gap > 60s (iOS froze timers, no event) is a resume with away = gap', async () => {
+  const f = await booted();
+  f.u.touch();
+  f.tick(15000); await f.u.beat();
+  assert.equal(f.navs.length, 0);
+  f.tick(5 * MIN); await f.u.beat();
+  assert.equal(f.navs.length, 1);
+  assert.deepEqual(f.why(), ['resume']);
+
+  const g = await booted();                        // 90s gap: woke, but away < 2 min
+  g.u.touch(); g.tick(90000); await g.u.beat();
   assert.equal(g.navs.length, 0);
-  assert.equal(g.lastToast().critical, false);
 
-  const h = rig();                                 // visibilitychange already handled the resume:
-  h.u.start(); h.latest = { build: V1 };           // the next (late) beat must not re-arm "fresh"
-  h.tick(120000); await h.u.resume('visible');
-  h.tick(5000); h.u.touch(); h.latest = { build: V2 };
-  h.tick(10000); await h.u.beat();
+  const h = await booted();                        // visibilitychange already handled the resume:
+  h.latest = { build: V1 };                        // the next (late) beat must not re-resume
+  h.u.touch(); h.hidden = true; await h.u.hide();
+  h.tick(30000); h.hidden = false; await h.u.resume();
+  h.latest = { build: V2 }; h.tick(10000); h.u.touch(); await h.u.beat();
   assert.equal(h.navs.length, 0);
 });
 
-test('periodic check every 5 min only while visible', async () => {
-  const f = rig({ tune: { wakeGapMs: 1e12 } });
-  f.u.start();
-  f.u.st.lastCheck = f.t;
-  f.hidden = true; f.tick(6 * 60000); await f.u.beat();
-  assert.equal(f.fetches, 0, 'hidden: no polling');
-  f.hidden = false; await f.u.beat();
-  assert.equal(f.fetches, 1);
+test('focus after hidden counts as the resume', async () => {
+  const f = await booted();
+  f.u.touch(); f.hidden = true; await f.u.hide();
+  f.tick(3 * MIN); f.hidden = false;
+  await f.u.focus();
+  assert.deepEqual(f.why(), ['resume']);
 });
 
-test('guard: focused input / modal / hold block every automatic reload', async () => {
+test('guards: focused input / modal / live draft / hold block every automatic reload', async () => {
   for (const reason of ['typing', 'modal', 'live-draft', 'draft-board', 'ai']) {
-    const f = rig();
-    f.u.start(); f.unsafe = reason; f.hidden = true;
-    await f.u.check('hidden');
+    const f = await booted();
+    f.u.touch(); f.unsafe = reason; f.hidden = true; await f.u.hide();
+    await run(f, 3 * MIN);
     assert.equal(f.navs.length, 0, reason + ' blocks the hidden reload');
-    f.hidden = false; f.tick(60000);
-    await f.u.resume('visible');
+    f.hidden = false; await f.u.resume();
     assert.equal(f.navs.length, 0, reason + ' blocks the resume reload');
-    f.unsafe = null; f.hidden = true;               // safe again → next trigger applies
-    await f.u.hidden();
-    assert.equal(f.navs.length, 1, 'retried at the next trigger once safe');
+    await run(f, 10 * MIN);
+    assert.equal(f.navs.length, 0, reason + ' blocks the idle reload');
+    f.unsafe = null; await run(f, 15000);
+    assert.equal(f.navs.length, 1, reason + ': applied at the next beat once safe');
   }
-  const f = rig();
-  f.u.start(); f.u.hold('live-draft'); f.hidden = true;
-  await f.u.check('hidden');
+  const f = await booted();
+  f.u.hold('live-draft'); await run(f, 10 * MIN);
   assert.equal(f.navs.length, 0);
-  f.u.release('live-draft');
-  await new Promise(r => setTimeout(r, 0));
-  assert.equal(f.navs.length, 1, 'release lets the pending hidden update through');
+  f.u.release('live-draft'); await flush();
+  assert.equal(f.navs.length, 1, 'release lets the idle update through');
 });
 
 test('guard re-verified after the prefetch: user starts typing mid-apply → abort', async () => {
-  const f = rig();
-  f.u.start(); f.tick(60000);
-  const env = f.u; // prefetch resolves after we flip unsafe
-  f.u.st.latest = { build: V2 };
-  f.hidden = true;
-  const p = env.evaluate('hidden');
+  const f = await booted();
+  f.u.hold('x'); await run(f, 6 * MIN);
+  const p = f.u.release('x');                      // idle ≥ 5 min → apply() starts, prefetch in flight
   f.unsafe = 'typing';
   await p;
   assert.equal(f.navs.length, 0);
-  assert.equal(f.overlay, false);
+  assert.equal(f.u.st.applying, false);
 });
 
-test('loop protection end-to-end: stale reload waits 10 min, then cache-busts', async () => {
+test('loop protection: stale reload waits 10 min, then cache-busts', async () => {
   const f = rig();
   f.hist = [{ from: V1, to: V2, at: f.t - 60000, why: 'hidden', mode: 'reload', rep: 1 }]; // came back still on V1
-  f.u.start(); f.hidden = true;
-  await f.u.check('hidden');
+  f.u.start(); f.tick(10000); await f.u.check('load');
+  await run(f, 8 * MIN);                           // idle long enough, but the target just failed
   assert.equal(f.navs.length, 0, 'CDN lag: no second reload within 10 min');
-  f.tick(10 * 60000);
-  await f.u.hidden();
+  await run(f, MIN);
   assert.deepEqual(f.navs, [{ mode: 'bust', target: V2 }], 'retry bypasses caches with ?lu=');
 });
 
 test('served HTML still old → cache-bust navigation instead of a pointless reload', async () => {
-  const f = rig();
+  const f = await booted();
   f.served = V1;
-  f.u.start(); f.hidden = true;
-  await f.u.check('hidden');
+  await run(f, 5 * MIN);
   assert.deepEqual(f.navs, [{ mode: 'bust', target: V2 }]);
 });
 
 test('rate limit: never more than 3 auto reloads per hour', async () => {
   const f = rig();
   f.hist = [1, 2, 3].map(i => ({ from: 'x', to: 'y' + i, at: f.t - i * 1000, rep: 1 }));
-  f.u.start(); f.hidden = true;
-  await f.u.check('hidden');
+  f.u.start(); f.tick(10000); await f.u.check('load');
+  await run(f, 10 * MIN);
   assert.equal(f.navs.length, 0);
 });
 
-test('critical: 30s countdown toast, then applies while active once safe', async () => {
-  const f = rig();
-  f.latest = { build: V2, critical: true };
-  f.u.start(); f.u.touch(); f.tick(10000);
-  await f.u.check('load');
-  assert.deepEqual(f.lastToast(), { critical: true, secs: 30 });
-  const ticker = f.timers.find(x => x.ms === 1000);
-  assert.ok(ticker, 'countdown ticker armed');
-  f.tick(10000); ticker.fn();
-  assert.deepEqual(f.lastToast(), { critical: true, secs: 20 });
-  f.unsafe = 'modal'; f.tick(25000); ticker.fn();
-  assert.equal(f.navs.length, 0, 'due, but a sheet is open');
-  assert.deepEqual(f.lastToast(), { critical: true, secs: 0 });
-  f.unsafe = null; f.tick(1000); await ticker.fn();
-  await new Promise(r => setTimeout(r, 0));
-  assert.equal(f.navs.length, 1);
-  assert.equal(f.hist[0].why, 'critical');
-  assert.equal(ticker.fn(), false, 'ticker stops');
+test('critical: any resume, or 60s idle, applies it', async () => {
+  const f = await booted({ critical: true });
+  f.u.touch(); f.hidden = true; f.unsafe = 'modal'; await f.u.hide();
+  f.tick(5000); f.hidden = false; f.unsafe = null; await f.u.resume();
+  assert.deepEqual(f.why(), ['resume'], '5s away is enough');
+
+  const g = await booted({ critical: true });
+  g.u.touch(); await run(g, 45000);
+  assert.equal(g.navs.length, 0);
+  await run(g, 15000);
+  assert.deepEqual(g.why(), ['idle']);
 });
 
-test('critical: × hides the toast but the countdown still applies it', async () => {
-  const f = rig();
-  f.latest = { build: V2, critical: true };
-  f.u.start(); f.u.touch(); f.tick(10000);
-  await f.u.check('load');
-  const ticker = f.timers.find(x => x.ms === 1000);
-  f.u.dismiss();
-  f.tick(5000); ticker.fn();
-  assert.equal(f.lastToast(), 'hide', 'stays dismissed');
+test('WR_UPDATE_TUNING overrides thresholds live', async () => {
+  const f = await booted();
+  f.tune = { idleMs: 5000 };
+  f.u.touch(); f.tick(4000); await f.u.beat();
   assert.equal(f.navs.length, 0);
-  f.tick(26000); await ticker.fn();
-  await new Promise(r => setTimeout(r, 0));
-  assert.equal(f.navs.length, 1, 'applied once due');
+  f.tick(1500); await f.u.beat();                  // (a 1s heartbeat in the browser e2e)
+  assert.deepEqual(f.why(), ['idle']);
+  const g = await booted({ tune: { minAwayMs: 3000 } });
+  g.u.touch(); g.hidden = true; await g.u.hide();
+  g.tick(3500); g.hidden = false; await g.u.resume();
+  assert.deepEqual(g.why(), ['resume']);
 });
 
 test('errors back off quietly; online retries immediately', async () => {
   const f = rig();
   f.u.start(); f.fetchFails = true;
   await f.u.check('load');
-  assert.equal(f.navs.length + f.toasts.filter(t => t !== 'hide').length, 0, '404 is silent');
+  assert.equal(f.navs.length, 0, '404 is silent');
   f.tick(60000); await f.u.check('focus');
   assert.equal(f.fetches, 1, 'backed off (5 min)');
   f.tick(60000); await f.u.check('online');
@@ -299,7 +300,6 @@ test('after the reload: logs live_update_applied once, with from/to/trigger', ()
   assert.deepEqual(f.tracks, [{ name: 'live_update_applied', meta: { from: V1, to: V2, landed: V2, ok: true, trigger: 'resume', mode: 'reload' } }]);
   f.u.arrived();
   assert.equal(f.tracks.length, 1, 'once');
-
   const g = rig({ own: V1 });                      // reload landed on the old page: not applied
   g.hist = [{ from: V1, to: V2, at: g.t - 5000, why: 'hidden', mode: 'reload' }];
   g.u.start();
