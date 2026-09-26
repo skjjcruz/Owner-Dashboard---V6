@@ -229,6 +229,19 @@ module.exports = [
     },
   },
 
+  // ── Engine unit tests beside the engines (node --test, CJS) ───────────────
+  {
+    files: ["js/**/*.test.js"],
+    languageOptions: {
+      globals: {
+        require: "readonly",
+        module: "readonly",
+        __dirname: "readonly",
+        process: "readonly",
+      },
+    },
+  },
+
   // ── eslint.config.js itself (Node/CJS) ────────────────────────────────────
   {
     files: ["eslint.config.js"],

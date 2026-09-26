@@ -83,12 +83,14 @@ test('win probabilities sum to ~100% and favour the best team', () => {
   assert.ok(by[4].winPct > by[1].winPct, 'the best team wins most often');
   assert.ok(by[4].winPct > 35, 'and by a clear margin: ' + by[4].winPct);
 });
-test('a truncated config (fewer legs than teams) leaves several alive, so nobody has won', () => {
-  // week 5 of a 6-leg league = 2 chops among 4 teams → 2 survivors.
+test('last_chopped_leg is the latest chop, not the end: the season runs until one team is left', () => {
+  // LAB126 (2026-09-25): Sleeper's last_chopped_leg is the most recent week a
+  // team was chopped. Week 5 with 4 alive and last_chopped_leg 6 still runs
+  // to week 7, so exactly one team is left standing in every simulation.
   const sim = ChopOdds.simulate({ league: LEAGUE, rosters: rosters([1, 2, 3, 4]), ledger: ledgerOf(SPEC), week: 5, sims: 2000 });
-  assert.strictEqual(sim.rows.reduce((s, r) => s + r.winPct, 0), 0, 'winPct means LAST ONE STANDING — nobody is');
-  const survive = sim.rows.reduce((s, r) => s + r.survivePct, 0);
-  assert.ok(Math.abs(survive - 200) < 3, 'two teams expected to survive: ' + survive);
+  assert.strictEqual(sim.weeks[sim.weeks.length - 1], 7, 'weeks 5-7: three chops for four teams');
+  const win = sim.rows.reduce((s, r) => s + r.winPct, 0);
+  assert.ok(Math.abs(win - 100) < 1, 'exactly one last-one-standing per run: ' + win);
 });
 test('the winner is credited the full remaining calendar, not just to the clinching week', () => {
   const sim = ChopOdds.simulate({ ...FULL, myRosterId: 4 });

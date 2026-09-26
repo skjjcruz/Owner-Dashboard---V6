@@ -1252,6 +1252,12 @@ function LineupTab({
                                 <div style={{ color: SILVER, fontSize: '0.82rem', marginTop: '4px' }}>
                                     Your lineup {workingTotal.toFixed(1)} · Optimal {optimalTotal.toFixed(1)}
                                 </div>
+                                {/* The platform's numbers, small, for comparison. */}
+                                <div style={{ color: SILVER, fontSize: '0.7rem', marginTop: '4px', opacity: 0.8 }}>
+                                    {dhqOk
+                                        ? 'DHQ projections · ' + (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper') + ': your lineup ' + sleeperWorkingTotal.toFixed(1) + ' · optimal ' + sleeperOptimalTotal.toFixed(1)
+                                        : (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper') + ' projections (DHQ still loading)'}
+                                </div>
                             </React.Fragment>
                         ) : (
                             <React.Fragment>
@@ -1259,7 +1265,7 @@ function LineupTab({
                                     Your lineup {workingTotal.toFixed(1)} pts
                                 </div>
                                 <div style={{ color: SILVER, fontSize: '0.82rem', marginTop: '4px' }}>
-                                    Tap a slot below to set your starters — the total updates live.
+                                    Press Apply Optimal for DHQ's best lineup — the total updates live.
                                 </div>
                             </React.Fragment>
                         )}
@@ -1272,7 +1278,7 @@ function LineupTab({
                             </React.Fragment>
                         ) : null}
                         <div style={{ display: 'flex', gap: '6px', marginTop: '10px', justifyContent: 'flex-end' }}>
-                            {pro ? <button onClick={applyOptimal} style={{ ...actBtn, color: GOLD, borderColor: 'var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.12)' }}>Apply Optimal</button> : null}
+                            {pro ? <button onClick={applyOptimal} title="Best lineup by DHQ's projections" style={{ ...actBtn, color: GOLD, borderColor: 'var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.12)' }}>Apply Optimal</button> : null}
                             <button onClick={() => { setWorkingAssign(currentAssign); setOpenSlot(null); setSwapShade(null); }} style={actBtn}>Reset</button>
                         </div>
                     </div>
@@ -1323,6 +1329,12 @@ function LineupTab({
                                 {matchup.oppCurTotal > 0 && matchup.oppIdealTotal - matchup.oppCurTotal > 0.5 ? <span style={{ color: AMBER }}> · {(matchup.oppIdealTotal - matchup.oppCurTotal).toFixed(1)} on their bench</span> : null}
                                 <span onClick={() => setShowOpp(v => !v)} style={{ color: GOLD, cursor: 'pointer', marginLeft: '8px', fontWeight: 600 }}>{showOpp ? 'hide' : 'view their lineup'}</span>
                             </div>
+                            {/* The platform's forecast for the same two lineups, small. */}
+                            <div style={{ color: SILVER, fontSize: '0.7rem', marginTop: '6px', opacity: 0.8 }}>
+                                {matchup.dhq
+                                    ? 'DHQ projections · ' + (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper') + ': you ' + matchup.sfc.projMe.toFixed(1) + ' – them ' + matchup.sfc.projOpp.toFixed(1) + (matchup.sfc.winPct != null ? ' · ' + matchup.sfc.winPct + '% to win' : '')
+                                    : (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper') + ' projections (DHQ still loading)'}
+                            </div>
                         </div>
                         <div style={{ textAlign: 'center', minWidth: '96px' }}>
                             {/* winPct null = one side has no projectable players — no forecast. */}
@@ -1370,11 +1382,8 @@ function LineupTab({
             {/* Unified interactive lineup table */}
             <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderRadius: '6px', overflow: 'hidden' }}>
                 <div style={{ padding: '10px 14px', borderBottom: `1px solid ${LINE}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.7rem', letterSpacing: '0.08em', color: SILVER, fontWeight: 600 }}>STARTING LINEUP · tap a slot to set it
-                        <span style={{ marginLeft: '10px', color: result.sleeperLines ? GREEN : AMBER, fontWeight: 600, letterSpacing: '0.04em' }}>
-                            {result.sleeperLines ? `· Sleeper week ${result.week} projections` : `· waiting on Sleeper's week ${result.week} projections`}
-                        </span>
-                    </span>
+                    {/* The column titles name the projection source. */}
+                    <span style={{ fontSize: '0.7rem', letterSpacing: '0.08em', color: SILVER, fontWeight: 600 }}>STARTING LINEUP · tap a slot to set it</span>
                     <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                         <span style={{ fontSize: fz('0.58rem'), color: SILVER, letterSpacing: '0.05em', marginRight: '2px' }}>FORM</span>
                         {[['L3', 3], ['L5', 5], ['L8', 8], ['SZN', 'season']].map(opt => (
@@ -1383,10 +1392,28 @@ function LineupTab({
                     </div>
                 </div>
                 {headerRow}
-                {[...startingSlots].sort((a, b) => (SLOT_DISPLAY_ORDER[a.slotName] ?? 50) - (SLOT_DISPLAY_ORDER[b.slotName] ?? 50)).map(sl => {
+                {/* Starters in the league's own slot order (roster_positions), as Sleeper lists them. */}
+                {[...startingSlots].map(sl => {
                     const pid = workingAssign[sl.idx] || null;
                     const open = openSlot === sl.idx;
-                    const elig = open ? eligibleFor(sl) : [];
+                    // The slot panel: players available for the slot in DHQ
+                    // projection order, minus the player already in it and anyone
+                    // who cannot play; DHQ's recommended replacement goes first.
+                    const elig = open ? (slot => {
+                        const DQ = window.App && window.App.DhqProj;
+                        const dhqMed = p => { const d = DQ && DQ.get(p); return d ? Number(d.median) || 0 : -1; };
+                        const cur = workingAssign[slot.idx];
+                        const OUT = { Out: 1, IR: 1, PUP: 1, Sus: 1, NA: 1, COV: 1 };
+                        const list = eligibleFor(slot)
+                            .filter(p => String(p) !== String(cur || '') && !(playersData[p] && OUT[playersData[p].injury_status]) && !((projOf(p) || {}).injuryStatus === 'BYE'))
+                            .sort((a, b) => dhqMed(b) - dhqMed(a));
+                        const recPid = cur && replaceMap[String(cur)] && replaceMap[String(cur)].pid;
+                        if (recPid) {
+                            const at = list.indexOf(recPid);
+                            if (at > 0) { list.splice(at, 1); list.unshift(recPid); }
+                        }
+                        return list;
+                    })(sl) : [];
                     return (
                         <div key={sl.idx} style={{ borderBottom: `1px solid ${LINE}` }}>
                             <div onClick={() => setOpenSlot(open ? null : sl.idx)}
@@ -1408,14 +1435,19 @@ function LineupTab({
                                             </div>
                                         ) : null;
                                     })() : null}
-                                    <div style={{ padding: '5px 14px', fontSize: fz('0.58rem'), letterSpacing: '0.05em', color: SILVER, textTransform: 'uppercase' }}>Eligible for {sl.slotName.replace('_', ' ')} — tap to start</div>
+                                    <div style={{ padding: '5px 14px', fontSize: fz('0.58rem'), letterSpacing: '0.05em', color: SILVER, textTransform: 'uppercase' }}>Available for {sl.slotName.replace('_', ' ')} — tap to start</div>
+                                    {/* When the recommended player already starts elsewhere, say so in one green line. */}
+                                    {pid && replaceMap[String(pid)] && replaceMap[String(pid)].from ? (
+                                        <div style={{ padding: '4px 14px 6px', fontSize: fz('0.66rem'), fontStyle: 'italic', color: GREEN, opacity: 0.9 }}>{'Recommended: move ' + pmeta(replaceMap[String(pid)].pid).name + ' here from ' + replaceMap[String(pid)].from + ' (Apply Optimal does it)'}</div>
+                                    ) : null}
                                     {elig.map(epid => {
                                         const isCur = String(pid) === String(epid);
+                                        const isRec = !isCur && pid && (replaceMap[String(pid)] || {}).pid === String(epid);
                                         return (
                                             <div key={epid} onClick={() => { setWorkingAssign(w => ({ ...w, [sl.idx]: epid })); setOpenSlot(null); }}
-                                                style={{ display: 'grid', gridTemplateColumns: GRID, gap: '8px', padding: isPhone ? '10px 14px' : '7px 14px', minHeight: isPhone ? '44px' : undefined, alignItems: 'center', cursor: 'pointer', background: isCur ? 'rgba(212,175,55,0.10)' : benchShade(epid) === 'rec' ? RED_BG : benchShade(epid) === 'moved' ? GREEN_BG : 'transparent', borderLeft: isCur ? `3px solid ${GOLD}` : benchShade(epid) === 'rec' ? `3px solid ${RED}` : benchShade(epid) === 'moved' ? `3px solid ${GREEN}` : '3px solid transparent' }}>
+                                                style={{ display: 'grid', gridTemplateColumns: GRID, gap: '8px', padding: isPhone ? '8px 14px' : '5px 14px', minHeight: isPhone ? '40px' : undefined, alignItems: 'center', cursor: 'pointer', fontSize: '0.86em', background: isCur ? 'rgba(212,175,55,0.10)' : isRec ? 'color-mix(in srgb, ' + GREEN + ' 9%, transparent)' : 'transparent', borderLeft: isCur ? `3px solid ${GOLD}` : isRec ? `3px solid ${GREEN}` : '3px solid transparent' }}>
                                                 <span style={{ fontSize: fz('0.6rem'), color: isCur ? GOLD : SILVER, fontWeight: 700 }}>{isCur ? 'IN' : ''}</span>
-                                                <PlayerCells pid={epid} chip={isCur ? null : benchChip(benchShade(epid))} />
+                                                <PlayerCells pid={epid} chip={null} rep={isRec} bare />
                                             </div>
                                         );
                                     })}
@@ -1429,6 +1461,9 @@ function LineupTab({
                         </div>
                     );
                 })}
+                {benchSection('BN', benchList)}
+                {benchSection('IR', irList)}
+                {benchSection('TAXI', taxiList)}
             </div>
 
             <div style={{ color: SILVER, fontSize: '0.66rem', marginTop: '10px', lineHeight: 1.6, opacity: 0.9 }}>
