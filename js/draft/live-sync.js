@@ -194,6 +194,7 @@
         // Fire immediately then on interval
         poll();
         _pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+        holdUpdates(true);
     }
 
     function pickKey(pick) {
@@ -311,11 +312,21 @@
         };
     }
 
+    // A live draft must never be reloaded out from under the user by a deploy
+    // (js/shared/live-update.js). Best-effort: the updater may be absent.
+    function holdUpdates(on) {
+        try {
+            const lu = window.App && window.App.LiveUpdate;
+            if (lu) lu[on ? 'hold' : 'release']('live-draft');
+        } catch (e) { /* updater unavailable — nothing to hold */ }
+    }
+
     function stop() {
         if (_pollTimer) {
             clearInterval(_pollTimer);
             _pollTimer = null;
         }
+        holdUpdates(false);
         _lastPickNo = 0;
         _seenPickKeys = new Set();
         _lastSuccessAt = 0;

@@ -150,7 +150,9 @@ for (const p of NEVER_SHIP) {
 }
 
 // ── 5. overlay the precompiled build ───────────────────────────────────────
+// (includes version.json + the build-stamped pages that live-update.js polls)
 fs.cpSync(DIST, LAB_DIR, { recursive: true });
+if (!fs.existsSync(path.join(LAB_DIR, 'version.json'))) fail('version.json missing from dist-deploy/ — live update would never fire');
 
 // ── 6. gate every root page ────────────────────────────────────────────────
 const gate = read(path.join(LAB_SRC, 'gate.html'));

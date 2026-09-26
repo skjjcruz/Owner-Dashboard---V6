@@ -13,6 +13,14 @@
 //
 // Uses the same Babel preset/options as build-preview.cjs so the emitted code is
 // identical to what the regression/browser test suites already validate.
+//
+// Live update (js/shared/live-update.js): every build also gets a BUILD ID —
+// "<tag>-<content hash>" over every self-updating page (after ?v= hashing, so it
+// covers each script they load) plus the shipped js/ tree. It changes exactly
+// when shipped code changes. The id is stamped into those pages as
+// <meta name="dhq-build"> and written to dist-deploy/version.json, which running
+// pages poll to notice a new deploy. DHQ_UPDATE_CRITICAL=1 / DHQ_UPDATE_NOTES
+// set version.json's critical/notes for an urgent push.
 
 const fs = require('fs');
 const path = require('path');
@@ -25,6 +33,11 @@ const OUT_DIR = path.join(ROOT, 'dist-deploy');
 
 // Every HTML entry point that loads @babel/standalone + type="text/babel" scripts.
 const ENTRIES = ['index.html', 'draft-warroom.html', 'free-agency.html', 'trade-calculator.html'];
+// Plain (no-Babel) pages that also self-update: they get the same ?v= content
+// hashing and the build stamp, and ship from dist-deploy/ like the entries.
+const STAMP_ONLY = ['landing.html', 'connect-sleeper.html', 'upgrade.html'];
+const LIVE_UPDATE_SRC = 'js/shared/live-update.js';
+const pages = new Map(); // page -> rewritten HTML, written after the build stamp
 
 const compiled = new Set(); // source pathnames already compiled (dedupe across entries)
 const assetHash = new Map(); // pathname -> content hash of the compiled output
@@ -119,21 +132,8 @@ function processEntry(entry) {
 })();`,
   );
 
-  // 4. Content-hash cache-bust EVERY local script's ?v= — compiled JSX modules
-  //    (hash of the emitted output) and raw plain-JS modules (hash of the source)
-  //    alike — so a stale or missing hand-maintained ?v= can never pin an old
-  //    module after a deploy. External / CDN URLs are left untouched.
-  html = html.replace(/<script\b([^>]*?)\bsrc=(["'])([^"']+)\2([^>]*)>/gi, (m, before, q, src, after) => {
-    if (/^(https?:)?\/\//i.test(src)) return m; // external/CDN — leave as-is
-    const pathname = src.split('?')[0];
-    let hash = assetHash.get(pathname); // compiled JSX module → hash of emitted output
-    if (!hash) {
-      const rawPath = path.join(ROOT, pathname);
-      if (!fs.existsSync(rawPath)) return m; // unknown local asset — leave as-is
-      hash = contentHash(fs.readFileSync(rawPath));
-    }
-    return `<script${before}src=${q}${pathname}?v=${hash}${q}${after}>`;
-  });
+  // 4. Content-hash cache-bust every local script's ?v= (see hashLocalScripts).
+  html = hashLocalScripts(html);
 
   // Safety net: the deploy must ship NO in-browser Babel (match real script tags,
   // not the word "text/babel" appearing inside a comment/string).
@@ -144,9 +144,87 @@ function processEntry(entry) {
     throw new Error(`${entry}: @babel/standalone reference survived`);
   }
 
-  ensureDir(OUT_DIR);
-  fs.writeFileSync(path.join(OUT_DIR, entry), html, 'utf8');
+  pages.set(entry, html); // written by stampAndWrite() once the build id is known
   console.log(`[build-deploy]   ${entry}: rewrote ${entryExternal} external babel scripts`);
+}
+
+// Content-hash cache-bust EVERY local script's ?v= — compiled JSX modules
+// (hash of the emitted output) and raw plain-JS modules (hash of the source)
+// alike — so a stale or missing hand-maintained ?v= can never pin an old
+// module after a deploy. External / CDN URLs are left untouched.
+function hashLocalScripts(html) {
+  return html.replace(/<script\b([^>]*?)\bsrc=(["'])([^"']+)\2([^>]*)>/gi, (m, before, q, src, after) => {
+    if (/^(https?:)?\/\//i.test(src)) return m; // external/CDN — leave as-is
+    const pathname = src.split('?')[0];
+    let hash = assetHash.get(pathname); // compiled JSX module → hash of emitted output
+    if (!hash) {
+      const rawPath = path.join(ROOT, pathname);
+      if (!fs.existsSync(rawPath)) return m; // unknown local asset — leave as-is
+      hash = contentHash(fs.readFileSync(rawPath));
+    }
+    return `<script${before}src=${q}${pathname}?v=${hash}${q}${after}>`;
+  });
+}
+
+function processStampOnly(page) {
+  const inPath = path.join(ROOT, page);
+  if (!fs.existsSync(inPath)) { console.warn(`[build-deploy] skip missing page: ${page}`); return; }
+  pages.set(page, hashLocalScripts(fs.readFileSync(inPath, 'utf8')));
+}
+
+function listFiles(dir, out = []) {
+  if (!fs.existsSync(dir)) return out;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) listFiles(p, out);
+    else out.push(p);
+  }
+  return out;
+}
+
+// Build id = "<tag>-<hash>". The hash covers every self-updating page (its
+// ?v= stamps already fingerprint each script it loads, incl. the shared-loader
+// stamp of reconai-shared/) plus the whole shipped js/ tree (anything loaded
+// dynamically). Deterministic: rebuilding unchanged sources yields the same id.
+function computeBuildId() {
+  const tagMatch = (pages.get('index.html') || '').match(/id=["']dhq-build-tag["'][^>]*>\s*([^<\s]+)\s*</);
+  const tag = tagMatch ? tagMatch[1] : 'b0';
+  const h = crypto.createHash('sha256');
+  for (const name of [...pages.keys()].sort()) h.update(name).update('\0').update(pages.get(name)).update('\0');
+  for (const f of listFiles(path.join(ROOT, 'js'))) {
+    if (/\.test\.js$|\.md$/i.test(f)) continue;
+    h.update(path.relative(ROOT, f)).update('\0').update(fs.readFileSync(f)).update('\0');
+  }
+  return { tag, build: `${tag}-${h.digest('hex').slice(0, 10)}` };
+}
+
+function stampAndWrite() {
+  const { tag, build } = computeBuildId();
+  const meta = `<meta name="dhq-build" content="${build}">`;
+  for (const [page, raw] of pages) {
+    if (!raw.includes(LIVE_UPDATE_SRC)) throw new Error(`${page}: does not load ${LIVE_UPDATE_SRC} — it would never self-update`);
+    let html = raw.replace(/<meta\s+name=["']dhq-build["'][^>]*>\s*/gi, '');
+    const charset = html.match(/<meta\s+charset[^>]*>/i);
+    const head = html.match(/<head[^>]*>/i);
+    const anchor = charset || head;
+    if (!anchor) throw new Error(`${page}: no <meta charset> or <head> to stamp the build into`);
+    const at = anchor.index + anchor[0].length;
+    const indent = charset ? (html.slice(0, anchor.index).match(/[ \t]*$/) || [''])[0] : '  ';
+    html = html.slice(0, at) + '\n' + indent + meta + html.slice(at);
+    ensureDir(OUT_DIR);
+    fs.writeFileSync(path.join(OUT_DIR, page), html, 'utf8');
+  }
+  const sha = process.env.GITHUB_SHA || null;
+  const version = {
+    build,
+    tag,
+    builtAt: new Date().toISOString(),
+    critical: /^(1|true|yes)$/i.test(String(process.env.DHQ_UPDATE_CRITICAL || '').trim()),
+    notes: String(process.env.DHQ_UPDATE_NOTES || ''),
+    commit: sha ? sha.slice(0, 12) : null,
+  };
+  fs.writeFileSync(path.join(OUT_DIR, 'version.json'), JSON.stringify(version, null, 2) + '\n', 'utf8');
+  console.log(`[build-deploy] build ${build} stamped into ${pages.size} pages -> version.json${version.critical ? ' (CRITICAL)' : ''}`);
 }
 
 // 0. Stamp the shared-loader's DEFAULT_VERSION with a content hash of the
@@ -184,6 +262,8 @@ function build() {
   ensureDir(OUT_DIR);
   stampSharedLoaderVersion();
   for (const e of ENTRIES) processEntry(e);
+  for (const p of STAMP_ONLY) processStampOnly(p);
+  stampAndWrite();
   console.log(`[build-deploy] compiled ${compiledCount} unique Babel sources across ${ENTRIES.length} entries -> ${path.relative(ROOT, OUT_DIR)}/`);
 }
 

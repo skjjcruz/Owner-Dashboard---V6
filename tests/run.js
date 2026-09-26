@@ -918,23 +918,36 @@ test('nfl scoreboard: production endpoint + failure backoff (contract)',
     ok(card.includes('Object.keys(map).length) setScoutTick'), 'scouting tab must not re-tick (and re-fetch) on empty loads');
   });
 
-test('update sentinel: quiet self-update with all owner guard rails (2026-08-27)',
+test('live update: deploy stamps a build id + version.json; every page polls it (2026-09-26)',
   () => {
-    // Users must receive shipped builds without force-quitting the app shell,
-    // and a reload must never interrupt live work. Pin every guard the owner
-    // approved: real absence, no draft, no typing, no recent touch, no loops.
-    const s = fs.readFileSync(path.join(ROOT, 'js/shared/update-sentinel.js'), 'utf8');
-    ok(s.includes('15 * 60 * 1000'), 'wake check requires a 15-minute absence');
-    ok(s.includes("doc.querySelector('[data-draft-pid]')"), 'a mounted draft board must block the reload');
-    ok(s.includes('typingNow'), 'a focused input must block the reload');
-    ok(s.includes('minTouchGapMs'), 'a recent touch must block the reload');
-    ok(s.includes('DONE_FOR_KEY'), 'a target tag may only be attempted once per session (no reload loops)');
-    ok(s.includes("cache: 'no-store'"), 'the version probe must bypass every HTTP cache');
-    ok(/dhq-build-tag[^']*'/.test(s) || s.includes('dhq-build-tag'), 'the probe reads the build tag the deploy pipeline stamps');
-    ok(s.includes('onLine === false'), 'offline wakes must skip silently');
-    ok(s.includes('location.replace'), 'the reload must navigate with a cache-busting query, not location.reload');
-    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-    ok(html.includes('js/shared/update-sentinel.js?v='), 'index.html must load the sentinel with a cache-buster');
+    // A running page (browser tab, iOS shell resumed from background) must pick
+    // up a new deploy without a relaunch. The deploy stamps the build id into
+    // each self-updating page and writes version.json; live-update.js polls it.
+    const bd = fs.readFileSync(path.join(ROOT, 'scripts/build-deploy.cjs'), 'utf8');
+    ok(bd.includes("'version.json'"), 'build-deploy must write dist-deploy/version.json');
+    ok(bd.includes('<meta name="dhq-build" content="${build}">'), 'build-deploy must stamp <meta name="dhq-build">');
+    ok(/STAMP_ONLY = \['landing\.html', 'connect-sleeper\.html', 'upgrade\.html'\]/.test(bd), 'plain pages are stamped too');
+    ok(bd.includes('DHQ_UPDATE_CRITICAL') && bd.includes('DHQ_UPDATE_NOTES'), 'critical/notes overrides');
+    ok(bd.includes('does not load ${LIVE_UPDATE_SRC}'), 'a stamped page that does not load the updater fails the build');
+    const pages = ['index.html', 'draft-warroom.html', 'free-agency.html', 'trade-calculator.html', 'landing.html', 'connect-sleeper.html', 'upgrade.html'];
+    for (const pg of pages) {
+      const html = fs.readFileSync(path.join(ROOT, pg), 'utf8');
+      ok(html.includes('<script src="js/shared/live-update.js?v='), pg + ' must load js/shared/live-update.js');
+      ok(/connect-src 'self'/.test(html) && /script-src 'self'/.test(html), pg + ' CSP must allow same-origin script + version.json fetch');
+    }
+    const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    ok(!index.includes('src="js/shared/update-sentinel.js'), 'one updater only: update-sentinel.js is superseded');
+    const lu = fs.readFileSync(path.join(ROOT, 'js/shared/live-update.js'), 'utf8');
+    ok(lu.includes("'version.json?t='") && lu.includes("cache: 'no-store'"), 'version probe bypasses every cache');
+    ok(lu.includes('meta[name="dhq-build"]'), 'own build read from the stamped meta tag');
+    ok(lu.includes("'[aria-modal=\"true\"],.wr-sheet-backdrop,dialog[open]'"), 'open sheet/modal blocks the reload');
+    ok(lu.includes('[data-draft-pid]') && lu.includes('liveSync'), 'a draft blocks the reload');
+    const ls = fs.readFileSync(path.join(ROOT, 'js/draft/live-sync.js'), 'utf8');
+    ok(ls.includes("('live-draft')") && ls.includes('holdUpdates(true)') && ls.includes('holdUpdates(false)'), 'live draft sync holds updates');
+    const wf = fs.readFileSync(path.join(ROOT, '.github/workflows/deploy.yml'), 'utf8');
+    ok(wf.includes('cp -R dist-deploy/. pages-artifact/') && wf.includes('pages-artifact/version.json'), 'Pages artifact ships version.json');
+    const lab = fs.readFileSync(path.join(ROOT, 'scripts/publish-lab.cjs'), 'utf8');
+    ok(lab.includes('fs.cpSync(DIST, LAB_DIR') && lab.includes("'version.json'"), 'Lab ships version.json');
   });
 
 test('draft storage: no orphan recaps, quota-safe mid-draft saves (2026-08-28)',

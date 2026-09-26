@@ -2975,7 +2975,8 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script src="js/shared/sync-manager.js?v=20260706sync1"></script>
 <!-- 1a2. Shared viewport seam — WR.useViewport() hook + WR.viewport() snapshot (plain JS; must precede components.js and all tab files) -->
 <script src="js/shared/viewport.js?v=20260826wake1"></script>
-<script src="js/shared/update-sentinel.js?v=20260827upd2"></script>
+<!-- 1a3. Live update — picks up a new deploy in a running page / resumed app (plain JS; replaces update-sentinel.js) -->
+<script src="js/shared/live-update.js?v=20260926lu1"></script>
 <!-- 1b. Format/phase skin contract for league-type-aware modules -->
 <script src="js/league-skin.js?v=20260817chp1"></script>
 <!-- 2. Shared components: UpgradeGate, GMMessage, PlayerInlineCard -->
@@ -3085,7 +3086,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="draft" src="js/draft/persistence.js?v=20260415cd8"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/scenarios.js?v=20260415cd8"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/ghost-replay.js?v=20260415cd8"></script>
-<script type="text/babel" data-wr-defer="draft" src="js/draft/live-sync.js?v=20260516p6redo"></script>
+<script type="text/babel" data-wr-defer="draft" src="js/draft/live-sync.js?v=20260926lu1"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/live-decision-engine.js?v=20260601draftux"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/analyst-mock.js?v=20260531voice1"></script>
 <script type="text/babel" data-wr-defer="draft" src="js/draft/command-center.js?v=20260927b135"></script>

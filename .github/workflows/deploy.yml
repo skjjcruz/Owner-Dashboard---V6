@@ -4,6 +4,15 @@ on:
   push:
     branches: ["main"]
   workflow_dispatch:
+    inputs:
+      critical:
+        description: "Live update: urgent — running pages apply it after a 30s countdown (version.json critical:true)"
+        type: boolean
+        default: false
+      notes:
+        description: "Live update: optional notes written to version.json"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -52,7 +61,13 @@ jobs:
       # draft-warroom + trade-calculator) to plain JS so production never
       # downloads ~3.1MB of @babel/standalone or runs the in-browser JSX
       # transform on cold load.
+      # Also stamps the build id (<meta name="dhq-build">) into every
+      # self-updating page and writes dist-deploy/version.json, which running
+      # pages poll (js/shared/live-update.js) to pick up this deploy.
       - name: Precompile JSX for production (drop in-browser Babel)
+        env:
+          DHQ_UPDATE_CRITICAL: ${{ inputs.critical && '1' || '' }}
+          DHQ_UPDATE_NOTES: ${{ inputs.notes || '' }}
         run: node scripts/build-deploy.cjs
 
       - name: Build Pages artifact
@@ -77,6 +92,8 @@ jobs:
           # raw sources, replacing the JSX modules and the entry HTML files
           # that loaded Babel.
           cp -R dist-deploy/. pages-artifact/
+          # Live update: without version.json running pages never see this deploy.
+          [ -f pages-artifact/version.json ] || { echo "Missing pages-artifact/version.json" >&2; exit 1; }
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
