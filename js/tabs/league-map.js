@@ -2426,10 +2426,12 @@ function LeagueMapTab({
                                 const rolling = typeof window.App?.computeRollingPPG === 'function' ? window.App.computeRollingPPG(x.pid, n) : 0;
                                 if (rolling > 0) { ppgShown = rolling; ppgLbl = 'L' + n; } else { ppgLbl = 'SZN'; }
                             }
-                            // Owner name ellipsizes on its own so "(You)" always survives.
+                            // Your rows lead with a gold "You" and let the team name
+                            // ellipsize after it — a trailing " (You)" was the first
+                            // thing the tag's ellipsis cut ("skjjcruz (…").
                             const tagHead = (x.p.team || 'FA') + (x.age ? ' · ' + x.age : '') + ' · ';
                             const tag = x.isMe
-                                ? <span style={{ display: 'flex', minWidth: 0 }}><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{tagHead + x.teamName}</span><span style={{ flexShrink: 0, whiteSpace: 'pre', color: 'var(--gold)' }}>{' (You)'}</span></span>
+                                ? <span style={{ display: 'flex', minWidth: 0 }}><span style={{ flexShrink: 0, whiteSpace: 'pre' }}>{tagHead}</span><span style={{ flexShrink: 0, color: 'var(--gold)', fontWeight: 700 }}>You</span><span style={{ whiteSpace: 'pre', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{' · ' + x.teamName}</span></span>
                                 : tagHead + x.teamName;
                             return React.createElement(window.WR.AssetRow, {
                                 key: x.pid,
