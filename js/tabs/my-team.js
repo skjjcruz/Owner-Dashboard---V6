@@ -1388,7 +1388,29 @@ function MyTeamTab({
   let _phoneSlotKeys = PHONE_SLOT_PRESETS[activePresetKey]
     || visibleCols.filter(k => PHONE_SLOT_KEYS.has(k)).slice(0, 3);
   if (!_phoneSlotKeys.length) _phoneSlotKeys = PHONE_SLOT_PRESETS.default;
+  // Phone board labels stay ≤5 chars so the stat cluster never outgrows
+  // its values (phone fit pass 2026-09-26: "SLEEPER" / "DHQ PROJ" labels
+  // pushed the cluster to ~200px and truncated team · age to "SEA ·…").
+  // Injury status → the short tag Sleeper itself shows (Q / D / O / IR…),
+  // so a QUESTIONABLE chip can't crowd team · age off the row.
+  const _phoneInjShort = (st) => {
+    if (!st) return st;
+    const k = String(st).trim().toLowerCase();
+    const map = { questionable: 'Q', doubtful: 'D', out: 'OUT', probable: 'P', suspended: 'SUS', sus: 'SUS', 'injured reserve': 'IR', ir: 'IR', pup: 'PUP', na: 'NA', cov: 'COV' };
+    return map[k] || String(st).slice(0, 4);
+  };
+  const _phoneProvShort = () => {
+    const prov = String((window.App && window.App.DhqProj) ? window.App.DhqProj.provLabel() : 'Sleeper');
+    return /^sleeper$/i.test(prov) ? 'SLPR' : prov.slice(0, 4);
+  };
+  // Column widths for the phone slots — every row's columns line up.
+  const _PHONE_SLOT_W = { dhq: '46px', proj: '34px', dhqProj: '34px', ppg: '34px' };
   const _phoneSlotFor = (colKey, r) => {
+    const s = _phoneSlotForRaw(colKey, r);
+    if (s && !s.w) s.w = _PHONE_SLOT_W[colKey] || '34px';
+    return s;
+  };
+  const _phoneSlotForRaw = (colKey, r) => {
     const short = ROSTER_COLUMNS[colKey]?.shortLabel || colKey;
     switch (colKey) {
       case 'dhq': {
@@ -1398,16 +1420,16 @@ function MyTeamTab({
         return { label: short, value: disp, strong: true };
       }
       case 'dhqProj':
-        return { label: 'DHQ Proj', value: (window.App && window.App.DhqProj) ? window.App.DhqProj.fmt(r.pid) : '\u2014', tone: 'gold' };
+        return { label: 'DHQ P', value: (window.App && window.App.DhqProj) ? window.App.DhqProj.fmt(r.pid) : '\u2014', tone: 'gold' };
       case 'proj': {
         // Labeled for the league's platform (Sleeper / MFL).
         const p = projFor(r.pid);
-        if (!p) return { label: (window.App && window.App.DhqProj) ? window.App.DhqProj.provLabel() : 'Sleeper', value: '—', tone: 'mute' };
-        if (!p.available) return { label: (window.App && window.App.DhqProj) ? window.App.DhqProj.provLabel() : 'Sleeper', value: p.injuryStatus || 'OUT', tone: 'warn' };
+        if (!p) return { label: _phoneProvShort(), value: '—', tone: 'mute' };
+        if (!p.available) return { label: _phoneProvShort(), value: _phoneInjShort(p.injuryStatus) || 'OUT', tone: 'warn' };
         // Same #232 rule as the desktop cell: straight weekly median (the number
         // the owner sees in Sleeper), never the GM-mode floor/ceiling objective.
         const pts = (p.points && (p.points.median != null ? p.points.median : p.points.mean)) || 0;
-        return { label: (window.App && window.App.DhqProj) ? window.App.DhqProj.provLabel() : 'Sleeper', value: pts > 0 ? pts.toFixed(1) : '—' };
+        return { label: _phoneProvShort(), value: pts > 0 ? pts.toFixed(1) : '—' };
       }
       case 'ppg': {
         // Same rolling-window override + seasonal fallback as renderCell;
@@ -1483,7 +1505,7 @@ function MyTeamTab({
     return bits.join(' · ');
   };
   const _phoneStatusChip = (r) => {
-    const label = r.injury ? String(r.injury) : _slotLabel(r);
+    const label = r.injury ? _phoneInjShort(r.injury) : _slotLabel(r);
     // Owner palette (2026-09-19): green starter · amber bench · red IR or
     // injury · blue taxi. Smaller than the verdict pill it replaced.
     const col = r.injury || r.section === 'ir' ? 'var(--bad, #e74c3c)'
@@ -1491,7 +1513,7 @@ function MyTeamTab({
       : r.section === 'taxi' ? 'var(--info, #4aa3ff)'
       : 'var(--warn, #f0a500)';
     return (
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, lineHeight: 1.3, padding: '1px 5px', borderRadius: '3px', border: '1px solid ' + wrAlpha(col, '80'), color: col, letterSpacing: '0.03em', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>
+      <span title={r.injury ? String(r.injury) : undefined} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, lineHeight: 1.3, padding: '1px 5px', borderRadius: '3px', border: '1px solid ' + wrAlpha(col, '80'), color: col, letterSpacing: '0.03em', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>
         {label}
       </span>
     );
@@ -2151,7 +2173,11 @@ function MyTeamTab({
                 <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.78rem', fontWeight: 700, color: 'var(--gold)', minWidth: '42px' }}>{yr}</span>
                 {picksByYear[yr].map((p, i) => (
                   <span key={i} title={p.own ? 'Your own pick' : ('Acquired from ' + p.from)} style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: '5px', fontFamily: 'JetBrains Mono, monospace', background: p.own ? 'var(--acc-fill2, rgba(212,175,55,0.10))' : 'rgba(124,107,248,0.13)', color: p.own ? 'var(--gold)' : 'var(--k-9b8afb, #9b8afb)', border: '1px solid ' + (p.own ? 'var(--acc-fill3, rgba(212,175,55,0.2))' : 'rgba(124,107,248,0.28)') }}>
-                    R{p.round}{p.own ? '' : ' · ' + String(p.from).slice(0, 8)}
+                    {/* Phone: full owner name with a real ellipsis (the hard
+                        8-char slice cut names mid-word — "MattLica"). */}
+                    {_phone
+                      ? <React.Fragment>R{p.round}{p.own ? null : <React.Fragment>{' · '}<span style={{ display: 'inline-block', maxWidth: '124px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{String(p.from)}</span></React.Fragment>}</React.Fragment>
+                      : <React.Fragment>R{p.round}{p.own ? '' : ' · ' + String(p.from).slice(0, 8)}</React.Fragment>}
                   </span>
                 ))}
               </div>

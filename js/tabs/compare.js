@@ -1555,9 +1555,14 @@ function CompareTab({
         // LEAD chip mirrors the ungated desktop "DHQ LEAD" chip — raw data,
         // no gate movement.
         const phoneRemoveX = (pid) => (
-            <button className="cmp-remove-x" title="Remove from compare"
+            // 36x40 transparent hit area around the same 26px visual chip. No
+            // negative margin: AssetRow's verdict slot is overflow:hidden, so
+            // anything outside the button's layout box wouldn't take taps.
+            <button className="cmp-remove-x" title="Remove from compare" aria-label="Remove from compare"
                 onClick={(e) => { e.stopPropagation(); removeComparePlayer(pid); }}
-                style={{ position: 'relative', width: '26px', height: '26px', borderRadius: '6px', border: '1px solid var(--ov-5, rgba(255,255,255,0.09))', background: 'rgba(0,0,0,0.42)', color: 'var(--silver)', cursor: 'pointer', fontSize: '0.95rem', lineHeight: 1, flexShrink: 0, padding: 0 }}>×</button>
+                style={{ position: 'relative', width: '36px', height: '40px', margin: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0, padding: 0 }}>
+                <span aria-hidden="true" style={{ width: '26px', height: '26px', boxSizing: 'border-box', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', border: '1px solid var(--ov-5, rgba(255,255,255,0.09))', background: 'rgba(0,0,0,0.42)', color: 'var(--silver)', fontSize: '0.95rem', lineHeight: 1 }}>×</span>
+            </button>
         );
         const renderPhoneFieldRows = () => (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
@@ -1625,15 +1630,21 @@ function CompareTab({
             // instead of engaging the scroll container — hold a 110px floor per
             // player column (two players still fit a 375 side-by-side; 3–4 scroll)
             // and pin the metric-label column sticky-left. Desktop/tablet: unchanged.
+            // 3–4 players: an 84px column floor so the THIRD column peeks
+            // ~45px into view at 375 (at 110px it sat entirely off-screen with
+            // no hint that the matrix scrolls). Label column 92px so two-line
+            // labels ("Wk 3 Sleeper / Proj") never wrap to a third line.
+            const phColW = N >= 3 ? 84 : 110;
+            const phLabelW = 92;
             const gt = isPhone
-                ? 'minmax(84px, 0.62fr) repeat(' + N + ', minmax(110px, 1fr))'
+                ? 'minmax(' + phLabelW + 'px, 0.62fr) repeat(' + N + ', minmax(' + phColW + 'px, 1fr))'
                 // Desktop/tablet: a matching spacer column on the RIGHT balances the
                 // left metric-label column, so the players sit centered instead of
                 // shifted right. (Phone scrolls, so it keeps the label-only layout.)
                 : 'minmax(94px, 0.62fr) repeat(' + N + ', minmax(0, 1fr)) minmax(94px, 0.62fr)';
             // Explicit px floor so every row spans the full scroll width (row
             // borders stay continuous mid-scroll): 84px label + N*(110px + 10px gap).
-            const rowMinW = isPhone ? (84 + N * 120) + 'px' : undefined;
+            const rowMinW = isPhone ? (phLabelW + N * (phColW + 10)) + 'px' : undefined;
             const fieldMaxDhq = Math.max(0, ...list.map(p => p.dhq || 0));
 
             // Metric defs. dir high/low picks the winner; numeric rows also print a
@@ -1775,7 +1786,7 @@ function CompareTab({
                 const best = winners.size ? (m.dir === 'high' ? Math.max(...vals) : Math.min(...vals.filter(v => v > 0))) : 0;
                 return (
                     <div key={m.label} style={{ display: 'grid', gridTemplateColumns: gt, minWidth: rowMinW, gap: '10px', alignItems: m.wrap ? 'flex-start' : 'center', padding: isPhone ? '8px 0' : '8px 2px', borderTop: '1px solid var(--ov-3, rgba(255,255,255,0.05))' }}>
-                        <div className={isPhone ? 'wr-stick-col' : undefined} style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.05em', ...(isPhone ? { opacity: 1, alignSelf: 'stretch', display: 'flex', alignItems: m.wrap ? 'flex-start' : 'center', paddingLeft: '10px', paddingRight: '6px' } : null) }}>{m.label}</div>
+                        <div className={isPhone ? 'wr-stick-col' : undefined} style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.05em', ...(isPhone ? { opacity: 1, alignSelf: 'stretch', display: 'flex', alignItems: m.wrap ? 'flex-start' : 'center', paddingLeft: '8px', paddingRight: '4px', letterSpacing: '0.02em', lineHeight: 1.3 } : null) }}>{m.label}</div>
                         {list.map((p, i) => {
                             const win = winners.has(i);
                             // Phone: winning cells go gold (shared sticky-table
@@ -1857,10 +1868,13 @@ function CompareTab({
                     {/* Phone (P7): the matrix rides the shared sticky-table classes —
                         scoped scroll wrap + pinned metric column — with a name header
                         row (the hero strip no longer carries the column headers). */}
+                    {isPhone && N >= 3 ? (
+                        <div style={{ ...mono, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.7, textAlign: 'right', margin: '0 2px 5px' }}>Swipe for all {N} players →</div>
+                    ) : null}
                     <div className={isPhone ? 'wr-sticky-table-wrap wr-sticky-table' : undefined} style={{ ...panelStyle, padding: isPhone ? '4px 0 12px' : '4px 16px 12px', marginBottom: '12px', overflowX: 'auto', ...(isPhone ? { WebkitOverflowScrolling: 'touch' } : null) }}>
                         {isPhone ? (
                             <div style={{ display: 'grid', gridTemplateColumns: gt, minWidth: rowMinW, gap: '10px', alignItems: 'center', padding: '8px 0 2px' }}>
-                                <div className="wr-stick-col" style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', paddingLeft: '10px', paddingRight: '6px', alignSelf: 'stretch' }}>Metric</div>
+                                <div className="wr-stick-col" style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', textTransform: 'uppercase', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', paddingLeft: '8px', paddingRight: '4px', alignSelf: 'stretch' }}>Metric</div>
                                 {list.map(pl => {
                                     const isLead = (pl.dhq || 0) === fieldMaxDhq && fieldMaxDhq > 0;
                                     return (
@@ -2182,7 +2196,7 @@ function CompareTab({
             ];
 
             const renderMiniPlayer = (r) => r
-                ? <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.p?.full_name || '?'}</span>
+                ? <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isPhone && r.p?.last_name ? ((r.p.first_name ? r.p.first_name[0] + '. ' : '') + r.p.last_name) : (r.p?.full_name || '?')}</span>
                 : <span style={{ color: 'var(--silver)', opacity: 0.38 }}>No player</span>;
 
             const openCard = (pid) => {
@@ -2220,8 +2234,12 @@ function CompareTab({
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                                 <span style={{ color: 'var(--white)', fontSize: '0.78rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{isPhone ? ((r.p?.first_name ? r.p.first_name[0] + '. ' : '') + (r.p?.last_name || r.p?.full_name || '?')) : (r.p?.full_name || '?')}</span>
                                 {slotChip(r.slot)}
+                                {/* Phone: the DHQ value rides the name row so the meta
+                                    chips get the cell's full width (the right-hand value
+                                    column squeezed the opponent cell past the card edge). */}
+                                {isPhone && <span style={{ ...mono, fontWeight: 700, fontSize: '0.74rem', color: dhqCol, flexShrink: 0, marginLeft: 'auto' }}>{r.dhq > 0 ? r.dhq.toLocaleString() : '-'}</span>}
                             </div>
-                            <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.68, marginTop: '1px', display: 'flex', gap: '6px', flexWrap: 'wrap', ...(isPhone ? { whiteSpace: 'nowrap', overflow: 'hidden', flexWrap: 'nowrap' } : null) }}>
+                            <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.68, marginTop: '1px', display: 'flex', gap: '6px', flexWrap: 'wrap', ...(isPhone ? { columnGap: '6px', rowGap: 0, whiteSpace: 'nowrap', overflow: 'hidden', lineHeight: 1.35 } : null) }}>
                                 {/* Owner ruling 2026-08-26: team · years · GP · season pts ·
                                     PPG · weekly proj (phone keeps 3 chips per 2026-07-12). */}
                                 <span>{r.team}</span>
@@ -2233,7 +2251,7 @@ function CompareTab({
                                 {!histSeason && (window.App && window.App.DhqProj) && <span style={{ color: 'var(--gold, #d4af37)', fontWeight: 700 }}>{window.App.DhqProj.fmt(r.pid) + ' DHQ'}</span>}
                             </div>
                         </div>
-                        <span style={{ ...mono, fontWeight: 700, fontSize: '0.76rem', color: dhqCol, flexShrink: 0 }}>{r.dhq > 0 ? r.dhq.toLocaleString() : '-'}</span>
+                        {!isPhone && <span style={{ ...mono, fontWeight: 700, fontSize: '0.76rem', color: dhqCol, flexShrink: 0 }}>{r.dhq > 0 ? r.dhq.toLocaleString() : '-'}</span>}
                     </div>
                 );
             };
@@ -2337,14 +2355,17 @@ function CompareTab({
                                             <div style={{ width: minePct + '%', background: 'var(--gold)' }}></div>
                                             <div style={{ width: (100 - minePct) + '%', background: theirColor }}></div>
                                         </div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: 'var(--text-micro, 0.6875rem)' }}>
+                                        {/* minmax(0,1fr) + ellipsis on the BLOCK wrapper: the inline
+                                            name span can't ellipsize itself, so long names overlapped
+                                            the opposite column / ran past the card at 375. */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px', fontSize: 'var(--text-micro, 0.6875rem)' }}>
                                             <div style={{ minWidth: 0 }}>
                                                 <div style={{ color: myColor, fontWeight: 800, marginBottom: '2px' }}>{summary.myPosDHQ.toLocaleString()}</div>
-                                                <div style={muted}>{renderMiniPlayer(summary.topMine)}</div>
+                                                <div title={summary.topMine?.p?.full_name || undefined} style={{ ...muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{renderMiniPlayer(summary.topMine)}</div>
                                             </div>
                                             <div style={{ minWidth: 0, textAlign: 'right' }}>
                                                 <div style={{ color: theirColor, fontWeight: 800, marginBottom: '2px' }}>{summary.theirPosDHQ.toLocaleString()}</div>
-                                                <div style={muted}>{renderMiniPlayer(summary.topTheirs)}</div>
+                                                <div title={summary.topTheirs?.p?.full_name || undefined} style={{ ...muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{renderMiniPlayer(summary.topTheirs)}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -2486,13 +2507,19 @@ function CompareTab({
                                             <span style={{ fontWeight: 800, color: summary.diff > 0 ? 'var(--good)' : summary.diff < 0 ? 'var(--bad)' : 'var(--silver)' }}>{summary.diff > 0 ? '+' : ''}{summary.diff.toLocaleString()}</span>
                                         </div>
                                     </div>
-                                    <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--ov-3, rgba(255,255,255,0.04))' }}>
-                                        <div title={'You: ' + Math.round(myPosPct) + '%'} style={{ width: myPosPct + '%', background: 'linear-gradient(90deg, var(--gold), var(--acc-line4, rgba(212,175,55,0.78)))', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '4px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--k-0a0a0a, #0a0a0a)', fontWeight: 800 }}>
-                                            {myPosPct >= 18 ? Math.round(myPosPct) + '%' : ''}
+                                    {/* Phone: the 11px % labels can't fit inside a 6px bar
+                                        (rendered half-cut) — they flank the bar instead. */}
+                                    <div style={isPhone ? { display: 'flex', alignItems: 'center', gap: '6px' } : undefined}>
+                                    {isPhone && <span style={{ ...mono, fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, color: 'var(--gold)', flexShrink: 0, minWidth: '28px' }}>{Math.round(myPosPct)}%</span>}
+                                    <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--ov-3, rgba(255,255,255,0.04))', ...(isPhone ? { flex: 1, minWidth: 0 } : null) }}>
+                                        <div title={'You: ' + Math.round(myPosPct) + '%'} style={{ width: myPosPct + '%', background: 'linear-gradient(90deg, var(--gold), var(--acc-line4, rgba(212,175,55,0.78)))', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: isPhone ? 0 : '4px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--k-0a0a0a, #0a0a0a)', fontWeight: 800 }}>
+                                            {!isPhone && myPosPct >= 18 ? Math.round(myPosPct) + '%' : ''}
                                         </div>
-                                        <div title={'Them: ' + Math.round(100 - myPosPct) + '%'} style={{ width: (100 - myPosPct) + '%', background: 'linear-gradient(90deg, rgba(124,107,248,0.76), var(--k-7c6bf8, #7c6bf8))', display: 'flex', alignItems: 'center', paddingLeft: '4px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--k-0a0a0a, #0a0a0a)', fontWeight: 800 }}>
-                                            {(100 - myPosPct) >= 18 ? Math.round(100 - myPosPct) + '%' : ''}
+                                        <div title={'Them: ' + Math.round(100 - myPosPct) + '%'} style={{ width: (100 - myPosPct) + '%', background: 'linear-gradient(90deg, rgba(124,107,248,0.76), var(--k-7c6bf8, #7c6bf8))', display: 'flex', alignItems: 'center', paddingLeft: isPhone ? 0 : '4px', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--k-0a0a0a, #0a0a0a)', fontWeight: 800 }}>
+                                            {!isPhone && (100 - myPosPct) >= 18 ? Math.round(100 - myPosPct) + '%' : ''}
                                         </div>
+                                    </div>
+                                    {isPhone && <span style={{ ...mono, fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 800, color: 'var(--k-7c6bf8, #7c6bf8)', flexShrink: 0, minWidth: '28px', textAlign: 'right' }}>{Math.round(100 - myPosPct)}%</span>}
                                     </div>
                                 </div>
                                 {(() => {
@@ -2510,7 +2537,7 @@ function CompareTab({
                                                 const mine = summary.myAtPos[i];
                                                 const theirs = summary.theirAtPos[i];
                                                 return (
-                                                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid var(--ov-2, rgba(255,255,255,0.03))' }}>
+                                                    <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', borderBottom: '1px solid var(--ov-2, rgba(255,255,255,0.03))' }}>
                                                         {renderRosterCell(mine, false, theirs)}
                                                         {renderRosterCell(theirs, true, mine)}
                                                     </div>

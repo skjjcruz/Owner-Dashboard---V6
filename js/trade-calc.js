@@ -492,12 +492,41 @@
                     return hay.includes(pickQuery);
                 });
 
+                // Phone: the two builder columns are ~165px wide (side-by-side is an
+                // owner ask) and the 16px no-zoom select/input text clipped mid-word
+                // ("skjjcruz (Dirty Mik", "Filter 53 players & 1"). The native select
+                // stays (same picker, same handler) with its text hidden under a
+                // two-line owner / team label that ellipsizes; placeholder shortens.
+                let tsPhone = false;
+                try { tsPhone = window.WR?.viewport ? !!window.WR.viewport().isPhone : window.matchMedia('(max-width: 767px)').matches; } catch (_) {}
+                const ownerSelect = (
+                    <select className="tc-ta-owner-select" value={tradeOwner[side] || ''} onChange={e => { setTradeOwner(prev => ({ ...prev, [side]: e.target.value || null })); setSearchText(prev => ({ ...prev, [side]: '' })); }}
+                        style={tsPhone ? { color: 'transparent', minHeight: '46px', paddingRight: '24px' } : undefined}
+                        aria-label={label + ' owner'}>
+                        {ownerOptions.map(o => <option key={o.id||'none'} value={o.id||''} style={tsPhone ? { color: 'var(--white)' } : undefined}>{o.label}</option>)}
+                    </select>
+                );
+                let ownerSelectEl = ownerSelect;
+                if (tsPhone) {
+                    const cur = ownerOptions.find(o => String(o.id || '') === String(tradeOwner[side] || '')) || ownerOptions[0] || { label: '' };
+                    const m = /^(.*?) \((.*)\)$/.exec(cur.label || '');
+                    const line1 = m ? m[1] : (cur.label || '');
+                    const line2 = m ? m[2] : '';
+                    ownerSelectEl = (
+                        <div style={{ position: 'relative', minWidth: 0 }}>
+                            {ownerSelect}
+                            <div aria-hidden="true" style={{ position: 'absolute', left: '9px', right: '24px', top: 0, bottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', pointerEvents: 'none', minWidth: 0, lineHeight: 1.2 }}>
+                                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--white)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line1}</span>
+                                {line2 && <span style={{ fontSize: 'max(11px, 0.7rem)', color: 'var(--silver)', opacity: 0.75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line2}</span>}
+                            </div>
+                        </div>
+                    );
+                }
+
                 return (
                     <div className={`tc-ta-side tc-side-${side.toLowerCase()}`}>
                         <span style={{ fontFamily:'var(--font-title)', fontSize:'0.95rem', color, letterSpacing:'0.08em' }}>{label}</span>
-                        <select className="tc-ta-owner-select" value={tradeOwner[side] || ''} onChange={e => { setTradeOwner(prev => ({ ...prev, [side]: e.target.value || null })); setSearchText(prev => ({ ...prev, [side]: '' })); }}>
-                            {ownerOptions.map(o => <option key={o.id||'none'} value={o.id||''}>{o.label}</option>)}
-                        </select>
+                        {ownerSelectEl}
 
                         {/* Added players */}
                         {ids.map(pid => {
@@ -543,7 +572,7 @@
                         {/* Roster picker */}
                         {tradeOwner[side] && rosterPlayers !== null ? (
                             <div>
-                                <input className="tc-ta-roster-filter" placeholder={`Filter ${rosterPlayers.length} players & ${ownerPicksList.length} picks...`} value={searchText[side]} onChange={e => setSearchText(prev => ({ ...prev, [side]: e.target.value }))} />
+                                <input className="tc-ta-roster-filter" placeholder={tsPhone ? 'Search roster…' : `Filter ${rosterPlayers.length} players & ${ownerPicksList.length} picks...`} value={searchText[side]} onChange={e => setSearchText(prev => ({ ...prev, [side]: e.target.value }))} />
                                 <div className="tc-ta-roster-list-tall">
                                     {rosterPlayers.length > 0 && (() => {
                                         const grouped = {};
@@ -1043,7 +1072,12 @@
         const [dealHqNotice, setDealHqNotice] = useState(null);
         // b105 (owner ruling 2026-09-06): moonshots show by default; the
         // toggle hides them.
-        const [showAllDeals, setShowAllDeals] = useState(true);
+        // Phone (<768): start collapsed — 16+ moonshot cards buried the Add
+        // Assets board under a ~24-card scroll (phone audit). Desktop keeps
+        // the b105 default.
+        const [showAllDeals, setShowAllDeals] = useState(() => {
+            try { return !(window.WR?.viewport ? window.WR.viewport().isPhone : window.matchMedia('(max-width: 767px)').matches); } catch (_) { return true; }
+        });
         const [expandedDealId, setExpandedDealId] = useState(null);
         const [assetBrowserPos, setAssetBrowserPos] = useState('ALL');
         const [assetBrowserSort, setAssetBrowserSort] = useState('dhq');
@@ -5193,7 +5227,7 @@
                     {sub ? <div style={{ fontFamily: MONO, fontSize: MICRO, color: 'var(--silver)', opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '110px' }}>{sub}</div> : null}
                 </div>
             );
-            const actBtn = (goldOn) => ({ padding: '9px 14px', minHeight: '44px', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', borderRadius: '5px', fontFamily: 'var(--font-body)', border: '1px solid ' + (goldOn ? 'var(--acc-line2, rgba(212,175,55,0.4))' : 'rgba(255,255,255,0.14)'), background: goldOn ? 'rgba(212,175,55,0.12)' : 'transparent', color: goldOn ? 'var(--gold)' : 'var(--silver)' });
+            const actBtn = (goldOn) => ({ padding: '9px 14px', minHeight: '44px', fontSize: 'max(11.5px, 0.72rem)', fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', borderRadius: '5px', fontFamily: 'var(--font-body)', border: '1px solid ' + (goldOn ? 'var(--acc-line2, rgba(212,175,55,0.4))' : 'rgba(255,255,255,0.14)'), background: goldOn ? 'rgba(212,175,55,0.12)' : 'transparent', color: goldOn ? 'var(--gold)' : 'var(--silver)' });
             const goldDiv = (label, sub) => (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                     <span style={{ fontFamily: MONO, fontSize: MICRO, fontWeight: 600, color: 'var(--gold)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{label}</span>
@@ -5355,7 +5389,7 @@
             const phPlusChip = (row) => (
                 <button type="button" aria-label={'Add ' + row.name + ' to the builder'}
                     onClick={e => { e.stopPropagation(); addAssetToBuilder(row); }}
-                    style={{ width: '34px', height: '34px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '7px', border: '1px solid var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.10)', color: 'var(--gold)', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer', fontFamily: MONO, lineHeight: 1, padding: 0 }}>+</button>
+                    style={{ width: '36px', height: '36px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--card-radius-sm, 8px)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.10)', color: 'var(--gold)', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer', fontFamily: MONO, lineHeight: 1, padding: 0 }}>+</button>
             );
             const phAssetRow = (row) => {
                 const rf = tcRookieInfoFor(row.pid);
@@ -5363,8 +5397,9 @@
                 return (
                     <AssetRow key={`${row.rosterId}-${row.pid}`} pos={row.pos} name={row.name}
                         tag={row.ownerLabel + (rookieBits.length ? ' · ' + rookieBits.join(' · ') : '')}
-                        slots={[{ label: 'DHQ', value: row.value.toLocaleString() }, { label: 'AGE', value: row.age || '—', tone: 'mute' }]}
-                        verdict={phPlusChip(row)}
+                        // "+" rides a fixed right slot (was the tag-line verdict:
+                        // its x-position followed the owner-name length).
+                        slots={[{ label: 'DHQ', value: row.value.toLocaleString(), w: '44px' }, { label: 'AGE', value: row.age || '—', tone: 'mute' }, { label: '', value: phPlusChip(row), w: '36px' }]}
                         accent={focusPlayerPid != null && String(focusPlayerPid) === String(row.pid) ? 'gold' : undefined}
                         onClick={() => {
                             // Row tap = focus the finder on this asset (desktop selectAssetFocus).
@@ -5378,13 +5413,12 @@
             const phPickPlusChip = (row) => (
                 <button type="button" aria-label={'Add ' + row.label + ' to the builder'}
                     onClick={e => { e.stopPropagation(); addPickRowToBuilder(row); }}
-                    style={{ width: '34px', height: '34px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '7px', border: '1px solid var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.10)', color: 'var(--gold)', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer', fontFamily: MONO, lineHeight: 1, padding: 0 }}>+</button>
+                    style={{ width: '36px', height: '36px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--card-radius-sm, 8px)', border: '1px solid var(--acc-line2, rgba(212,175,55,0.4))', background: 'rgba(212,175,55,0.10)', color: 'var(--gold)', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer', fontFamily: MONO, lineHeight: 1, padding: 0 }}>+</button>
             );
             const phPickRow = (row) => (
                 <AssetRow key={`${row.rosterId}-${row.id}`} pos="PK" name={row.label}
                     tag={(phPicksScopeMine ? 'Your pick' : row.ownerName) + (row.via && row.via !== row.ownerName ? ' · via ' + row.via : '')}
-                    slots={[{ label: 'DHQ', value: row.value.toLocaleString(), strong: true }]}
-                    verdict={phPickPlusChip(row)}
+                    slots={[{ label: 'DHQ', value: row.value.toLocaleString(), strong: true }, { label: '', value: phPickPlusChip(row), w: '36px' }]}
                     accent={finderQuery.focus && finderQuery.focus.kind === 'pick' && String(finderQuery.focus.id) === String(row.id) ? 'gold' : undefined}
                     onClick={() => {
                         setFinderQuery(qr => ({ ...qr, focus: { kind: 'pick', id: row.id, label: row.label, ownerId: row.ownerId, rosterId: row.rosterId } }));
@@ -5515,13 +5549,15 @@
             let finderPanelEl = null;
             if (_pro && rosterState.isUsable && phFinderPanel === 'intent') {
                 finderPanelEl = finderPanelWrap(
-                    <div className="wr-seg">
+                    // 5 choices didn't fit the .wr-seg scroller (GM hidden at 375,
+                    // no scroll hint) — 3-up grid so every intent is visible.
+                    <div className="wr-seg" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', overflow: 'hidden' }}>
                         {finderIntents.map(i => (
                             <button key={i.key} type="button" className={finderQuery.intent === i.key ? 'is-on' : ''}
                                 onClick={() => { setFinderQuery(qr => ({ ...qr, intent: i.key })); setAssetBrowserPos('ALL'); setShowAllDeals(false); setPhFinderPanel(null); }}>{i.label}</button>
                         ))}
                         {/* LAB20: amber GM button (owner order 2026-09-05) — same door on the phone deck */}
-                        <button key="gm" type="button" onClick={() => { setPhFinderPanel(null); labOpenGmOffice(); }} style={{ background: 'rgba(255,179,0,0.16)', border: '1px solid #ffb300', color: '#ffb300', fontWeight: 700 }}>GM</button>
+                        <button key="gm" type="button" onClick={() => { setPhFinderPanel(null); labOpenGmOffice(); }} style={{ background: 'rgba(255,179,0,0.16)', border: '1px solid #ffb300', color: '#ffb300', fontWeight: 700, minWidth: 0 }}>GM</button>
                     </div>
                 );
             } else if (_pro && rosterState.isUsable && phFinderPanel === 'partner') {
@@ -5542,7 +5578,7 @@
                                 return (
                                     <button key={a.rosterId} type="button" style={partnerRow(on)} onClick={() => { phSetPartner(on ? null : a.ownerId); setPhFinderPanel(null); }}>
                                         <strong style={{ color: on ? 'var(--gold)' : 'var(--white)', fontWeight: 600, minWidth: 0, flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.ownerName}</strong>
-                                        {item.posture && <span style={{ fontSize: '0.58rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: item.posture.color, whiteSpace: 'nowrap' }}>{item.posture.label}</span>}
+                                        {item.posture && <span style={{ fontSize: 'max(11px, 0.58rem)', letterSpacing: '0.04em', flexShrink: 0, textTransform: 'uppercase', color: item.posture.color, whiteSpace: 'nowrap' }}>{item.posture.label}</span>}
                                         <span style={{ fontFamily: MONO, fontSize: '0.72rem', color: 'var(--silver)' }}>{item.score}</span>
                                     </button>
                                 );
@@ -5642,7 +5678,7 @@
             let deskBody = null;
             if (active === 'desk') {
                 const pillsEl = (_pro && rosterState.isUsable) ? (
-                    <div className="wr-hscroll" style={{ display: 'flex', gap: '6px', overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                         {React.createElement(FilterPill, { label: 'Intent', value: intentLabel, onClick: () => setPhFinderPanel(p => p === 'intent' ? null : 'intent') })}
                         {React.createElement(FilterPill, { label: 'Partner', value: pinnedPartnerName, onClick: () => setPhFinderPanel(p => p === 'partner' ? null : 'partner') })}
                         {focusR ? React.createElement(FilterPill, { label: '✕', value: focusR.label, onClick: phClearFocus }) : null}
@@ -5777,7 +5813,8 @@
                     <React.Fragment>
                         {_pro ? (
                             <React.Fragment>
-                                <div className="wr-kpi-strip">
+                                {/* 2×2 on phone — the 4th tile (Pending) sat off-screen in the snap strip. */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
                                     {kpiTile('Deals', pipelineRows.length, 'tracked')}
                                     {kpiTile('Record', (wins + losses) ? `${wins}W-${losses}L` : '—', 'logged outcomes', wins > losses ? 'var(--good)' : losses > wins ? 'var(--bad)' : undefined)}
                                     {kpiTile('Avg grade', avgGrade, 'DHQ bands', avgGrade === '—' ? undefined : tcGradeColor(avgGrade))}

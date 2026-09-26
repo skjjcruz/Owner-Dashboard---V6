@@ -297,20 +297,55 @@
         return src && PLATFORM_NAME[src] ? PLATFORM_NAME[src] : 'Sleeper';
     }
 
+    // DHQ has no number for him: a position the engine does not project
+    // (team defenses) or a player it came back empty on. He is on an NFL
+    // team, so he may well play; DHQ just can't say. A projection of 0 is
+    // different: that is DHQ saying he won't play (out, bye).
+    function noNumber(pid) {
+        pid = String(pid || '');
+        if (!pid || !(pid in st.results) || st.results[pid] !== null) return false;
+        const p = (S().players || {})[pid];
+        return !!(p && p.team);
+    }
     // DHQ's best lineup for a roster: the same slot solver as the app's
     // optimizer, fed DHQ's numbers (IR and taxi never start; a player's
     // every Sleeper position counts, so an edge rusher can fill a DL slot).
-    function optimalFor(roster, rosterPositions) {
+    // A starter DHQ has no number for keeps his slot (owner report
+    // 2026-09-26: Apply Optimal moved "Minnesota Vikings → Empty" because a
+    // defense has no DHQ projection and read as unplayable). He rides along
+    // in `starters` marked `held`, adds nothing to the DHQ total, and the
+    // solver fills only the other slots. `current` (slot idx → pid) is the
+    // lineup in the slots; the roster's saved starters when omitted.
+    function optimalFor(roster, rosterPositions, current) {
         const SS = App.StartSit;
         if (!SS || !SS.optimalLineupWeekly || !roster) return null;
         const skip = new Set([].concat(roster.reserve || [], roster.taxi || []).map(String));
         const players = S().players || {};
-        const list = (roster.players || []).map(String).filter(pid => pid && !skip.has(pid)).map(pid => {
+        const slots = slotsFor(rosterPositions);
+        const cur = {};
+        if (current) Object.keys(current).forEach(k => { if (current[k] && String(current[k]) !== '0') cur[k] = String(current[k]); });
+        else slots.forEach(x => { const pid = (roster.starters || [])[x.idx]; if (pid && String(pid) !== '0') cur[x.idx] = String(pid); });
+        const held = slots.filter(x => cur[x.idx] && !skip.has(cur[x.idx]) && noNumber(cur[x.idx]) && posList(cur[x.idx]).some(q => x.elig.includes(q)));
+        const heldIdx = new Set(held.map(x => x.idx)), heldPid = new Set(held.map(x => cur[x.idx]));
+        const rest = []; let t = 0;
+        (rosterPositions || []).forEach(raw => {
+            if (BENCH_SLOTS.has(SS.normSlot(raw))) { rest.push(raw); return; }
+            if (!heldIdx.has(t)) rest.push(raw);
+            t++;
+        });
+        const list = (roster.players || []).map(String).filter(pid => pid && !skip.has(pid) && !heldPid.has(pid)).map(pid => {
             const r = get(pid), p = players[pid] || {};
             const pos = String((App.normPos && App.normPos(p.position)) || p.position || '').toUpperCase();
             return { pid, pos, positions: (p.fantasy_positions || []).concat([pos]), available: !!(r && Number(r.median) > 0), pts: r ? Number(r.median) || 0 : 0 };
         });
-        return SS.optimalLineupWeekly(list, rosterPositions || []);
+        const out = SS.optimalLineupWeekly(list, rest);
+        held.forEach(x => {
+            const pid = cur[x.idx], l = posList(pid);
+            out.starters.push({ pid, slot: x.slotName, pts: 0, pos: l.length ? l[l.length - 1] : '', held: true });
+            out.slots.push({ slot: x.slotName, pid });
+        });
+        out.held = [...heldPid];
+        return out;
     }
     // Numeric total of several players, or null while any is still working.
     function totalNum(pids) {
@@ -453,10 +488,11 @@
     // WeeklyProj.optimalForRoster's result where they overlap, so callers
     // can swap it in; null until every player involved has a DHQ number.
     const BENCH_SLOTS = new Set(['BN', 'BE', 'BENCH', 'IR', 'TAXI', 'RES']);
-    function slotList(league) {
+    function slotList(league) { return slotsFor(league && league.roster_positions); }
+    function slotsFor(rosterPositions) {
         const SS = App.StartSit; if (!SS) return [];
         const out = []; let t = 0;
-        ((league && league.roster_positions) || []).forEach(raw => {
+        (rosterPositions || []).forEach(raw => {
             const nm = SS.normSlot(raw);
             if (BENCH_SLOTS.has(nm)) return;
             const elig = (SS.FLEX_ALLOWED && SS.FLEX_ALLOWED[nm]) || (SS.BASE_POSITIONS && SS.BASE_POSITIONS.has(nm) ? [nm] : null);
@@ -473,7 +509,7 @@
         else slots.forEach(x => { const pid = (roster.starters || [])[x.idx]; if (pid && String(pid) !== '0') current[x.idx] = String(pid); });
         const curPids = Object.values(current);
         const cur = totalNum(curPids);
-        const best = optimalFor(roster, league.roster_positions || []);
+        const best = optimalFor(roster, league.roster_positions || [], current);
         if (cur == null || !best || !(best.total > 0)) return null;
         const bestPids = best.starters.map(x => String(x.pid));
         if (totalNum(bestPids) == null) return null;

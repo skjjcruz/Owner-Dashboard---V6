@@ -342,9 +342,12 @@ function AnalyticsPanel({
         <div className="analytics-data-stack">
             {rows.map((r, i) => (
                 <div key={i} className={'analytics-data-row' + (compact ? ' is-compact' : '')} title={compact ? (r.detail || undefined) : undefined}>
-                    <div>
+                    {/* Phone: the <strong> is inline, so the row CSS's ellipsis
+                        never applied and long labels ran under the badge —
+                        a 2-line clamp inside a min-width:0 track keeps it clear. */}
+                    <div style={_phone ? { minWidth: 0, overflow: 'hidden' } : undefined}>
                         {!compact && <span>{r.kicker || r.label}</span>}
-                        <strong>{r.label}</strong>
+                        <strong style={_phone ? { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, whiteSpace: 'normal', lineHeight: 1.3 } : undefined}>{r.label}</strong>
                     </div>
                     {!compact && <em>{r.detail}</em>}
                     <b style={{ color: r.color || undefined }}>{r.value}</b>
@@ -1010,11 +1013,13 @@ function AnalyticsPanel({
                                 <div>
                                     <div style={{ color: 'var(--silver)', fontSize: 'var(--text-body, 1rem)', marginBottom: '6px', fontWeight: 700 }}>Players at risk:</div>
                                     {arPlayers2.slice(0, 5).map((p, i) => (
-                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--ov-3, rgba(255,255,255,0.04))', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)' }}>
-                                            <span style={{ color: 'var(--silver)' }}>{p.name} ({p.age})</span>
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        // Phone: one line per player — the name truncates, the
+                                        // value + TRADE NOW chip never wrap ("3,985 / DHQ").
+                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--ov-3, rgba(255,255,255,0.04))', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)', ...(_phone ? { gap: '8px', fontSize: '0.84rem', minHeight: '36px' } : null) }}>
+                                            <span style={{ color: 'var(--silver)', ...(_phone ? { flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } : null) }}>{p.name} ({p.age})</span>
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', ...(_phone ? { flexShrink: 0, whiteSpace: 'nowrap', gap: '6px' } : null) }}>
                                                 <span style={{ color: badColor }}>{p.dhq.toLocaleString()} DHQ</span>
-                                                <span style={{ padding: '2px 8px', background: 'rgba(231,76,60,0.15)', color: badColor, borderRadius: '4px', fontSize: 'var(--text-label, 0.75rem)', fontWeight: 700, letterSpacing: '0.05em' }}>TRADE NOW</span>
+                                                <span style={{ padding: '2px 8px', background: 'rgba(231,76,60,0.15)', color: badColor, borderRadius: '4px', fontSize: 'var(--text-label, 0.75rem)', fontWeight: 700, letterSpacing: '0.05em', ...(_phone ? { padding: '2px 6px', fontSize: 'var(--text-micro, 0.6875rem)', letterSpacing: '0.03em' } : null) }}>TRADE NOW</span>
                                             </span>
                                         </div>
                                     ))}
@@ -1303,12 +1308,12 @@ function AnalyticsPanel({
                             <p>Each round is one lane on a fixed 0-100% scale. The gold rail is the title-tier (champion) hit rate; the faint silver tick is the league field. Your bar grows toward the rail &mdash; past it, you beat the standard. Rounds with fewer than 2 picks draw as a hollow ghost: direction, not a verdict.</p>
                             <div style={{ display: 'flex', gap: '18px', borderTop: '1px solid var(--ov-4,rgba(255,255,255,0.06))', borderBottom: '1px solid var(--ov-4,rgba(255,255,255,0.06))', padding: '12px 0', margin: '4px 0 14px' }}>
                                 {[
-                                    { k: 'Anchor (R1-R2)', v: anchorGradable ? anchorPct + '%' : '\u2014', c: anchorGradable ? 'var(--good)' : 'var(--silver)', s: 'you \u00B7 ' + myAnchorHits + '/' + myAnchorN },
+                                    { k: _phone ? 'Anchor R1-2' : 'Anchor (R1-R2)', v: anchorGradable ? anchorPct + '%' : '\u2014', c: anchorGradable ? 'var(--good)' : 'var(--silver)', s: 'you \u00B7 ' + myAnchorHits + '/' + myAnchorN },
                                     { k: 'Elite Anchor', v: eliteAnchorPct + '%', c: 'var(--gold)', s: 'champions \u00B7 n=' + winnerAnchorN },
                                     { k: 'Edge', v: anchorGradable ? signedNum(anchorEdge, ' pts') : '\u2014', c: !anchorGradable ? 'var(--silver)' : anchorEdge >= 0 ? 'var(--good)' : 'var(--warn)', s: 'vs title tier' },
                                 ].map((cell, i) => (
                                     <div key={i} style={{ flex: '1 1 0', minWidth: 0 }}>
-                                        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>{cell.k}</div>
+                                        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: _phone ? '0.04em' : '0.1em', fontWeight: 700, ...(_phone ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } : null) }}>{cell.k}</div>
                                         <div style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '1.85rem', lineHeight: 1.05, color: cell.c }}>{cell.v}</div>
                                         <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)' }}>{cell.s}</div>
                                     </div>
@@ -1331,7 +1336,7 @@ function AnalyticsPanel({
                                     <div style={{ position: 'relative', height: '10px', borderRadius: '99px', background: 'rgba(255,255,255,0.055)', overflow: 'visible' }}>
                                         {t.state === 'solid' && <i style={{ position: 'absolute', left: 0, top: 0, height: '10px', width: t.youPct + '%', background: 'var(--k-4ecdc4,#4ecdc4)', borderRadius: '99px' }} />}
                                         {t.state === 'thin' && <i className="rc-ghost" style={{ position: 'absolute', left: 0, top: 0, height: '10px', width: Math.max(3, t.youPct) + '%', borderRadius: '99px' }} />}
-                                        {t.state === 'empty' && <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 'var(--text-micro)', color: 'var(--silver)', whiteSpace: 'nowrap' }}>NO PICK</span>}
+                                        {t.state === 'empty' && <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 'var(--text-micro)', color: 'var(--silver)', whiteSpace: 'nowrap', ...(_phone ? { zIndex: 2, background: 'var(--black, #121217)', padding: '0 5px', borderRadius: '3px', lineHeight: 1.3 } : null) }}>NO PICK</span>}
                                         {t.state !== 'empty' && <i style={{ position: 'absolute', left: Math.min(t.youPct, t.elitePct) + '%', width: Math.abs(t.gap) + '%', height: '2px', top: '4px', background: gapColor, borderTop: t.state !== 'solid' ? '1px dashed ' + gapColor : 'none' }} />}
                                         <i style={{ position: 'absolute', left: t.elitePct + '%', top: '-3px', width: '2px', height: '16px', background: 'var(--gold)' }} />
                                         <i style={{ position: 'absolute', left: t.leaguePct + '%', top: '-1px', width: '1px', height: '12px', background: 'rgba(189,184,173,0.55)' }} />
@@ -1340,7 +1345,9 @@ function AnalyticsPanel({
                                         <b style={{ color: t.state === 'empty' ? 'var(--silver)' : 'var(--k-4ecdc4,#4ecdc4)' }}>{t.state === 'empty' ? '\u2014' : t.youPct + '%'}</b>
                                         <span style={{ color: 'var(--silver)', opacity: 0.45 }}> / </span>
                                         <b style={{ color: 'var(--gold)' }}>{t.elitePct}%</b>
-                                        <em style={{ display: 'block', fontStyle: 'normal', fontSize: 'var(--text-micro)', color: gapColor, opacity: t.state === 'solid' ? 1 : 0.5 }}>{t.state === 'empty' ? '\u00A0' : signedNum(t.gap, ' pts')}</em>
+                                        {/* Phone: an empty lane drops the blank second line so
+                                            "\u2014 / 50%" sits on the row centre, not above it. */}
+                                        {!(_phone && t.state === 'empty') && <em style={{ display: 'block', fontStyle: 'normal', fontSize: 'var(--text-micro)', color: gapColor, opacity: t.state === 'solid' ? 1 : 0.5 }}>{t.state === 'empty' ? '\u00A0' : signedNum(t.gap, ' pts')}</em>}
                                     </div>
                                 </div>
                                 );
@@ -1387,7 +1394,12 @@ function AnalyticsPanel({
                                     <div>
                                         <div style={{ display: 'flex', height: '26px', borderRadius: '6px', overflow: 'hidden', opacity: myRdCount ? 1 : 0.55 }}>
                                             {wEntries.map(([pos, pct]) => (
-                                                <span key={pos} title={posLabel(pos) + ' ' + pctFmt(pct)} style={{ width: (pct * 100) + '%', background: POS_COLOR[pos] || POS_COLOR.UNK, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-micro)', color: '#0c0c0f', overflow: 'hidden', whiteSpace: 'nowrap' }}>{pct >= 0.12 ? posLabel(pos) + ' ' + pctFmt(pct) : ''}</span>
+                                                // Phone: the bar is ~200px, so a 12% slice is ~24px and
+                                                // "LB 13%" collided with its neighbour. Full label only
+                                                // on slices ≥27%, position-only ≥13%, blank below.
+                                                <span key={pos} title={posLabel(pos) + ' ' + pctFmt(pct)} style={{ width: (pct * 100) + '%', background: POS_COLOR[pos] || POS_COLOR.UNK, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-micro)', color: '#0c0c0f', overflow: 'hidden', whiteSpace: 'nowrap' }}>{_phone
+                                                    ? (pct >= 0.27 ? posLabel(pos) + ' ' + pctFmt(pct) : pct >= 0.13 ? posLabel(pos) : '')
+                                                    : (pct >= 0.12 ? posLabel(pos) + ' ' + pctFmt(pct) : '')}</span>
                                             ))}
                                         </div>
                                         <div style={{ position: 'relative', height: myRdCount ? '22px' : '16px', marginTop: '4px' }}>
@@ -1400,8 +1412,12 @@ function AnalyticsPanel({
                                                 const offBoard = !(pos in center);
                                                 const left = offBoard ? 99 : center[pos];
                                                 const mc = onScript ? 'var(--good)' : 'var(--warn)';
+                                                // Phone: markers near either end anchor their label
+                                                // inward (the triangle still points at `left`) so
+                                                // "DL ×1" can't stick out past the card edge.
+                                                const anchor = !_phone ? 'center' : left >= 80 ? 'end' : left <= 20 ? 'start' : 'center';
                                                 return (
-                                                <span key={pos + idx} style={{ position: 'absolute', left: left + '%', transform: 'translateX(-50%)', top: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', color: mc, fontSize: 'var(--text-micro)', whiteSpace: 'nowrap' }}>
+                                                <span key={pos + idx} style={{ position: 'absolute', left: left + '%', transform: anchor === 'end' ? 'translateX(calc(-100% + 4px))' : anchor === 'start' ? 'translateX(-4px)' : 'translateX(-50%)', top: 0, display: 'flex', flexDirection: 'column', alignItems: anchor === 'end' ? 'flex-end' : anchor === 'start' ? 'flex-start' : 'center', color: mc, fontSize: 'var(--text-micro)', whiteSpace: 'nowrap' }}>
                                                     <i style={{ width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '6px solid ' + mc, opacity: myRdCount < 2 ? 0.85 : 1 }} />
                                                     <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{posLabel(pos)} &times;{cnt}{offBoard ? ' (champs 0%)' : ''}</span>
                                                 </span>
@@ -1487,7 +1503,7 @@ function AnalyticsPanel({
 
             const alerts = [];
             if (mySampleN >= 2 && mp.avgTradesPerSeason < lp.avgTradesPerSeason) alerts.push({ sev: 'medium', title: 'Low Trade Volume', msg: 'You trade below league average (' + mp.avgTradesPerSeason + ' vs ' + lp.avgTradesPerSeason + ' per season). Elite tier teams average ' + wp.avgTradesPerSeason + '.' });
-            if (mySampleN >= 2 && mp.avgValueGained < 0) alerts.push({ sev: 'high', title: 'Losing Value', msg: 'You\'re losing ' + Math.abs(mp.avgValueGained) + ' DHQ per trade on average. Elite tier teams gain +' + wp.avgValueGained + '.' });
+            if (mySampleN >= 2 && mp.avgValueGained < 0) alerts.push({ sev: 'high', title: 'Losing Value', msg: 'You\'re losing ' + Math.abs(mp.avgValueGained) + ' DHQ per trade on average. ' + (wp.avgValueGained >= 0 ? 'Elite tier teams gain ' + signedNum(wp.avgValueGained) + '.' : 'Elite tier teams average ' + signedNum(wp.avgValueGained) + ' per trade.') });
             if (winnerTradeN >= 2 && wp.partnerPreference && wp.partnerPreference !== 'Unknown' && wp.partnerPreference !== mp.partnerPreference) alerts.push({ sev: 'low', title: 'Trade Partner Strategy', msg: 'Title teams most often trade against ' + cleanPreference(wp.partnerPreference) + '-type owners; you favor ' + cleanPreference(mp.partnerPreference) + '-type owners.' });
 
             // (Removed dead boughtBar* bar-chart items — Trade Flow now renders the net

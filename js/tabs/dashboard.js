@@ -1166,7 +1166,8 @@ function DashboardPanel({
                     style={{ fontFamily: rajFont, fontSize: 'var(--text-title, 1.125rem)', fontWeight: 700, color: 'var(--k-34d399, #34d399)', letterSpacing: '0.07em', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', cursor: hasTxns ? 'pointer' : 'default' }}>
                     📰 TRANSACTION TICKER
                     {hasTxns && (
-                        <span style={{ marginLeft: 'auto', fontSize: 'var(--text-label, 0.75rem)', fontWeight: 600, color: S, opacity: 0.7, fontFamily: dmFont, letterSpacing: 0, textTransform: 'none' }}>
+                        <span style={{ marginLeft: 'auto', marginRight: dashViewport.isPhone ? '20px' : undefined, fontSize: 'var(--text-label, 0.75rem)', fontWeight: 600, color: S, opacity: 0.7, fontFamily: dmFont, letterSpacing: 0, textTransform: 'none', whiteSpace: 'nowrap' }}>
+                            {/* Phone: marginRight clears the shell's ⋯ 44px hit area. */}
                             {hiddenCount > 0 ? ('+' + hiddenCount + ' more →') : 'See all →'}
                         </span>
                     )}

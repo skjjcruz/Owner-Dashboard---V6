@@ -26,6 +26,13 @@ function WrChopBlock({ active, currentLeague, myRoster, myStarters }) {
     const MONO = 'var(--font-mono, "JetBrains Mono", monospace)';
     const mono = { fontFamily: MONO, fontVariantNumeric: 'tabular-nums' };
     const microHdr = { font: '600 0.6875rem ' + MONO, color: '#8D887E', letterSpacing: '0.08em', textTransform: 'uppercase' };
+    // Phone (<768): the block's five columns fit 375px (fixed number columns,
+    // headers that wrap, the micro type lifted to the phone's 11px floor —
+    // 0.6875rem is ~9.3px under the phone's 13.5px root). Viewport seam
+    // presence is fixed for the page's lifetime, so the hook order is stable.
+    const _vp = window.WR && window.WR.useViewport ? window.WR.useViewport() : null;
+    const isPhone = !!(_vp && _vp.isPhone);
+    if (isPhone) microHdr.font = '600 var(--text-micro, 11px) ' + MONO;
 
     const leagueId = currentLeague?.league_id || currentLeague?.id || '';
     const [st, setSt] = React.useState({ status: 'idle' });
@@ -147,10 +154,11 @@ function WrChopBlock({ active, currentLeague, myRoster, myStarters }) {
 
             <Section title="The Block" meta={alive.length + ' alive · most at risk first' + (sim.weekSource === 'dhq' ? ' · this week on DHQ' : '')}>
                 <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: isPhone ? 'fixed' : undefined }}>
+                        {isPhone ? <colgroup><col /><col style={{ width: '52px' }} /><col style={{ width: '60px' }} /><col style={{ width: '46px' }} /><col style={{ width: '46px' }} /></colgroup> : null}
                         <thead><tr>
                             {['Team', 'Chop risk', 'Survive', 'Win', 'Wks left'].map((h, i) => (
-                                <th key={h} style={{ ...microHdr, textAlign: i ? 'right' : 'left', padding: '4px 8px', borderBottom: `1px solid ${LINE}`, whiteSpace: 'nowrap' }}>{h}</th>
+                                <th key={h} style={{ ...microHdr, textAlign: i ? 'right' : 'left', padding: isPhone ? '4px 4px' : '4px 8px', borderBottom: `1px solid ${LINE}`, whiteSpace: isPhone ? 'normal' : 'nowrap', ...(isPhone ? { letterSpacing: '0.02em', verticalAlign: 'bottom', lineHeight: 1.25 } : null) }}>{h}</th>
                             ))}
                         </tr></thead>
                         <tbody>
@@ -158,11 +166,11 @@ function WrChopBlock({ active, currentLeague, myRoster, myStarters }) {
                                 const isMe = me && String(r.rosterId) === String(me.rosterId);
                                 return (
                                     <tr key={r.rosterId} style={{ background: isMe ? 'var(--co-accent-fill, #12212B)' : 'transparent' }}>
-                                        <td style={{ padding: '6px 8px', fontSize: '0.78rem', color: isMe ? TEXT : SILVER, fontWeight: isMe ? 700 : 500, fontFamily: 'var(--font-body)', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</td>
-                                        <td style={{ ...mono, padding: '6px 8px', textAlign: 'right', fontSize: '0.8rem', fontWeight: 700, color: riskCol(r.chopThisWeekPct) }}>{r.chopThisWeekPct}%</td>
-                                        <td style={{ ...mono, padding: '6px 8px', textAlign: 'right', fontSize: '0.78rem', color: SILVER }}>{r.survivePct}%</td>
-                                        <td style={{ ...mono, padding: '6px 8px', textAlign: 'right', fontSize: '0.78rem', color: r.winPct >= 10 ? GOLD : SILVER }}>{r.winPct}%</td>
-                                        <td style={{ ...mono, padding: '6px 8px', textAlign: 'right', fontSize: '0.78rem', color: SILVER }}>{r.expWeeksLeft}</td>
+                                        <td style={{ padding: isPhone ? '6px 4px' : '6px 8px', fontSize: '0.78rem', color: isMe ? TEXT : SILVER, fontWeight: isMe ? 700 : 500, fontFamily: 'var(--font-body)', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</td>
+                                        <td style={{ ...mono, padding: isPhone ? '6px 4px' : '6px 8px', textAlign: 'right', fontSize: '0.8rem', fontWeight: 700, color: riskCol(r.chopThisWeekPct) }}>{r.chopThisWeekPct}%</td>
+                                        <td style={{ ...mono, padding: isPhone ? '6px 4px' : '6px 8px', textAlign: 'right', fontSize: '0.78rem', color: SILVER }}>{r.survivePct}%</td>
+                                        <td style={{ ...mono, padding: isPhone ? '6px 4px' : '6px 8px', textAlign: 'right', fontSize: '0.78rem', color: r.winPct >= 10 ? GOLD : SILVER }}>{r.winPct}%</td>
+                                        <td style={{ ...mono, padding: isPhone ? '6px 4px' : '6px 8px', textAlign: 'right', fontSize: '0.78rem', color: SILVER }}>{r.expWeeksLeft}</td>
                                     </tr>
                                 );
                             })}

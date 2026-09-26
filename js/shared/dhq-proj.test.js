@@ -81,3 +81,45 @@ test('rosterDists prices every living team for a chopped week', () => {
     assert.equal(D.rosterDists(lg, ['1', '2', '3'], 3, 1, null), null, 'waits for every living team');
     globalThis.S = saved.S; App.WeeklyProj = saved.WP;
 });
+
+test('a starter DHQ can\'t project keeps its slot', () => {
+    // CTB The One, 2026-09-26: Apply Optimal moved "Minnesota Vikings → Empty".
+    // A team defense has no DHQ projection; that is not the same as "won't play".
+    const saved = { S: globalThis.S, WP: App.WeeklyProj, SS: App.StartSit };
+    App.StartSit = require('./startsit-engine.js');
+    globalThis.S = { currentLeague: null, currentLeagueId: 'L', leagues: [{ league_id: 'L', scoring_settings: {} }], players: {
+        qb1: { position: 'QB', team: 'ARI', fantasy_positions: ['QB'] }, qb2: { position: 'QB', team: 'JAX', fantasy_positions: ['QB'] },
+        min: { position: 'DEF', team: 'MIN', fantasy_positions: ['DEF'] }, tb: { position: 'DEF', team: 'TB', fantasy_positions: ['DEF'] },
+        wr1: { position: 'WR', team: 'LV', fantasy_positions: ['WR'] }, wrOut: { position: 'WR', team: 'PIT', fantasy_positions: ['WR'] },
+    } };
+    App.WeeklyProj = { displayWeek: () => 3 };
+    const st = D._st;
+    D.get('x');
+    Object.assign(st.results, { qb1: { median: 12 }, qb2: { median: 15 }, min: null, tb: null, wr1: { median: 9 }, wrOut: { median: 0 } });
+    const league = { roster_positions: ['QB', 'WR', 'DEF', 'BN', 'BN', 'BN'] };
+    const roster = { players: ['qb1', 'qb2', 'min', 'tb', 'wr1', 'wrOut'], starters: ['qb1', 'wrOut', 'min'] };
+
+    const best = D.optimalFor(roster, league.roster_positions);
+    const def = best.starters.find(s => s.slot === 'DEF');
+    assert.ok(def, 'the DEF slot is not left empty');
+    assert.equal(def.pid, 'min', 'the defense in the slot stays in it');
+    assert.equal(def.held, true);
+    assert.equal(best.total, 24, 'the held defense adds nothing to the DHQ total (qb2 15 + wr1 9)');
+
+    const chk = D.lineupCheck(roster, league);
+    assert.equal(chk.placed[2], 'min', 'lineup check keeps the defense in its slot');
+    assert.equal(chk.placed[0], 'qb2', 'a player DHQ does project is still upgraded');
+    assert.equal(chk.placed[1], 'wr1', 'a starter DHQ projects at 0 (out) is still replaced');
+    assert.ok(!chk.delta.benchInstead.includes('min'), 'no "bench the defense" call');
+    assert.ok(chk.delta.startInstead.every(s => s.pid !== 'tb'), 'no other defense pushed in on no number');
+
+    // Working lineup with the other defense in the slot: that one stays.
+    const chk2 = D.lineupCheck(roster, league, { 0: 'qb1', 1: 'wr1', 2: 'tb' });
+    assert.equal(chk2.placed[2], 'tb');
+
+    // A cut player (no NFL team) is not held: he really can't play.
+    globalThis.S.players.min = { position: 'DEF', team: null, fantasy_positions: ['DEF'] };
+    const best2 = D.optimalFor(roster, league.roster_positions);
+    assert.ok(!best2.starters.some(s => s.pid === 'min'));
+    globalThis.S = saved.S; App.WeeklyProj = saved.WP; App.StartSit = saved.SS;
+});

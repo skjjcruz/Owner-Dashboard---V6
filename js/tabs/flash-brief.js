@@ -608,7 +608,8 @@ function IntelligenceBriefWidget({
             if ((type === 'regular' || type === 'post') && week > 0) {
                 const sunday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ((7 - now.getDay()) % 7));
                 big = type === 'post' ? 'PLAYOFFS' : 'WK ' + week;
-                text = (type === 'post' ? 'NFL postseason · week ' : 'NFL regular season · week ') + week;
+                // NBSP keeps "week 3" together when the line wraps on a phone.
+                text = (type === 'post' ? 'NFL postseason · week\u00a0' : 'NFL regular season · week\u00a0') + week;
                 tag = '· ' + (sunday.getTime() === new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() ? 'SUNDAY' : 'SUN ' + stampOf(sunday));
             } else {
                 let t = null;
@@ -629,8 +630,10 @@ function IntelligenceBriefWidget({
             style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '9px', flexShrink: 0, marginTop: 'auto', padding: '11px 4px', borderTop: '1px solid var(--acc-fill2, rgba(212,175,55,0.12))', background: 'linear-gradient(180deg, transparent, rgba(212,175,55,0.05))' },
         },
             React.createElement('span', { style: { fontSize: '1.15rem' } }, '🏈'),
-            React.createElement('span', { style: { fontFamily: 'JetBrains Mono, monospace', fontWeight: 800, fontSize: '1.1rem', color: 'var(--gold)' } }, big),
-            React.createElement('span', { style: { fontSize: '0.8rem', color: 'var(--silver)' } }, text),
+            // nowrap + no shrink: the big "WK 3" stamp broke onto two lines
+            // on a 375pt phone; the sentence beside it wraps instead.
+            React.createElement('span', { style: { fontFamily: 'JetBrains Mono, monospace', fontWeight: 800, fontSize: '1.1rem', color: 'var(--gold)', whiteSpace: 'nowrap', flexShrink: 0 } }, big),
+            React.createElement('span', { style: { fontSize: '0.8rem', color: 'var(--silver)', minWidth: 0 } }, text),
             React.createElement('span', { style: { fontFamily: 'JetBrains Mono, monospace', fontSize: '0.68rem', color: 'var(--gold-dim, #b8912f)', letterSpacing: '0.04em', whiteSpace: 'nowrap' } }, tag),
         );
     }

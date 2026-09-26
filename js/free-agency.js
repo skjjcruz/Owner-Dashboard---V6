@@ -1869,8 +1869,24 @@
             _faSlotKeys = faTierCols(_faSlotKeys);
             if (!_faSlotKeys.length) _faSlotKeys = faTierCols(FA_PHONE_SLOT_PRESETS.default);
 
-            // Slot renderer — same data reads as the desktop renderCell.
+            // Fixed min widths per slot so the stat columns line up row to
+            // row (phone fit pass 2026-09-26) — PPG's width fits the thin-
+            // sample "2G PPG" label so it can't shift the row next to it.
+            const _FA_SLOT_W = { dhq: '46px', ppg: '42px', proj: '34px', faab: '46px' };
             const _faSlotFor = (k, x) => {
+                const s = _faSlotForRaw(k, x);
+                if (s && !s.w) s.w = _FA_SLOT_W[k] || '34px';
+                return s;
+            };
+            // Injury status → Sleeper's short tag (Q / D / OUT / IR…) for the
+            // row's tag line, so it can't push team · age off the card.
+            const _faInjShort = (st) => {
+                const k = String(st || '').trim().toLowerCase();
+                const map = { questionable: 'Q', doubtful: 'D', out: 'OUT', probable: 'P', suspended: 'SUS', sus: 'SUS', 'injured reserve': 'IR', ir: 'IR', pup: 'PUP', na: 'NA', cov: 'COV' };
+                return map[k] || String(st || '').slice(0, 4);
+            };
+            // Slot renderer — same data reads as the desktop renderCell.
+            const _faSlotForRaw = (k, x) => {
                 const p = x.p;
                 const short = ((faColumns[k] && faColumns[k].shortLabel) || k).toUpperCase();
                 switch (k) {
@@ -1895,7 +1911,19 @@
                         return { label: lbl, value: shown > 0 ? shown : '—' };
                     }
                     // Sleeper's number, with DHQ's beside it (owner ruling 2026-09-23: side by side).
-                    case 'proj': return { label: 'WK', value: (x.proj > 0 ? x.proj.toFixed(1) : '—') + (window.App && window.App.DhqProj ? ' · DHQ ' + window.App.DhqProj.fmt(x.pid) : '') };
+                    // Phone fit pass 2026-09-26: the one-line "18.1 · DHQ 16.9"
+                    // read as a run-on with PPG — now two stacked numbers under
+                    // one WK label, Sleeper on top, DHQ below in DHQ gold.
+                    case 'proj': {
+                        const slp = x.proj > 0 ? x.proj.toFixed(1) : '—';
+                        if (!(window.App && window.App.DhqProj)) return { label: 'WK', value: slp };
+                        return { label: 'WK', value: (
+                            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.15 }}>
+                                <span title="Sleeper projection">{slp}</span>
+                                <span title="DHQ projection" style={{ color: 'var(--gold)', fontSize: '0.72rem', fontWeight: 600 }}>{window.App.DhqProj.fmt(x.pid)}</span>
+                            </span>
+                        ) };
+                    }
                     case 'age': return { label: short, value: p.age || '—', tone: 'mute' };
                     case 'peakYr': {
                         const py = peakYearsFor(x.pos, p.age);
@@ -2157,7 +2185,7 @@
             const _faMktRows = _faPhoneMkt.map(x => {
                 const bits = [x.p.team || 'FA'];
                 if (x.p.age) bits.push('Age ' + x.p.age);
-                if (x.p.injury_status) bits.push(x.p.injury_status);
+                if (x.p.injury_status) bits.push(_faInjShort(x.p.injury_status));
                 return React.createElement(window.WR.AssetRow, {
                     key: x.pid,
                     pos: x.pos,
@@ -2182,7 +2210,7 @@
                 pos: o.pos,
                 name: (playersData[o.fa.pid] || {}).full_name || o.fa.pid,
                 tag: 'over ' + o.worstName + ' (' + o.worstProj.toFixed(1) + ')',
-                slots: [{ label: 'WK', value: o.fa.proj.toFixed(1) }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(o.fa.pid) : '\u2014' }, { label: 'EDGE', value: '+' + o.delta.toFixed(1), tone: 'good' }],
+                slots: [{ label: 'WK', value: o.fa.proj.toFixed(1), w: '34px' }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(o.fa.pid) : '\u2014', w: '34px' }, { label: 'EDGE', value: '+' + o.delta.toFixed(1), tone: 'good', w: '34px' }],
                 onClick: () => openFaPlayer(o.fa.pid),
                 title: 'Open player card',
             }));
@@ -2197,7 +2225,10 @@
             })) : [];
             const _faGroups = [];
             if (_faStreamRows.length) _faGroups.push({ label: 'Streaming', sub: 'beats your weakest starter', rows: _faStreamRows });
-            _faGroups.push({ label: 'Market', sub: _faPhoneMkt.length + ' of ' + availablePlayers.length + ' shown', rows: _faMktRowNodes });
+            // The stacked WK slot (Sleeper over DHQ) is keyed once here rather
+            // than on every row.
+            const _faWkKey = _faSlotKeys.includes('proj') && window.App && window.App.DhqProj;
+            _faGroups.push({ label: 'Market', sub: _faPhoneMkt.length + ' of ' + availablePlayers.length + (_faWkKey ? ' · wk sleeper/dhq' : ' shown'), rows: _faMktRowNodes });
             if (_faDropRows.length) _faGroups.push({ label: 'Drop alerts', sub: 'fresh drops worth a claim', rows: _faDropRows });
 
             return (

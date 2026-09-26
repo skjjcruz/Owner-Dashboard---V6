@@ -28,6 +28,11 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
     const MONO = 'var(--font-mono, "JetBrains Mono", monospace)';
     const mono = { fontFamily: MONO, fontVariantNumeric: 'tabular-nums' };
     const microHdr = { font: '600 var(--text-micro, 0.6875rem) ' + MONO, color: 'var(--text-muted, #8D887E)', letterSpacing: '0.08em', textTransform: 'uppercase' };
+    // Phone (<768): the three tables fit the screen instead of hiding columns
+    // behind an unmarked sideways scroll. Viewport seam presence is fixed for
+    // the page's lifetime, so the conditional hook call is order-stable.
+    const _vp = window.WR && window.WR.useViewport ? window.WR.useViewport() : null;
+    const isPhone = !!(_vp && _vp.isPhone);
 
     const leagueId = currentLeague?.league_id || currentLeague?.id || '';
     const [so, setSo] = React.useState({ status: 'idle' });
@@ -144,9 +149,9 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
 
     // ── Shells ───────────────────────────────────────────────────────
     const Section = ({ title, meta, children }) => (
-        <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderRadius: '6px', padding: '14px 16px' }}>
+        <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderRadius: '6px', padding: isPhone ? '14px 12px' : '14px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                <span style={{ fontSize: '0.72rem', letterSpacing: '0.08em', color: SILVER, fontWeight: 600, textTransform: 'uppercase' }}>{title}</span>
+                <span style={{ fontSize: isPhone ? 'var(--text-micro, 11px)' : '0.72rem', letterSpacing: '0.08em', color: SILVER, fontWeight: 600, textTransform: 'uppercase' }}>{title}</span>
                 {meta ? <span style={{ ...microHdr, textTransform: 'none', letterSpacing: 0 }}>{meta}</span> : null}
             </div>
             {children}
@@ -212,9 +217,25 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
     }
 
     const tagColor = t => t === 'EASY' ? GREEN : t === 'HARD' ? RED : SILVER;
-    const oddsGrid = { display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) 0.7fr 0.8fr 0.7fr 0.7fr 0.9fr', gap: '8px', alignItems: 'center', padding: '6px 10px', minWidth: 0 };
-    const luckGrid = { display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) 0.7fr 0.9fr 0.8fr 0.7fr', gap: '8px', alignItems: 'center', padding: '6px 10px', minWidth: 0 };
+    // Phone: fixed number columns sized for their widest value, the team
+    // name takes the rest (two lines at most). The playoff table drops Rec
+    // there (the Luck Ledger below lists every record) and the Bye column
+    // when the bracket has no byes.
+    const oddsGrid = isPhone
+        ? { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 48px' + (sim && sim.byeSlots ? ' 34px' : '') + ' 36px 54px', gap: '6px', alignItems: 'center', padding: '6px 6px', minWidth: 0 }
+        : { display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) 0.7fr 0.8fr 0.7fr 0.7fr 0.9fr', gap: '8px', alignItems: 'center', padding: '6px 10px', minWidth: 0 };
+    const luckGrid = isPhone
+        ? { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 36px 44px 32px 36px', gap: '6px', alignItems: 'center', padding: '6px 6px', minWidth: 0 }
+        : { display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) 0.7fr 0.9fr 0.8fr 0.7fr', gap: '8px', alignItems: 'center', padding: '6px 10px', minWidth: 0 };
+    const weekGrid = isPhone
+        ? { display: 'grid', gridTemplateColumns: '26px 1fr 1fr 46px 1fr', gap: '6px' }
+        : { display: 'grid', gridTemplateColumns: '44px 1fr 1fr 1fr 1fr', gap: '8px' };
     const rowLine = { borderBottom: `1px solid ${LINE}`, color: SILVER, fontSize: '0.75rem', ...mono };
+    // Phone table headers: tighter tracking so a label fits its column.
+    const phHdr = isPhone ? { letterSpacing: '0.02em' } : null;
+    const teamCell = isPhone
+        ? { fontFamily: 'var(--font-body)', fontWeight: 600, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.25, wordBreak: 'break-word' }
+        : { fontFamily: 'var(--font-body)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
     const myRowStyle = { background: 'rgba(212,175,55,0.07)', boxShadow: `inset 3px 0 0 ${GOLD}`, color: TEXT };
     const swing = sim && sim.leverage ? Math.abs((sim.leverage.ifWin ?? 0) - (sim.leverage.ifLose ?? 0)) : 0;
 
@@ -231,24 +252,25 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
                         </div>
                     ) : null}
                     <div style={{ overflowX: 'auto' }}>
-                        <div style={{ minWidth: '520px' }}>
-                            <div style={{ ...oddsGrid, ...microHdr, borderBottom: `1px solid ${LINE}` }}>
-                                <span>Team</span><span style={{ textAlign: 'right' }}>Rec</span><span style={{ textAlign: 'right' }}>Playoff</span>
-                                {sim.byeSlots ? <span style={{ textAlign: 'right' }}>Bye</span> : <span />}
-                                <span style={{ textAlign: 'right' }}>Title</span><span style={{ textAlign: 'right' }}>Proj W-L</span>
+                        <div style={{ minWidth: isPhone ? 0 : '520px' }}>
+                            <div style={{ ...oddsGrid, ...microHdr, ...phHdr, borderBottom: `1px solid ${LINE}` }}>
+                                <span>Team</span>{isPhone ? null : <span style={{ textAlign: 'right' }}>Rec</span>}<span style={{ textAlign: 'right' }}>Playoff</span>
+                                {sim.byeSlots ? <span style={{ textAlign: 'right' }}>Bye</span> : isPhone ? null : <span />}
+                                <span style={{ textAlign: 'right' }}>Title</span><span style={{ textAlign: 'right' }}>{isPhone ? 'Proj' : 'Proj W-L'}</span>
                             </div>
                             {sim.rows.map(r => (
                                 <div key={r.rosterId} style={{ ...oddsGrid, ...rowLine, ...(String(r.rosterId) === myId ? myRowStyle : {}) }}>
-                                    <span style={{ fontFamily: 'var(--font-body)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-                                    <span style={{ textAlign: 'right' }}>{r.record}</span>
+                                    <span style={teamCell}>{r.name}</span>
+                                    {isPhone ? null : <span style={{ textAlign: 'right' }}>{r.record}</span>}
                                     <span style={{ textAlign: 'right', color: String(r.rosterId) === myId ? GOLD : undefined }}>{r.playoffPct}%</span>
-                                    {sim.byeSlots ? <span style={{ textAlign: 'right' }}>{r.byePct != null ? r.byePct + '%' : '—'}</span> : <span />}
+                                    {sim.byeSlots ? <span style={{ textAlign: 'right' }}>{r.byePct != null ? r.byePct + '%' : '—'}</span> : isPhone ? null : <span />}
                                     <span style={{ textAlign: 'right' }}>{r.titlePct}%</span>
                                     <span style={{ textAlign: 'right', opacity: 0.8 }}>{r.projWins}-{r.projLosses}</span>
                                 </div>
                             ))}
                         </div>
                     </div>
+                    {isPhone ? <div style={{ ...microHdr, textTransform: 'none', letterSpacing: 0, marginTop: '8px' }}>Proj = projected W-L. Records are in the Luck Ledger below.</div> : null}
                 </Section>
             ) : (
                 <Section title="Playoff Odds">
@@ -305,14 +327,14 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
                     </div>
                 ) : null}
                 <div id="wr-export-luck" style={{ overflowX: 'auto', background: 'var(--black, #121217)' }}>
-                    <div style={{ minWidth: '460px' }}>
-                        <div style={{ ...luckGrid, ...microHdr, borderBottom: `1px solid ${LINE}` }}>
-                            <span>Team</span><span style={{ textAlign: 'right' }}>Rec</span><span style={{ textAlign: 'right' }}>All-Play</span>
-                            <span style={{ textAlign: 'right' }}>Exp. W</span><span style={{ textAlign: 'right' }}>Luck</span>
+                    <div style={{ minWidth: isPhone ? 0 : '460px' }}>
+                        <div style={{ ...luckGrid, ...microHdr, ...phHdr, borderBottom: `1px solid ${LINE}` }}>
+                            <span>Team</span><span style={{ textAlign: 'right' }}>Rec</span><span style={{ textAlign: 'right' }}>{isPhone ? 'All-P' : 'All-Play'}</span>
+                            <span style={{ textAlign: 'right' }}>{isPhone ? 'Exp' : 'Exp. W'}</span><span style={{ textAlign: 'right' }}>Luck</span>
                         </div>
                         {luckRows.map(r => (
                             <div key={r.rosterId} style={{ ...luckGrid, ...rowLine, ...(String(r.rosterId) === myId ? myRowStyle : {}) }}>
-                                <span style={{ fontFamily: 'var(--font-body)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                                <span style={teamCell}>{r.name}</span>
                                 <span style={{ textAlign: 'right' }}>{r.wins}-{r.losses}{r.ties ? '-' + r.ties : ''}</span>
                                 <span style={{ textAlign: 'right' }}>{r.allPlayW}-{r.allPlayL}</span>
                                 {/* toFixed(1) on both — tabular mono columns, and a bare 3
@@ -326,21 +348,21 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap' }}>
                     {window.wrExport ? (
                         <button onClick={() => window.wrExport.capture(document.getElementById('wr-export-luck'), 'luck-ledger')}
-                            style={{ padding: '6px 12px', background: 'transparent', color: GOLD, border: '1px solid rgba(212,175,55,0.5)', borderRadius: '5px', font: '700 0.66rem ' + MONO, letterSpacing: '0.05em', textTransform: 'uppercase', cursor: 'pointer' }}>
+                            style={{ padding: '6px 12px', background: 'transparent', color: GOLD, border: '1px solid rgba(212,175,55,0.5)', borderRadius: '5px', font: (isPhone ? '700 var(--text-micro, 11px) ' : '700 0.66rem ') + MONO, minHeight: isPhone ? '44px' : undefined, letterSpacing: '0.05em', textTransform: 'uppercase', cursor: 'pointer' }}>
                             Export for league chat
                         </button>
                     ) : null}
-                    <span style={{ ...microHdr, textTransform: 'none', letterSpacing: 0 }}>All-play = your record if you played everyone every week. Luck = actual wins − expected.</span>
+                    <span style={{ ...microHdr, textTransform: 'none', letterSpacing: 0 }}>{isPhone ? 'All-P (all-play) = your record if you played everyone every week. Exp = expected wins. Luck = actual wins − expected.' : 'All-play = your record if you played everyone every week. Luck = actual wins − expected.'}</span>
                 </div>
                 {myLuck && myLuck.weekly.length ? (
                     <div style={{ marginTop: '14px', overflowX: 'auto' }}>
                         <div style={{ ...microHdr, marginBottom: '6px' }}>Your weekly ledger</div>
-                        <div style={{ minWidth: '380px' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 1fr 1fr 1fr', gap: '8px', padding: '4px 10px', ...microHdr, borderBottom: `1px solid ${LINE}` }}>
+                        <div style={{ minWidth: isPhone ? 0 : '380px' }}>
+                            <div style={{ ...weekGrid, padding: isPhone ? '4px 6px' : '4px 10px', ...microHdr, ...phHdr, borderBottom: `1px solid ${LINE}` }}>
                                 <span>Wk</span><span style={{ textAlign: 'right' }}>PF</span><span style={{ textAlign: 'right' }}>Median</span><span style={{ textAlign: 'right' }}>Result</span><span style={{ textAlign: 'right' }}>All-Play</span>
                             </div>
                             {myLuck.weekly.map(g => (
-                                <div key={g.week} style={{ display: 'grid', gridTemplateColumns: '44px 1fr 1fr 1fr 1fr', gap: '8px', padding: '5px 10px', ...rowLine }}>
+                                <div key={g.week} style={{ ...weekGrid, padding: isPhone ? '5px 6px' : '5px 10px', ...rowLine }}>
                                     <span>{g.week}</span>
                                     <span style={{ textAlign: 'right', color: TEXT }}>{g.pts.toFixed(1)}</span>
                                     <span style={{ textAlign: 'right', opacity: 0.7 }}>{g.median.toFixed(1)}</span>

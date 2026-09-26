@@ -620,12 +620,15 @@
                         verdict ? h('div', { style: { flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '130px' } }, verdict) : null
                     )
                 ),
-                h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 } },
-                    ...(slots || []).slice(0, 3).map((s, i) => h('div', { key: 'slot-' + i, style: { textAlign: 'right', minWidth: '32px' } },
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 } },
+                    // Optional `s.w` pins a slot's min width so a list's columns
+                    // line up row to row (phone fit pass 2026-09-26); labels and
+                    // values never wrap, so a 2-word label can't grow the row.
+                    ...(slots || []).slice(0, 3).map((s, i) => h('div', { key: 'slot-' + i, style: { textAlign: 'right', minWidth: s.w || '32px', flexShrink: 0 } },
                         // `strong` slots (the signature DHQ value) render gold +
                         // a notch larger so they read as the row's headline stat.
-                        h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: s.strong ? 700 : 500, color: s.strong ? 'var(--gold)' : 'var(--text-muted, #55555f)', textTransform: 'uppercase', letterSpacing: '0.02em' } }, s.label),
-                        h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: s.strong ? '0.98rem' : '0.8rem', fontWeight: s.strong ? 700 : 600, color: s.strong ? 'var(--gold)' : toneColor(s.tone) } }, s.value != null && s.value !== '' ? s.value : '—')
+                        h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: s.strong ? 700 : 500, color: s.strong ? 'var(--gold)' : 'var(--text-muted, #55555f)', textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' } }, s.label),
+                        h('div', { style: { fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: s.strong ? '0.98rem' : '0.8rem', fontWeight: s.strong ? 700 : 600, color: s.strong ? 'var(--gold)' : toneColor(s.tone), whiteSpace: 'nowrap' } }, s.value != null && s.value !== '' ? s.value : '—')
                     )),
                     h('span', { 'aria-hidden': 'true', style: { color: 'var(--text-muted, #55555f)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontSize: '0.9rem', fontWeight: 600, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' } }, '›')
                 )
@@ -701,11 +704,19 @@
                     s.node
                 ))
             ),
+            // The sheet body keeps a 12px + safe-area bottom padding, and a
+            // sticky box stops at the scroller's padding edge — so a plain
+            // `bottom: 0` footer floated 12px+ up with list rows showing
+            // through beneath it. The negative bottom/margin pin the footer
+            // flush to the sheet's bottom edge (mid-scroll AND at the end), and
+            // the padding carries the safe area so the buttons stay clear of
+            // the home indicator (phone fit pass 2026-09-26).
             footer ? h('div', {
                 style: {
-                    position: 'sticky', bottom: 0, marginTop: '14px',
+                    position: 'sticky', bottom: 'calc(-12px - var(--sab, env(safe-area-inset-bottom, 0px)))', marginTop: '14px',
+                    marginBottom: 'calc(-12px - var(--sab, env(safe-area-inset-bottom, 0px)))',
                     display: 'flex', alignItems: 'center', gap: '8px',
-                    padding: '10px 16px',
+                    padding: '10px 16px calc(10px + var(--sab, env(safe-area-inset-bottom, 0px)))',
                     background: 'var(--k-0a0b0d, #0a0b0d)',
                     borderTop: '1px solid var(--ov-4, rgba(255,255,255,0.07))',
                 }

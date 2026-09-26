@@ -29,6 +29,10 @@
         // ELITE/CONTENDER/… tier verdict badge and the Action Plan rec are Pro.
         const pro = typeof window.wrIsPro !== 'function' || window.wrIsPro();
         const rosterState = window.App?.getRosterDataState?.({ roster: myRoster, currentLeague, rosters: currentLeague?.rosters }) || { isUsable: true };
+        // Phone tier (hook called unconditionally — the WR kit is fixed for
+        // the page's lifetime, so hook order never changes).
+        const _rpVp = (window.WR && window.WR.useViewport) ? window.WR.useViewport() : { isPhone: false };
+        const _rpPhone = !!_rpVp.isPhone;
 
         // ── GM Strategy (single source of truth) ────────────────
         const gm = window.WR.GmMode.useGmEffects(currentLeague);
@@ -116,6 +120,10 @@
         const healthSparkData = React.useMemo(() => {
             return allAssess.map(a => a.healthScore || 0).sort((a, b) => b - a);
         }, [allAssess]);
+        // Phone: teams with no roster (guillotine chops) score 0 and drew as
+        // invisible bars, leaving the right ~15% of the League Health strip
+        // empty in an 18-team Shootout — the phone chart spans live teams.
+        const healthBars = _rpPhone ? healthSparkData.filter(v => v > 0) : healthSparkData;
 
         // Tier color
         const tierCol = tier === 'ELITE' ? colors.positive : tier === 'CONTENDER' ? colors.accent : tier === 'CROSSROADS' ? colors.warn : colors.negative;
@@ -224,7 +232,7 @@
                         <div style={{ fontSize: fs(0.64), color: colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '2px', fontFamily: fonts.ui }}>{primary.label}</div>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                        <MiniBarChart data={healthSparkData} highlight={health} colors={colors} fonts={fonts} fs={fs} height={42} />
+                        <MiniBarChart data={healthBars} highlight={health} colors={colors} fonts={fonts} fs={fs} height={42} />
                         <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
                             <Badge label={contenderKv.value} color={contenderKv.color || colors.accent} theme={theme} />
                             <Badge label={windowKv.value + ' window'} color={windowKv.color || colors.textMuted} theme={theme} />
@@ -292,7 +300,7 @@
                         <span style={{ fontFamily: fonts.display, fontSize: fs(1.0), fontWeight: 700, color: colors.accent, letterSpacing: '0.07em', textTransform: 'uppercase', flex: 1 }}>Roster Pulse</span>
                         {/* free keeps the raw rank; the tier verdict word is Pro */}
                         <Badge label={(pro ? tier + ' · ' : '') + '#' + (powerRank || '—')} color={pro ? tierCol : colors.accent} theme={theme} />
-                        <button onClick={openMyRoster} title="Open My Roster" style={{ padding: '3px 8px', minHeight: '44px', marginTop: '-12px', marginBottom: '-12px', display: 'flex', alignItems: 'center', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.22))', borderRadius: '5px', cursor: 'pointer', fontSize: fs(0.58), fontFamily: fonts.ui, fontWeight: 700, whiteSpace: 'nowrap' }}>Roster</button>
+                        <button onClick={openMyRoster} title="Open My Roster" style={{ padding: '3px 8px', minHeight: '44px', marginTop: '-12px', marginBottom: _rpPhone ? 0 : '-12px', marginRight: _rpPhone ? '20px' : undefined, display: 'flex', alignItems: 'center', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.22))', borderRadius: '5px', cursor: 'pointer', fontSize: fs(0.58), fontFamily: fonts.ui, fontWeight: 700, whiteSpace: 'nowrap' }}>Roster</button>
                     </div>
 
                     {/* Vital signs grid */}
@@ -380,7 +388,7 @@
                                     <span style={{ fontWeight: 700, color: colors.accent, textTransform: 'uppercase', letterSpacing: '0.08em' }}>League Health</span>
                                     <span>You: {powerRank > 0 ? percentile + ordinalSuffix(percentile) + ' percentile · ' : ''}#{powerRank || '—'} of {totalTeams}</span>
                                 </div>
-                                <MiniBarChart data={healthSparkData} highlight={health} colors={colors} fonts={fonts} fs={fs} height={36} />
+                                <MiniBarChart data={healthBars} highlight={health} colors={colors} fonts={fonts} fs={fs} height={36} />
                             </div>
                             {/* Needs + Strengths — deficit/surplus directives (same species as
                                 gap-plan) → Pro; raw Top Players strip below stays free */}
