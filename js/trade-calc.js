@@ -4329,7 +4329,7 @@
                                     else if (e.key === 'ArrowUp') { e.preventDefault(); setFinderTypeaheadIdx(i => Math.max(i - 1, 0)); }
                                     else if (e.key === 'Enter') { e.preventDefault(); selectFinderFocus(typeaheadFlat[finderTypeaheadIdx] || typeaheadFlat[0]); }
                                 }}
-                                placeholder="Focus: search players, picks, owners — yours and the league's"
+                                placeholder={leagueHasPicks ? "Focus: search players, picks, owners — yours and the league's" : "Focus: search players, owners — yours and the league's"}
                                 aria-label="Finder focus search"
                                 role="combobox"
                                 aria-expanded={typeaheadFlat.length > 0}
@@ -5650,7 +5650,7 @@
                             )}
                             <input type="text" value={finderSearch}
                                 onChange={e => setFinderSearch(e.target.value)}
-                                placeholder="Search players, picks, owners"
+                                placeholder={leagueHasPicks ? "Search players, picks, owners" : "Search players, owners"}
                                 aria-label="Finder focus search"
                                 style={{ width: '100%', minHeight: '44px', border: '1px solid rgba(212,175,55,0.22)', borderRadius: '5px', background: 'rgba(255,255,255,0.045)', color: 'var(--white)', fontFamily: 'var(--font-body)', fontSize: '16px', padding: '8px 10px' }} />
                             {phTypeGroups.map(group => (
