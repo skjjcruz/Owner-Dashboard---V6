@@ -209,7 +209,9 @@
         var a = doc.activeElement, tag = a && a.tagName;
         if (a && (tag === 'TEXTAREA' || tag === 'SELECT' || a.isContentEditable ||
             (tag === 'INPUT' && !/^(button|submit|reset|checkbox|radio|range|color|file|image|hidden)$/i.test(a.type || '')))) return 'typing';
-        if (doc.querySelector('[aria-modal="true"],.wr-sheet-backdrop,dialog[open]')) return 'modal';
+        // only a rendered modal counts (landing.html keeps its closed auth sheet in a [hidden] parent)
+        var m = doc.querySelectorAll('[aria-modal="true"],.wr-sheet-backdrop,dialog[open]');
+        for (var i = 0; i < m.length; i++) if (m[i].getClientRects().length) return 'modal';
         var ls = root.DraftCC && root.DraftCC.liveSync;
         if (ls && typeof ls.isRunning === 'function' && ls.isRunning()) return 'live-draft';
         if (doc.querySelector('[data-draft-pid]')) return 'draft-board';

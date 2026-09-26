@@ -942,7 +942,7 @@ test('live update: silent self-update — build id + version.json, every page po
     const lu = fs.readFileSync(path.join(ROOT, 'js/shared/live-update.js'), 'utf8');
     ok(lu.includes("'version.json?t='") && lu.includes("cache: 'no-store'"), 'version probe bypasses every cache');
     ok(lu.includes('meta[name="dhq-build"]'), 'own build read from the stamped meta tag');
-    ok(lu.includes("'[aria-modal=\"true\"],.wr-sheet-backdrop,dialog[open]'"), 'open sheet/modal blocks the reload');
+    ok(lu.includes("'[aria-modal=\"true\"],.wr-sheet-backdrop,dialog[open]'") && lu.includes('getClientRects().length'), 'a rendered sheet/modal blocks the reload (a closed, display:none one does not)');
     ok(lu.includes('[data-draft-pid]') && lu.includes('liveSync'), 'a draft blocks the reload');
     ok(lu.includes('2026-08-27') && lu.includes('no button, no banner'), 'header cites the owner ruling');
     ok(!/createElement|innerHTML|textContent\s*=|role=|toast|overlay/i.test(lu.replace(/^\s*\/\/.*$/gm, '')), 'no visible UI at all: no toast, no button, no overlay');
