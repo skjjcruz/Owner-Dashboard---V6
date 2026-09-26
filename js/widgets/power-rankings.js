@@ -228,7 +228,8 @@
                 }, 'Power Rankings'),
                 // One lens only — a quiet caption instead of the old view tabs.
                 React.createElement('div', {
-                    style: { marginLeft: 'auto', flex: '0 0 auto', fontFamily: 'var(--font-body)', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.66, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' } }, cur.caption));
+                    // Phone: marginRight clears the shell's ⋯ 44px hit area (same as the Ticker).
+                    style: { marginLeft: 'auto', marginRight: (window.matchMedia && window.matchMedia('(max-width: 767px)').matches) ? '20px' : undefined, flex: '0 0 auto', fontFamily: 'var(--font-body)', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.66, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' } }, cur.caption));
         }
 
         function Bar({ t, rank, totalTeams, width = 70, height = 6 }) {
