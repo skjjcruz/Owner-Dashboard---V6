@@ -394,7 +394,11 @@
         const scoutNote = draftScoutNote(pid);
         const age = p.age || 0;
         const team = p.team || 'FA';
-        const dhq = window.App?.LI?.playerScores?.[pid] || 0;
+        // Format-aware value: rest-of-season (ROS) in redraft leagues, dynasty
+        // DHQ otherwise — the same number Free Agency and the trade finder show.
+        const _cardSkin = window.App?.LeagueSkin?.getCurrent?.();
+        const dhq = window.App?.PlayerValue?.getValue ? window.App.PlayerValue.getValue(pid, { skin: _cardSkin }) : (window.App?.LI?.playerScores?.[pid] || 0);
+        const valueLabel = _cardSkin?.vocabulary?.valueShortLabel === 'ROS' ? 'ROS' : 'DHQ';
         const meta = window.App?.LI?.playerMeta?.[pid] || {};
         const st = statsData?.[pid] || {};
         const curve = typeof window.App?.getAgeCurve === 'function'
@@ -552,7 +556,7 @@
             const compressed = compressHistory(historyRows || []);
             // Action verdict cell is Pro; free gets the raw 4-stat row (clean absence).
             const statCells = [
-                { v: dhq > 0 ? dhq.toLocaleString() : '—', l: 'DHQ', c: dhqCol },
+                { v: dhq > 0 ? dhq.toLocaleString() : '—', l: valueLabel, c: dhqCol },
                 { v: ppg || '—', l: 'PPG (curr)', c: ppg >= 10 ? 'var(--k-2ecc71, #2ecc71)' : 'var(--k-d0d0d0, #d0d0d0)' },
                 { v: peakYrs > 0 ? peakYrs + 'yr' : valueYrs + 'yr', l: peakYrs > 0 ? 'Peak Left' : 'Value Left', c: peakCol },
                 { v: tier.label, l: 'Tier', c: tier.color },

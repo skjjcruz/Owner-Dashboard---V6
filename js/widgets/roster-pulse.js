@@ -113,7 +113,9 @@
                 label: 'RECORD',
                 value: played ? (w + '-' + l + (t ? '-' + t : '')) : '0-0',
                 color: !played ? colors.textMuted : w > l ? colors.positive : w < l ? colors.negative : colors.accent,
-                sub: pfTxt || 'this season',
+                // Leagues that also play the median count two results a week
+                // in Sleeper's standings; say so (Game Day shows head-to-head).
+                sub: (currentLeague?.settings?.league_average_match ? 'w/ median' + (pfTxt ? ' · ' + pfTxt : '') : (pfTxt || 'this season')),
             };
         })();
         // FAAB left, straight from Sleeper: the budget is a LEAGUE setting

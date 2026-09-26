@@ -749,6 +749,7 @@ function DashboardPanel({
     sleeperUserId,
     setActiveTab,
     transactions,
+    transactionsLoaded,
     standings,
     currentLeague,
     leagueSkin,
@@ -1025,13 +1026,15 @@ function DashboardPanel({
         const ann = kpiAnn(primaryKey, primaryVal.value);
 
         // League context for bar chart — find roster value for comparison
+        // My team on every platform (MFL/ESPN have no Sleeper owner id).
+        const _dashMyRid = window.App?.resolveMyRosterId ? window.App.resolveMyRosterId(currentLeague, sleeperUserId) : null;
         const allDHQs = (() => {
             const LI = window.App?.LI || {};
             const scores = window.App?.PlayerValue?.valueMap ? window.App.PlayerValue.valueMap() : (LI.playerScores || {});
             return (currentLeague?.rosters || []).map(r => ({
                 rid: r.roster_id,
                 dhq: (r.players || []).reduce((s, pid) => s + (scores[pid] || 0), 0),
-                isMe: r.owner_id === sleeperUserId,
+                isMe: _dashMyRid != null ? String(r.roster_id) === _dashMyRid : r.owner_id === sleeperUserId,
             })).sort((a, b) => b.dhq - a.dhq);
         })();
         const maxDHQ = allDHQs[0]?.dhq || 1;
@@ -1198,7 +1201,9 @@ function DashboardPanel({
                     )}
                 </div>
                 <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                {(!transactions || transactions.length === 0) ? (
+                {(!transactions || transactions.length === 0) && transactionsLoaded ? (
+                    <div style={{ padding: '10px 2px', fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', opacity: 0.8 }}>No league transactions yet this season.</div>
+                ) : (!transactions || transactions.length === 0) ? (
                     <SkeletonRows count={size === 'narrow' ? 8 : size === 'lg' ? 5 : size === 'slim' ? 4 : 2} />
                 ) : typeof window.WrTxnTickerList === 'function' ? (
                     /* Rows live in the shared widget (js/widgets/txn-ticker.js) so the
@@ -1314,6 +1319,8 @@ function DashboardPanel({
     // LEAGUE STANDINGS
     // ══════════════════════════════════════════════════════════════
     function renderStandings(size) {
+        // My team on every platform (MFL/ESPN have no Sleeper owner id).
+        const _dashMyRid = window.App?.resolveMyRosterId ? window.App.resolveMyRosterId(currentLeague, sleeperUserId) : null;
         const isOffseason = currentLeague?.status === 'complete' || currentLeague?.status === 'pre_draft';
         // md and the skinny narrow/slim column use the tight 4-column layout.
         const isCompact = size === 'md' || size === 'narrow' || size === 'slim';
@@ -1357,7 +1364,7 @@ function DashboardPanel({
                             if (a.losses !== b.losses) return a.losses - b.losses;
                             return b.pointsFor - a.pointsFor;
                         }).slice(0, showAll ? 999 : isCompact ? 5 : 8).map((team, idx) => {
-                            const isMe = team.userId === sleeperUserId;
+                            const isMe = _dashMyRid != null ? String(team.rosterId) === _dashMyRid : team.userId === sleeperUserId;
                             const roster = currentLeague?.rosters?.find(r => r.owner_id === team.userId);
                             const totalDHQ = roster?.players?.reduce((s, pid) => s + ((window.App?.PlayerValue?.getValue ? window.App.PlayerValue.getValue(pid) : (window.App?.LI?.playerScores?.[pid] || 0))), 0) || 0;
                             const user = (currentLeague?.users || []).find(u => u.user_id === team.userId);
