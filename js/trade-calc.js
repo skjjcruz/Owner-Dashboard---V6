@@ -519,6 +519,8 @@
                                 <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--white)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line1}</span>
                                 {line2 && <span style={{ fontSize: 'max(11px, 0.7rem)', color: 'var(--silver)', opacity: 0.75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line2}</span>}
                             </div>
+                            {/* transparent select text hides the native chevron too */}
+                            <span aria-hidden="true" style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--silver)', fontSize: '0.8rem', lineHeight: 1 }}>▾</span>
                         </div>
                     );
                 }
