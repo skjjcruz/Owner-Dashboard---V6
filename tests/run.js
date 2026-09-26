@@ -952,8 +952,12 @@ test('live update: silent self-update — build id + version.json, every page po
     ok(ls.includes("('live-draft')") && ls.includes('holdUpdates(true)') && ls.includes('holdUpdates(false)'), 'live draft sync holds updates');
     const wf = fs.readFileSync(path.join(ROOT, '.github/workflows/deploy.yml'), 'utf8');
     ok(wf.includes('cp -R dist-deploy/. pages-artifact/') && wf.includes('pages-artifact/version.json'), 'Pages artifact ships version.json');
-    const lab = fs.readFileSync(path.join(ROOT, 'scripts/publish-lab.cjs'), 'utf8');
-    ok(lab.includes('fs.cpSync(DIST, LAB_DIR') && lab.includes("'version.json'"), 'Lab ships version.json');
+    // The Lab publisher lives in the website repo only (the app repo has none).
+    const labPath = path.join(ROOT, 'scripts/publish-lab.cjs');
+    if (fs.existsSync(labPath)) {
+      const lab = fs.readFileSync(labPath, 'utf8');
+      ok(lab.includes('fs.cpSync(DIST, LAB_DIR') && lab.includes("'version.json'"), 'Lab ships version.json');
+    }
   });
 
 test('live update: unsaved work holds the silent reload (QA 2026-09-26)',

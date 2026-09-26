@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       critical:
-        description: "Live update: urgent — running pages apply it after a 30s countdown (version.json critical:true)"
+        description: "Live update: urgent — running pages apply it at the next safe moment (any return to the app, or 60s idle) (version.json critical:true)"
         type: boolean
         default: false
       notes:
