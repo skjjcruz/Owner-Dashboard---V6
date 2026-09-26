@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://api.sleeper.app https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://fantasysports.yahooapis.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
 <title>Dynasty HQ — Generic advice stops here.</title>
   <meta name="description" content="Dynasty HQ reads your Sleeper, MFL or ESPN league and shows you who to start, which trades your leaguemates will take, and where you really stand. Free this season.">
@@ -152,6 +152,13 @@
     --display: 'Rajdhani', 'Arial Narrow', system-ui, sans-serif;
     --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
     --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    /* iOS safe-area insets (notch / Dynamic Island / home indicator). They
+       read 0 in a normal browser, so these only move things in the app shell
+       (viewport-fit=cover above is what makes env() report them). */
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -161,7 +168,7 @@
   body {
     color: var(--text-1);
     font: 16px/1.55 var(--sans);
-    padding-inline: 20px;
+    padding-inline: max(20px, var(--sal)) max(20px, var(--sar));
     padding-block: 0;
     -webkit-font-smoothing: antialiased;
   }
@@ -179,7 +186,7 @@
   main { overflow-x: clip; }
 
 
-  header.top { display: flex; align-items: center; justify-content: space-between; padding-block: 18px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; padding-block: calc(18px + var(--sat)) 18px; }
   .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text-1); }
   .brand img { width: 36px; height: 36px; border-radius: var(--r-sm); }
   .brand span { font: 700 20px/1 var(--display); letter-spacing: .06em; }
@@ -273,7 +280,7 @@
   .tile .tag { font: 500 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--forge); margin-bottom: 8px; display: block; }
   .tile p { margin: 0; color: var(--text-2); font-size: 15px; }
 
-  footer { border-top: 1px solid var(--border); padding-block: 28px 40px; display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; justify-content: space-between; }
+  footer { border-top: 1px solid var(--border); padding-block: 28px calc(40px + var(--sab)); display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; justify-content: space-between; }
   footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
   footer a { color: var(--text-2); text-decoration: none; font-size: 14px; }
   footer a:hover, footer a:focus-visible { color: var(--text-1); }
@@ -308,7 +315,7 @@
 
   /* ── Sign-up sheet ── */
   body.sheet-open { overflow: hidden; }
-  .sheet { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; }
+  .sheet { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: calc(16px + var(--sat)) 16px calc(16px + var(--sab)); }
   .sheet-backdrop { position: absolute; inset: 0; background: rgba(4,5,7,.74); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
   .sheet-panel {
     position: relative; width: min(100%, 440px); max-height: calc(100% - 32px); overflow-y: auto;
@@ -325,8 +332,8 @@
   .auth-hint { text-align: center; font-size: 12px; color: var(--text-3); margin: 12px 0 0; }
   .auth-links { text-align: center; margin-top: 14px; font-size: 13px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   @media (max-width: 560px) {
-    .sheet { place-items: end center; padding: 0; }
-    .sheet-panel { width: 100%; max-height: 92%; border-radius: 18px 18px 0 0; padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px)); }
+    .sheet { place-items: end center; padding: var(--sat) 0 0; }
+    .sheet-panel { width: 100%; max-height: 92%; border-radius: 18px 18px 0 0; padding-bottom: calc(22px + var(--sab)); overscroll-behavior: contain; }
   }
 
   /* Sign-in form styles, carried from the previous landing page's #auth. */
@@ -351,6 +358,33 @@
   .auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
   .auth-linkbtn { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; text-decoration: underline; font-family: inherit; }
   .auth-linkbtn:hover { color: var(--accent); }
+
+  /* ── Phone fit (2026-09-26) ── */
+  /* Short viewports (a phone with the keyboard up, or a landscape phone):
+     compact the sheet header so the email field, password and submit fit
+     above the keyboard. The crest is decorative (alt=""). */
+  @media (max-width: 560px) and (max-height: 600px) {
+    .sheet-panel { max-height: calc(100% - 20px); padding-top: 16px; }
+    .auth-crest { display: none; }
+    .auth-title { font-size: 22px; margin-bottom: 10px; padding-inline: 36px; }
+    .auth-sub { font-size: 13px; line-height: 1.45; margin: -4px 0 12px; }
+    .auth-or { margin: 10px 0; }
+  }
+  @media (max-width: 480px) {
+    /* Platform toggle spans the same width as the input and button below. */
+    .platform { display: grid; width: 100%; }
+    .platform button { min-width: 0; padding: 0 8px; }
+  }
+  @media (max-width: 560px) {
+    /* Tap targets ≥ 40px. Padding grows the hit area; the negative margin
+       keeps the text exactly where it was. */
+    .signup a.hero-secondary { display: inline-block; padding-block: 11px; margin-block: -11px; }
+    footer nav { gap: 0 22px; }
+    footer a, footer .foot-btn { display: inline-block; padding-block: 10px; }
+    footer { padding-top: 18px; }
+    .auth-links { gap: 0 14px; margin-top: 6px; }
+    .auth-linkbtn { min-height: 40px; padding: 0 6px; }
+  }
 </style>
 </head>
 <body>
@@ -1079,6 +1113,39 @@
       try { sessionStorage.setItem('dhq_connect_prefill', JSON.stringify({ platform: platform, value: v, ts: Date.now() })); } catch (err) {}
       try{localStorage.setItem('wr_guest_v1','1')}catch(e){};window.location.href='connect-sleeper.html';
     });
+  })();
+</script>
+<script>
+  // Sheet keyboard fit (layout only). iOS Safari overlays the keyboard on
+  // the page instead of resizing it, so pin the sheet to the visible area;
+  // then keep the focused field and the submit button in view.
+  (function () {
+    var sheet = document.getElementById('authSheet');
+    if (!sheet) return;
+    var panel = sheet.querySelector('.sheet-panel');
+    var vv = window.visualViewport;
+    function pin() {
+      if (!vv) return;
+      var covered = !sheet.hidden && window.innerHeight - vv.height > 1;
+      sheet.style.top = covered ? vv.offsetTop + 'px' : '';
+      sheet.style.height = covered ? vv.height + 'px' : '';
+      sheet.style.bottom = covered ? 'auto' : '';
+    }
+    function fit() {
+      var el = document.activeElement;
+      if (!el || !panel.contains(el) || !/^(INPUT|TEXTAREA)$/.test(el.tagName)) return;
+      var pr = panel.getBoundingClientRect(), er = el.getBoundingClientRect();
+      var sub = document.getElementById('btnJoin');
+      var top = er.top - 12, bottom = Math.max(er.bottom, sub ? sub.getBoundingClientRect().bottom : 0) + 12;
+      var d = 0;
+      if (bottom - top > pr.height || top < pr.top) d = top - pr.top;
+      else if (bottom > pr.bottom) d = bottom - pr.bottom;
+      if (Math.abs(d) > 1) panel.scrollTop += d;
+    }
+    function sync() { pin(); fit(); }
+    if (vv) { vv.addEventListener('resize', sync); vv.addEventListener('scroll', pin); }
+    window.addEventListener('resize', sync);
+    panel.addEventListener('focusin', function () { setTimeout(sync, 60); setTimeout(sync, 400); });
   })();
 </script>
 </body>

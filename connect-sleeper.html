@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://api.sleeper.app https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://fantasysports.yahooapis.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
   <title>Dynasty HQ — Connect your leagues</title>
   <!-- Pre-paint auth gate: decide before render so this step-2 page only shows
@@ -39,9 +39,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-    :root{--gold:#D4AF37;--dark-gold:#B8941E;--bg:#0A0A0A;--bg2:#141414;--border:rgba(255,255,255,.1);--white:#FFFFFF;--silver:#C0C0C0;--muted:rgba(255,255,255,.5);--green:#34d399;--red:#f87171}
+    :root{--gold:#D4AF37;--dark-gold:#B8941E;--bg:#0A0A0A;--bg2:#141414;--border:rgba(255,255,255,.1);--white:#FFFFFF;--silver:#C0C0C0;--muted:rgba(255,255,255,.5);--green:#34d399;--red:#f87171;
+      /* iOS safe-area insets — 0 in a normal browser (viewport-fit=cover makes env() report them in the app shell). */
+      --sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}
     html,body{min-height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--white);-webkit-font-smoothing:antialiased}
-    body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px 24px 12vh}
+    body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:calc(24px + var(--sat)) 24px calc(12vh + var(--sab))}
     /* Subdued DHQ watermark — matches the in-app background (icon at low opacity). */
     body::before{content:'';position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:clamp(400px,60vw,900px);height:clamp(400px,60vw,900px);background:url('icon-192.png') center/contain no-repeat;opacity:.06;filter:brightness(1.2);z-index:0;pointer-events:none}
     .card{position:relative;z-index:1;width:100%;max-width:440px;text-align:center}
@@ -103,6 +105,17 @@
     .pane.on{display:block;animation:fade .3s ease}
     @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
     @media (prefers-reduced-motion:reduce){.pane.on{animation:none}}
+    /* Phone fit (2026-09-26) */
+    @media (max-width:560px){
+      /* Show every ESPN team — the page scrolls, not a 320px inner box that cut the list at a card edge. */
+      .team-list{max-height:none;overflow:visible}
+      /* ESPN private-league buttons: one line each; they stack when both won't fit. */
+      .espn-box .row .btn-link{flex:1 1 auto;white-space:nowrap}
+      /* Text-link buttons get a ≥40px tap height; margins trimmed so spacing reads the same. */
+      .private-toggle{min-height:40px;padding:0 8px;margin:-6px 0 4px}
+      .skip-team{min-height:40px;padding:0 8px;margin-top:2px}
+      .signout{min-height:40px;padding:0 12px;margin-top:6px}
+    }
   </style>
 </head>
 <body>
