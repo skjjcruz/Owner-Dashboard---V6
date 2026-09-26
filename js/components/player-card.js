@@ -565,7 +565,12 @@
                 // approved scr-player-card phone pane. Desktop keeps the
                 // equal-width grid untouched.
                 isPhone
-                    ? React.createElement('div', { className: 'wr-kpi-strip', style: { padding: '14px 20px', borderBottom: '1px solid var(--ov-4, rgba(255,255,255,0.06))' } },
+                    // scrollPadding: the strip is scroll-snap mandatory with
+                    // snap-align start, so without it the first tile snaps to
+                    // the scroll edge (flush against the screen, 20px gutter
+                    // ignored). Matching the 20px padding keeps tiles on the
+                    // card gutter at rest and after each snap.
+                    ? React.createElement('div', { className: 'wr-kpi-strip', style: { padding: '14px 20px', scrollPaddingInline: '20px', borderBottom: '1px solid var(--ov-4, rgba(255,255,255,0.06))' } },
                         statCells.map((s, i) => React.createElement('div', { key: i, style: { background: 'var(--black, #121217)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '9px', padding: '9px 11px' } },
                             React.createElement('div', { style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' } }, s.l),
                             React.createElement('div', { style: { fontFamily: 'JetBrains Mono, monospace', fontSize: '1.05rem', fontWeight: 700, color: s.c, marginTop: '2px' } }, s.v)
