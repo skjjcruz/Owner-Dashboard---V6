@@ -940,7 +940,8 @@
                             const pr = WP.projectPlayer(pid, {
                                 playersData, statsData, priorData: prevStatsData,
                                 scoring: currentLeague?.scoring_settings || {},
-                                week: WP.loadedProjWeek ? (WP.loadedProjWeek() || (WP.currentWeek ? WP.currentWeek() : 1)) : (window.S?.currentWeek || 1),
+                                // displayWeek: the current week once its lines load (LAB114).
+                                week: WP.displayWeek ? WP.displayWeek() : WP.loadedProjWeek ? (WP.loadedProjWeek() || (WP.currentWeek ? WP.currentWeek() : 1)) : (window.S?.currentWeek || 1),
                                 requireSleeper: true,
                             });
                             proj = (pr && pr.points && Number.isFinite(pr.points.median)) ? pr.points.median : null;
@@ -1893,7 +1894,8 @@
                         }
                         return { label: lbl, value: shown > 0 ? shown : '—' };
                     }
-                    case 'proj': return { label: 'WK', value: x.proj > 0 ? x.proj.toFixed(1) : '—' };
+                    // Sleeper's number, with DHQ's beside it (owner ruling 2026-09-23: side by side).
+                    case 'proj': return { label: 'WK', value: (x.proj > 0 ? x.proj.toFixed(1) : '—') + (window.App && window.App.DhqProj ? ' · DHQ ' + window.App.DhqProj.fmt(x.pid) : '') };
                     case 'age': return { label: short, value: p.age || '—', tone: 'mute' };
                     case 'peakYr': {
                         const py = peakYearsFor(x.pos, p.age);
@@ -2180,7 +2182,7 @@
                 pos: o.pos,
                 name: (playersData[o.fa.pid] || {}).full_name || o.fa.pid,
                 tag: 'over ' + o.worstName + ' (' + o.worstProj.toFixed(1) + ')',
-                slots: [{ label: 'WK', value: o.fa.proj.toFixed(1) }, { label: 'EDGE', value: '+' + o.delta.toFixed(1), tone: 'good' }],
+                slots: [{ label: 'WK', value: o.fa.proj.toFixed(1) }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(o.fa.pid) : '\u2014' }, { label: 'EDGE', value: '+' + o.delta.toFixed(1), tone: 'good' }],
                 onClick: () => openFaPlayer(o.fa.pid),
                 title: 'Open player card',
             }));
@@ -2408,6 +2410,7 @@
                                     <span style={{ fontWeight: 700, color: 'var(--gold)', minWidth: '34px' }}>{window.App?.posLabel?.(o.pos) || o.pos}</span>
                                     <span style={{ color: 'var(--text, #e8e8ea)', fontWeight: 600 }}>{(playersData[o.fa.pid] || {}).full_name || o.fa.pid}</span>
                                     <span style={{ color: 'var(--good)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{o.fa.proj.toFixed(1)}</span>
+                                    {window.App && window.App.DhqProj ? <span title="DHQ projection" style={{ color: 'var(--gold, #d4af37)', fontWeight: 700, fontSize: '0.72rem' }}>{'DHQ ' + window.App.DhqProj.fmt(o.fa.pid)}</span> : null}
                                     <span style={{ color: 'var(--silver)' }}>projects <span style={{ color: 'var(--good)', fontWeight: 700 }}>+{o.delta.toFixed(1)}</span> over your {o.worstName} ({o.worstProj.toFixed(1)})</span>
                                 </div>
                             ))}
@@ -2479,7 +2482,7 @@
                                         // DHQ reads white here \u2014 no tier colors in the market table (owner ask 2026-07-12)
                                         case 'dhq':        return <span style={{ fontSize: '0.78rem', fontWeight: 700, fontFamily: 'var(--font-body)', color: 'var(--white)' }}>{dhq > 0 ? dhq.toLocaleString() : '\u2014'}</span>;
                                         case 'ppg':        return <span style={{ fontSize: '0.78rem', color: ppg >= 10 ? 'var(--good)' : ppg >= 5 ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))' }}>{ppg > 0 ? ppg : '\u2014'}{ppgMarker}</span>;
-                                        case 'proj':       return <span title="This week's projected points (league-scored)" style={{ fontSize: '0.78rem', fontWeight: 600, color: proj >= 14 ? 'var(--good)' : proj >= 8 ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))' }}>{proj > 0 ? proj.toFixed(1) : '\u2014'}</span>;
+                                        case 'proj':       return <span title="This week's projected points (league-scored)" style={{ fontSize: '0.78rem', fontWeight: 600, color: proj >= 14 ? 'var(--good)' : proj >= 8 ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))' }}>{proj > 0 ? proj.toFixed(1) : '\u2014'}{window.App && window.App.DhqProj ? <span title="DHQ projection (Sleeper above)" style={{ display: 'block', fontSize: '0.6rem', fontWeight: 700, color: 'var(--gold, #d4af37)' }}>{'DHQ ' + window.App.DhqProj.fmt(pid)}</span> : null}</span>;
                                         case 'peakYr':     return <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: peakCol, fontWeight: 600 }}>{peakLabel}</span>;
                                         case 'yrsExp':     return <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)' }}>{p.years_exp != null ? p.years_exp : '\u2014'}</span>;
                                         case 'college':    return <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.college || '\u2014'}</span>;

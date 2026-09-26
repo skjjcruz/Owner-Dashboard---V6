@@ -9,7 +9,8 @@
 //
 // Sleeper marks this natively and we read it rather than infer it:
 //   league.settings.type            3
-//   league.settings.last_chopped_leg  last week a chop happens (e.g. 17)
+//   league.settings.last_chopped_leg  the most recent week a team was chopped
+//                                   (2 going into week 3) — not the final week
 //   league.settings.leg / last_scored_leg   current / last scored week
 //   roster.settings.eliminated      THE WEEK that roster was chopped (absent
 //                                   while alive) — verified against a

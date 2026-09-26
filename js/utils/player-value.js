@@ -405,7 +405,8 @@ window.App.PlayerValue = (function () {
         // not published would zero every player. Until they load there is no
         // honest value to compute, so stay null and rebuild when they arrive
         // (callers re-run on the wr:proj-updated event).
-        const publishedWeek = WP && WP.loadedProjWeek ? WP.loadedProjWeek() : 0;
+        // Prefer the current week once its lines have loaded.
+        const publishedWeek = WP && WP.loadedProjWeek ? ((WP.hasProjWeek && WP.hasProjWeek(week)) ? week : WP.loadedProjWeek()) : 0;
         if (!(publishedWeek > 0)) { _ros = null; return null; }
         if (_ros && _ros.leagueId === leagueId && _ros.week === publishedWeek) return _ros; // cached
 

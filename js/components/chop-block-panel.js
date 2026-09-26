@@ -2,7 +2,7 @@
 // js/components/chop-block-panel.js — window.WrChopBlock
 // The Chopping Block: survival odds for a Sleeper CHOPPED league.
 //
-//   <WrChopBlock active currentLeague myRoster />
+//   <WrChopBlock active currentLeague myRoster myStarters />
 //
 // Renders three things and nothing else:
 //   1. YOUR number — chance of being chopped this week, and how many more
@@ -18,7 +18,7 @@
 //
 // Deferred with the "lineup" group. Pure render + one async load.
 // ══════════════════════════════════════════════════════════════════
-function WrChopBlock({ active, currentLeague, myRoster }) {
+function WrChopBlock({ active, currentLeague, myRoster, myStarters }) {
     const SILVER = 'var(--silver, #BDB8AD)', TEXT = 'var(--white, #F5F2EA)';
     const GREEN = 'var(--k-2ecc71, #2ecc71)', RED = 'var(--k-e74c3c, #e74c3c)';
     const AMBER = 'var(--k-f0a500, #f0a500)', GOLD = 'var(--gold, #D4AF37)';
@@ -55,10 +55,39 @@ function WrChopBlock({ active, currentLeague, myRoster }) {
                     ledger, week, myRosterId: myRoster?.roster_id,
                 });
                 if (!live()) return;
-                setSt(sim ? { status: 'ready', sim } : { status: 'unavailable' });
+                setSt(sim ? { status: 'ready', sim, ledger, week } : { status: 'unavailable' });
             } catch (e) { window.wrLog?.('chopBlock', e); if (live()) setSt({ status: 'error' }); }
         })();
     }, [active, st.status, leagueId, currentLeague, myRoster]);
+
+    // This week on DHQ's numbers. Once every living team's set lineup is
+    // projected (yours from the Game Day slots when myStarters is passed),
+    // App.DhqProj.rosterDists gives this week's score distribution per roster
+    // and the block re-simulates with it; later weeks keep the fitted form.
+    // Re-runs when DHQ's numbers land (wr:proj-updated) or the lineup changes.
+    React.useEffect(() => {
+        if (st.status !== 'ready' || !st.ledger) return;
+        const App = window.App || {}, CO = App.ChopOdds, DQ = App.DhqProj, Ch = App.Chopped;
+        if (!CO || !DQ || !DQ.rosterDists || !Ch) return;
+        let live = true;
+        const run = () => {
+            if (!live) return;
+            const rosters = currentLeague.rosters || (window.S && window.S.rosters) || [];
+            const ids = rosters.filter(r => !Ch.isEliminated(r)).map(r => String(r.roster_id));
+            const mine = myStarters && myStarters.length ? myStarters.map(String) : null;
+            const weekDists = DQ.rosterDists(Object.assign({}, currentLeague, { rosters }), ids, st.week, myRoster && myRoster.roster_id, mine);
+            if (!weekDists) return;
+            // Skip the re-sim when nothing it reads has moved.
+            const key = Object.keys(weekDists.byRoster).sort().map(rid => rid + ':' + weekDists.byRoster[rid].mean.toFixed(1)).join(',') + '|' + (mine || []).join(',');
+            if (runRef.current.dq === key) return;
+            runRef.current.dq = key;
+            const sim = CO.simulate({ league: currentLeague, rosters, ledger: st.ledger, week: st.week, myRosterId: myRoster && myRoster.roster_id, weekDists });
+            if (live && sim) setSt(prev => (prev.status === 'ready' ? { ...prev, sim } : prev));
+        };
+        run();
+        window.addEventListener('wr:proj-updated', run);
+        return () => { live = false; window.removeEventListener('wr:proj-updated', run); };
+    }, [st.status, st.ledger, leagueId, (myStarters || []).join(',')]);
 
     const Section = ({ title, meta, children }) => (
         <div style={{ background: 'var(--co-surface, #121217)', border: `1px solid ${LINE}`, borderRadius: '8px', padding: '14px 16px', marginBottom: '12px' }}>
@@ -88,7 +117,7 @@ function WrChopBlock({ active, currentLeague, myRoster }) {
     return (
         <div>
             {me && me.alive ? (
-                <Section title="Your Survival" meta={(projected ? 'projected form · ' : '') + sim.simCount.toLocaleString() + ' simulations'}>
+                <Section title="Your Survival" meta={(sim.weekSource === 'dhq' ? 'this week on DHQ projections · ' : '') + (projected ? 'projected form · ' : '') + sim.simCount.toLocaleString() + ' simulations'}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
                         {[
                             { lbl: 'Chopped this week', val: me.chopThisWeekPct + '%', col: riskCol(me.chopThisWeekPct) },
@@ -116,7 +145,7 @@ function WrChopBlock({ active, currentLeague, myRoster }) {
                 </Section>
             ) : null}
 
-            <Section title="The Block" meta={alive.length + ' alive · most at risk first'}>
+            <Section title="The Block" meta={alive.length + ' alive · most at risk first' + (sim.weekSource === 'dhq' ? ' · this week on DHQ' : '')}>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead><tr>

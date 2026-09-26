@@ -13,7 +13,12 @@
 //
 // Opponents come from App.Matchup.resolveSeasonOpponents (Sleeper + MFL).
 // Each upcoming matchup is projected with App.WeeklyProj.optimalForRoster
-// (median) + App.Matchup.forecast; completed weeks use actual scores when the
+// (median) + App.Matchup.forecast, except the current week, which runs on
+// DHQ's numbers (App.DhqProj.matchup: the lineup you have set against the
+// lineup they have set) once they are in, so the Season panel and the
+// This Week matchup box tell the same story (owner ruling 2026-09-24).
+// DHQ projects one week at a time; later weeks stay on Sleeper's lines.
+// Each row carries source: 'dhq' | 'sleeper'; completed weeks use actual scores when the
 // platform exposes them. Bye watch = which of the user's ideal starters are on
 // bye each week (+ whether a full lineup can still be fielded) — works with or
 // without a posted schedule, so it powers the pre-season planning view too.
@@ -76,7 +81,10 @@
         const startersKey = ((myRoster.starters) || []).join(',');
         const playersData = opts.playersData;
         const rosterKey = ((myRoster.players) || []).length;   // roster size (bye watch keys off the whole roster)
-        const cacheKey = [leagueId, myRosterId, curWk, lastReg, startersKey, rosterKey].join('|');
+        const D = App.DhqProj;
+        const dhqOn = !!(D && D.matchup && D.week && Number(D.week()) === curWk);
+        const myStarters = (opts.myStarters || myRoster.starters || []).filter(x => x && String(x) !== '0').map(String);
+        const cacheKey = [leagueId, myRosterId, curWk, lastReg, startersKey, rosterKey, myStarters.join(','), dhqOn && D.stamp ? D.stamp() : ''].join('|');
         const hit = _cache[cacheKey];
         if (hit && Date.now() - hit.ts < TTL_MS) return hit.data;
 
@@ -114,7 +122,7 @@
             const oppRoster = entry ? rostersById[String(entry.oppRosterId)] : null;
             const isPast = w < curWk;
             const isCurrent = w === curWk;
-            let winPct = null, margin = null, myProj = null, oppProj = null, result = null, mine = null;
+            let winPct = null, margin = null, myProj = null, oppProj = null, result = null, mine = null, source = null;
 
             // My per-week optimal (current + future) powers BOTH the forecast and
             // the bye check (unfilled starting slots). Past weeks don't need it.
@@ -131,15 +139,22 @@
                     result = entry.myPts > entry.oppPts ? 'W' : entry.myPts < entry.oppPts ? 'L' : 'T';
                     myProj = Math.round(entry.myPts * 10) / 10;
                     oppProj = Math.round(entry.oppPts * 10) / 10;
-                } else if (mine) {
+                } else if (mine || (isCurrent && dhqOn)) {
                     try {
-                        const theirs = WP.optimalForRoster(oppRoster, league, { ...projOpts, week: w });
-                        const myDist = M.dist(mine.optimal.starters.map(s => s.pid), mine.projections, 'median');
-                        const oppDist = M.dist(theirs.optimal.starters.map(s => s.pid), theirs.projections, 'median');
-                        const fc = M.forecast(myDist, oppDist);
+                        let fc = null;
+                        if (isCurrent && dhqOn) {
+                            const dq = D.matchup(myStarters, oppRoster, league.roster_positions || []);
+                            if (dq && dq.fc && dq.fc.winPct != null) { fc = dq.fc; source = 'dhq'; }
+                        }
+                        if (!fc && mine) {
+                            const theirs = WP.optimalForRoster(oppRoster, league, { ...projOpts, week: w });
+                            const myDist = M.dist(mine.optimal.starters.map(s => s.pid), mine.projections, 'median');
+                            const oppDist = M.dist(theirs.optimal.starters.map(s => s.pid), theirs.projections, 'median');
+                            fc = M.forecast(myDist, oppDist); source = 'sleeper';
+                        }
                         // winPct null = a side had no projectable players — no
                         // forecast for this week (don't paint a 99% "win").
-                        if (fc.winPct != null) {
+                        if (fc && fc.winPct != null) {
                             winPct = fc.winPct; margin = fc.margin; myProj = fc.projMe; oppProj = fc.projOpp;
                             if (!isPast) {
                                 futureWins += fc.winPct / 100;
@@ -166,7 +181,7 @@
                 week: w, bye: noOpp,
                 oppRosterId: entry && entry.oppRosterId,
                 oppName: oppRoster ? rosterName(oppRoster, league) : (noOpp ? 'BYE' : '—'),
-                isPast, isCurrent, winPct, margin, myProj, oppProj, result,
+                isPast, isCurrent, winPct, margin, myProj, oppProj, result, source,
                 byes: { count: byeCount, unfilled, thin, pids: byePids },
             };
         });

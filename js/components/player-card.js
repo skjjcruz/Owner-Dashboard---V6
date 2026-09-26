@@ -237,6 +237,9 @@
 
     function PlayerCard({ pid, playersData, statsData, scoringSettings, onClose, initialTab }) {
         const [tab, setTab] = useState(initialTab || 'overview');
+        // Bumped when this week's projections land so the Week N projection
+        // box (DHQ + Sleeper numbers) re-renders.
+        const [projTick, setProjTick] = useState(0);
         const [tagMenu, setTagMenu] = useState(false);
         const closeRef = useRef(null);
         // Phone tier (<768): the card renders as a WR.Sheet bottom sheet
@@ -280,6 +283,16 @@
             _synthetic: true,
             _fromProspect: true,
         } : null);
+
+        // Load this week's Sleeper projections and re-render when any
+        // projection source (DHQ / Sleeper) reports an update.
+        useEffect(() => {
+            const bump = () => setProjTick(t => t + 1);
+            const SP = window.App && window.App.SleeperProj;
+            if (SP && SP.loadCurrent) SP.loadCurrent(window.S && window.S.season).then(() => bump()).catch(() => {});
+            window.addEventListener('wr:proj-updated', bump);
+            return () => window.removeEventListener('wr:proj-updated', bump);
+        }, []);
 
         // ESC closes
         useEffect(() => {
@@ -564,6 +577,8 @@
                             React.createElement('div', { style: { fontSize: 'var(--text-label, 0.75rem)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '3px' } }, s.l)
                         ))
                     ),
+                // Week N projection box: DHQ's number beside the platform's.
+                ProjectionLine(true),
                 // Player Brief — the universal written summary (every player,
                 // always), via the shared block: Alex's Read → The Wire → DHQ
                 // Read, with the composed-at stamp top-right.
@@ -706,6 +721,45 @@
             );
         }
 
+        // ── This week's projection: DHQ's number, the league platform's beside
+        // it (Sleeper, or MFL's own), and DHQ's plain-words reasons. `boxed`
+        // renders the Overview box; otherwise a line inside Scouting's
+        // matchup section. Hidden off the current week, for free agents, and
+        // until at least one number is in. ──
+        function ProjectionLine(boxed) {
+            const A = window.App || {};
+            const WP = A.WeeklyProj;
+            const curWeek = (WP && WP.currentWeek && WP.currentWeek()) || 1;
+            const week = WP && WP.displayWeek ? (Number(WP.displayWeek()) || curWeek) : curWeek;
+            if (week !== curWeek || !p || !p.team || p.team === 'FA') return null;
+            const DP = (A.DhqProj && A.DhqProj.get && (!A.DhqProj.week || Number(A.DhqProj.week()) === week)) ? A.DhqProj : null;
+            const dhqRow = DP ? DP.get(pid) : null;
+            const dhqText = DP ? DP.fmt(pid) : null;
+            const platPts = (() => {
+                try {
+                    const proj = WP && WP.projectPlayer ? WP.projectPlayer(pid, { playersData, statsData, scoring: sc, week, requireSleeper: true }) : null;
+                    return proj && proj.points ? (proj.available === false ? 0 : proj.points.median) : null;
+                } catch (e) { return null; }
+            })();
+            if (!DP && platPts == null) return null;
+            const platLabel = DP && DP.provLabel ? DP.provLabel() : 'Sleeper';
+            const gameCtx = WP && WP._ctx && WP._ctx.byTeamWeek ? WP._ctx.byTeamWeek[String(p.team).toUpperCase() + '|' + week] : null;
+            const oppText = gameCtx && gameCtx.opp ? (gameCtx.home === false ? '@ ' : 'vs ') + String(gameCtx.opp).toUpperCase() : null;
+            return React.createElement('div', {
+                style: boxed
+                    ? { margin: '12px 20px 0', padding: '9px 11px', border: '1px solid var(--acc-fill3, rgba(212,175,55,0.16))', borderRadius: '7px', background: 'var(--ov-2, rgba(255,255,255,0.025))' }
+                    : { marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--ov-4, rgba(255,255,255,0.06))' },
+            },
+                boxed ? React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--gold)', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' } }, 'Week ' + week + ' projection' + (oppText ? ' · ' + oppText : '')) : null,
+                React.createElement('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' } },
+                    React.createElement('span', { style: { fontSize: 'var(--text-label, 0.72rem)', color: 'var(--text-muted)', letterSpacing: '0.05em', fontWeight: 700 } }, 'DHQ PROJ'),
+                    React.createElement('span', { style: { fontFamily: 'JetBrains Mono, monospace', fontSize: '1.15rem', fontWeight: 800, color: 'var(--gold)' } }, dhqText || '—'),
+                    React.createElement('span', { style: { fontSize: 'var(--text-label, 0.78rem)', color: 'var(--text-muted)' } }, '· ' + platLabel + ' ' + (platPts != null ? Number(platPts).toFixed(1) : '—'))
+                ),
+                dhqRow && dhqRow.why ? React.createElement('div', { style: { fontSize: 'var(--text-label, 0.74rem)', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.45 } }, dhqRow.why) : null
+            );
+        }
+
         // ── Scouting tab: this-week matchup + injury + usage + game log + news ──
         function ScoutingTab() {
             const A = window.App || {};
@@ -713,7 +767,11 @@
             const week = (A.WeeklyProj && A.WeeklyProj.currentWeek && A.WeeklyProj.currentWeek()) || 1;
             const teamU = String(team || '').toUpperCase();
             const opp = (A.SOS && A.SOS.schedule && A.SOS.schedule[week] && A.SOS.schedule[week][teamU]) || null;
-            const ctx = (A.NflContext && A.NflContext.teamWeekCtx) ? A.NflContext.teamWeekCtx(team, week) : null;
+            // Home/away, team total and spread: NflContext when present, else
+            // the game context WeeklyProj has already loaded.
+            const ctx = (A.NflContext && A.NflContext.teamWeekCtx)
+                ? A.NflContext.teamWeekCtx(team, week)
+                : ((A.WeeklyProj && A.WeeklyProj._ctx && A.WeeklyProj._ctx.byTeamWeek && A.WeeklyProj._ctx.byTeamWeek[String(team).toUpperCase() + '|' + week]) || null);
             const weather = ctx && ctx.weather, vegas = ctx && ctx.vegas, home = ctx ? ctx.home : null;
             const ranks = A.SOS && A.SOS.defenseRankings;
             const dvpRank = (opp && ranks && ranks[opp]) ? ranks[opp]['vs' + nPos] : null;
@@ -736,7 +794,8 @@
                             (vegas && vegas.impliedTotal) ? React.createElement('span', { key: 'it' }, 'Team total ' + Math.round(vegas.impliedTotal)) : null,
                             (vegas && vegas.spread != null) ? React.createElement('span', { key: 'sp' }, 'Spread ' + (vegas.spread > 0 ? '+' : '') + vegas.spread) : null,
                             wxText ? React.createElement('span', { key: 'wx' }, wxText) : null
-                        )
+                        ),
+                        ProjectionLine(false)
                     ) : React.createElement('div', { style: { fontSize: 'var(--text-body, 1rem)', color: 'var(--silver)', opacity: 0.6 } }, 'Opponent not set yet (off-season or schedule pending).')
                 ),
                 p.injury_status ? React.createElement('div', { style: sectionStyle },

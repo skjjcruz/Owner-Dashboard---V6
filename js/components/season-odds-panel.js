@@ -11,7 +11,7 @@
 // doesn't absorb another 200 of JSX.
 //
 //   <WrSeasonOdds active currentLeague myRoster playersData statsData
-//                 stats2025Data leagueSkin pro onSummary />
+//                 stats2025Data leagueSkin pro onSummary myStarters />
 //
 // `active` gates the fetch — the 10k-sim only runs once the tab is opened.
 // `onSummary` reports {projWins, projLosses} back so Game Day's SEASON
@@ -21,7 +21,7 @@
 //
 // Engines: App.Luck (luck-engine.js), App.PlayoffOdds (playoff-odds.js).
 // ══════════════════════════════════════════════════════════════════
-function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData, stats2025Data, leagueSkin, pro, onSummary }) {
+function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData, stats2025Data, leagueSkin, pro, onSummary, myStarters }) {
     const GOLD = 'var(--gold, #d4af37)', SILVER = 'var(--silver, #9aa0a6)', TEXT = 'var(--text, #e8e8ea)';
     const GREEN = 'var(--k-2ecc71, #2ecc71)', RED = 'var(--k-e74c3c, #e74c3c)';
     const PANEL = 'var(--panel, #15151b)', LINE = 'var(--ov-4, rgba(255,255,255,0.08))';
@@ -72,21 +72,51 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
                 for (let w = pws; w < pws + rounds && w <= 18; w++) playoffWeeks.push(w);
                 try { window.App?.NflContext?.load?.(playoffWeeks, currentLeague.season).then(bump); } catch (_) { /* grid stays empty */ }
 
-                let sim = null;
+                let sim = null, pairs = null;
                 // !seasonOver is load-bearing: with a finished season curWk is 1,
                 // so without it every played week would be re-simulated as a
                 // "future" game on top of the record it already produced.
                 if (!seasonOver && playedWeeks >= 2 && curWk <= lastReg) {
                     const futurePairs = await PO.fetchFuturePairs({ league: currentLeague, fromWeek: curWk, toWeek: lastReg });
+                    pairs = futurePairs;   // kept for the DHQ re-sim below
                     sim = PO.simulate({ league: currentLeague, ledger, futurePairs, myRosterId: myRoster?.roster_id, sims: 10000 });
                 }
-                if (live()) setSo({ status: 'ready', ledger, sim, playedWeeks, curWk, pws, playoffWeeks });
+                if (live()) setSo({ status: 'ready', ledger, sim, pairs, playedWeeks, curWk, pws, playoffWeeks });
             } catch (e) {
                 window.wrLog?.('seasonOdds.build', e);
                 if (live()) setSo({ status: 'error' });
             }
         })();
     }, [active, so.status, leagueId]);
+
+    // This week's games on DHQ's numbers. Once every team in this week's
+    // matchups has a projected set lineup (yours from the Game Day slots when
+    // myStarters is passed), App.DhqProj.weekDists gives one week's score
+    // distribution per roster and the odds re-simulate with it; later weeks
+    // keep the fitted season distributions. Re-runs when DHQ's numbers land
+    // (wr:proj-updated) or the lineup changes.
+    React.useEffect(() => {
+        if (so.status !== 'ready' || !so.pairs || !so.ledger) return;
+        const App = window.App || {}, PO = App.PlayoffOdds, DQ = App.DhqProj;
+        if (!PO || !DQ || !DQ.weekDists) return;
+        let live = true;
+        const run = () => {
+            if (!live) return;
+            const wk = so.curWk;
+            const mine = myStarters && myStarters.length ? myStarters.map(String) : null;
+            const weekDists = DQ.weekDists(currentLeague, so.pairs[wk] || [], wk, myRoster && myRoster.roster_id, mine);
+            if (!weekDists) return;
+            // Skip the re-sim when nothing it reads has moved.
+            const key = Object.keys(weekDists.byRoster).sort().map(rid => rid + ':' + weekDists.byRoster[rid].mean.toFixed(1)).join(',') + '|' + (mine || []).join(',');
+            if (runRef.current.dq === key) return;
+            runRef.current.dq = key;
+            const sim = PO.simulate({ league: currentLeague, ledger: so.ledger, futurePairs: so.pairs, myRosterId: myRoster && myRoster.roster_id, sims: 10000, weekDists });
+            if (live && sim) setSo(s => (s.status === 'ready' ? { ...s, sim } : s));
+        };
+        run();
+        window.addEventListener('wr:proj-updated', run);
+        return () => { live = false; window.removeEventListener('wr:proj-updated', run); };
+    }, [so.status, so.pairs, leagueId, (myStarters || []).join(',')]);
 
     // Starters for the playoff-SOS grid (recomputes when SOS / NFL context land).
     const sos = React.useMemo(() => {
@@ -191,7 +221,7 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {sim ? (
-                <Section title="Playoff Odds" meta={sim.simCount.toLocaleString() + ' simulations · record then points-for' + (sim.usedDivisions ? ' · division winners seeded' : '')}>
+                <Section title="Playoff Odds" meta={sim.simCount.toLocaleString() + ' simulations · record then points-for' + (sim.usedDivisions ? ' · division winners seeded' : '') + (sim.weekSource === 'dhq' ? ' · this week on DHQ projections' : '')}>
                     {mine ? (
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
                             <Kpi label="Make playoffs" value={mine.playoffPct + '%'} color={GOLD} />
@@ -229,7 +259,7 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
             )}
 
             {sim && sim.leverage ? (
-                <Section title="This Week's Leverage" meta={'your playoff odds conditioned on the Week ' + sim.leverage.week + ' result'}>
+                <Section title="This Week's Leverage" meta={'your playoff odds conditioned on the Week ' + sim.leverage.week + ' result' + (sim.weekWinPct != null ? ' · ' + sim.weekWinPct + '% to win (DHQ)' : '')}>
                     {[['If you win', sim.leverage.ifWin, GREEN], ['Current', sim.leverage.current, GOLD], ['If you lose', sim.leverage.ifLose, RED]].map(([lb, v, c]) => (
                         <div key={lb} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 48px', gap: '10px', alignItems: 'center', padding: '4px 0' }}>
                             <span style={{ ...microHdr }}>{lb}</span>

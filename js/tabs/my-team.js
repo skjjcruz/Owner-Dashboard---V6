@@ -219,6 +219,11 @@ function MyTeamTab({
         }
         return (bv - av) * dir;
       }
+      if (key === 'dhqProj') {
+        // DHQ's median; players without a DHQ number sort last.
+        const pv = r => { const q = (window.App && window.App.DhqProj) ? window.App.DhqProj.get(r.pid) : null; return q ? (Number(q.median) || 0) : -1; };
+        return (pv(b) - pv(a)) * dir;
+      }
       if (key === 'proj') {
         // Sort by the same median projection the column now displays.
         const pv = r => { const p = projFor(r.pid); return p && p.available ? ((p.points && (p.points.median != null ? p.points.median : p.points.mean)) || 0) : -1; };
@@ -302,7 +307,9 @@ function MyTeamTab({
     dhq:        { label: valueLabel, shortLabel: valueShortLabel, width: '60px', group: 'dynasty' },
     ppg:        { label: 'Points Per Game', shortLabel: 'PPG', width: '48px', group: 'stats' },
     pts:        { label: 'Total Points (season)', shortLabel: 'Pts', width: '52px', group: 'stats' },
-    proj:       { label: isPro && wkVerdict ? 'This Week — projected pts + start/sit (league-scored)' : 'This Week — projected pts (league-scored)', shortLabel: 'Proj', width: '62px', group: 'stats' },
+    proj:       { label: isPro && wkVerdict ? 'This Week — projected pts + start/sit (league-scored)' : 'This Week — projected pts (league-scored)', shortLabel: ((window.App && window.App.DhqProj) ? window.App.DhqProj.provLabel() : 'Sleeper') + ' Proj', width: '96px', group: 'stats' },
+    // DHQ's projection in its own column beside the platform's (owner ruling 2026-09-23).
+    dhqProj:    { label: "DHQ projection — the DHQ matchup engine's projected pts (league-scored)", shortLabel: 'DHQ Proj', width: '80px', group: 'stats' },
     hi:         { label: 'Season High — most fantasy pts in a week', shortLabel: 'Hi', width: '40px', group: 'stats' },
     lo:         { label: 'Season Low — fewest fantasy pts in a played week', shortLabel: 'Lo', width: '40px', group: 'stats' },
     prev:       { label: 'Previous Season PPG', shortLabel: 'Last', width: '44px', group: 'stats' },
@@ -342,11 +349,11 @@ function MyTeamTab({
   // view can't resurrect it.
   if (!isPro) delete ROSTER_COLUMNS.action;
 
-  // Dynasty (E2): 'proj' leaves the default preset — still user-addable
-  // (raw pts; renderCell strips the verdict so saved views can't resurrect it).
+  // The platform's Proj column and DHQ Proj sit side by side in the default
+  // view in every league (renderCell strips the verdict in dynasty).
   const COLUMN_PRESETS = {
-    default: ['pos','age','dhq','posRankLg','ppg',...(wkVerdict ? ['proj'] : []),'durability','peak','action','sos'].filter(k => ROSTER_COLUMNS[k]),
-    ...(wkVerdict ? { redraft: ['pos','proj','ppg','prev','trend','hi','lo','sos'] } : {}),
+    default: ['pos','age','dhq','posRankLg','ppg','proj','dhqProj','durability','peak','action','sos'].filter(k => ROSTER_COLUMNS[k]),
+    ...(wkVerdict ? { redraft: ['pos','proj','dhqProj','ppg','prev','trend','hi','lo','sos'] } : {}),
     stats:   ['pos','dhq','pts','ppg','prev','trend','gp','durability','sos'],
     scout:   ['pos','age','college','slot','height','weight','depthChart','yrsExp','starterSzn','posRankNfl'],
     rookie:  ['pos','age','college','rkSlot','rkTeam','rkProfile'],
@@ -1022,6 +1029,8 @@ function MyTeamTab({
     const base = { width: col.width, minWidth: col.width, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isCompactRows ? '0.73rem' : '0.78rem', padding: '0 5px', borderLeft: isGroupStart ? '1px solid var(--acc-fill2, rgba(212,175,55,0.12))' : '1px solid var(--ov-1, rgba(255,255,255,0.024))', color: 'rgba(235,235,240,0.78)', lineHeight: 1.1 };
 
     switch(colKey) {
+      case 'dhqProj':
+        return <div key={colKey} style={{ ...base }}><span title="DHQ projection" style={{ color: 'var(--gold, #d4af37)', fontWeight: 600, fontSize: '0.76rem', fontFamily: 'var(--font-body)', fontVariantNumeric: 'tabular-nums' }}>{(window.App && window.App.DhqProj) ? window.App.DhqProj.fmt(r.pid) : '\u2014'}</span></div>;
       case 'proj': {
         const p = projFor(r.pid);
         if (!p) return <div key={colKey} style={{...base}}><span style={{ color: 'var(--silver)', opacity: 0.45 }}>{'—'}</span></div>;
@@ -1368,13 +1377,13 @@ function MyTeamTab({
   // App.PlayerValue.getRosPoints / App.WeeklyProj.formStats /
   // App.RookieFields.fields) — lookups reused, no formulas duplicated.
   const PHONE_SLOT_PRESETS = {
-    default: ['dhq', 'proj', 'ppg'],
-    redraft: ['proj', 'ppg', 'trend'],
+    default: ['dhq', 'proj', 'dhqProj', 'ppg'],
+    redraft: ['proj', 'dhqProj', 'ppg', 'trend'],
     stats:   ['ppg', 'prev', 'trend'],
     scout:   ['yrsExp', 'starterSzn', 'posRankNfl'],
     rookie:  ['rkSlot', 'age', 'dhq'],
   };
-  const PHONE_SLOT_KEYS = new Set(['dhq', 'proj', 'ppg', 'prev', 'trend', 'age', 'gp', 'hi', 'lo', 'yrsExp', 'starterSzn', 'posRankNfl', 'posRankLg', 'sos', 'peak', 'rkSlot']);
+  const PHONE_SLOT_KEYS = new Set(['dhq', 'proj', 'dhqProj', 'ppg', 'prev', 'trend', 'age', 'gp', 'hi', 'lo', 'yrsExp', 'starterSzn', 'posRankNfl', 'posRankLg', 'sos', 'peak', 'rkSlot']);
   // Custom column sets ride the first 3 slot-capable picks; empty → default.
   let _phoneSlotKeys = PHONE_SLOT_PRESETS[activePresetKey]
     || visibleCols.filter(k => PHONE_SLOT_KEYS.has(k)).slice(0, 3);
@@ -1388,14 +1397,17 @@ function MyTeamTab({
         const disp = rosPts != null ? (rosPts > 0 ? Math.round(rosPts).toLocaleString() : '—') : (r.dhq > 0 ? r.dhq.toLocaleString() : '—');
         return { label: short, value: disp, strong: true };
       }
+      case 'dhqProj':
+        return { label: 'DHQ Proj', value: (window.App && window.App.DhqProj) ? window.App.DhqProj.fmt(r.pid) : '\u2014', tone: 'gold' };
       case 'proj': {
+        // Labeled for the league's platform (Sleeper / MFL).
         const p = projFor(r.pid);
-        if (!p) return { label: 'Proj', value: '—', tone: 'mute' };
-        if (!p.available) return { label: 'Proj', value: p.injuryStatus || 'OUT', tone: 'warn' };
+        if (!p) return { label: (window.App && window.App.DhqProj) ? window.App.DhqProj.provLabel() : 'Sleeper', value: '—', tone: 'mute' };
+        if (!p.available) return { label: (window.App && window.App.DhqProj) ? window.App.DhqProj.provLabel() : 'Sleeper', value: p.injuryStatus || 'OUT', tone: 'warn' };
         // Same #232 rule as the desktop cell: straight weekly median (the number
         // the owner sees in Sleeper), never the GM-mode floor/ceiling objective.
         const pts = (p.points && (p.points.median != null ? p.points.median : p.points.mean)) || 0;
-        return { label: 'Proj', value: pts > 0 ? pts.toFixed(1) : '—' };
+        return { label: (window.App && window.App.DhqProj) ? window.App.DhqProj.provLabel() : 'Sleeper', value: pts > 0 ? pts.toFixed(1) : '—' };
       }
       case 'ppg': {
         // Same rolling-window override + seasonal fallback as renderCell;

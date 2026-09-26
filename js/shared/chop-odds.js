@@ -120,18 +120,29 @@
         if (!rosters.length) return null;
 
         const week = Number(opts.week) || 1;
-        const lastLeg = Chopped.lastChoppedLeg(league) || 17;
+        const living = rosters.filter(r => !Chopped.isEliminated(r));
+        // Sleeper's last_chopped_leg is the most recent week a team was
+        // chopped, not the season's final chop (CTB Shootout, week 3 of 2026:
+        // 2, with teams chopped in weeks 1 and 2). Read as the end, week 3
+        // sat past the finish and nobody was ever at risk. The chopping runs
+        // until one team is left: alive - 1 more weeks, this one included.
+        const lastLeg = Math.min(18, Math.max(Chopped.lastChoppedLeg(league) || 0, week + Math.max(0, living.length - 2)));
         // Weeks still to be played, inclusive of the current one.
         const weeks = [];
         for (let w = week; w <= lastLeg; w++) weeks.push(w);
 
-        const living = rosters.filter(r => !Chopped.isEliminated(r));
         const ledgerRows = (opts.ledger && opts.ledger.rows) || [];
         const byId = {};
         ledgerRows.forEach(r => { byId[String(r.rosterId)] = r; });
         // Every living roster needs a row, even with zero played weeks.
         const rows = living.map(r => byId[String(r.roster_id)] || { rosterId: r.roster_id, weekly: [] });
         const dists = fitDists(rows, opts.seedMeans);
+        // weekDists (optional): { week, byRoster: { rosterId: { mean, sd } } }
+        // — that week's scores come from these instead of the fitted form (the
+        // Lab passes every living team's set lineup on DHQ's projections for
+        // the current week, so "chopped this week" reads this week's lineups).
+        const wd = opts.weekDists && opts.weekDists.byRoster ? opts.weekDists : null;
+        const distFor = (id, w) => (wd && Number(wd.week) === w && wd.byRoster[id]) || dists[id];
 
         const ids = living.map(r => String(r.roster_id));
         const n = ids.length;
@@ -166,7 +177,7 @@
                     }
                     let lowId = null, lowPts = Infinity;
                     alive.forEach(id => {
-                        const d = dists[id] || { mean: 100, sd: DEFAULT_SD };
+                        const d = distFor(id, weeks[wi]) || { mean: 100, sd: DEFAULT_SD };
                         const pts = d.mean + gauss(rand) * d.sd;
                         if (pts < lowPts) { lowPts = pts; lowId = id; }
                     });
@@ -224,6 +235,7 @@
             simCount: sims,
             // 'played' once anybody has real scores; 'projected' preseason.
             basis: rows.some(r => (r.weekly || []).length) ? 'played' : 'projected',
+            weekSource: wd && Number(wd.week) === week ? 'dhq' : null,
         };
         // Cache per league so the value model and the FAAB engine can read the
         // horizon synchronously (they can't await a simulation mid-render).

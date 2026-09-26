@@ -72,8 +72,8 @@ function LineupTab({
     // Phone drops the Form/Hi/Lo columns so rows fit 375px with no horizontal
     // scroll — form stats resurface inside the row-tap expand instead.
     const GRID = isPhone
-        ? (pro ? '50px minmax(0,1fr) 54px 34px' : '50px minmax(0,1fr) 54px')
-        : (pro ? '50px minmax(0,1fr) 58px 50px 48px 38px 38px' : '50px minmax(0,1fr) 58px 48px 38px 38px');
+        ? (pro ? '50px minmax(0,1fr) 54px 54px 34px' : '50px minmax(0,1fr) 54px 54px')
+        : (pro ? '50px minmax(0,1fr) 84px 68px 50px 48px 38px 38px' : '50px minmax(0,1fr) 84px 68px 48px 38px 38px');
     const SLOT_DISPLAY_ORDER = { QB: 1, RB: 2, WR: 3, TE: 4, REC_FLEX: 5, FLEX: 6, WRTQ: 7, SUPER_FLEX: 8, K: 20, DEF: 21, IDP_FLEX: 30, DL: 31, LB: 32, DB: 33, WILDCARD: 40 };
     const BENCH = new Set(['BN', 'BE', 'BENCH', 'IR', 'TAXI', 'RES']);
     const OBJ_LABEL = { floor: 'Floor · safe (win-now)', median: 'Median · balanced', ceiling: 'Ceiling · upside (rebuild)' };
@@ -139,7 +139,9 @@ function LineupTab({
             .then(id => { if (alive) setOppRosterId(id != null ? String(id) : null); })
             .catch(() => {});
         return () => { alive = false; };
-    }, [lineupKey]);
+        // Keyed on the week too: if the week was read before the league loaded,
+        // the opponent re-resolves once the real week arrives.
+    }, [lineupKey, WP && WP.currentWeek ? WP.currentWeek() : 1]);
     const oppResult = React.useMemo(() => {
         if (!WP || !oppRosterId || !currentLeague) return null;
         const oppRoster = (currentLeague.rosters || []).find(r => String(r.roster_id) === String(oppRosterId));
@@ -182,11 +184,15 @@ function LineupTab({
         const Sch = window.App && window.App.Schedule;
         if (!Sch || !Sch.buildSeason || !myRoster || !currentLeague || !_projReady) return;
         let alive = true;
-        Sch.buildSeason({ league: currentLeague, myRoster, playersData, statsData, stats2025Data })
+        // This week's row runs on DHQ's matchup for the lineup in the slots.
+        Sch.buildSeason({
+            league: currentLeague, myRoster, playersData, statsData, stats2025Data,
+            myStarters: (() => { const ids = Object.values(workingAssign).filter(Boolean).map(String); return ids.length ? ids : null; })(),
+        })
             .then(d => { if (alive && d) setSeasonData(d); })
             .catch(() => {});
         return () => { alive = false; };
-    }, [lineupKey, ctxTick, _projReady]);
+    }, [lineupKey, ctxTick, _projReady, Object.values(workingAssign).filter(Boolean).join(',')]);
 
     // Alex's game-day note: a stable weekly briefing off the CURRENT lineup +
     // matchup (not the working edits). Seeded template renders instantly; AI

@@ -47,8 +47,16 @@ function CompareTab({
     const [, forceProjRerender] = React.useState(0);
     React.useEffect(() => {
         const h = () => forceProjRerender(n => n + 1);
+        // Fetch Sleeper's lines for the shown week, and re-render when DHQ's
+        // or Sleeper's numbers land (wr:proj-updated).
+        const SP = window.App && window.App.SleeperProj;
+        if (SP && SP.loadCurrent) SP.loadCurrent(window.S && window.S.season).then(() => h()).catch(() => {});
         window.addEventListener('wr:weekly-points-loaded', h);
-        return () => window.removeEventListener('wr:weekly-points-loaded', h);
+        window.addEventListener('wr:proj-updated', h);
+        return () => {
+            window.removeEventListener('wr:weekly-points-loaded', h);
+            window.removeEventListener('wr:proj-updated', h);
+        };
     }, []);
     // ── Historical View (owner ask 2026-08-27): when the league time machine
     // sits on a past season, the Full Roster grid shows THAT season's rosters.
@@ -629,9 +637,13 @@ function CompareTab({
     };
     const projCtxForField = (() => {
         const WP = window.App && window.App.WeeklyProj;
-        const wk = WP && WP.currentWeek ? WP.currentWeek() : (window.S?.currentWeek || 1);
+        // The week the app shows (the current week once its lines load).
+        const wk = WP && WP.displayWeek ? (Number(WP.displayWeek()) || 1) : WP && WP.currentWeek ? WP.currentWeek() : (window.S?.currentWeek || 1);
         const season = (window.S?.nflState && window.S.nflState.season) || window.S?.season || '';
-        return { wk, prefix: leagueId + '|' + season + '|' + wk + '|' };
+        // The memo key knows whether the week's lines have loaded, and from which platform.
+        const loaded = (WP && WP.hasProjWeek && WP.hasProjWeek(wk)) ? 'L' : '-';
+        const src = (WP && WP.platformSource && WP.platformSource(wk)) || '';
+        return { wk, prefix: leagueId + '|' + season + '|' + wk + '|' + loaded + src + '|' };
     })();
     const projForField = (pid) => {
         const WP = window.App && window.App.WeeklyProj;
@@ -640,7 +652,8 @@ function CompareTab({
         if (k in _cmpProjMemo) return _cmpProjMemo[k];
         let v = null;
         try {
-            const prj = WP.projectPlayer(pid, { playersData, statsData, priorData: {}, scoring: scoringForField, week: projCtxForField.wk });
+            // Sleeper's published line for the shown week (same number as Game Day / My Roster).
+            const prj = WP.projectPlayer(pid, { playersData, statsData, priorData: stats2025Data || {}, scoring: scoringForField, week: projCtxForField.wk, requireSleeper: true });
             const med = prj && prj.points && prj.points.median;
             v = (med != null && isFinite(med)) ? +(+med).toFixed(1) : null;
         } catch (e) { v = null; }
@@ -1018,7 +1031,7 @@ function CompareTab({
                                 {player.team} · {player.yrsExp}y · {player.gp > 0 ? player.gp + ' GP' : '0 GP'}
                             </div>
                             <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.66, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {(player.pts != null ? player.pts : '—') + ' pts · ' + (player.ppg > 0 ? player.ppg : '—') + ' ppg' + (histSeason ? '' : ' · ' + (player.proj != null ? player.proj : '—') + ' proj')}
+                                {(player.pts != null ? player.pts : '—') + ' pts · ' + (player.ppg > 0 ? player.ppg : '—') + ' ppg' + (histSeason ? '' : ' · ' + (player.proj != null ? player.proj : '—') + ' ' + ((window.App && window.App.DhqProj && window.App.DhqProj.provLabel) ? window.App.DhqProj.provLabel() : 'Sleeper') + ((window.App && window.App.DhqProj) ? ' · ' + window.App.DhqProj.fmt(player.pid) + ' DHQ' : ''))}
                             </div>
                         </div>
                         <div style={{ ...mono, color: dhqCol, fontSize: '0.72rem', fontWeight: 850, flexShrink: 0 }}>{player.dhq > 0 ? player.dhq.toLocaleString() : '-'}</div>
@@ -1642,6 +1655,14 @@ function CompareTab({
                 mk('Tier', 'none', p => p.dhq, (p) => p.tier.label, { colors: p => p.tier.color }),
                 mk('PPG', 'high', p => p.ppg || 0, (p, v) => v > 0 ? v : '—', { numeric: true, countable: true, gapFmt: n => n.toFixed(1) }),
                 mk('PPG Trend', 'high', p => p.trend || 0, (p) => trendDisp(p), { countable: true }),
+                // This week's DHQ and Sleeper projections head to head (DHQ counts toward the edge tally).
+                ...(histSeason ? [] : [
+                    mk('Wk ' + projCtxForField.wk + ' DHQ Proj', 'high', p => {
+                        const q = (window.App && window.App.DhqProj) ? window.App.DhqProj.get(p.pid) : null;
+                        return q ? (Number(q.median) || 0) : 0;
+                    }, (p) => (window.App && window.App.DhqProj) ? window.App.DhqProj.fmt(p.pid) : '—', { numeric: true, countable: true, gapFmt: n => n.toFixed(1) }),
+                    mk('Wk ' + projCtxForField.wk + ' ' + ((window.App && window.App.DhqProj && window.App.DhqProj.provLabel) ? window.App.DhqProj.provLabel() : 'Sleeper') + ' Proj', 'high', p => projForField(p.pid) || 0, (p, v) => v > 0 ? v.toFixed(1) : '—', { numeric: true, gapFmt: n => n.toFixed(1) }),
+                ]),
                 mk('Age', isRedraft ? 'none' : 'low', p => p.age || 0, (p, v) => v ? v + 'yo' : '—'),
                 mk('Dynasty Runway', isRedraft ? 'none' : 'high', p => p.valueYrs || 0, (p, v) => v > 0 ? v + 'yr' : '—', { countable: !isRedraft }),
                 mk('Peak Left', isRedraft ? 'none' : 'high', p => p.peakYrs || 0, (p, v) => v > 0 ? v + 'yr' : '—', { countable: !isRedraft }),
@@ -2209,7 +2230,8 @@ function CompareTab({
                                 {!isPhone && <span>{r.gp > 0 ? r.gp : 0} GP</span>}
                                 {!isPhone && <span>{(r.pts != null ? r.pts : '—') + ' pts'}</span>}
                                 <span>{(r.ppg > 0 ? r.ppg : '—') + ' ppg'}</span>
-                                {!histSeason && <span>{(r.proj != null ? r.proj : '—') + ' proj'}</span>}
+                                {!histSeason && <span>{(r.proj != null ? r.proj : '—') + ' ' + ((window.App && window.App.DhqProj && window.App.DhqProj.provLabel) ? window.App.DhqProj.provLabel() : 'Sleeper')}</span>}
+                                {!histSeason && (window.App && window.App.DhqProj) && <span style={{ color: 'var(--gold, #d4af37)', fontWeight: 700 }}>{window.App.DhqProj.fmt(r.pid) + ' DHQ'}</span>}
                             </div>
                         </div>
                         <span style={{ ...mono, fontWeight: 700, fontSize: '0.76rem', color: dhqCol, flexShrink: 0 }}>{r.dhq > 0 ? r.dhq.toLocaleString() : '-'}</span>

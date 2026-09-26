@@ -233,13 +233,19 @@
     // provably optimal when eligibility sets are nested (QB ⊂ SUPER_FLEX,
     // RB/WR/TE ⊂ FLEX ⊂ SUPER_FLEX, …), which holds for standard formats.
     //
-    // players: [{ pid, pos, available, pts }] (pts = objective score)
+    // players: [{ pid, pos, positions?, available, pts }] (pts = objective
+    //   score; positions = every slot position he is eligible for, e.g.
+    //   Sleeper's fantasy_positions ['DL','LB'] for an edge rusher)
     // rosterPositions: raw slot array from the league (BN/IR/TAXI ignored)
     // returns { total, starters:[{pid,slot,pts,pos}], slots:[{slot,pid|null}] }
     function optimalLineupWeekly(players, rosterPositions) {
         const pool = (players || [])
             .filter(p => p && p.available !== false && Number.isFinite(p.pts))
-            .map(p => ({ ...p, pos: String(p.pos || '').toUpperCase() }))
+            .map(p => {
+                const pos = String(p.pos || '').toUpperCase();
+                const positions = [...new Set([pos].concat((p.positions || []).map(x => String(x || '').toUpperCase())).filter(Boolean))];
+                return { ...p, pos, positions };
+            })
             .sort((a, b) => b.pts - a.pts);
 
         const slots = (rosterPositions || [])
@@ -261,7 +267,7 @@
             let best = null;
             for (const p of pool) {
                 if (used.has(p.pid)) continue;
-                if (sl.elig.includes(p.pos)) { best = p; break; } // pool is pre-sorted desc
+                if (p.positions.some(x => sl.elig.includes(x))) { best = p; break; } // pool is pre-sorted desc
             }
             if (best) {
                 used.add(best.pid);

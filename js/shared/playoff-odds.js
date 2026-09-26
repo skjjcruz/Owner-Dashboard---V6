@@ -7,11 +7,15 @@
 //     → Promise<{ [week]: [[rosterIdA, rosterIdB], …] }>   (Sleeper posts the
 //       full-season pairings up front, so future weeks resolve pre-game)
 //
-//   simulate({ league, ledger, futurePairs, myRosterId, sims, seed })
+//   simulate({ league, ledger, futurePairs, myRosterId, sims, seed, weekDists })
+//     weekDists (optional): { week, byRoster: { rosterId: { mean, sd } } }
+//       — that week's games are drawn from these instead of the fitted
+//       season distributions (the Lab passes DHQ's projected lineups for the
+//       current week, so the odds agree with the This Week matchup box).
 //     → { rows: [{ rosterId, name, playoffPct, byePct, titlePct, avgSeed,
 //                  projWins, projLosses }],                 // sorted by playoffPct
 //         playoffTeams, byeSlots, usedDivisions,
-//         leverage: { week, ifWin, ifLose, current } | null,
+//         leverage: { week, ifWin, ifLose, current, winPct } | null,
 //         simCount }
 //
 // Model, stated honestly: each roster's weekly score ~ Normal(mean, sd) fitted
@@ -167,6 +171,8 @@
         const usedDivisions = nDiv >= 2 && divTagged >= rows.length;
 
         const dists = fitDists(rows);
+        const wd = opts && opts.weekDists && opts.weekDists.byRoster ? opts.weekDists : null;
+        const distFor = (id, w) => (wd && Number(wd.week) === w && wd.byRoster[id]) || dists[id];
         const futureWeeks = Object.keys(futurePairs).map(Number).sort((a, b) => a - b);
         const curWeek = futureWeeks.length ? futureWeeks[0] : null;
 
@@ -192,7 +198,7 @@
                 for (const pair of futurePairs[w]) {
                     const a = String(pair[0]), b = String(pair[1]);
                     if (!dists[a] || !dists[b]) continue;
-                    const pa = sample(dists[a]), pb = sample(dists[b]);
+                    const pa = sample(distFor(a, w)), pb = sample(distFor(b, w));
                     pf[a] += pa; pf[b] += pb;
                     if (pa >= pb) wins[a] += 1; else wins[b] += 1;
                     if (myId && w === curWeek && (a === myId || b === myId)) {
@@ -263,10 +269,13 @@
                 ifWin: Math.round((lev.winPlayoff / Math.max(1, lev.winN)) * 100),
                 ifLose: Math.round((lev.losePlayoff / Math.max(1, lev.loseN)) * 100),
                 current: me ? me.playoffPct : null,
+                winPct: Math.round((lev.winN / Math.max(1, lev.winN + lev.loseN)) * 100),
+                source: wd && Number(wd.week) === curWeek ? 'dhq' : 'history',
             };
         }
 
-        return { rows: out, playoffTeams, byeSlots, usedDivisions, leverage, simCount: sims };
+        const weekSource = wd && curWeek != null && Number(wd.week) === curWeek ? 'dhq' : null;
+        return { rows: out, playoffTeams, byeSlots, usedDivisions, leverage, simCount: sims, weekSource, weekWinPct: weekSource && wd.myWinPct != null ? wd.myWinPct : null };
     }
 
     // ── Playoff-weeks SOS ────────────────────────────────────────────

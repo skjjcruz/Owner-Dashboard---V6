@@ -1224,6 +1224,7 @@ function LeagueMapTab({
       { key: 'dhq', label: 'DHQ' },
       { key: 'ppg', label: 'PPG' },
       { key: 'projWk', label: 'Proj (Wk)' },
+      { key: 'dhqWk', label: 'DHQ Proj (Wk)' },
       { key: 'rosValue', label: 'ROS Value' },
       { key: 'peakYrs', label: 'Peak Yrs' },
       { key: 'owner', label: 'Owner' },
@@ -1246,7 +1247,7 @@ function LeagueMapTab({
   }
 
   function getFilterableFields(dataSource) {
-    if (dataSource === 'players') return ['pos', 'age', 'dhq', 'ppg', 'projWk', 'rosValue', 'peakYrs', 'team', 'owner', 'tier', 'contend'];
+    if (dataSource === 'players') return ['pos', 'age', 'dhq', 'ppg', 'projWk', 'dhqWk', 'rosValue', 'peakYrs', 'team', 'owner', 'tier', 'contend'];
     return ['healthScore', 'tier', 'totalDHQ', 'avgAge', 'eliteCount'];
   }
 
@@ -1339,7 +1340,10 @@ function LeagueMapTab({
           const rosValue = (window.App?.PlayerValue?.getValue) ? window.App.PlayerValue.getValue(pid) : dhq;
           rows.push({
             name: p.full_name || ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),
-            pos, age: p.age || null, team: p.team || 'FA', dhq, ppg, projWk, rosValue,
+            pos, age: p.age || null, team: p.team || 'FA', dhq, ppg, projWk,
+            // DHQ's projection beside Sleeper's (null until the engine has it).
+            dhqWk: (window.App && window.App.DhqProj) ? ((window.App.DhqProj.get(pid) || {}).median ?? null) : null,
+            rosValue,
             peakYrs, owner: ownerName, tier: assess?.tier || 'N/A',
             contend: contendByRoster[String(r.roster_id)] || 'N/A',
             acquired: acqLabel, pid, rosterId: r.roster_id,
@@ -2488,7 +2492,7 @@ function LeagueMapTab({
                                     }
                                     case 'proj': {
                                         const v = projOf(x);
-                                        return <span key={c.key} style={{ color: v != null && v > 0 ? 'var(--white)' : 'var(--silver)', fontFamily: 'var(--font-body)' }}>{v != null && v > 0 ? v : '\u2014'}</span>;
+                                        return <span key={c.key} style={{ color: v != null && v > 0 ? 'var(--white)' : 'var(--silver)', fontFamily: 'var(--font-body)' }}>{v != null && v > 0 ? v : '\u2014'}{window.App && window.App.DhqProj ? <span title="DHQ projection (Sleeper first)" style={{ display: 'block', fontSize: '0.6rem', fontWeight: 700, color: 'var(--gold, #d4af37)' }}>{'DHQ ' + window.App.DhqProj.fmt(x)}</span> : null}</span>;
                                     }
                                     case 'adp': {
                                         const a = adpOf(x);

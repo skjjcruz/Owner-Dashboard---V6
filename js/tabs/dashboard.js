@@ -1836,7 +1836,9 @@ function DashboardPanel({
         if (!WP || typeof WP.optimalForRoster !== 'function' || !myRoster || !currentLeague) return null;
         const platformStarters = (myRoster.starters || []).filter(pid => pid && String(pid) !== '0');
         if (!platformStarters.length) return null;
-        try { return WP.optimalForRoster(myRoster, currentLeague, { playersData, statsData, priorData: prevStatsData, sleeperOnly: true }); }
+        // Same lineup check Game Day reads (DHQ's numbers, fewest moves);
+        // Sleeper's optimizer only while DHQ's numbers are still loading.
+        try { return (window.App.DhqProj && window.App.DhqProj.lineupCheck && window.App.DhqProj.lineupCheck(myRoster, currentLeague)) || WP.optimalForRoster(myRoster, currentLeague, { playersData, statsData, priorData: prevStatsData, sleeperOnly: true }); }
         catch (e) { if (window.wrLog) window.wrLog('dashboard.phoneHero', e); return null; }
     }, [_phone, wrPro, myRoster, currentLeague, playersData, statsData, prevStatsData, _projTick]);
 

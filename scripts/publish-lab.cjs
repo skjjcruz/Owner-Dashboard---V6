@@ -66,13 +66,14 @@ const ARTIFACT_PATHS = [
 const NEVER_SHIP = ['CNAME', '.nojekyll'];
 
 // The Lab's own plumbing — the only things this script never touches.
-const LAB_KEEP = new Set(['.git', '.github', '.nojekyll', 'robots.txt', 'README.md']);
+const LAB_KEEP = new Set(['.git', '.github', '.claude', '.nojekyll', 'robots.txt', 'README.md']);
 // Lab-only work from other sessions lives beside the mirror and must survive
 // every publish (the Matchup Grades lab, Sep 2026: its page, engine, feeds,
 // snapshot data and job). Matching files are set aside before the wipe and
 // put back after the overlay, untouched — no gate, no tag, no rewrite.
 const LAB_PRESERVE = [
   /^matchup-lab\.html$/,
+  /^landing-mock\.html$/,
   /^data\//,
   /^scripts\//,
   /^js\/shared\/(matchup-|MATCHUP-)/,
