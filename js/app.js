@@ -1358,6 +1358,9 @@
         // eslint-disable-next-line no-undef
         const _EmpireDash = typeof EmpireDashboard === 'function' ? EmpireDashboard : null;
         const [empireModuleState, setEmpireModuleState] = useState(_EmpireDash ? 'ready' : 'idle');
+        // Bumped by "Try again" — the loader forgets a failed/timed-out group
+        // (js/module-loader.js), so this re-requests it without a page reload.
+        const [empireAttempt, setEmpireAttempt] = useState(0);
         useEffect(() => {
             if (!proMode || _EmpireDash || !window.wrLoadModuleGroup) return;
             let alive = true;
@@ -1366,7 +1369,7 @@
                 .then(() => { if (alive) setEmpireModuleState('ready'); })
                 .catch(() => { if (alive) setEmpireModuleState('error'); });
             return () => { alive = false; };
-        }, [proMode, _EmpireDash]);
+        }, [proMode, _EmpireDash, empireAttempt]);
         const [empirePlayersLoaded, setEmpirePlayersLoaded] = useState(false);
         const [empirePlayers, setEmpirePlayers] = useState({});
         // Bumped after background roster assessment so the Rolodex re-renders.
@@ -1488,18 +1491,18 @@
             // flashing the hub. Escape hatch mirrors the Empire onBack handler.
             return (
                 <div style={{ padding: '96px 24px', textAlign: 'center', color: 'var(--silver)', fontSize: 'var(--text-body, 1rem)' }}>
-                    {empireModuleState === 'error' ? 'Empire Dashboard failed to load.' : 'Loading Empire Dashboard…'}
+                    {empireModuleState === 'error' ? 'Empire Dashboard didn’t load — check your connection.' : 'Loading Empire Dashboard…'}
                     <div>
                         <button
                             onClick={() => {
-                                if (empireModuleState === 'error') { window.location.reload(); return; }
+                                if (empireModuleState === 'error') { setEmpireAttempt(a => a + 1); return; }
                                 setProMode(false);
                                 if (!isNavigatingRef.current) {
                                     history.pushState({ view: 'hub' }, '', routeUrl(''));
                                 }
                             }}
                             style={{ marginTop: '16px', padding: '8px 16px', background: 'var(--gold)', color: 'var(--black)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
-                        >{empireModuleState === 'error' ? 'Reload' : 'Back to Hub'}</button>
+                        >{empireModuleState === 'error' ? 'Try again' : 'Back to Hub'}</button>
                     </div>
                 </div>
             );

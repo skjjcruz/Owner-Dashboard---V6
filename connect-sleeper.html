@@ -616,9 +616,18 @@
       try {
         localStorage.removeItem(SESSION_KEY);
         localStorage.removeItem(AUTH_KEY);
+        localStorage.removeItem('od_session_v1');
         // Clear the guest flag too — landing.html forwards mid-setup guests
         // back here, so a lingering flag would trap them in a loop.
         localStorage.removeItem('wr_guest_v1');
+        // Platform logins + personal AI keys go with the person (2026-09-27):
+        // same list as DHQ-Shared supabase-client.js DEVICE_SECRET_KEYS, plus
+        // the Supabase Google/Apple session, so a shared device never hands the
+        // next person the last owner's ESPN cookies or signs them back in.
+        ['espn_s2','espn_swid','mfl_api_key','mfl_write_cookie','mfl_write_host','yahoo_session_id',
+ 'dynastyhq_ai_key','dynastyhq_xai_key','dynastyhq_gemini_key','dynastyhq_anthropic_key','dynastyhq_apikey',
+ 'dynastyhq_ai_provider','dynastyhq_ai_model','dhq_credentials_owner_v1'].forEach(k => { try { sessionStorage.removeItem(k); localStorage.removeItem(k); } catch (e) {} });
+        ['', '-code-verifier', '-user'].forEach(s => { try { localStorage.removeItem('sb-sxshiqyxhhifvtfqawbq-auth-token' + s); } catch (e) {} });
       } catch {}
       window.location.href = 'landing.html';
     }

@@ -2970,7 +2970,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 
 <!-- War Room modules — loaded in dependency order by Babel standalone -->
 <!-- 1. Core: tier system, React hooks, fetch helpers (everything depends on this) -->
-<script type="text/babel" src="js/core.js?v=20260916spent1"></script>
+<script type="text/babel" src="js/core.js?v=20260927fix1"></script>
 <!-- 1a. Central data-sync manager — window.WR.Sync — stale-while-revalidate on tab return + in-season interval (plain JS) -->
 <script src="js/shared/sync-manager.js?v=20260706sync1"></script>
 <!-- 1a2. Shared viewport seam — WR.useViewport() hook + WR.viewport() snapshot (plain JS; must precede components.js and all tab files) -->
@@ -2990,7 +2990,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- 2c-2. Saved Alex Reports — window.WR.SavedReports — local cache + ai_analysis server sync -->
 <script src="js/shared/saved-reports.js?v=20260601reports1"></script>
 <!-- 2d. GM Mode helper (Phase 1) — window.WR.GmMode — canonical mode/preset source of truth -->
-<script type="text/babel" src="js/shared/gm-mode.js?v=20260902voice1"></script>
+<script type="text/babel" src="js/shared/gm-mode.js?v=20260927fix1"></script>
 <script src="js/shared/startsit-engine.js?v=20260926b133"></script>
 <script src="js/shared/weekly-proj.js?v=20260926b133"></script>
 <script src="js/shared/sleeper-proj.js?v=20260917truth3"></script>
@@ -3057,11 +3057,16 @@ WRShared.preloadMany(WR_SHARED_FILES);
      every build/serve pipeline) so the browser does NOT parse/execute them at app
      boot. js/module-loader.js injects executable copies, in DOM order within each
      group, when the owning surface first calls wrLoadModuleGroup('<group>'). -->
-<script src="js/module-loader.js?v=20260612modlazy1"></script>
-<script type="text/babel" src="js/settings.js?v=20260926qa1"></script>
+<script src="js/module-loader.js?v=20260927fix1"></script>
+<script type="text/babel" src="js/settings.js?v=20260927fix1"></script>
 <script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20260926qa1"></script>
 <script type="text/babel" src="js/post-draft.js?v=20260907b112"></script>
-<script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260926b134"></script>
+<!-- FA waiver tools (C2 wave): stat catalog + stat math, market display helpers, waiver engine (fa group, before free-agency.js) -->
+<script type="text/babel" data-wr-defer="fa" src="js/shared/stat-catalog.js?v=20260927waivers1"></script>
+<script type="text/babel" data-wr-defer="fa" src="js/shared/league-stats.js?v=20260927waivers1"></script>
+<script type="text/babel" data-wr-defer="fa" src="js/shared/fa-market-data.js?v=20260927waivers1"></script>
+<script type="text/babel" data-wr-defer="fa" src="js/shared/waiver-tools.js?v=20260927waivers1"></script>
+<script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260927waivers1"></script>
 <!-- Season Odds panel loads with Game Day (owner ruling 2026-07-30) — must
      precede lineup.js in the group so window.WrSeasonOdds exists on first render. -->
 <script type="text/babel" data-wr-defer="lineup" src="js/components/season-odds-panel.js?v=20260927b135"></script>
@@ -3143,7 +3148,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- 7. League detail: coordinator shell, depends on all above -->
     <script type="text/babel" src="js/league-detail.js?v=20260926qa1"></script>
 <!-- 8. App: OwnerDashboard + ReactDOM.render (loads last) -->
-<script type="text/babel" src="js/app.js?v=20260925espn1"></script>
+<script type="text/babel" src="js/app.js?v=20260927fix1"></script>
 
 <!-- All JSX code extracted to js/ modules. Only bootstrap remains. -->
 <script>
