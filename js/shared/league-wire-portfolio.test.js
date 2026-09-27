@@ -149,3 +149,21 @@ test('Dynasty HQ: userLeagues loads the Sleeper list once, skips broken leagues,
     assert.equal((await root.WrWirePortfolio.userLeagues('../x', '2026', { fetcher })).length, 0);
     assert.equal((await root.WrWirePortfolio.userLeagues('', '2026', { fetcher })).length, 0);
 });
+
+test('review B1: a pre-draft league in All-my-leagues reads "not started", not failed, and publishes no 0.00 stories', async () => {
+    const root = { console, setTimeout, clearTimeout, S: {} }; root.window = root; vm.createContext(root);
+    for (const f of ['league-live-scores', 'league-live-table', 'league-wire-journal', 'league-wire-portfolio']) vm.runInContext(fs.readFileSync(path.join(__dirname, `${f}.js`), 'utf8'), root);
+    const league = { id: 'pre', season: '2026', name: 'Pre-draft', settings: { playoff_week_start: 15 }, rosters: [1, 2, 3, 4].map(i => ({ roster_id: i, owner_id: 'o' + i })), users: [] };
+    const zeros = [1, 2, 3, 4].map(i => ({ roster_id: i, matchup_id: Math.ceil(i / 2), points: 0, starters: [] }));
+    const fetcher = async url => {
+        if (url.includes('/state/')) return { ok: true, json: async () => ({ season: '2026', season_type: 'regular', week: 3 }) };
+        if (/\/league\/pre$/.test(url)) return { ok: true, json: async () => ({ previous_league_id: null }) };
+        return { ok: true, json: async () => zeros };
+    };
+    let last;
+    await root.WrWirePortfolio.load({ leagues: [league], accountId: 'x', fetcher, onUpdate: e => { last = e; } });
+    assert.equal(last.completedThrough, 0);
+    assert.equal(last.currentError, '', 'unplayed weeks are not a load failure');
+    assert.equal(last.resultsReady, true);
+    assert.equal(last.stories.length, 0, 'no “finish level”, no 0.00 crown, no halved-average previews');
+});

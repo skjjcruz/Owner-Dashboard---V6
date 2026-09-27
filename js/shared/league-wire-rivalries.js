@@ -18,7 +18,9 @@
 // scoped copy when the account scope has none; the next save writes the
 // account-scoped key (the Sleeper copy is left as-is, never deleted).
 // A renewed league (Sleeper previous_league_id chain) inherits the previous
-// season's selections until it saves its own.
+// season's selections until it saves its own. When the league object has no
+// previous_league_id key (our app's league objects), the newest earlier
+// season from the Wire's linked archive is used as the predecessor.
 // Exposes: list, set, remove, pairKey, scope, key.
 // Tests may install root.App.AccountStorage ({ owner, get, set }) exactly as
 // C2 did; when present it takes precedence.
@@ -92,7 +94,16 @@
             seen.add(idOf(current));
             const saved = readSaved(current);
             if (saved?.version === 1 && Array.isArray(saved.pairs)) return clean(saved.pairs);
-            const previous = current.previous_league_id;
+            let previous = current.previous_league_id;
+            // Dynasty HQ league objects don't carry previous_league_id (app.js
+            // builds them from the user's league list). The archive's seasons
+            // ARE the provider-linked chain, so the newest earlier one is this
+            // league's predecessor (review S2).
+            if (current === league && !Object.prototype.hasOwnProperty.call(league, 'previous_league_id')) {
+                const year = Number(league.season);
+                const earlier = (priorSeasons || []).map(s => s.league).filter(l => l && (!year || Number(l.season) < year)).sort((a, b) => Number(b.season) - Number(a.season))[0];
+                previous = earlier ? (earlier.league_id || earlier.id) : null;
+            }
             current = previous ? linked.get(String(previous)) || (seen.has(String(previous)) ? null : { league_id: previous }) : null;
         }
         return [];

@@ -43,7 +43,7 @@
             (entry.league.rosters || []).forEach(r => { if (r.owner_id) { const owner = str(r.owner_id); counts.set(owner, (counts.get(owner) || 0) + 1); } });
             (entry.weeks || []).filter(w => Number(w.week) >= range.start && Number(w.week) <= range.end).forEach(w => {
                 const pairs = journal.inspect(w.rows, entry.league);
-                if (!pairs) return;
+                if (!pairs || (journal.played && !journal.played(w.rows))) return;
                 pairs.forEach(pair => {
                     const owners = pair.map(r => ownerOf(entry.league, r.roster_id));
                     if (owners.some(owner => !owner || counts.get(owner) !== 1) || owners[0] === owners[1]) return;
@@ -60,7 +60,7 @@
             let through = start - 1;
             if (isH2H(league)) for (let week = start; week <= Math.min(cutoff, lastRegular); week++) {
                 const rows = currentWeeks.get(week), pairs = journal.inspect(rows, league);
-                if (!pairs) break;
+                if (!pairs || (journal.played && !journal.played(rows))) break; // unplayed weeks are not results (review B1)
                 through = week; verified.push({ league, week, rows, pairs });
                 rows.forEach(row => {
                     const rid = str(row.roster_id);

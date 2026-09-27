@@ -17,7 +17,9 @@ function makeEnv(srcs) {
     const injected = []; // every <script> the loader appended, in order
     const deferred = srcs.map(src => ({ getAttribute: (a) => (a === 'type' ? 'text/wr-deferred' : a === 'src' ? src : null) }));
     const events = [];
+    const listeners = {};
     const ctx = {
+        addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); },
         setTimeout: (fn, ms) => { const t = { fn, ms, cleared: false }; timers.push(t); return t; },
         clearTimeout: (t) => { if (t) t.cleared = true; },
         CustomEvent: function (type, init) { this.type = type; this.detail = init && init.detail; },
@@ -35,7 +37,13 @@ function makeEnv(srcs) {
     ctx.dispatchEvent = (e) => events.push(e.type);
     vm.createContext(ctx);
     vm.runInContext(SRC, ctx);
-    const fire = (el, kind) => el[kind === 'load' ? 'onload' : 'onerror']();
+    const fire = (el, kind, message) => {
+        if (kind === 'throw') { // top-level throw: window 'error' for that file, then load
+            (listeners.error || []).forEach(fn => fn({ filename: el.src, message: message || 'TypeError: Cannot destructure DraftCC.styles' }));
+            return el.onload();
+        }
+        return el[kind === 'load' ? 'onload' : 'onerror']();
+    };
     const fireTimeout = () => timers.filter(t => !t.cleared && t.ms === 45000).forEach(t => { t.cleared = true; t.fn(); });
     return { ctx, injected, timers, events, fire, fireTimeout };
 }
@@ -77,19 +85,100 @@ test('retry after a timeout waits on the stalled tag instead of injecting a twin
     assert.equal(env.ctx.__wrDraftLoaded, true);
 });
 
-test('retry after a network error re-requests only what failed, never a script that already ran', async () => {
+test('retry after a network error re-runs the failed script and everything after it, never what ran before', async () => {
     const env = makeEnv(['a.js', 'b.js', 'c.js']);
     const p1 = env.ctx.wrLoadModuleGroup('fa');
     env.fire(env.injected[0], 'load');
     env.fire(env.injected[1], 'error');
     assert.match(await settle(p1), /failed to load/);
-    env.fire(env.injected[2], 'load'); // c.js still executed after b.js failed
+    env.fire(env.injected[2], 'load'); // c.js ran WITHOUT b.js — may be broken
     await tick();
     const p2 = env.ctx.wrLoadModuleGroup('fa');
-    const again = env.injected.slice(3).map(el => el.src);
-    assert.deepEqual(again, ['b.js'], 'a.js and c.js already ran and are not run twice');
-    env.fire(env.injected[3], 'load');
+    await tick();
+    assert.deepEqual(env.injected.slice(3).map(el => el.src), ['b.js', 'c.js'], 'a.js (ran before the failure) is not run twice');
+    env.injected.slice(3).forEach(el => env.fire(el, 'load'));
     assert.equal(await settle(p2), 'resolved');
+});
+
+test('a script that throws while starting counts as a failure, and the retry re-runs it and the tail', async () => {
+    const env = makeEnv(['styles.js', 'board.js', 'room.js', 'picks.js']);
+    const p1 = env.ctx.wrLoadModuleGroup('draft');
+    env.fire(env.injected[0], 'load');
+    env.fire(env.injected[1], 'throw'); // e.g. DraftCC.styles missing
+    assert.match(await settle(p1), /threw while starting: board\.js/);
+    env.fire(env.injected[2], 'load');
+    env.fire(env.injected[3], 'load');
+    await tick();
+    assert.equal(env.ctx.wrModuleGroupLoaded('draft'), false, 'a group with a crashed module is not "loaded"');
+    const p2 = env.ctx.wrLoadModuleGroup('draft');
+    await tick();
+    assert.deepEqual(env.injected.slice(4).map(el => el.src), ['board.js', 'room.js', 'picks.js']);
+    env.injected.slice(4).forEach(el => env.fire(el, 'load'));
+    assert.equal(await settle(p2), 'resolved');
+    assert.equal(env.ctx.__wrDraftLoaded, true);
+    // Next load after success: nothing re-run.
+    assert.equal(await settle(env.ctx.wrLoadModuleGroup('draft')), 'resolved');
+    assert.equal(env.injected.length, 7);
+});
+
+test('tail scripts still in flight are waited for, never duplicated, then re-run in order', async () => {
+    const env = makeEnv(['a.js', 'b.js', 'c.js']);
+    const p1 = env.ctx.wrLoadModuleGroup('trade');
+    env.fire(env.injected[0], 'load');
+    env.fire(env.injected[1], 'error'); // c.js is still downloading
+    await settle(p1);
+    const p2 = env.ctx.wrLoadModuleGroup('trade');
+    await tick();
+    assert.equal(env.injected.length, 3, 'nothing injected while c.js is still in the queue');
+    env.fire(env.injected[2], 'load'); // the old c.js lands (ran without b.js)
+    await tick(); await tick();
+    assert.deepEqual(env.injected.slice(3).map(el => el.src), ['b.js', 'c.js'], 'then b.js and c.js, in order');
+    env.injected.slice(3).forEach(el => env.fire(el, 'load'));
+    assert.equal(await settle(p2), 'resolved');
+});
+
+const REDECLARED = "Uncaught SyntaxError: Identifier 'DRAFT_WR_KEYS' has already been declared";
+
+test('re-running a file with top-level const that already ran fine: its first run stands, the group loads', async () => {
+    const env = makeEnv(['styles.js', 'scouting.js', 'draft-room.js', 'picks.js']);
+    const p1 = env.ctx.wrLoadModuleGroup('draft');
+    env.fire(env.injected[0], 'load');
+    env.fire(env.injected[1], 'error');
+    await settle(p1);
+    env.fire(env.injected[2], 'load'); // draft-room.js ran fine the first time
+    env.fire(env.injected[3], 'load');
+    await tick();
+    const p2 = env.ctx.wrLoadModuleGroup('draft');
+    await tick();
+    const tail = env.injected.slice(4);
+    assert.deepEqual(tail.map(el => el.src), ['scouting.js', 'draft-room.js', 'picks.js']);
+    env.fire(tail[0], 'load');
+    env.fire(tail[1], 'throw', REDECLARED); // the engine refuses the second evaluation
+    env.fire(tail[2], 'load');
+    assert.equal(await settle(p2), 'resolved');
+});
+
+test('a top-level-const file that CRASHED on its first run can only be redone by a reload', async () => {
+    const env = makeEnv(['styles.js', 'draft-room.js']);
+    const p1 = env.ctx.wrLoadModuleGroup('draft');
+    env.fire(env.injected[0], 'load');
+    env.fire(env.injected[1], 'throw');
+    await settle(p1);
+    const p2 = env.ctx.wrLoadModuleGroup('draft');
+    await tick();
+    env.fire(env.injected[2], 'throw', REDECLARED);
+    const err = await p2.then(() => null, e => e);
+    assert.ok(err && err.reloadRequired, 'group error says a reload is needed');
+    assert.equal(env.ctx.wrModuleGroupLoaded('draft'), false);
+});
+
+test('an error from some other file is not blamed on a deferred script', async () => {
+    const env = makeEnv(['a.js']);
+    const p = env.ctx.wrLoadModuleGroup('alex');
+    const el = env.injected[0];
+    const realSrc = el.src; el.src = 'other.js'; // error event names a different file
+    env.fire(el, 'throw'); el.src = realSrc;
+    assert.equal(await settle(p), 'resolved');
 });
 
 test('the 45s clock is a stall timer: every script that lands restarts it', async () => {

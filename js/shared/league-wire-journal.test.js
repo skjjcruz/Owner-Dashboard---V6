@@ -181,3 +181,49 @@ test('C2 league stories: recaps, record ties, custom totals, streaks, missing we
     // Deterministic: the same evidence always yields the same edition (no randomness, no AI).
     assert.equal(JSON.stringify(build()), JSON.stringify(build()));
 });
+
+test('review fixes: unplayed weeks, History made needs a comparable prior season, scoring comparison, guillotine field', async () => {
+    const context = { console, setTimeout, clearTimeout, AbortController, App: {} };
+    context.window = context;
+    vm.createContext(context);
+    for (const file of ['league-live-scores.js', 'chopped.js', 'league-wire-journal.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), context);
+    const J = context.WrWireStories;
+    const row = (rid, pts, m = 1, extra = {}) => ({ roster_id: rid, points: pts, matchup_id: m, ...extra });
+    const lg = (extra = {}) => ({ league_id: 'D', season: '2026', settings: { playoff_week_start: 15, playoff_teams: 2 }, scoring_settings: { rec: 1 }, roster_positions: ['QB'], rosters: [1, 2, 3, 4].map(i => ({ roster_id: i, owner_id: 'o' + i })), ...extra });
+    const zeros = { week: 1, rows: [row(1, 0, 1, { starters: [] }), row(2, 0, 1, { starters: [] }), row(3, 0, 2, { starters: [] }), row(4, 0, 2, { starters: [] })] };
+    // B1: pre-draft league — every team 0.00 with empty lineups.
+    const pre = J.build({ league: lg(), weeks: [zeros, { ...zeros, week: 2 }], start: 1, end: 2, nameFor: r => 'T' + r, board: { week: 3, rows: zeros.rows } });
+    assert.equal(pre.completedThrough, 0, 'the edition stops before the first unplayed week');
+    assert.equal(pre.stories.length, 0, 'no “finish level — 0.00 apiece”, no 0.00 scoring crown');
+    assert.equal(pre.previews.length, 0, 'no previews with made-up records or halved averages');
+    assert.equal(pre.table.length, 0);
+    assert(!JSON.stringify(pre).includes('0.00 points'));
+    // Lineups set but nobody started (a week that has not begun) is also unplayed.
+    assert.equal(J.played([row(1, 0.4, 1, { starters: ['0'] }), row(2, 0, 1, { starters: [] })]), false);
+    assert.equal(J.played([row(1, 88, 1, { starters: ['p'] }), row(2, 0, 1, { starters: ['q'] })]), true);
+    // A real week, then an unplayed one: results stop at week 1.
+    const real = { week: 1, rows: [row(1, 100), row(2, 90), row(3, 80, 2), row(4, 70, 2)] };
+    const stop = J.build({ league: lg(), weeks: [real, { ...zeros, week: 2 }], start: 1, end: 2, nameFor: r => 'T' + r });
+    assert.equal(stop.completedThrough, 1);
+    // S1: no comparable prior season → no "History made".
+    const other = { league: { ...lg({ league_id: 'P', season: '2025', scoring_settings: { rec: 0.5 } }), users: [] }, weeks: [{ week: 1, rows: [row(1, 300), row(2, 10), row(3, 10, 2), row(4, 10, 2)] }] };
+    const two = [real, { week: 2, rows: [row(1, 150), row(2, 90), row(3, 80, 2), row(4, 70, 2)] }];
+    const noHistory = J.build({ league: lg(), weeks: two, start: 1, end: 2, priorSeasons: [other], nameFor: r => 'T' + r });
+    assert(!noHistory.stories.some(s => s.category === 'History made'), 'incomparable seasons cannot anchor an archive record');
+    assert(noHistory.stories.some(s => /A new season scoring high/.test(s.text)), 'the season record still reports');
+    const same = { ...other, league: { ...other.league, scoring_settings: { rec: 1 } }, weeks: [{ week: 1, rows: [row(1, 120), row(2, 10), row(3, 10, 2), row(4, 10, 2)] }] };
+    assert(J.build({ league: lg(), weeks: two, start: 1, end: 2, priorSeasons: [same], nameFor: r => 'T' + r }).stories.some(s => s.category === 'History made' && /previous archived high of 120\.00/.test(s.body)));
+    // Nit: 0-valued keys and float noise are not rule changes.
+    assert.equal(J.signature({ scoring_settings: { rec: 1, fgm_yds: 0.10000000149, bonus: 0 } }), J.signature({ scoring_settings: { rec: 1, fgm_yds: 0.1 } }));
+    assert.notEqual(J.signature({ scoring_settings: { rec: 1 } }), J.signature({ scoring_settings: { rec: 0.5 } }));
+    // Guillotine: the chopped team is not part of the field.
+    const chopped = lg({ settings: { type: 3, playoff_week_start: 15 }, rosters: [{ roster_id: 1, owner_id: 'a' }, { roster_id: 2, owner_id: 'b' }, { roster_id: 3, owner_id: 'c', settings: { eliminated: 1 } }] });
+    const g = J.build({ league: chopped, headToHead: false, start: 1, end: 2, nameFor: r => 'T' + r, weeks: [{ week: 1, rows: [row(1, 100, null), row(2, 90, null), row(3, 50, null)] }, { week: 2, rows: [row(1, 110, null), row(2, 95, null), row(3, 0, null)] }] });
+    assert(g.stories.some(s => s.week === 1 && /in a 3-team field/.test(s.body)), 'alive in the week it was chopped');
+    assert(g.stories.some(s => s.week === 2 && /in a 2-team field/.test(s.body)), 'chopped teams leave the field');
+    // S2 support: loadArchive reports the provider link it read.
+    const fetcher = async url => ({ ok: true, json: async () => (url.endsWith('/D') ? { league_id: 'D', previous_league_id: null } : null) });
+    assert.equal((await J.loadArchive({ league: lg(), fetcher, force: true })).previousLeagueId, null);
+    const fetcher2 = async url => (url.endsWith('/E') ? { ok: true, json: async () => ({ league_id: 'E', previous_league_id: 'P9' }) } : { ok: false });
+    assert.equal((await J.loadArchive({ league: lg({ league_id: 'E' }), fetcher: fetcher2, force: true })).previousLeagueId, 'P9');
+});

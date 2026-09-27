@@ -98,3 +98,30 @@ test('No private chronicle data ships: no data file, no hand-entered facts, no A
         assert(!/Math\.random/.test(text), path.basename(file) + ' is deterministic');
     }
 });
+
+test('review S8: titles from the archive\'s own brackets — one bracket request per archived season, then none', async () => {
+    const writes = [];
+    const root = load({ WrWireArchiveCache: { write: async s => { writes.push(s); return true; } } });
+    const C = root.WrWireChronicles;
+    const season = (yr, extra = {}) => ({ league: { league_id: 'A' + yr, season: String(yr), status: 'complete', rosters: [{ roster_id: 1, owner_id: 'u1' }, { roster_id: 2, owner_id: 'u2' }, { roster_id: 3, owner_id: 'u3' }],
+        users: [{ user_id: 'u1', metadata: { team_name: 'One ' + yr } }, { user_id: 'u2', display_name: 'Two ' + yr }, { user_id: 'u3', display_name: 'Three' }] }, weeks: [], ...extra });
+    const brackets = {
+        A2025: [{ r: 1, m: 1, t1: 1, t2: 3, w: 1, l: 3 }, { r: 2, m: 2, t1: 1, t2: 2, w: 2, l: 1, p: 1 }, { r: 2, m: 3, t1: 3, t2: 4, w: 3, l: 4, p: 3 }],
+        A2024: [{ r: 1, m: 1, t1: 1, t2: 2, w: 1, l: 2 }], // no p field: a lone final
+    };
+    const urls = [];
+    const fetcher = async url => { urls.push(url); const id = url.split('/league/')[1].split('/')[0]; return brackets[id] ? { ok: true, json: async () => brackets[id] } : { ok: false }; };
+    const seasons = [season(2025), season(2024), season(2023, { league: { ...season(2023).league, status: 'in_season' } }), season(2022, { bracket: [] })];
+    const loaded = await C.loadBrackets({ seasons, fetcher });
+    assert.equal(urls.length, 2, 'only complete seasons without a stored bracket are requested');
+    assert.equal(writes.length, 2, 'fetched brackets are persisted with their season');
+    assert.equal((await C.loadBrackets({ seasons: loaded, fetcher })).length, 4); assert.equal(urls.length, 2, 'a second pass requests nothing');
+    const league = { league_id: 'A2026', season: '2026', rosters: [{ roster_id: 1, owner_id: 'u1' }, { roster_id: 2, owner_id: 'u2' }] };
+    const book = C.fromArchive({ league, seasons: loaded });
+    const facts = JSON.parse(JSON.stringify(book.facts.map(f => [f.season, f.winner, f.loser, f.owners])));
+    assert.deepEqual(facts, [[2025, 'Two 2025', 'One 2025', ['u2', 'u1']], [2024, 'One 2024', 'Two 2024', ['u1', 'u2']]], 'p=1 game (not the 3rd-place game); names from that season');
+    assert.equal(book.facts[0].sources[0].url, 'https://api.sleeper.app/v1/league/A2025/winners_bracket');
+    // syncFromHistory falls back to the archive when the Trophy Room cache is empty.
+    const r2 = load({ WrHistory: { getCached: () => null } });
+    assert(r2.WrWireChronicles.syncFromHistory(league, loaded));
+});

@@ -38,6 +38,16 @@
 //     overall table is not the playoff field there).
 //   - ESPN/MFL leagues: an honest note and zero requests.
 // ══════════════════════════════════════════════════════════════════
+// A game counts as live while it is in progress, or once its kickoff has
+// passed and no final has been reported (capped at 6h so a stuck status
+// can't keep the page polling forever). Postponed/cancelled games never.
+function wireGameLive(g, now = Date.now()) {
+    if (!g || g.completed || /POSTPONED|CANCEL|SUSPEND/i.test(g.statusName || '')) return false;
+    if (g.state === 'in') return true;
+    const kickoff = Date.parse(g.kickoff || '');
+    return Number.isFinite(kickoff) && kickoff <= now && now - kickoff < 6 * 3600000;
+}
+
 function WrLeagueWire({ currentLeague, standings, transactions, playersData, getOwnerName, getPlayerName, sleeperUserId, allLeagues, onOpenLeague }) {
 
     const LLS = window.App.LeagueLiveScores;
@@ -77,38 +87,52 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
     React.useEffect(() => {
         const NC = window.App?.NflContext, NFL = window.WrWireNfl;
         if (!supported || !NC?.currentPhase || !NFL?.loadScoreboard) return undefined;
-        let alive = true, timer = null, warmup = null, tries = 0, busy = false;
-        const schedule = games => {
+        let alive = true, timer = null, warmup = null, tries = 0, busy = false, priorDone = '';
+        const schedule = (games, failed) => {
             if (timer) clearTimeout(timer);
             timer = null;
-            if (!alive || document.hidden) return;
+            if (!alive || document.hidden) return null;
+            // Once a minute while a game is live or about to start; 2 minutes
+            // after a failed load; otherwise a slow re-check so a Wire left
+            // open on game day still wakes up for kickoff.
             const soon = Date.now() + 10 * 60000;
-            const active = (games || []).some(g => !g.completed && !/POSTPONED|CANCEL/i.test(g.statusName || '') && (g.state === 'in' || (Date.parse(g.kickoff) || Infinity) <= soon));
-            // Once a minute while a game is live or about to start; otherwise
-            // a slow re-check so a Wire left open on game day still wakes up.
-            timer = setTimeout(tick, active ? 60000 : 15 * 60000);
+            const active = (games || []).some(g => wireGameLive(g) || (!g.completed && (Date.parse(g.kickoff) || Infinity) <= soon));
+            const delay = failed ? 120000 : active ? 60000 : 15 * 60000;
+            timer = setTimeout(tick, delay);
+            return Date.now() + delay;
         };
         const tick = async () => {
             if (busy || !alive) return;
+            // Sleeper's calendar says offseason: there is no "this week" to show.
+            const seasonType = String(window.S?.nflState?.season_type || '').toLowerCase();
+            if (seasonType && !['pre', 'regular', 'post'].includes(seasonType)) {
+                setNflScores([]);
+                setNflDesk({ key: 'off', offseason: true, season: window.S?.nflState?.season || '', current: { status: 'ready', games: [] }, previous: { status: 'ready', games: [] } });
+                return;
+            }
             busy = true;
             const ph = NC.currentPhase();
             const previous = NC.previousPhase(ph);
             const key = `${ph.season}|${ph.seasontype}|${ph.week}`;
+            const prevKey = previous ? `${previous.season}|${previous.seasontype}|${previous.week}` : '';
             setNflDesk(old => old.key === key ? old : { key, phase: ph, previousPhase: previous, current: { status: 'loading', games: [] }, previous: { status: 'loading', games: [] } });
+            // Last week never changes once every game is final: fetch it once (review S5).
+            const skipPrior = !previous || priorDone === prevKey;
             const results = await Promise.allSettled([
                 NFL.loadScoreboard(ph.week, ph.season, ph.seasontype),
-                previous ? NFL.loadScoreboard(previous.week, previous.season, previous.seasontype) : Promise.resolve({ games: [], source: 'none' }),
+                skipPrior ? Promise.resolve(null) : NFL.loadScoreboard(previous.week, previous.season, previous.seasontype),
             ]);
             busy = false;
             if (!alive) return;
             const [current, prior] = results;
+            if (prior.status === 'fulfilled' && prior.value && prior.value.games.length && prior.value.games.every(g => g.completed)) priorDone = prevKey;
             if (current.status === 'fulfilled') setNflScores(current.value.games.map(g => ({ ...g, isPre: !!ph.isPre, phaseWeek: ph.week })));
             else setNflScores([]);
-            setNflDesk(old => ({ key, phase: ph, previousPhase: previous,
+            const nextAt = schedule(current.status === 'fulfilled' ? current.value.games : [], current.status !== 'fulfilled');
+            setNflDesk(old => ({ key, phase: ph, previousPhase: previous, nextAt,
                 current: current.status === 'fulfilled' ? { status: 'ready', games: current.value.games, source: current.value.source, checkedAt: current.value.checkedAt } : { status: 'error', games: old.key === key ? old.current.games : [], source: old.current?.source, checkedAt: old.current?.checkedAt },
-                previous: prior.status === 'fulfilled' ? { status: 'ready', games: prior.value.games, source: prior.value.source, checkedAt: prior.value.checkedAt } : { status: 'error', games: old.key === key ? old.previous.games : [] },
+                previous: prior.status === 'fulfilled' ? (prior.value ? { status: 'ready', games: prior.value.games, source: prior.value.source, checkedAt: prior.value.checkedAt } : old.key === key ? old.previous : { status: 'ready', games: [] }) : { status: 'error', games: old.key === key ? old.previous.games : [] },
             }));
-            schedule(current.status === 'fulfilled' ? current.value.games : []);
         };
         const start = () => {
             if (!window.S?.nflState && ++tries < 15) { warmup = setTimeout(start, 1000); return; }
@@ -119,10 +143,16 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         start();
         return () => { alive = false; if (timer) clearTimeout(timer); if (warmup) clearTimeout(warmup); document.removeEventListener('visibilitychange', onVisible); };
     }, [supported]);
-    const nflLive = (nflScores || []).some(g => g.state === 'in' && !g.completed);
+    // Live = in progress, OR kickoff passed and not final (a blocked ESPN read
+    // or a stale relay can still say 'pre' mid-game — review S6).
+    const nflLive = (nflScores || []).some(g => wireGameLive(g));
 
     // ── This league's scoreboard (shared client; polls only during live games) ──
     const board = LLS.useScores({ league: currentLeague, enabled: supported, interval: nflLive ? undefined : 0 });
+    // useScores returns a fresh object every render; memos depend on its
+    // contents, not its identity, so typing in search doesn't rebuild the
+    // edition (review S9).
+    const stableBoard = React.useMemo(() => ({ week: board.week, rows: board.rows, error: board.error, updatedAt: board.updatedAt }), [board.week, board.rows, board.error, board.updatedAt]);
 
     const weekHasScores = board.rows.filter(r => Number(r.points) > 0).length >= 2;
     const statWeek = board.week ? Math.max(1, weekHasScores ? board.week : board.week - 1) : null;
@@ -173,22 +203,33 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
     }, [pastKey, archiveRevision, supported]);
     const pastSeasons = past.key === pastKey ? past.seasons : [];
 
-    // ── Championship history: only Sleeper's own brackets (WrHistory, the
-    //    Trophy Room's loader). Built after the archive settles so the two
-    //    history walks never compete; cached 6h by WrHistory. ──
+    // ── Championship history: only Sleeper's own brackets. The Trophy Room's
+    //    WrHistory cache is used when it exists (free); otherwise, once the
+    //    archive settles, one winners_bracket per archived season is fetched
+    //    and stored with it — never the Trophy Room's full history walk again
+    //    (review S8), and the Trophy Room's own loading is unchanged. ──
+    const [bracketSeasons, setBracketSeasons] = React.useState({ key: '', seasons: [] });
+    React.useEffect(() => {
+        if (!supported || past.key !== pastKey || past.status === 'loading' || past.status === 'idle' || !pastSeasons.length) return undefined;
+        let cached = null;
+        try { cached = window.WrHistory?.getCached?.(leagueId); } catch (_) { cached = null; }
+        if (cached || !window.WrWireChronicles?.loadBrackets) return undefined;
+        let alive = true;
+        const controller = new window.AbortController();
+        window.WrWireChronicles.loadBrackets({ seasons: pastSeasons, signal: controller.signal })
+            .then(seasons => { if (alive) setBracketSeasons({ key: pastKey, seasons }); }).catch(() => {});
+        return () => { alive = false; controller.abort(); };
+    }, [supported, past.key, past.status]);
+    const chronicleSeasons = bracketSeasons.key === pastKey ? bracketSeasons.seasons : pastSeasons;
     const [chronicleRevision, setChronicleRevision] = React.useState(0);
     React.useEffect(() => {
         if (!supported) return undefined;
-        const sync = () => { if (window.WrWireChronicles?.syncFromHistory?.(currentLeague, pastSeasons)) setChronicleRevision(n => n + 1); };
+        const sync = () => { if (window.WrWireChronicles?.syncFromHistory?.(currentLeague, chronicleSeasons)) setChronicleRevision(n => n + 1); };
         sync();
         const onLoaded = e => { if (!e?.detail?.leagueId || sameId(e.detail.leagueId, leagueId)) sync(); };
         window.addEventListener('wr_history_loaded', onLoaded);
         return () => window.removeEventListener('wr_history_loaded', onLoaded);
-    }, [leagueId, supported, pastSeasons.length]);
-    React.useEffect(() => {
-        if (!supported || past.key !== pastKey || past.status === 'loading' || past.status === 'idle') return;
-        if (window.WrHistory?.loadIfMissing) window.WrHistory.loadIfMissing(currentLeague).catch(() => {});
-    }, [supported, past.key, past.status]);
+    }, [leagueId, supported, chronicleSeasons]);
 
     const historicalEdition = readingSeason === 'current' ? null : pastSeasons.find(s => String(s.league.season) === readingSeason);
     const editionLeague = historicalEdition?.league || currentLeague;
@@ -212,20 +253,29 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         nameFor: editionName, playerName: _getPlayerName, headToHead, league: editionLeague,
         priorSeasons: pastSeasons.filter(s => Number(s.league.season) < Number(editionLeague.season)),
         archiveComplete: past.key === pastKey && past.complete,
-        board: historicalEdition || !archiveReady || editionWeek !== 'latest' ? null : board,
-    }), [archive, archiveReady, historicalEdition, editionStart, storyThrough, editionWeek, standings, currentLeague, playersData, headToHead, past, board, rivalryRevision, accountScope, chronicleRevision]);
-    const editionStories = edition.stories.filter(it => it.documentary || editionWeek === 'all' || it.week === selectedWeek)
-        .concat(editionWeek === 'latest' ? edition.previews : []);
+        board: historicalEdition || !archiveReady || editionWeek !== 'latest' ? null : stableBoard,
+    }), [archive, archiveReady, historicalEdition, editionStart, storyThrough, editionWeek, standings, currentLeague, playersData, headToHead, past, stableBoard, rivalryRevision, accountScope, chronicleRevision]);
+    const editionStories = React.useMemo(() => edition.stories.filter(it => it.documentary || editionWeek === 'all' || it.week === selectedWeek)
+        .concat(editionWeek === 'latest' ? edition.previews : []), [edition, editionWeek, selectedWeek]);
 
     // ── Top fantasy scorer per position (rostered players only) ──
-    const [leaders, setLeaders] = React.useState([]);
+    // Runs once the player database is READY (a cold deep link renders before
+    // it arrives — review S3). The week in progress reads fresh Sleeper stats
+    // on the board's cadence and is labelled "as of" (review S4); completed
+    // weeks use App.SOS's session cache.
+    const playersReady = React.useMemo(() => { if (!playersData) return false; for (const k in playersData) { if (k) return true; } return false; }, [playersData]);
+    const liveStatWeek = !!statWeek && Number(statWeek) === Number(board.week) && !seasonFinished && String(season) === String(nflState?.season || season);
+    const [leaders, setLeaders] = React.useState({ key: '', rows: [], at: null });
+    const leadersKey = `${leagueId}|${season}|${statWeek}`;
     React.useEffect(() => {
-        if (!supported || !statWeek || !currentLeague) return undefined;
+        if (!supported || !statWeek || !currentLeague || !playersReady || typeof window.calcFantasyPts !== 'function') return undefined;
         const SOS = window.App?.SOS;
-        if (!SOS?.getWeekStats || typeof window.calcFantasyPts !== 'function') return undefined;
+        const source = liveStatWeek && window.WrWireNfl?.liveWeekStats
+            ? window.WrWireNfl.liveWeekStats(season, statWeek, 'regular').then(r => ({ ws: r.stats, at: r.at }))
+            : SOS?.getWeekStats ? Promise.resolve(SOS.getWeekStats(season, statWeek)).then(ws => ({ ws, at: null })) : null;
+        if (!source) return undefined;
         let alive = true;
-        setLeaders([]);
-        Promise.resolve(SOS.getWeekStats(season, statWeek)).then(ws => {
+        source.then(({ ws, at }) => {
             if (!alive) return;
             const scoring = currentLeague.scoring_settings || {};
             const seen = new Set();
@@ -246,16 +296,18 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
                 });
             });
             rows.sort((a, b) => b.pts - a.pts);
-            setLeaders(rows);
-        }).catch(() => { /* skip */ });
+            setLeaders({ key: leadersKey, rows, at });
+        }).catch(() => { /* keep the last good list; items drop when the key changes */ });
         return () => { alive = false; };
-    }, [leagueId, statWeek, season, supported]);
+    }, [leadersKey, supported, playersReady, liveStatWeek, liveStatWeek ? stableBoard.updatedAt : 0]);
+    const asOf = at => at ? new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
 
     // ── NFL-wide leaders, for whatever phase/week is live ──
-    const buildNflLeaders = React.useCallback((statsByPid, wk, phaseType) => {
+    const buildNflLeaders = React.useCallback((statsByPid, wk, phaseType, at) => {
         const w = wk
             ? (phaseType === 'pre' ? 'PRE' + wk + ' ' : phaseType === 'post' ? 'POST' + wk + ' ' : 'WK' + wk + ' ')
             : 'NFL ';
+        const stamp = at ? ' · AS OF ' + asOf(at) : '';
         const CATS = [
             { key: 'pass_yd', label: w + 'PASS', unit: 'yds' },
             { key: 'rush_yd', label: w + 'RUSH', unit: 'yds' },
@@ -276,7 +328,7 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
             if (!best) return null;
             const val = c.unit === 'sacks' ? (Math.round(best.v * 10) / 10) : Math.round(best.v);
             return {
-                kind: 'nflstat', label: c.label,
+                kind: 'nflstat', label: c.label + stamp,
                 text: (best.p.full_name || 'Player') + ' ' + val + ' ' + c.unit + (best.p.team ? ' · ' + best.p.team : ''),
             };
         }).filter(Boolean);
@@ -291,18 +343,23 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         // Hold last week's leaders until this week's games actually kick off.
         const started = (nflScores || []).some(g => g.state === 'in' || g.state === 'post' || g.completed);
         const week = started ? ph.week : Math.max(1, ph.week - 1);
-        return { week, type, season: ph.season || season };
+        return { week, type, season: ph.season || season, current: started };
     }, [nflScores, board.week, season]);
 
     const [nflLeaders, setNflLeaders] = React.useState([]);
+    // The current NFL week reads fresh stats on the desk's cadence, labelled
+    // "as of"; earlier weeks use the cached weekly stats (review S4).
     React.useEffect(() => {
-        if (!supported || !window.WrWireNfl?.weekStats || !nflStatCtx.week) return undefined;
+        const NFL = window.WrWireNfl;
+        if (!supported || !NFL?.weekStats || !nflStatCtx.week || !playersReady || nflDesk.offseason) return undefined; // offseason: no "this week"
         let alive = true;
-        Promise.resolve(window.WrWireNfl.weekStats(nflStatCtx.season, nflStatCtx.week, nflStatCtx.type))
-            .then(ws => { if (alive) setNflLeaders(buildNflLeaders(ws || {}, nflStatCtx.week, nflStatCtx.type)); })
-            .catch(() => { if (alive) setNflLeaders([]); });
+        const source = nflStatCtx.current && NFL.liveWeekStats
+            ? NFL.liveWeekStats(nflStatCtx.season, nflStatCtx.week, nflStatCtx.type).then(r => ({ ws: r.stats, at: r.at }))
+            : Promise.resolve(NFL.weekStats(nflStatCtx.season, nflStatCtx.week, nflStatCtx.type)).then(ws => ({ ws, at: null }));
+        source.then(({ ws, at }) => { if (alive) setNflLeaders(buildNflLeaders(ws || {}, nflStatCtx.week, nflStatCtx.type, at)); })
+            .catch(() => { /* keep the last good list */ });
         return () => { alive = false; };
-    }, [nflStatCtx.season, nflStatCtx.week, nflStatCtx.type, buildNflLeaders, supported]);
+    }, [nflStatCtx.season, nflStatCtx.week, nflStatCtx.type, nflStatCtx.current, buildNflLeaders, supported, playersReady, !!nflDesk.offseason, nflStatCtx.current ? nflDesk.current?.checkedAt : 0]);
 
     // ── Risers & fallers ──
     const [trendTick, setTrendTick] = React.useState(0);
@@ -399,6 +456,10 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         (nflLeaders || []).forEach(l => out.push(l));
 
         // This league shares the same scored snapshot as Game Day.
+        const board = stableBoard;
+        // Playoff weeks mix bracket and consolation games in one Sleeper feed:
+        // scores are labelled as playoff scores and never feed margin records.
+        const playoffWeek = Number(board.week) > lastRegular;
         const scoreRows = (board.rows || []).map(row => ({ ...row, points: LLS.rosterPoints(row) })).filter(row => row.points != null);
         if (!historicalEdition && edition.high !== null && Number(board.week) > historyEnd && Number(board.week) <= lastRegular && !board.error) {
             scoreRows.filter(r => r.points >= edition.high * .9 && r.points > 0).forEach(r => out.push({ kind: 'story', category: 'Record watch', rosterIds: [r.roster_id], weight: 60, label: 'RECORD WATCH · WK ' + board.week,
@@ -413,9 +474,9 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         if (headToHead) pairs.forEach(pair => {
             if (!pair.some(p => Number(p.points) > 0)) return;
             const [a, b] = [...pair].sort((x, y) => Number(y.points) - Number(x.points));
-            out.push({ kind: 'score', label: (board.error ? 'LAST UPDATE · WK ' : 'WK ') + board.week, text: nameFor(a.roster_id) + ' ' + Number(a.points).toFixed(1) + ' — ' + nameFor(b.roster_id) + ' ' + Number(b.points).toFixed(1) });
+            out.push({ kind: 'score', label: (board.error ? 'LAST UPDATE · ' : '') + (playoffWeek ? 'PLAYOFFS (INCL. CONSOLATION) · WK ' : 'WK ') + board.week, text: nameFor(a.roster_id) + ' ' + Number(a.points).toFixed(1) + ' — ' + nameFor(b.roster_id) + ' ' + Number(b.points).toFixed(1) });
         });
-        const margins = headToHead ? pairs.filter(p => p.some(x => Number(x.points) > 0)).map(pair => {
+        const margins = headToHead && !playoffWeek ? pairs.filter(p => p.some(x => Number(x.points) > 0)).map(pair => {
             const [a, b] = [...pair].sort((x, y) => Number(y.points) - Number(x.points));
             return { m: Number(a.points) - Number(b.points), win: a, lose: b };
         }).sort((x, y) => y.m - x.m) : [];
@@ -428,12 +489,12 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         }
         let hi = null;
         scoreRows.forEach(r => { const p = Number(r.points) || 0; if (!hi || p > hi.p) hi = { p, rid: r.roster_id }; });
-        if (hi && hi.p > 0) out.push({ kind: 'top', label: 'HIGH SCORE · WK ' + board.week, text: nameFor(hi.rid) + ' ' + hi.p.toFixed(1) });
+        if (hi && hi.p > 0 && !playoffWeek) out.push({ kind: 'top', label: 'HIGH SCORE · WK ' + board.week, text: nameFor(hi.rid) + ' ' + hi.p.toFixed(1) });
 
         const positions = (typeof window.getLeaguePositions === 'function' ? window.getLeaguePositions({ league: currentLeague }) : ['QB', 'RB', 'WR', 'TE']) || [];
         positions.forEach(pos => {
-            const top = leaders.find(r => r.pos === pos);
-            if (top) out.push({ kind: 'top', label: 'WK ' + statWeek + ' TOP ' + pos, pid: top.pid, text: top.name + ' ' + top.pts.toFixed(1) });
+            const top = leaders.key === leadersKey ? leaders.rows.find(r => r.pos === pos) : null;
+            if (top) out.push({ kind: 'top', label: 'WK ' + statWeek + ' TOP ' + pos + (leaders.at ? ' · AS OF ' + asOf(leaders.at) : ''), pid: top.pid, text: top.name + ' ' + top.pts.toFixed(1) });
         });
 
         // Loaded provider transactions only (DHQ's merged historical-trade
@@ -487,7 +548,7 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         if (historicalEdition || editionWeek !== 'latest') return editionStories;
         const priority = { record: -3, story: -2, recap: -1, nfllive: 0, score: 1, faab: 2, rec: 3, top: 4, nfl: 5, nflstat: 6, trend: 7 };
         return out.filter((item, i) => out.findIndex(x => x.kind === item.kind && x.text === item.text) === i).sort((a, b) => priority[a.kind] - priority[b.kind]);
-    }, [editionStories, nflScores, nflLeaders, board, leaders, transactions, trending, standings, currentLeague, playoffTeams, historicalEdition, editionWeek, supported, headToHead]);
+    }, [editionStories, nflScores, nflLeaders, stableBoard, leaders, leadersKey, transactions, trending, standings, currentLeague, playoffTeams, historicalEdition, editionWeek, supported, headToHead]);
 
     const [topic, setTopic] = React.useState('all');
     const [search, setSearch] = React.useState('');
@@ -597,7 +658,7 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         <div className="wr-journal-bar"><h2 id="wr-journal-title">The Wire<span>.</span></h2><span>{editionLeague.name || currentLeague.name || 'Your league'} <span className="wr-journal-dot">•</span> {editionLeague.season}</span><span className="wr-journal-bar-actions">{allWireButton}</span></div>
         <nav className="wr-journal-nav" aria-label="Wire sections">{topics.map(([value, label]) => <button key={value} type="button" aria-pressed={topic === value} onClick={() => setTopic(value)}>{label}</button>)}</nav>
         {topic !== 'nfl' && scorePairs.length > 0 && <section className="wr-journal-scorestrip" aria-label={'League scoreboard · Week ' + scoreWeek}>
-            <div className="wr-journal-scorestrip-label"><strong>WEEK {scoreWeek}</strong><span>{scoresFinal ? 'Results' : 'Scoreboard'}</span></div>
+            <div className="wr-journal-scorestrip-label"><strong>WEEK {scoreWeek}</strong><span>{Number(scoreWeek) > lastRegular && !historicalEdition ? 'Playoffs · incl. consolation games' : scoresFinal ? 'Results' : 'Scoreboard'}</span></div>
             <div className="wr-journal-scores" tabIndex={0} aria-label="Scroll league matchups">{scorePairs.map((pair, i) => {
                 const hasPoints = pair.some(r => Number(LLS.rosterPoints(r)) !== 0 && LLS.rosterPoints(r) != null);
                 return <div className="wr-journal-score-tile" key={i}><span className={'wr-journal-score-status' + (!scoresFinal && hasPoints ? ' is-current' : '')}>{scoresFinal ? 'Final' : board.error ? 'Last update' : hasPoints ? 'Score update' : 'Awaiting scores'}</span>{pair.map(r => { const pts = LLS.rosterPoints(r); return <div key={r.roster_id}>{teamBadge(r.roster_id)}<span title={editionName(r.roster_id)}>{editionName(r.roster_id)}</span><strong>{pts == null || (!scoresFinal && !hasPoints) ? '—' : Number(pts).toFixed(2)}</strong></div>; })}</div>;
@@ -605,7 +666,7 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         </section>}
         <div className="wr-journal-paper">
             {topic !== 'nfl' && <><header className="wr-journal-masthead"><div><span>{historicalEdition ? 'FROM THE ARCHIVE' : 'YOUR LEAGUE, COVERED'}</span><h3>{topic === 'all' ? 'League news' : topics.find(([value]) => value === topic)?.[1]}</h3></div><p>{editionLeague.season} <span> / </span> {editionWeek === 'all' ? 'Season in review' : selectedWeek >= editionStart ? 'Week ' + selectedWeek + ' edition' : 'Opening week'}</p></header>
-                <div className="wr-wire-edition-strip"><div><p>{edition.completedThrough >= editionStart ? `Results through Week ${edition.completedThrough}` : 'Awaiting the first completed results'}{!historicalEdition && editionWeek === 'latest' && board.week <= lastRegular ? ` · Week ${board.week} matchups` : ''}</p>{!historicalEdition && archive.key === historyKey && archive.checkedAt && <small>{archive.status === 'stale' ? 'Saved results · ' : archive.status === 'refreshing' ? 'Refreshing · ' : 'Results checked '}{reading.checked(archive.checkedAt)}</small>}</div><button type="button" disabled={archive.status === 'refreshing'} onClick={refreshEdition}>{archive.status === 'refreshing' ? 'Refreshing…' : 'Refresh edition'}</button>{studioAvailable && <button type="button" onClick={() => openStudio(null)}>Playoff picture →</button>}</div>
+                <div className="wr-wire-edition-strip"><div><p>{edition.completedThrough >= editionStart ? `Results through Week ${edition.completedThrough}` : 'Awaiting the first completed results'}{!historicalEdition && editionWeek === 'latest' && board.week <= lastRegular ? ` · Week ${board.week} ${headToHead ? 'matchups' : 'scores'}` : ''}</p>{!historicalEdition && archive.key === historyKey && archive.checkedAt && <small>{archive.status === 'stale' ? 'Saved results · ' : archive.status === 'refreshing' ? 'Refreshing · ' : 'Results checked '}{reading.checked(archive.checkedAt)}</small>}</div><button type="button" disabled={archive.status === 'refreshing'} onClick={refreshEdition}>{archive.status === 'refreshing' ? 'Refreshing…' : 'Refresh edition'}</button>{studioAvailable && <button type="button" onClick={() => openStudio(null)}>Playoff picture →</button>}</div>
                 <div className="wr-wire-reader-tools"><div className="wr-wire-search"><label>Find a story<input type="search" aria-label="Search this Wire" placeholder="Search this edition" value={search} onChange={e => setSearch(e.target.value)} /></label>{search && <button type="button" onClick={() => setSearch('')}>Clear search</button>}</div>
                     <details className="wr-journal-tools"><summary>Editions & teams <span className={teamFilter !== 'all' ? 'is-active' : ''}>{teamFilter !== 'all' ? editionName(teamFilter) : 'Browse another season, week, or team'}</span></summary>
                         <div className="wr-journal-filters">
@@ -681,11 +742,12 @@ function WrNflDesk({ desk, leaders = [] }) {
             </details>}
         </article>;
     };
+    const retryAt = desk.nextAt ? new Date(desk.nextAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
     const weekSection = (title, phase, data, previous = false) => <section className={'wr-nfl-week ' + (previous ? 'wr-nfl-previous' : 'wr-nfl-current')} aria-label={title} tabIndex={-1}>
         <header><h3>{title}</h3><span>{phaseLabel(phase)}</span></header>
         {data.status === 'ready' && sourceLine(data)}
         {data.status === 'loading' && <p role="status">Loading NFL games…</p>}
-        {data.status === 'error' && <p className="wr-nfl-notice" role="status">{data.games.length ? 'Showing the last available scores. The latest update couldn’t load.' : 'These NFL games couldn’t load.'} We’ll try again shortly.</p>}
+        {data.status === 'error' && <p className="wr-nfl-notice" role="status">{data.games.length ? 'Showing the last available scores. The latest update couldn’t load.' : 'These NFL games couldn’t load.'} {retryAt ? `Next try about ${retryAt}.` : 'Open this section again to retry.'}</p>}
         {data.status === 'ready' && !data.games.length && <p>{previous && !phase ? 'No earlier games in this phase yet. Results will appear after the opening week.' : 'No games are listed for this week.'}</p>}
         {data.games.length > 0 && <div className="wr-nfl-games">{data.games.slice().sort((a, b) => (Date.parse(a.kickoff) || 0) - (Date.parse(b.kickoff) || 0)).map(gameCard)}</div>}
     </section>;
@@ -694,6 +756,7 @@ function WrNflDesk({ desk, leaders = [] }) {
         section?.focus({ preventScroll: true });
         section?.scrollIntoView({ block: 'start' });
     };
+    if (desk.offseason) return <div className="wr-nfl-desk"><header className="wr-nfl-heading"><span>AROUND THE NFL</span><h3>The NFL offseason</h3><p>There are no games this week. Sleeper’s calendar will list the {desk.season ? Number(desk.season) + 1 + ' ' : ''}schedule when the new season opens.</p></header></div>;
     return <div className="wr-nfl-desk"><header className="wr-nfl-heading"><span>AROUND THE NFL</span><h3>The week in football</h3><p>This week’s games and last week’s results, all in one place.</p></header>
         <nav className="wr-nfl-jump" aria-label="NFL weeks"><button type="button" onClick={event => jumpToWeek(event, '.wr-nfl-current')}>This week</button>{desk.previousPhase && <button type="button" onClick={event => jumpToWeek(event, '.wr-nfl-previous')}>Last week’s results ↓</button>}</nav>
         {weekSection('This week', desk.phase, desk.current)}

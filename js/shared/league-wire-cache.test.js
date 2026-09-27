@@ -62,3 +62,50 @@ test('Dynasty HQ: private mode / blocked storage / quota never throw', async () 
     // Active seasons are never persisted.
     assert.equal(await quota.write({ ...complete, league: { ...complete.league, status: 'in_season' } }), false);
 });
+
+// Minimal in-memory IndexedDB: enough of the API for the archive adapter.
+function fakeIDB() {
+    const data = new Map(); let opens = 0; let version = 0;
+    const later = fn => setTimeout(fn, 0);
+    const store = {
+        indexNames: { contains: n => n === 'savedAt' && version >= 2 },
+        put(v) { data.set(v.id, structuredClone(v)); },
+        get(k) { const r = {}; later(() => { r.result = structuredClone(data.get(k)); r.onsuccess?.(); }); return r; },
+        count() { const r = {}; later(() => { r.result = data.size; r.onsuccess?.(); }); return r; },
+        createIndex() {},
+        index() { return { openCursor() {
+            const r = {}; const keys = [...data.values()].sort((a, b) => a.savedAt - b.savedAt).map(v => v.id); let i = 0;
+            const step = () => later(() => { const id = keys[i]; r.result = id === undefined ? null : { delete: () => data.delete(id), continue: () => { i++; step(); } }; r.onsuccess?.(); });
+            step(); return r; } }; },
+    };
+    const db = { objectStoreNames: { contains: () => version >= 1 }, createObjectStore: () => store, close() {},
+        transaction() { const tx = { objectStore: () => store }; later(() => later(() => later(() => tx.oncomplete?.()))); return tx; } };
+    return { data, opens: () => opens, api: { open(name, v) { opens++; const req = { result: db, transaction: { objectStore: () => store } }; later(() => { if (version < v) { version = v; req.onupgradeneeded?.(); } req.onsuccess?.(); }); return req; } } };
+}
+
+test('review nits: pruning walks the savedAt index (no full-store read); a failed open is retried after a minute', async () => {
+    const fake = fakeIDB();
+    let clock = 1000;
+    const r = { setTimeout, clearTimeout, indexedDB: fake.api, Date: { now: () => clock } }; r.window = r; vm.createContext(r);
+    vm.runInContext(src('league-wire-cache.js'), r);
+    for (let i = 0; i < 102; i++) fake.data.set('old' + i, { id: 'old' + i, version: 1, savedAt: i, season: {} });
+    const season = { league: { league_id: 'newest', season: '2025', status: 'complete', rosters: [{ roster_id: 1, owner_id: 'a' }], users: [] }, weeks: [], bracket: [{ r: 1, m: 1, t1: 1, t2: 2, w: 1, l: 2, p: 1, extra: 'x' }] };
+    clock = 5000;
+    assert.equal(await r.WrWireArchiveCache.write(season), true);
+    await new Promise(res => setTimeout(res, 20));
+    assert.equal(fake.data.size, 100, 'bounded to 100');
+    assert(!fake.data.has('old0') && !fake.data.has('old2') && fake.data.has('old3') && fake.data.has('newest'), 'oldest entries pruned');
+    const back = await r.WrWireArchiveCache.read('newest');
+    assert.deepEqual(JSON.parse(JSON.stringify(back.bracket)), [{ r: 1, m: 1, t1: 1, t2: 2, w: 1, l: 2, p: 1 }], 'bracket kept compactly with the season');
+    // Retry: open throws once; the adapter backs off 60s, then tries again.
+    let throwing = true; const f2 = fakeIDB(); let calls = 0;
+    const flaky = { open(...a) { calls++; if (throwing) throw Error('denied'); return f2.api.open(...a); } };
+    const r2 = { setTimeout, clearTimeout, indexedDB: flaky, Date: { now: () => clock } }; r2.window = r2; vm.createContext(r2);
+    vm.runInContext(src('league-wire-cache.js'), r2);
+    assert.equal(await r2.WrWireArchiveCache.read('x'), null);
+    throwing = false;
+    assert.equal(await r2.WrWireArchiveCache.read('x'), null); assert.equal(calls, 1, 'no hammering within the back-off');
+    clock += 61000;
+    assert.equal(await r2.WrWireArchiveCache.write(season), true, 'storage recovers later in the session');
+    assert.equal(calls, 2);
+});

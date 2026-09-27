@@ -103,3 +103,19 @@ test('Dynasty HQ storage: per-account + per-league keys, guest carry-over, quota
     failing = false; root.OD.getCurrentUserId = () => null; root.S = {};
     assert.equal(api.scope(), 'guest');
 });
+
+test('review S2: carry-over works for app league objects without previous_league_id', () => {
+    const store = new Map();
+    const localStorage = { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) };
+    const root = { localStorage, S: { myUserId: '7' }, CustomEvent: class { constructor(t) { this.type = t; } }, dispatchEvent() {} };
+    vm.runInContext(fs.readFileSync(path.join(__dirname, 'league-wire-rivalries.js'), 'utf8'), vm.createContext({ window: root, console }));
+    const api = root.WrWireRivalries;
+    const rosters = [{ roster_id: 1, owner_id: 'a' }, { roster_id: 2, owner_id: 'b' }];
+    const last = { league_id: 'S25', season: '2025', previous_league_id: 'S24', rosters };
+    api.set(last, ['a', 'b'], 'Old feud');
+    const appLeague = { id: 'S26', season: '2026', rosters }; // app.js shape: no previous_league_id key
+    const archive = [{ league: { league_id: 'S24', season: '2024', previous_league_id: null } }, { league: last }];
+    assert.equal(api.list(appLeague, archive)[0].name, 'Old feud', 'inherited from the newest earlier linked season');
+    assert.equal(api.list(appLeague, []).length, 0, 'no archive yet → nothing guessed');
+    assert.equal(api.list({ ...appLeague, previous_league_id: null }, archive).length, 0, 'an explicit “no predecessor” is respected');
+});

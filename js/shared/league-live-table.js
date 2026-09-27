@@ -5,7 +5,8 @@
 // Ported from C2 (WarRoom-sandbox, 2026-09-27). Public API and shapes are
 // C2's (The Wire's journal/portfolio call loadHistory directly):
 //   loadHistory({ league, week, signal?, force?, fetcher?, now? })
-//     → Promise<{ priorWeeks: [{ week, rows }], updatedAt }>  (weeks start..week-1)
+//     → Promise<{ priorWeeks: [{ week, rows }], updatedAt, unplayedFrom }>  (weeks start..week-1,
+//       ending before the first unplayed week)
 //   startedRosters({ rows, games, playersData, historical?, now? }) → [rosterId]
 //   useContext({ league, board, playersData, enabled?, games? })
 //     → { enabled, historical, future, currentWeek, lastReg, history, startedRosterIds, refresh }
@@ -19,6 +20,15 @@
 //   • startedRosters() also counts a passed kickoff as "started": the prod
 //     nfl-scoreboard relay caches game state for up to 3h, kickoff times never
 //     go stale.
+//   • An UNPLAYED week is not a completed week (review B1, 2026-09-27): a
+//     week where every team scored 0 (or where Sleeper's rows carry lineups
+//     and nobody started anyone — a pre-draft / not-yet-started league) would
+//     otherwise count as all-ties with 0.00 points. loadHistory() stops at the
+//     first unplayed week: priorWeeks holds only the weeks before it, and the
+//     result adds unplayedFrom (that week, else null). Callers that need every
+//     week (live standings) then fall back to Sleeper's official records.
+//     unplayedWeek(rows) is exported for the same rule elsewhere.
+//   • LRU cap of 40 history entries (was unbounded).
 //   • useContext({ enabled:false }) keeps the hook mounted but idle, so a
 //     collapsed/hidden standings view costs no requests; useContext({ games })
 //     reuses the caller's NFL schedule instead of polling the relay itself.
@@ -28,6 +38,13 @@
     const App = root.App = root.App || {};
     const historyCache = new Map();
     const HISTORY_TTL = 15 * 60 * 1000;
+    const HISTORY_MAX = 40;
+    // Every team on 0, or lineups present and nobody started → not played yet.
+    function unplayedWeek(rows) {
+        if (!Array.isArray(rows) || !rows.length) return false;
+        if (rows.every(r => App.LeagueLiveScores.rosterPoints(r) === 0)) return true;
+        return rows.every(r => Array.isArray(r.starters)) && !rows.some(r => r.starters.some(pid => pid != null && String(pid) !== '0' && String(pid) !== ''));
+    }
     const response = rows => ({ ok: true, json: async () => rows });
 
     async function loadHistory({ league, week, signal, force = false, fetcher, now = Date.now }) {
@@ -60,8 +77,13 @@
         }
         await Promise.all(Array.from({ length: Math.min(4, weeks.length) }, worker));
         priorWeeks.sort((a, b) => a.week - b.week);
-        const result = { priorWeeks, updatedAt: now() };
+        const cut = priorWeeks.findIndex(w => unplayedWeek(w.rows));
+        const unplayedFrom = cut >= 0 ? priorWeeks[cut].week : null;
+        if (cut >= 0) priorWeeks.length = cut;
+        const result = { priorWeeks, updatedAt: now(), unplayedFrom };
+        historyCache.delete(key);
         historyCache.set(key, result);
+        while (historyCache.size > HISTORY_MAX) historyCache.delete(historyCache.keys().next().value);
         return result;
     }
 
@@ -141,5 +163,5 @@
             refresh: () => setRevision(n => n + 1),
         };
     }
-    App.LeagueLiveTable = { loadHistory, startedRosters, useContext };
+    App.LeagueLiveTable = { loadHistory, startedRosters, useContext, unplayedWeek };
 })(typeof window !== 'undefined' ? window : globalThis);

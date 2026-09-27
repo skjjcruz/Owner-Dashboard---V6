@@ -11,7 +11,11 @@
 // placements per linked season, the same data the Trophy Room shows):
 //   fromSleeperHistory({ league, history, seasons }) → book | null
 //   syncFromHistory(league, seasons?) → reads WrHistory.getCached (no fetch),
-//     builds + registers the book, returns it (or null)
+//     else the archive's stored brackets (fromArchive); builds + registers
+//     the book, returns it (or null)
+//   loadBrackets({ seasons }) → fetches winners_bracket once per archived
+//     complete season (persisted with it), so the Wire never repeats the
+//     Trophy Room's history walk (review S8).
 //   register(book) / select(league) — registry keyed by every linked
 //     Sleeper league id, so past-season editions find the same book.
 //   enrich(edition, { league, board, end, nameFor }) — adds "Championship
@@ -60,6 +64,64 @@
             coverage: `Title games from Sleeper's playoff brackets, ${Math.min(...years)}–${Math.max(...years)} (${facts.length} season${facts.length === 1 ? '' : 's'} with a decided final). Team names are as they were that season. Final scores are not stored in this summary.`,
         };
     }
+    // Review S8: championship facts straight from the Wire's own archive, so
+    // opening the Wire never repeats the Trophy Room's history walk. Each
+    // archived (complete) season carries Sleeper's winners_bracket, fetched
+    // once (loadBrackets) and kept in the on-device archive. Same rule as the
+    // league-history loader: the p=1 game's winner/loser, else a lone
+    // highest-round game; names/owners from THAT season's rosters and users.
+    function finalOf(bracket) {
+        if (!Array.isArray(bracket) || !bracket.length) return null;
+        const p1 = bracket.filter(b => b && Number(b.p) === 1);
+        if (p1.length === 1) return p1[0];
+        if (p1.length) return null;
+        const maxR = Math.max(...bracket.map(b => Number(b?.r) || 0));
+        const top = bracket.filter(b => Number(b?.r) === maxR);
+        return top.length === 1 ? top[0] : null;
+    }
+    function fromArchive({ league, seasons = [] } = {}) {
+        const leagueId = str(league?.league_id || league?.id || '');
+        if (!leagueId) return null;
+        const champs = {};
+        (seasons || []).forEach(entry => {
+            const lg = entry?.league;
+            if (!lg || lg.status !== 'complete' || !Array.isArray(entry.bracket)) return;
+            const game = finalOf(entry.bracket);
+            if (!game || game.w == null) return;
+            const rosterOf = rid => (lg.rosters || []).find(r => str(r.roster_id) === str(rid));
+            const nameOf = rid => {
+                const user = (lg.users || []).find(u => str(u.user_id) === str(rosterOf(rid)?.owner_id));
+                return String(user?.metadata?.team_name || user?.display_name || user?.username || '').trim();
+            };
+            champs[Number(lg.season)] = { championName: nameOf(game.w), championOwnerId: rosterOf(game.w)?.owner_id || null,
+                runnerUpName: game.l != null ? nameOf(game.l) : null, runnerUpOwnerId: game.l != null ? rosterOf(game.l)?.owner_id || null : null };
+        });
+        return Object.keys(champs).length ? fromSleeperHistory({ league, history: { leagueId, championships: champs }, seasons }) : null;
+    }
+    // Fetch winners_bracket for archived complete seasons that lack one (4 at a
+    // time), persist it with the season, and return new season entries.
+    async function loadBrackets({ seasons = [], signal, fetcher = (...args) => root.fetch(...args) } = {}) {
+        const out = seasons.slice();
+        const todo = out.map((s, i) => [s, i]).filter(([s]) => s?.league?.status === 'complete' && !Array.isArray(s.bracket) && (s.league.league_id || s.league.id));
+        let cursor = 0;
+        async function worker() {
+            while (cursor < todo.length) {
+                if (signal?.aborted) return;
+                const [entry, i] = todo[cursor++];
+                try {
+                    const r = await fetcher('https://api.sleeper.app/v1/league/' + encodeURIComponent(entry.league.league_id || entry.league.id) + '/winners_bracket', { signal });
+                    if (!r.ok) continue;
+                    const raw = await r.json();
+                    if (!Array.isArray(raw)) continue;
+                    const bracket = raw.filter(b => b && typeof b === 'object').map(b => ({ r: b.r, m: b.m, t1: b.t1 ?? null, t2: b.t2 ?? null, w: b.w ?? null, l: b.l ?? null, p: b.p ?? null }));
+                    out[i] = { ...entry, bracket };
+                    try { await root.WrWireArchiveCache?.write?.(out[i]); } catch (_) { /* cache is optional */ }
+                } catch (_) { /* that season just has no title fact */ }
+            }
+        }
+        await Promise.all(Array.from({ length: Math.min(4, todo.length) }, worker));
+        return out;
+    }
     function register(book) {
         if (!book || !Array.isArray(book.leagueIds)) return false;
         const previous = registry.get(book.leagueIds[0]);
@@ -72,7 +134,8 @@
         if (!id) return null;
         let history = null;
         try { history = root.WrHistory?.getCached?.(id) || null; } catch (_) { history = null; }
-        const book = fromSleeperHistory({ league, history, seasons });
+        // The Trophy Room's cache when it exists (free); else the archive's brackets.
+        const book = fromSleeperHistory({ league, history, seasons }) || fromArchive({ league, seasons });
         if (book) register(book);
         return book || select(league);
     }
@@ -186,5 +249,5 @@
         return { ...edition, stories: edition.stories.map(decorate).concat(stories), previews,
             chronicle: { name: book.name, coverage: book.coverage, finals, records: [], sources: [...new Set(eligible.flatMap(f => f.sources).map(citation))], excluded: [] } };
     }
-    root.WrWireChronicles = { fromSleeperHistory, register, syncFromHistory, select, enrich };
+    root.WrWireChronicles = { fromSleeperHistory, fromArchive, loadBrackets, finalOf, register, syncFromHistory, select, enrich };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -75,16 +75,19 @@ function componentHarness(league, extra = {}) {
         Fragment: 'fragment',
         useState: initial => { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], v => { slots[i] = typeof v === 'function' ? v(slots[i]) : v; }]; },
         useRef: initial => { const i = cursor++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; },
-        useMemo: fn => fn(), useCallback: fn => fn, useEffect: fn => effects.push(fn),
+        useMemo: (fn, deps) => { const i = cursor++; const prev = slots[i]; if (prev && deps && prev.deps.length === deps.length && deps.every((d, n) => Object.is(d, prev.deps[n]))) return prev.value; const value = fn(); slots[i] = { deps, value }; return value; },
+        useCallback: (fn, deps) => React.useMemo(() => fn, deps), useEffect: fn => effects.push(fn),
     };
     const window = { App: {}, fetch: async url => { calls.push(url); throw Error('unexpected network: ' + url); }, addEventListener() {}, removeEventListener() {}, matchMedia: () => ({ matches: false }), S: {}, ...extra };
     const ctx = { React, window, document: { hidden: false, addEventListener() {}, removeEventListener() {} }, console, setTimeout, clearTimeout, AbortController };
     vm.createContext(ctx);
     for (const f of ['league-live-scores', 'league-live-table', 'league-wire-reading', 'league-wire-journal']) vm.runInContext(fs.readFileSync(path.join(__dirname, `${f}.js`), 'utf8').replace('typeof window !== \'undefined\' ? window : globalThis', 'window'), ctx);
-    window.App.LeagueLiveScores.useScores = () => ({ week: 3, rows: [], status: 'idle', error: null });
+    const boardRows = [];
+    window.App.LeagueLiveScores.useScores = () => ({ week: 3, rows: boardRows, status: 'idle', error: null, updatedAt: 1, refresh() {} }); // a NEW object every render, like the real hook
     vm.runInContext(babel.transform(fs.readFileSync(path.join(__dirname, '..', 'components', 'league-wire.js'), 'utf8'), { presets: ['react'] }).code, ctx);
-    const render = () => { cursor = 0; return window.WrLeagueWire({ currentLeague: league, standings: [], transactions: [], playersData: {}, sleeperUserId: '123' }); };
-    return { render, effects, calls, window };
+    const props = { currentLeague: league, standings: [], transactions: [], playersData: {}, sleeperUserId: '123' }; // stable, like parent state
+    const render = () => { cursor = 0; return window.WrLeagueWire(props); };
+    return { render, effects, calls, window, ctx };
 }
 const nodes = n => n && typeof n === 'object' ? [n, ...n.children.flatMap(nodes)] : [];
 const text = n => n == null || typeof n === 'boolean' ? '' : typeof n !== 'object' ? String(n) : n.children.map(text).join(' ');
@@ -124,4 +127,46 @@ test('NFL desk: relay copies say "live score unavailable" and show no number; ES
     const fresh = Desk({ desk: { phase: { season: '2026', seasontype: 2, week: 3 }, previousPhase: null, current: { status: 'ready', games: [{ ...game, liveUnavailable: false, homeScore: 10, awayScore: 7, shortDetail: 'Q2 3:00' }], source: 'espn', checkedAt: Date.parse('2026-09-27T17:40:00Z') }, previous: { status: 'ready', games: [] } } });
     assert.match(text(fresh), /ESPN scoreboard · checked/);
     assert.match(text(fresh), /Q2 3:00/);
+});
+
+test('review S9: typing does not rebuild the edition (board identity churn ignored)', () => {
+    const h = componentHarness({ league_id: '999', season: '2026', name: 'Sample', settings: { playoff_week_start: 15 }, rosters: [{ roster_id: 1, owner_id: 'a' }, { roster_id: 2, owner_id: 'b' }], users: [] });
+    let builds = 0; const real = h.window.WrWireStories.build;
+    h.window.WrWireStories.build = (...a) => { builds++; return real(...a); };
+    h.render(); h.render(); h.render();
+    assert.equal(builds, 1, 'three renders with an unchanged board → one build');
+});
+
+test('review S6: a game whose kickoff passed without a final counts as live (blocked ESPN / stale relay)', () => {
+    const h = componentHarness({ id: 'x', _platform: 'espn' });
+    const live = h.ctx.wireGameLive, now = Date.parse('2026-09-27T18:00:00Z');
+    assert.equal(live({ state: 'pre', completed: false, kickoff: '2026-09-27T17:00:00Z' }, now), true);
+    assert.equal(live({ state: 'in', completed: false, liveUnavailable: true, kickoff: '2026-09-27T17:00:00Z' }, now), true);
+    assert.equal(live({ state: 'post', completed: true, kickoff: '2026-09-27T17:00:00Z' }, now), false);
+    assert.equal(live({ state: 'pre', completed: false, kickoff: '2026-09-27T20:00:00Z' }, now), false);
+    assert.equal(live({ state: 'pre', completed: false, statusName: 'STATUS_POSTPONED', kickoff: '2026-09-27T17:00:00Z' }, now), false);
+    assert.equal(live({ state: 'pre', completed: false, kickoff: '2026-09-26T17:00:00Z' }, now), false, 'a stuck status stops counting after 6h');
+});
+
+test('review S5 + S4: an all-final week is not re-downloaded every minute; the week in progress reads fresh stats with a time', async () => {
+    const urls = [];
+    const finals = { events: [espnEvent('1', 'post', true, 27, 20), espnEvent('4', 'post', true, 10, 13)] };
+    let clock = 1000000;
+    const root = load({ fetch: async url => { urls.push(url); return { ok: true, json: async () => (/stats/.test(url) ? { p1: { pass_yd: 99 } } : /week=2/.test(url) ? finals : scoreboard) }; } });
+    root.Date = { now: () => clock };
+    vm.runInContext(fs.readFileSync(path.join(__dirname, 'league-wire-nfl.js'), 'utf8'), vm.createContext(root));
+    await root.WrWireNfl.loadScoreboard(2, '2026', 2); await root.WrWireNfl.loadScoreboard(3, '2026', 2);
+    await new Promise(r => setTimeout(r, 0));
+    clock += 61000;
+    await root.WrWireNfl.loadScoreboard(2, '2026', 2); await root.WrWireNfl.loadScoreboard(3, '2026', 2);
+    assert.equal(urls.filter(u => /week=2/.test(u)).length, 1, 'last week (all final) is kept');
+    assert.equal(urls.filter(u => /week=3/.test(u)).length, 2, 'this week refreshes');
+    const live = await root.WrWireNfl.liveWeekStats('2026', 3, 'regular');
+    assert.equal(live.at, clock); assert.equal(live.stats.p1.pass_yd, 99);
+    assert.equal(urls.filter(u => /stats\/nfl\/regular\/2026\/3$/.test(u)).length, 1);
+    await root.WrWireNfl.liveWeekStats('2026', 3, 'regular');
+    assert.equal(urls.filter(u => /stats\/nfl/.test(u)).length, 1, '≤1 request per 55s');
+    clock += 56000;
+    await root.WrWireNfl.liveWeekStats('2026', 3, 'regular');
+    assert.equal(urls.filter(u => /stats\/nfl/.test(u)).length, 2, 'then fresh again');
 });

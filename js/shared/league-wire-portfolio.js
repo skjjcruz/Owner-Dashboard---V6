@@ -45,6 +45,9 @@
                 const nameFor = rid => root.WrWireStories.oldName(league, rid);
                 const scheduleExpected = span.live && span.week <= root.WrWireStories.bounds(league).end;
                 const scoresExpected = span.end >= span.start;
+                // Results end before the first UNPLAYED week (review B1) — that is
+                // "not started yet", not "failed to load".
+                let resultsEnd = span.end;
                 let weeks = [], past = { seasons: [], complete: false }, board = null;
                 let scoresLoaded = false, scheduleLoaded = !scheduleExpected, scoresError = '', scheduleError = '', archiveError = '';
                 let scoresUpdatedAt = null, scheduleUpdatedAt = null, publishedSelectionKey = '';
@@ -56,8 +59,8 @@
                     const edition = root.WrWireStories.build({ rivalries, league, weeks, start: span.start, end: span.end, priorSeasons: past.seasons, archiveComplete: past.complete,
                         board, nameFor, headToHead: !root.App?.Chopped?.isChopped?.(league) && league.type !== 'chopped' && league.leagueSkin?.type !== 'chopped',
                         playerName: pid => root.S?.players?.[pid]?.full_name || 'A starting player' });
-                    const stories = edition.stories.filter(s => s.documentary || s.week === span.end).concat(edition.previews);
-                    const scoresReady = scoresLoaded && edition.completedThrough >= span.end;
+                    const stories = edition.stories.filter(s => s.documentary || s.week === resultsEnd).concat(edition.previews);
+                    const scoresReady = scoresLoaded && edition.completedThrough >= resultsEnd;
                     const currentReady = scoresReady && scheduleLoaded;
                     const currentError = [scoresError || (scoresLoaded && !scoresReady ? 'Some completed scores could not load. Refresh to retry.' : ''), scheduleError].filter(Boolean).join(' ');
                     const error = [currentError, archiveError].filter(Boolean).join(' ');
@@ -65,14 +68,14 @@
                     // When both sources are present, show the older successful snapshot.
                     const currentTimes = [scoresExpected && scoresReady ? scoresUpdatedAt : null, scheduleLoaded ? scheduleUpdatedAt : null].filter(t => t != null);
                     const currentUpdatedAt = currentTimes.length ? Math.min(...currentTimes) : null;
-                    const value = { rivalryProfiles: edition.rivals || [], race: root.WrWirePlayoffs?.race({ league, edition: { ...edition, expectedThrough: span.end } }) || null, league, historical: Number(league.season) < Number(nfl.season), status: status === 'ready' && (error || !currentReady) ? 'partial' : status, error, currentError, archiveError, currentUpdatedAt, resultsReady: scoresExpected && scoresReady, scheduleReady: scheduleExpected && scheduleLoaded, stories, week: span.week, completedThrough: edition.completedThrough, priorSeasons: past.seasons.length, rivalryHistory: past.seasons.map(s => ({ league: s.league })), reusedSeasons: past.fromMemory ? past.seasons.length : past.savedCount || 0, currentReady, at: now() };
+                    const value = { rivalryProfiles: edition.rivals || [], race: root.WrWirePlayoffs?.race({ league, edition: { ...edition, expectedThrough: resultsEnd } }) || null, league, historical: Number(league.season) < Number(nfl.season), status: status === 'ready' && (error || !currentReady) ? 'partial' : status, error, currentError, archiveError, currentUpdatedAt, resultsReady: scoresExpected && scoresReady, scheduleReady: scheduleExpected && scheduleLoaded, stories, week: span.week, completedThrough: edition.completedThrough, priorSeasons: past.seasons.length, rivalryHistory: past.seasons.map(s => ({ league: s.league })), reusedSeasons: past.fromMemory ? past.seasons.length : past.savedCount || 0, currentReady, at: now() };
                     onUpdate(value); return value;
                 };
                 publish('loading');
                 // Current news is usable while the older archive is still loading.
                 await Promise.allSettled([
                     (async () => {
-                        try { const r = await root.App.LeagueLiveTable.loadHistory({ league, week: span.end + 1, signal, force, fetcher, now }); if (!Array.isArray(r?.priorWeeks)) throw Error('Invalid completed scores'); weeks = r.priorWeeks; scoresLoaded = true; scoresUpdatedAt = Number.isFinite(r.updatedAt) ? r.updatedAt : now(); }
+                        try { const r = await root.App.LeagueLiveTable.loadHistory({ league, week: span.end + 1, signal, force, fetcher, now }); if (!Array.isArray(r?.priorWeeks)) throw Error('Invalid completed scores'); weeks = r.priorWeeks; if (Number(r.unplayedFrom) > 0) resultsEnd = Math.min(span.end, Number(r.unplayedFrom) - 1); scoresLoaded = true; scoresUpdatedAt = Number.isFinite(r.updatedAt) ? r.updatedAt : now(); }
                         catch (_) { scoresError = 'Some completed scores could not load. Refresh to retry.'; }
                         publish('loading');
                     })(),

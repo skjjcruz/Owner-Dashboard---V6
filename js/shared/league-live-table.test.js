@@ -141,3 +141,29 @@ test('useContext({ games }) reuses the caller schedule and never calls the relay
     const cleanup = effect(); await new Promise(r => setImmediate(r)); cleanup();
     assert.equal(relay, 0);
 });
+
+test('review B1: an unplayed week (all 0.00, or no one started) ends the completed baseline — never 0-0 ties', async () => {
+    const root = load(), E = root.App.LeagueLiveTable;
+    const league = { league_id: '140244429948798', season: '2026', rosters: [{ roster_id: 1 }, { roster_id: 2 }], settings: {} };
+    const played = [{ roster_id: 1, points: 101.5, starters: ['a'] }, { roster_id: 2, points: 90, starters: ['b'] }];
+    const zeros = [{ roster_id: 1, points: 0, starters: [] }, { roster_id: 2, points: 0, starters: [] }];
+    const emptyLineups = [{ roster_id: 1, points: 0.5, starters: ['0', null] }, { roster_id: 2, points: 0, starters: [] }];
+    const byWeek = { 1: played, 2: zeros, 3: played };
+    const res = await E.loadHistory({ league, week: 4, fetcher: async url => response(byWeek[Number(url.split('/').pop())]) });
+    assert.deepEqual(plain(res.priorWeeks.map(w => w.week)), [1], 'stops at the first unplayed week');
+    assert.equal(res.unplayedFrom, 2);
+    const pre = await E.loadHistory({ league: { ...league, league_id: '140244429948799' }, week: 3, fetcher: async () => response(zeros) });
+    assert.equal(pre.priorWeeks.length, 0, 'a pre-draft league has no completed weeks');
+    assert.equal(pre.unplayedFrom, 1);
+    assert.equal(E.unplayedWeek(emptyLineups), true, 'lineups present but nobody started');
+    assert.equal(E.unplayedWeek(played), false);
+    assert.equal(E.unplayedWeek([{ roster_id: 1, points: 0 }, { roster_id: 2, points: -3.5 }]), false, 'a real negative score is a played week');
+    assert.equal(E.unplayedWeek([{ roster_id: 1, points: 12 }, { roster_id: 2, points: 0 }]), false, 'one idle team does not void the week');
+    // Standings then fall back to official records instead of all-tie rows.
+    const sctx = { window: { App: {} }, console };
+    vm.createContext(sctx);
+    for (const file of ['league-live-scores.js', 'league-live-standings.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), sctx);
+    const table = sctx.window.App.LeagueLiveStandings.compute({ league: { ...league, settings: { start_week: 1, playoff_week_start: 15 } }, priorWeeks: pre.priorWeeks, board: { week: 3, rows: zeros }, week: 3, currentWeek: 3 });
+    assert.equal(table.status, 'official');
+    assert(table.rows.every(r => r.ties === 0), 'no invented ties');
+});

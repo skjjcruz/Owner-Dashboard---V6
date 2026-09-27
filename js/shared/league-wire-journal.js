@@ -20,12 +20,16 @@
 (function (root) {
     'use strict';
     const cache = new Map();
+    const CACHE_MAX = 24;
     const id = value => String(value);
     const points = row => root.App.LeagueLiveScores.rosterPoints(row);
     const fmt = n => Number(n).toFixed(2);
     const round = n => Math.round(n * 100) / 100;
+    // Scoring rules compared by effect: a 0-valued key equals a missing key, and
+    // float noise (0.1 vs 0.10000000149) is rounded away (review S1 nit).
     const signature = league => JSON.stringify([
-        Object.entries(league.scoring_settings || {}).sort(([a], [b]) => a.localeCompare(b)),
+        Object.entries(league.scoring_settings || {}).map(([k, v]) => [k, typeof v === 'number' ? Math.round(v * 10000) / 10000 : v])
+            .filter(([, v]) => v !== 0 && v != null).sort(([a], [b]) => a.localeCompare(b)),
         (league.roster_positions || []).filter(p => p !== 'BN' && p !== 'IR').slice().sort(),
     ]);
     const bounds = league => ({ start: Math.max(1, Number(league.settings?.start_week) || 1), end: Math.min(18, (Number(league.settings?.playoff_week_start) || 19) - 1) });
@@ -45,6 +49,15 @@
         rows.forEach(r => { if (r.matchup_id != null) { const k = id(r.matchup_id); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); } });
         if (isH2H(league) && [...groups.values()].some(g => g.length !== 2)) return null;
         return [...groups.values()].filter(g => g.length === 2);
+    }
+    // A structurally complete week can still be UNPLAYED (review B1): every
+    // team on 0.00, or lineups present and nobody started (pre-draft, or a
+    // week that hasn't begun). Such a week is never a completed result — the
+    // edition stops before it. Same rule as App.LeagueLiveTable.unplayedWeek.
+    function played(rows) {
+        if (!Array.isArray(rows) || !rows.length) return false;
+        if (rows.every(r => points(r) === 0)) return false;
+        return !(rows.every(r => Array.isArray(r.starters)) && !rows.some(r => r.starters.some(pid => pid != null && id(pid) !== '0' && id(pid) !== '')));
     }
     function usableSaved(saved, previous, year) {
         try {
@@ -66,11 +79,12 @@
             if (!response.ok) throw new Error('unavailable');
             return response.json();
         };
-        let complete = false, reason = '';
+        let complete = false, reason = '', previousLeagueId = null;
         try {
             const current = await json(encodeURIComponent(league.league_id || league.id));
             if (!current || !Object.prototype.hasOwnProperty.call(current, 'previous_league_id')) throw new Error('unavailable');
             let previous = current.previous_league_id, year = Number(league.season);
+            previousLeagueId = previous && id(previous) !== '0' ? id(previous) : null;
             while (previous && id(previous) !== '0') {
                 if (seen.has(id(previous)) || seasons.length >= 25) { reason = 'The linked history ends before the archive can be verified in full.'; break; }
                 seen.add(id(previous));
@@ -103,8 +117,10 @@
             if (signal?.aborted) throw new Error('Archive loading was interrupted.');
             reason = 'Some linked seasons could not be verified. Records cover the loaded seasons only.';
         }
-        const result = { seasons, complete, reason, savedCount, at: now() };
+        const result = { seasons, complete, reason, savedCount, at: now(), previousLeagueId };
+        cache.delete(key);
         cache.set(key, result);
+        while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
         return result;
     }
     const choose = (variants, week, rid) => variants[(Number(week) + (Number(rid) || 0)) % variants.length];
@@ -160,7 +176,7 @@
                 const range = bounds(s.league);
                 if (w.week < range.start || w.week > range.end) continue;
                 const pairs = inspect(w.rows, s.league);
-                if (!pairs) continue;
+                if (!pairs || !played(w.rows)) continue;
                 w.rows.forEach(r => { historicalHigh = collectRecord(points(r), historicalRecords, { season: s.league.season, week: w.week, name: oldName(s.league, r.roster_id), points: points(r) }, historicalHigh); });
                 if (comparable) w.rows.forEach(r => { archiveHigh = collectRecord(points(r), archiveRecords, { season: s.league.season, week: w.week, name: oldName(s.league, r.roster_id), points: points(r) }, archiveHigh); });
                 if (!isH2H(s.league)) continue;
@@ -175,6 +191,8 @@
             }
         });
         const priorHigh = archiveHigh;
+        // Guillotine: a chopped team's row is not part of the week's field.
+        const field = (rows, week) => rows.filter(r => { const roster = league.rosters?.find(t => id(t.roster_id) === id(r.roster_id)); return !roster || !root.App?.Chopped?.isAliveInWeek || root.App.Chopped.isAliveInWeek(roster, week); }).length;
         const series = (a, b) => games.filter(g => (g.a === a && g.b === b) || (g.a === b && g.b === a));
         let latestTable = [], previousTable = [];
         const seats = Number(league.settings?.playoff_teams) || 0;
@@ -182,7 +200,7 @@
         const simpleRace = headToHead && seats > 0 && Number(league.settings?.divisions || 0) < 2 && !league.settings?.playoff_seed_type;
         for (let week = start; week <= end; week++) {
             const rows = previous.get(week), pairs = inspect(rows, league);
-            if (!pairs) break;
+            if (!pairs || !played(rows)) break;
             completedThrough = week;
             const add = (kind, category, text, body, rosterIds = [], extra = {}) => {
                 const story = { id: `${season}:${week}:${category}:${rosterIds.join(':')}:${stories.length}`, kind, category, week, season, label: `WK ${week} · ${category.toUpperCase()}`, text, body, rosterIds, ...extra };
@@ -194,14 +212,16 @@
             const sorted = rows.slice().sort((a, b) => points(b) - points(a)), best = points(sorted[0]);
             const top = sorted.filter(r => points(r) === best), winners = top.map(r => nameFor(r.roster_id)).join(' & ');
             if (high !== null && best >= high) add('record', 'Record book', `${best > high ? 'A new season scoring high' : 'Season scoring high matched'}: ${winners}`, `A ${fmt(best)}-point week ${best > high ? 'beats' : 'matches'} the previous season high of ${fmt(high)}.`, top.map(r => r.roster_id), { weight: 85, metric: fmt(best), metricLabel: 'fantasy points' });
-            if (priorSeasons.length > 0 && archiveHigh !== null && best > archiveHigh) add('record', 'History made', `An archive scoring high for ${winners}`, `A ${fmt(best)}-point week beats the previous archived high of ${fmt(archiveHigh)}. ${archiveComplete && !rulesChanged ? 'Every linked season has been checked.' : 'Compared with loaded seasons using the same scoring and starting positions.'}`, top.map(r => r.roster_id), { weight: 100, metric: fmt(best), metricLabel: 'new archive high' });
+            // Needs a COMPARABLE earlier season: archiveHigh here is the max of
+            // that and this season's weeks so far (review S1).
+            if (priorHigh !== null && archiveHigh !== null && best > archiveHigh) add('record', 'History made', `An archive scoring high for ${winners}`, `A ${fmt(best)}-point week beats the previous archived high of ${fmt(archiveHigh)}. ${archiveComplete && !rulesChanged ? 'Every linked season has been checked.' : 'Compared with loaded seasons using the same scoring and starting positions.'}`, top.map(r => r.roster_id), { weight: 100, metric: fmt(best), metricLabel: 'new archive high' });
             if (high === null || best >= high) {
                 if (high === null || best > high) records.length = 0;
                 top.forEach(r => records.push({ week, rosterId: r.roster_id, points: best })); high = best;
             }
             rows.forEach(r => { historicalHigh = collectRecord(points(r), historicalRecords, { season, week, name: nameFor(r.roster_id), points: points(r) }, historicalHigh); });
             rows.forEach(r => { archiveHigh = collectRecord(points(r), archiveRecords, { season, week, name: nameFor(r.roster_id), points: points(r) }, archiveHigh); });
-            add('story', 'Scoring crown', choose([`Top of the scoring pile: ${winners}`, `The weekly scoring crown goes to ${winners}`, `The week belongs to ${winners}`], week, top[0].roster_id), `${top.length > 1 ? 'A share of the weekly crown' : 'The highest score of the week'}: ${fmt(best)} points in a ${rows.length}-team field.${top.length === 1 && sorted[1] ? ` That’s ${fmt(best - points(sorted[1]))} more than the next-best total.` : ''}`, top.map(r => r.roster_id), { weight: 45, metric: fmt(best), metricLabel: 'weekly high' });
+            add('story', 'Scoring crown', choose([`Top of the scoring pile: ${winners}`, `The weekly scoring crown goes to ${winners}`, `The week belongs to ${winners}`], week, top[0].roster_id), `${top.length > 1 ? 'A share of the weekly crown' : 'The highest score of the week'}: ${fmt(best)} points in a ${field(rows, week)}-team field.${top.length === 1 && sorted[1] ? ` That’s ${fmt(best - points(sorted[1]))} more than the next-best total.` : ''}`, top.map(r => r.roster_id), { weight: 45, metric: fmt(best), metricLabel: 'weekly high' });
             rows.forEach(r => {
                 const rid = id(r.roster_id), old = scoreTotals.get(rid) || 0, total = round(old + points(r));
                 scoreTotals.set(rid, total); stats.get(rid).pf = total;
@@ -394,5 +414,5 @@
         const enriched = root.WrWireChronicles?.enrich(result, { league, board: headToHead ? board : null, end, nameFor }) || result;
         return root.WrWireGraphics?.enrich(enriched, { league, weeks, start, end, priorSeasons, archiveComplete, nameFor }) || enriched;
     }
-    root.WrWireStories = { build, loadArchive, signature, inspect, bounds, oldName, frontPage, weeklyLookback };
+    root.WrWireStories = { build, loadArchive, signature, inspect, played, bounds, oldName, frontPage, weeklyLookback };
 })(typeof window !== 'undefined' ? window : globalThis);

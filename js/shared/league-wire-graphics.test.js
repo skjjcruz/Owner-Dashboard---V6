@@ -78,7 +78,13 @@ test('Wire graphics: verified comparisons, owner identity, cutoffs, median scope
     const firstWeek = build({ end: 0, weeks: [], board: { ...board, week: 1 } }).previews.find(s => s.rosterIds.includes(1)).broadcast;
     assert(firstWeek.teams.every(t => t.record === null && t.average === null && t.h2hRecord === null), 'unplayed current form stays unknown, not 0–0 and zero points');
     assert.equal(firstWeek.throughWeek, null);
-    const zero = build({ end: 1, weeks: [{ week: 1, rows: [row(1, 55, 1, { custom_points: 0 }), row(2, 0), row(3, 0, 2), row(4, 0, 2)] }], board: { ...board, week: 2 } }).previews.find(s => s.rosterIds.includes(1)).broadcast;
+    // Dynasty HQ (review B1): a week where EVERY team is on 0.00 is unplayed,
+    // not a round of 0–0 ties — form stays unknown.
+    const unplayed = build({ end: 1, weeks: [{ week: 1, rows: [row(1, 55, 1, { custom_points: 0 }), row(2, 0), row(3, 0, 2), row(4, 0, 2)] }], board: { ...board, week: 2 } }).previews.find(s => s.rosterIds.includes(1)).broadcast;
+    assert(unplayed.teams.every(t => t.average === null && t.h2hRecord === null), 'an all-zero week is not a result');
+    assert(!series(unplayed, 'regular-season') || !series(unplayed, 'regular-season').meetings.some(m => m.season === 2026));
+    // A played week keeps a verified custom zero and a real zero.
+    const zero = build({ end: 1, weeks: [{ week: 1, rows: [row(1, 55, 1, { custom_points: 0 }), row(2, 0), row(3, 12, 2), row(4, 0, 2)] }], board: { ...board, week: 2 } }).previews.find(s => s.rosterIds.includes(1)).broadcast;
     assert(zero.teams.every(t => t.average === 0), 'verified zero and custom zero are preserved');
     assert(zero.teams.every(t => t.h2hRecord === '0–0–1'));
     assert.equal(series(zero, 'regular-season').ties, 1);
