@@ -613,8 +613,11 @@ function CompareTab({
         };
     };
     const getFaab = (roster) => {
-        const isFaab = currentLeague?.settings?.waiver_type === 2 || Number(currentLeague?.settings?.waiver_budget || 0) > 0;
-        const budget = isFaab ? Number(currentLeague?.settings?.waiver_budget || 100) : 0;
+        // One definition app-wide (App.FaabLeague): budget AND Sleeper waiver_type 2.
+        const isFaab = window.App?.FaabLeague?.isFaabLeague
+            ? window.App.FaabLeague.isFaabLeague(currentLeague)
+            : (Number(currentLeague?.settings?.waiver_budget || 0) > 0 && (currentLeague?.settings?.waiver_type == null || Number(currentLeague.settings.waiver_type) === 2));
+        const budget = isFaab ? Number(currentLeague?.settings?.waiver_budget || 0) : 0;
         const spent = Number(roster?.settings?.waiver_budget_used || 0);
         const remaining = budget ? Math.max(0, budget - spent) : 0;
         return {

@@ -204,7 +204,9 @@ const WrCalendar = (function () {
                 date: nextWaiver,
                 icon: '💰',
                 type: 'recurring',
-                detail: 'Every ' + dayNames[waiverDay] + (settings.waiver_budget ? ' · $' + settings.waiver_budget + ' FAAB' : ''),
+                // $ FAAB only where the league bids (App.FaabLeague) — Sleeper keeps
+                // a $100 budget on rolling-waiver leagues too.
+                detail: 'Every ' + dayNames[waiverDay] + ((window.App?.FaabLeague?.isFaabLeague ? window.App.FaabLeague.isFaabLeague({ settings }) : (settings.waiver_budget > 0 && (settings.waiver_type == null || Number(settings.waiver_type) === 2))) ? ' · $' + settings.waiver_budget + ' FAAB' : ''),
             });
         }
 

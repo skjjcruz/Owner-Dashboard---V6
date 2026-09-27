@@ -126,8 +126,10 @@
         const faabVital = (() => {
             const ls = currentLeague?.settings || {};
             const budget = Number(ls.waiver_budget) || 0;
-            const isFaab = budget > 0 && (ls.waiver_type == null || Number(ls.waiver_type) === 2);
-            if (!isFaab) return { label: 'FAAB', value: '—', color: colors.textMuted, sub: 'no FAAB' };
+            const isFaab = window.App?.FaabLeague?.isFaabLeague
+                ? window.App.FaabLeague.isFaabLeague(currentLeague)
+                : budget > 0 && (ls.waiver_type == null || Number(ls.waiver_type) === 2);
+            if (!isFaab) return { label: 'FAAB', value: '—', color: colors.textMuted, sub: window.App?.FaabLeague?.waiverLabel ? window.App.FaabLeague.waiverLabel(currentLeague) : 'no FAAB' };
             const used = Number(myRoster?.settings?.waiver_budget_used) || 0;
             const left = Math.max(0, budget - used);
             return {

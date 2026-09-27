@@ -121,10 +121,14 @@ function IntelligenceBriefWidget({
     const scores = window.App?.LI?.playerScores || {};
     const ownerProfiles = window.App?.LI?.ownerProfiles || {};
 
-    // FAAB
-    const budget = currentLeague?.settings?.waiver_budget || 0;
-    const spent = myRoster?.settings?.waiver_budget_used || 0;
-    const faabRemaining = Math.max(0, budget - spent);
+    // FAAB — only where the league actually bids (App.FaabLeague: budget AND
+    // Sleeper waiver_type 2). Sleeper keeps a $100 budget on rolling-waiver
+    // leagues too, which used to read "You've got $100 FAAB left" there.
+    const _faab = window.App?.FaabLeague?.faab
+        ? window.App.FaabLeague.faab(currentLeague, myRoster)
+        : (() => { const st = currentLeague?.settings || {}; const on = (Number(st.waiver_budget) || 0) > 0 && (st.waiver_type == null || Number(st.waiver_type) === 2); const b = on ? Number(st.waiver_budget) || 0 : 0; return { budget: b, remaining: on ? Math.max(0, b - (Number(myRoster?.settings?.waiver_budget_used) || 0)) : 0 }; })();
+    const budget = _faab.budget;
+    const faabRemaining = _faab.remaining;
 
 	    // free-agency.js is a deferred module group (see js/module-loader.js); it owns
 	    // getFreeAgencyBriefTarget. Kick off the load and recompute once it lands so the

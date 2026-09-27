@@ -1325,10 +1325,13 @@
                 case 'faab-efficiency': {
                     // The FAAB budget is a LEAGUE setting (waiver_budget, FAAB when
                     // waiver_type === 2); only the spend lives on the roster.
+                    // One definition app-wide: App.FaabLeague (js/shared/faab-league.js).
                     const _ls = currentLeague?.settings || {};
-                    const budget = (_ls.waiver_type === 2 ? Number(_ls.waiver_budget) || 0 : 0) || myRoster?.settings?.waiver_budget || 0;
+                    const _fl = window.App?.FaabLeague;
+                    const budget = _fl ? _fl.faab(currentLeague, myRoster).budget
+                        : ((Number(_ls.waiver_budget) || 0) > 0 && (_ls.waiver_type == null || Number(_ls.waiver_type) === 2) ? Number(_ls.waiver_budget) || 0 : 0);
                     const spent = myRoster?.settings?.waiver_budget_used || 0;
-                    if (!budget) return { value: '\u2014', sub: 'No FAAB', color: 'var(--silver)' };
+                    if (!budget) return { value: '\u2014', sub: _fl ? 'No FAAB · ' + _fl.waiverLabel(currentLeague) : 'No FAAB', color: 'var(--silver)' };
                     const remaining = budget - spent;
                     return { value: '$' + remaining, sub: '$' + budget + ' budget', color: remaining > budget * 0.5 ? 'var(--k-2ecc71, #2ecc71)' : remaining > budget * 0.25 ? 'var(--gold)' : 'var(--k-e74c3c, #e74c3c)' };
                 }
@@ -2302,10 +2305,15 @@
                 window.getFAAB = () => {
                     const league = window.S.leagues?.[0];
                     const my = window.myR();
-                    const isFAAB = (league?.settings?.waiver_type === 2) || (league?.settings?.waiver_budget > 0);
+                    // Budget AND Sleeper waiver_type 2 (App.FaabLeague): Sleeper keeps a
+                    // $100 budget on rolling-waiver leagues, which made this say FAAB.
+                    const isFAAB = window.App?.FaabLeague?.isFaabLeague
+                        ? window.App.FaabLeague.isFaabLeague(league)
+                        : ((Number(league?.settings?.waiver_budget) || 0) > 0 && (league?.settings?.waiver_type == null || Number(league.settings.waiver_type) === 2));
                     const budget = isFAAB ? (league?.settings?.waiver_budget || 0) : 0;
-                    const spent = my?.settings?.waiver_budget_used || 0;
-                    const minBid = isFAAB ? (league?.settings?.waiver_budget_min ?? 0) : 0;
+                    const spent = isFAAB ? (my?.settings?.waiver_budget_used || 0) : 0;
+                    // Sleeper's real floor field is waiver_bid_min (imports use waiver_budget_min).
+                    const minBid = isFAAB ? (league?.settings?.waiver_bid_min ?? league?.settings?.waiver_budget_min ?? 0) : 0;
                     return { budget, spent, remaining: Math.max(0, budget - spent), isFAAB, minBid };
                 };
                 window.loadMentality = () => {

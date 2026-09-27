@@ -100,12 +100,14 @@
         const dealCol = dealCount >= 3 ? colors.positive : dealCount >= 1 ? colors.accent : colors.textMuted;
 
         // FAAB
+        // FAAB leagues only (App.FaabLeague). The old `|| 100` default showed
+        // a made-up $100 bar in leagues with no budget (ESPN/MFL imports) and
+        // in rolling-waiver leagues, where nobody bids.
         const faab = React.useMemo(() => {
-            const budget = currentLeague?.settings?.waiver_budget || 100;
-            const used = myRoster?.settings?.waiver_budget_used || 0;
-            const remaining = Math.max(0, budget - used);
-            const pct = (remaining / Math.max(budget, 1)) * 100;
-            return { remaining, budget, pct };
+            const f = window.App?.FaabLeague?.faab ? window.App.FaabLeague.faab(currentLeague, myRoster) : ((st, r) => { const on = (Number(st.waiver_budget) || 0) > 0 && (st.waiver_type == null || Number(st.waiver_type) === 2); const b = on ? Number(st.waiver_budget) || 0 : 0; return { isFaab: on, budget: b, spent: on ? Number(r?.settings?.waiver_budget_used) || 0 : 0, remaining: on ? Math.max(0, b - (Number(r?.settings?.waiver_budget_used) || 0)) : 0 }; })(currentLeague?.settings || {}, myRoster);
+            const pct = f.isFaab ? (f.remaining / Math.max(f.budget, 1)) * 100 : 0;
+            const label = window.App?.FaabLeague?.waiverLabel ? window.App.FaabLeague.waiverLabel(currentLeague) : 'waivers';
+            return { isFaab: f.isFaab, remaining: f.remaining, budget: f.budget, pct, label };
         }, [currentLeague, myRoster]);
 
         // Waiver targets (un-rostered, DHQ > threshold)
@@ -394,6 +396,9 @@
 
         // ── Reusable FAAB bar ──
         function renderFaab(opts = {}) {
+            if (!faab.isFaab) {
+                return <div style={{ fontSize: fs(0.6), color: colors.textMuted, fontFamily: fonts.ui }}>No FAAB — this league uses {faab.label}.</div>;
+            }
             return (
                 <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fs(0.6), color: colors.textMuted, marginBottom: '2px', fontFamily: fonts.ui }}>
@@ -418,7 +423,7 @@
                         <span title={'GM Strategy posture frames partner selection'} style={{ fontSize: fs(0.5), fontWeight: 700, color: colors.gold || 'var(--gold, #d4af37)', fontFamily: fonts.ui, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '1px 6px', borderRadius: 3, border: '1px solid ' + wrAlpha(colors.gold || 'var(--gold, #d4af37)', '40'), background: wrAlpha(colors.gold || 'var(--gold, #d4af37)', '12'), whiteSpace: 'nowrap' }}>{postureLabel}</span>
                     )}
                     <span style={{ flex: 1 }} />
-                    <span style={{ fontSize: fs(0.62), color: colors.textMuted, fontFamily: fonts.ui }}>{dealCount} targets · ${faab.remaining}</span>
+                    <span style={{ fontSize: fs(0.62), color: colors.textMuted, fontFamily: fonts.ui }}>{dealCount} targets{faab.isFaab ? ' · $' + faab.remaining : ''}</span>
                     <button onClick={openTrades} title="Open Trade Center" style={{ padding: '3px 8px', background: wrAlpha(colors.purple || 'var(--k-7c6bf8, #7c6bf8)', '1A'), color: colors.purple || 'var(--k-7c6bf8, #7c6bf8)', border: '1px solid ' + wrAlpha(colors.purple || 'var(--k-7c6bf8, #7c6bf8)', '47'), borderRadius: '5px', cursor: 'pointer', fontSize: fs(0.56), fontFamily: fonts.ui, fontWeight: 700, whiteSpace: 'nowrap' }}>Trades</button>
                     <button onClick={openFreeAgency} title="Open Free Agency" style={{ padding: '3px 8px', background: wrAlpha(colors.info || 'var(--k-3498db, #3498db)', '1A'), color: colors.info || 'var(--k-3498db, #3498db)', border: '1px solid ' + wrAlpha(colors.info || 'var(--k-3498db, #3498db)', '47'), borderRadius: '5px', cursor: 'pointer', fontSize: fs(0.56), fontFamily: fonts.ui, fontWeight: 700, whiteSpace: 'nowrap' }}>FA</button>
                 </div>
@@ -526,7 +531,7 @@
 
             // FAAB context: average remaining FAAB across league
             const faabContext = (() => {
-                const budget = currentLeague?.settings?.waiver_budget || 0;
+                const budget = faab.isFaab ? faab.budget : 0;
                 if (!budget) return null;
                 const allRemaining = (currentLeague?.rosters || []).map(r => Math.max(0, budget - (r.settings?.waiver_budget_used || 0)));
                 const avg = allRemaining.reduce((s, v) => s + v, 0) / Math.max(allRemaining.length, 1);

@@ -237,9 +237,12 @@
                 ctaLabel: 'Review FAAB log',
             });
         }
-        // NEW: FAAB usage pattern
-        const myFaab = myRoster?.settings?.waiver_budget_used || 0;
-        const budget = currentLeague?.settings?.waiver_budget || 100;
+        // NEW: FAAB usage pattern — FAAB leagues only (App.FaabLeague: budget
+        // AND Sleeper waiver_type 2). The old `|| 100` default invented a $100
+        // budget for leagues that never bid (rolling waivers, ESPN/MFL imports).
+        const _faab = window.App?.FaabLeague?.faab ? window.App.FaabLeague.faab(currentLeague, myRoster) : ((st, r) => { const on = (Number(st.waiver_budget) || 0) > 0 && (st.waiver_type == null || Number(st.waiver_type) === 2); const b = on ? Number(st.waiver_budget) || 0 : 0; return { isFaab: on, budget: b, spent: on ? Number(r?.settings?.waiver_budget_used) || 0 : 0, remaining: on ? Math.max(0, b - (Number(r?.settings?.waiver_budget_used) || 0)) : 0 }; })(currentLeague?.settings || {}, myRoster);
+        const myFaab = _faab.spent;
+        const budget = _faab.budget;
         if (budget > 0) {
             const spentPct = myFaab / budget;
             // Compute league avg spend
@@ -259,7 +262,7 @@
                     ctaLabel: 'Open Free Agency',
                 });
             }
-            if (spentPct > 0.85 && (currentLeague?.settings?.waiver_budget > 0)) {
+            if (spentPct > 0.85) {
                 out.push({
                     focus: 'waivers', severity: 'warning', confidence: 70,
                     title: 'You\u2019ve burned ' + Math.round(spentPct * 100) + '% of your FAAB',

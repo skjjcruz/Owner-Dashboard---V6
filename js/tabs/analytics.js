@@ -1479,7 +1479,9 @@ function AnalyticsPanel({
             const lp = tr.leagueTradeProfile;
             const mp = tr.myTradeProfile;
             const cleanPreference = (v) => (!v || v === 'Unknown') ? 'No pattern' : v;
-            const waiverBudget = Number(currentLeague?.settings?.waiver_budget || 0);
+            // FAAB leagues only (App.FaabLeague) — not a rolling-waiver league's stored $100.
+            const waiverBudget = (window.App?.FaabLeague?.isFaabLeague ? window.App.FaabLeague.isFaabLeague(currentLeague) : Number(currentLeague?.settings?.waiver_type) === 2)
+                ? Number(currentLeague?.settings?.waiver_budget || 0) : 0;
             const waiverUsed = Number(myRoster?.settings?.waiver_budget_used || 0);
             const faabRemaining = waiverBudget > 0 ? Math.max(0, waiverBudget - waiverUsed) : null;
             const faabEfficiency = wa.faabEfficiency || {};

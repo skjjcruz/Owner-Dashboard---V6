@@ -152,6 +152,12 @@
     // to editorialize ("massive surplus") — budget, rank, and median make it
     // a checkable fact instead.
     function faabContext(league, myRoster) {
+        // FAAB leagues only (App.FaabLeague) — a rolling-waiver league's
+        // stored $100 budget is not money anyone can bid.
+        const isFaab = window.App?.FaabLeague?.isFaabLeague
+            ? window.App.FaabLeague.isFaabLeague(league)
+            : (Number(league.settings?.waiver_budget || 0) > 0 && (league.settings?.waiver_type == null || Number(league.settings.waiver_type) === 2));
+        if (!isFaab) return null;
         const budget = Number(league.settings?.waiver_budget || 0);
         if (!(budget > 0) || !myRoster?.settings) return null;
         const remaining = (league.rosters || [])
