@@ -135,7 +135,11 @@ function IntelligenceBriefWidget({
 	        if (!window.wrLoadModuleGroup) return;
 	        let alive = true;
 	        window.wrLoadModuleGroup('fa').then(() => { if (alive) setFaModuleTick(1); }).catch(() => {});
-	        return () => { alive = false; };
+	        // On a stall the promise gives up, but the group can still land later
+	        // (module-loader announces it) — upgrade the brief when it does.
+	        const onGroupLoaded = (e) => { if (alive && e && e.detail && e.detail.group === 'fa') setFaModuleTick(t => t + 1); };
+	        window.addEventListener('wr:module-group-loaded', onGroupLoaded);
+	        return () => { alive = false; window.removeEventListener('wr:module-group-loaded', onGroupLoaded); };
 	    }, []);
 
 	    // Best waiver target

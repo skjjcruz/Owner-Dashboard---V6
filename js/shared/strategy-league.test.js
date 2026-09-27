@@ -144,3 +144,13 @@ test('a remote sync of league A\'s plan does not become the open league B\'s in-
     env.ctx.DhqEvents.emit('strategy:changed', { mode: 'compete', leagueId: 'B' });
     assert.equal(env.ctx._wrGmStrategy.mode, 'compete');
 });
+
+test('checkAlignment/recordAction judge against the plan they are given (the open league), else the stored one', () => {
+    const env = makeEnv({ [GLOBAL_KEY]: { mode: 'rebuild', leagueId: 'A', targetPositions: ['RB'] } });
+    const G = env.ctx.GMStrategy;
+    const action = { type: 'trade', direction: 'acquire', position: 'WR' };
+    assert.equal(G.checkAlignment(action).alignment, 'partial', 'stored plan (A) targets RB, not WR');
+    assert.equal(G.checkAlignment(action, { mode: 'win_now', targetPositions: ['WR'] }).alignment, 'aligned', 'league B\'s plan targets WR');
+    assert.equal(G.checkAlignment(action, {}).alignment, 'partial', 'no plan for this league: neutral, not league A\'s');
+    assert.equal(G.recordAction({ ...action, direction: 'sell', playerId: 'p1' }, { untouchable: ['p1'] }).alignment, 'conflicts');
+});

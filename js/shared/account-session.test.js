@@ -115,21 +115,33 @@ test('a guest who then creates an account keeps the ESPN league they just connec
     assert.equal(signedUp.ss.getItem('espn_s2'), 'S2');
 });
 
-test('server-revoked account session clears device logins; a legacy token rejected by fw-refresh-session does not', async () => {
+test('a 401 from the server drops the session but does not wipe device logins (not proof of revocation)', async () => {
     const stale = { token: jwt({ exp: future(), iat: Math.floor(Date.now() / 1000) - 3 * 86400, app_metadata: { user_id: 'u1', session_version: 1 } }), user: { id: 'u1' } };
     const env = load({ local: { [FW]: stale }, session: { ...SECRETS }, fetchImpl: () => ({ status: 401, body: { error: 'Invalid or expired session.' } }) });
     await env.OD.ensureFreshAppSession();
-    assert.equal(env.ls.getItem(FW), null);
-    assert.equal(env.ss.getItem('espn_s2'), null);
+    assert.equal(env.ls.getItem(FW), null, 'dead session dropped');
+    assert.equal(env.ss.getItem('espn_s2'), 'S2', 'ESPN login kept');
+    // …and if someone else then signs in on this tab, the guard clears them.
+    const next = load({ local: { [FW]: { token: accountToken('u2'), user: { id: 'u2' } } }, session: Object.fromEntries(env.ss.m) });
+    assert.equal(next.ss.getItem('espn_s2'), null);
+});
 
-    const legacy = load({ local: { [FW]: { token: legacyToken('bob'), user: { sleeperUsername: 'bob' } } }, session: { ...SECRETS }, fetchImpl: () => ({ status: 401, body: {} }) });
-    await legacy.OD.ensureFreshAppSession();
-    assert.equal(legacy.ss.getItem('espn_s2'), 'S2');
+test('a stale legacy token from an older build does not make a guest tab "owned"', () => {
+    const stale = { token: legacyToken('olduser', Math.floor(Date.now() / 1000) - 86400), expiresAt: new Date(Date.now() - 864e5).toISOString() };
+    const guest = load({ local: { wr_guest_v1: '1', [OD_SESSION]: stale }, session: { ...SECRETS } });
+    assert.equal(guest.ss.getItem('dhq_credentials_owner_v1'), null);
+    const signedUp = load({ local: { [OD_SESSION]: stale, [FW]: { token: accountToken('new'), user: { id: 'new' } } }, session: Object.fromEntries(guest.ss.m) });
+    assert.equal(signedUp.ss.getItem('espn_s2'), 'S2', 'guest → first account keeps the ESPN league');
+    // Even a still-valid leftover legacy token doesn't own a guest tab.
+    const live = load({ local: { wr_guest_v1: '1', [OD_SESSION]: { token: legacyToken('olduser'), expiresAt: new Date(Date.now() + 864e5).toISOString() } }, session: { ...SECRETS } });
+    assert.equal(live.ss.getItem('dhq_credentials_owner_v1'), null);
 });
 
 // ── password change ─────────────────────────────────────────────────────────
 test('passwordAccount tells the session kinds apart', () => {
     assert.equal(load().OD.passwordAccount().kind, 'none');
+    assert.equal(load({ local: { wr_guest_v1: '1', od_auth_v1: { username: 'bob' } } }).OD.passwordAccount().kind, 'guest');
+    assert.equal(load({ local: { od_auth_v1: { username: 'bob', passwordHash: 'x' } } }).OD.passwordAccount().kind, 'local', 'old local-only login is not called a guest');
     assert.equal(load({ local: { [FW]: { token: accountToken('u1'), user: { id: 'u1', email: 'u1@x.test' } } } }).OD.passwordAccount().kind, 'account');
     const g = load({ local: { [FW]: { token: accountToken('u1'), user: { id: 'u1', email: 'U1@x.test' } }, [SB]: { user: { email: 'u1@x.test', app_metadata: { provider: 'google' } } } } }).OD.passwordAccount();
     assert.equal(g.kind, 'account');
@@ -163,7 +175,9 @@ test('email account: every failure is reported, never success', async () => {
     assert.match(await codeOf(accountEnv({ status: 400, body: { error: 'Current password is incorrect.' } }).OD.changePassword('a-old-pass', 'b-new-pass')), /^current: Current password is incorrect/);
     assert.match(await codeOf(accountEnv({ status: 400, body: { error: 'This account uses provider sign-in. Manage your password with your sign-in provider.' } }).OD.changePassword('a-old-pass', 'b-new-pass')), /^provider: .*Google or Apple/);
     assert.match(await codeOf(accountEnv({ status: 401, body: { error: 'Sign in again before changing your password.' } }).OD.changePassword('a-old-pass', 'b-new-pass')), /^signin/);
-    assert.match(await codeOf(accountEnv({ status: 409, body: {} }).OD.changePassword('a-old-pass', 'b-new-pass')), /^signin/);
+    assert.match(await codeOf(accountEnv({ status: 409, body: { error: 'Your account changed. Sign in again before retrying.' } }).OD.changePassword('a-old-pass', 'b-new-pass')), /^signin: .*nothing was changed/);
+    assert.match(await codeOf(accountEnv({ status: 400, body: { error: 'Enter your current password and a new password between 8 and 1024 characters.' } }).OD.changePassword('a-old-pass', 'b-new-pass')), /^invalid: Enter your current password/, 'a format error is not "wrong current password"');
+    assert.match(await codeOf(accountEnv({ status: 400, body: { error: 'Choose a different new password.' } }).OD.changePassword('a-old-pass', 'b-new-pass')), /^invalid/);
     assert.match(await codeOf(accountEnv({ status: 429, body: {} }).OD.changePassword('a-old-pass', 'b-new-pass')), /^rate/);
     assert.match(await codeOf(accountEnv({ status: 500, body: {} }).OD.changePassword('a-old-pass', 'b-new-pass')), /^uncertain/);
     const offline = load({ local: { [FW]: { token: accountToken('u1'), user: { id: 'u1' } } }, fetchImpl: () => { throw new TypeError('Failed to fetch'); } });
@@ -197,4 +211,40 @@ test('legacy Sleeper login: current password verified on the server before set-p
     const setCall = env.calls.find(c => /set-password/.test(c.url));
     assert.equal(setCall.opts.headers.Authorization, 'Bearer fresh.jwt.x', 'uses the freshly verified token');
     assert.deepEqual(setCall.body, { username: 'bob', password: 'new-password-1' });
+});
+
+test('a token refresh or a mid-request 401 is not an "account switch"', async () => {
+    for (const mutate of [
+        ls => ls.setItem(FW, JSON.stringify({ token: accountToken('u1'), user: { id: 'u1', email: 'u1@x.test', tier: 'pro' } })), // re-minted, same account
+        ls => ls.removeItem(FW), // 401 elsewhere dropped the session
+    ]) {
+        let env;
+        env = load({ local: { [FW]: { token: accountToken('u1'), user: { id: 'u1' } } }, fetchImpl: () => { mutate(env.ls); return { status: 200, body: { ok: true, signInRequired: true } }; } });
+        const r = await env.OD.changePassword('old-password', 'new-password-1');
+        assert.equal(r.sessionChanged, false);
+    }
+    let other;
+    other = load({ local: { [FW]: { token: accountToken('u1'), user: { id: 'u1' } } }, fetchImpl: () => { other.ls.setItem(FW, JSON.stringify({ token: accountToken('u2'), user: { id: 'u2' } })); return { status: 200, body: { ok: true, signInRequired: true } }; } });
+    assert.equal((await other.OD.changePassword('old-password', 'new-password-1')).sessionChanged, true, 'a different account really is a switch');
+});
+
+test('legacy Sleeper login: precise error mapping', async () => {
+    const make = (tokenReply, setReply) => load({
+        local: { [FW]: { token: legacyToken('bob'), user: { sleeperUsername: 'bob' } } },
+        fetchImpl: (url) => (/get-session-token/.test(url) ? tokenReply : setReply),
+    });
+    const ok = { status: 200, body: { token: 'fresh.jwt.x' } };
+    assert.match(await codeOf(make(ok, { status: 409, body: { error: 'Account changed. Sign in again before updating the password.' } }).OD.changePassword('right-pass', 'new-password-1')), /^signin: .*nothing was changed/);
+    assert.match(await codeOf(make(ok, { status: 403, body: { error: 'Passwordless Sleeper accounts cannot set a password through this endpoint.' } }).OD.changePassword('right-pass', 'new-password-1')), /^invalid: This Sleeper login has no password/);
+    assert.match(await codeOf(make(ok, { status: 400, body: { error: 'Password must be between 8 and 128 characters' } }).OD.changePassword('right-pass', 'new-password-1')), /^invalid: Password must be/);
+    assert.match(await codeOf(make({ status: 401, body: { error: 'Your account changed. Sign in again before continuing.' } }, null).OD.changePassword('right-pass', 'new-password-1')), /^signin/);
+    assert.match(await codeOf(make({ status: 401, body: { error: 'Incorrect password', isGifted: true } }, null).OD.changePassword('x-wrong-pass', 'new-password-1')), /^current/);
+});
+
+test('guests and local-only logins are refused before any request', async () => {
+    const g = load({ local: { wr_guest_v1: '1' } });
+    assert.match(await codeOf(g.OD.changePassword('old-password', 'new-password-1')), /^invalid: Guests/);
+    const l = load({ local: { od_auth_v1: { username: 'bob' } } });
+    assert.match(await codeOf(l.OD.changePassword('old-password', 'new-password-1')), /^signin/);
+    assert.equal(g.calls.length + l.calls.length, 0);
 });

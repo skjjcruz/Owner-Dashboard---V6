@@ -99,7 +99,7 @@ function WrWireStudio({ league, story = null, seasons = [], race = null, initial
 
 function WrWireStudioSources({ notes = [], sources = [] }) {
     const unique = [...new Map(sources.map(s => [s.url || JSON.stringify(s), s])).values()];
-    return notes.length || unique.length ? <details className="wr-studio-sources"><summary>Data & context</summary>{notes.map((note, i) => <p key={'note-' + i}>{typeof note === 'string' ? note : note.text || note.label}</p>)}{unique.map((source, i) => <p key={'source-' + i}>{source.url && /^https?:\/\//.test(source.url) ? <a href={source.url} target="_blank" rel="noopener noreferrer">{source.label || 'View source'}</a> : source.workbook ? source.workbook + ' · ' + source.sheet + '!' + source.range : source.label || source.text}</p>)}</details> : null;
+    return notes.length || unique.length ? <details className="wr-studio-sources"><summary>Data & context</summary>{notes.map((note, i) => <p key={'note-' + i}>{typeof note === 'string' ? note : note.text || note.label}</p>)}{unique.map((source, i) => <p key={'source-' + i}>{source.url && /^https?:\/\//.test(source.url) ? <a href={source.url} target="_blank" rel="noopener noreferrer">{source.label || 'View source'}</a> : source.label || source.text}</p>)}</details> : null;
 }
 
 function WrWireStudioComparison({ model }) {

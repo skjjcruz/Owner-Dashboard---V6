@@ -58,11 +58,14 @@
     //                    changes it and ends EVERY session, this one included,
     //                    so on success we sign out and send them to sign in.
     //   Sleeper login  → current password re-verified by get-session-token,
-    //                    then set-password; also signed out to sign back in.
+    //                    then set-password. That revokes nothing elsewhere
+    //                    (legacy tokens carry no session version), so only
+    //                    THIS device is signed out — and the copy says so.
     //   Google/Apple   → hinted up front when this browser holds that
     //                    provider sign-in; once the server says the account
     //                    has no password, the form is replaced by the reason.
-    //   guest / ended  → nothing to change; explained.
+    //   guest          → nothing to change; explained.
+    //   ended / local-only login / signed out → "sign in", with a button.
     // "Password updated" only ever shows after the server confirmed it.
     const PW_NOTE_STYLE = { fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', lineHeight: 1.5, padding: '0.6rem 0.75rem', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: 'var(--card-radius-sm, 8px)', marginBottom: '0.6rem' };
     const PW_PROVIDER_LABEL = { google: 'Google', apple: 'Apple' };
@@ -147,7 +150,9 @@
             try { window.OD.clearSignedInState?.(); } catch (err) { window.wrLog?.('settings.passwordSignOut', err); }
             leaveDest.current = dest;
             setSignedOut({ dest });
-            setMsg({ tone: 'ok', text: 'Password changed. For your security you’ve been signed out on every device — sign in again with your new password.' });
+            setMsg({ tone: 'ok', text: result.kind === 'legacy'
+                ? 'Password changed. You’ve been signed out on this device — sign in again with your new password. Devices already signed in stay signed in until their session expires.'
+                : 'Password changed. For your security you’ve been signed out on every device — sign in again with your new password.' });
             leaveTimer.current = setTimeout(() => leave(dest), 3500);
         }
 
@@ -158,12 +163,15 @@
         if (collapsible && !open) {
             return <button type="button" onClick={() => setOpen(true)} style={{ ...btnOutline, width: '100%', flex: 'none' }}>Change password</button>;
         }
-        if (kind === 'none') {
+        if (kind === 'guest') {
             return <>{heading}{note('You’re using Dynasty HQ as a guest, so there’s no password to change. Create a free account from the sign-in page to get one.')}</>;
         }
-        if (kind === 'expired') {
-            return <>{heading}{note('Your session has ended. Sign in again to change your password.')}
-                <button type="button" onClick={() => leave('landing.html')} style={{ ...btnOutline, width: '100%', flex: 'none' }}>Sign in again</button></>;
+        if (kind === 'expired' || kind === 'local' || kind === 'none') {
+            const why = kind === 'expired'
+                ? 'Your session has ended. Sign in again to change your password.'
+                : 'You’re not signed in to a Dynasty HQ account on this device. Sign in to change your password.';
+            return <>{heading}{note(why)}
+                <button type="button" onClick={() => leave('landing.html')} style={{ ...btnOutline, width: '100%', flex: 'none' }}>{kind === 'expired' ? 'Sign in again' : 'Sign in'}</button></>;
         }
         if (kind === 'unavailable') {
             return <>{heading}{note('Account services didn’t load. Reload the page to change your password.')}</>;

@@ -545,7 +545,7 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
     const lead = editorial[0];
     const fullCoverage = past.key === pastKey && past.complete && (historicalEdition || archiveReady) && edition.completedThrough === storyThrough;
     const archiveTitle = historicalEdition || editionWeek !== 'latest' ? 'Archive through ' + editionLeague.season + ' · Wk ' + edition.completedThrough : fullCoverage && !edition.archive.rulesChanged ? 'All-time · linked seasons' : 'Available archive · same scoring';
-    const topics = [['all', 'Front page'], ['stories', 'Stories'], ['matchups', 'This week'], ['recaps', 'Recaps'], ['records', 'Records'], ...(headToHead ? [['rivalries', 'Rivalries']] : []), ...(edition.chronicle ? [['history', 'History']] : []), ['league', 'League feed'], ['nfl', 'NFL'], ['trends', 'Trends']];
+    const topics = [['all', 'Front page'], ['stories', 'Stories'], ...(headToHead ? [['matchups', 'This week'], ['recaps', 'Recaps']] : []), ['records', 'Records'], ...(headToHead ? [['rivalries', 'Rivalries']] : []), ...(edition.chronicle ? [['history', 'History']] : []), ['league', 'League feed'], ['nfl', 'NFL'], ['trends', 'Trends']];
     const cards = editorial.slice(lead ? 1 : 0);
     const changeSeason = value => { setReadingSeason(value); setEditionWeek('latest'); setTeamFilter('all'); };
     const articleId = it => 'wire-article-' + encodeURIComponent(it.id || it.label + it.text);

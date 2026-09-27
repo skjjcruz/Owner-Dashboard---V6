@@ -297,7 +297,11 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
         // The keys that decide whether the next page load is signed in — and,
         // if the shared client never loaded, the platform logins it would clear.
         const keys = ['od_auth_v1', 'fw_session_v1', 'od_session_v1', 'wr_guest_v1'];
-        if (!cleared) keys.push('espn_s2', 'espn_swid', 'mfl_api_key', 'mfl_write_cookie', 'mfl_write_host', 'dynastyhq_ai_key', 'dynastyhq_xai_key');
+        // Keep in step with DEVICE_SECRET_KEYS in DHQ-Shared supabase-client.js
+        // (js/shared/device-secret-keys.test.js fails if a key is missing here).
+        if (!cleared) keys.push('espn_s2', 'espn_swid', 'mfl_api_key', 'mfl_write_cookie', 'mfl_write_host', 'yahoo_session_id',
+            'dynastyhq_ai_key', 'dynastyhq_xai_key', 'dynastyhq_gemini_key', 'dynastyhq_anthropic_key', 'dynastyhq_apikey',
+            'dynastyhq_ai_provider', 'dynastyhq_ai_model', 'dhq_credentials_owner_v1');
         keys.forEach(k => {
             try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ }
             try { sessionStorage.removeItem(k); } catch (e) { /* storage blocked */ }

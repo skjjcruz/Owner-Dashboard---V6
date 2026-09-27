@@ -24,13 +24,18 @@ function WrWireRivalryEditor({ league, priorSeasons = [], onChange }) {
     }, []);
     const pairs = React.useMemo(() => api.list(league, priorSeasons), [league, priorSeasons, version]);
     // Unsaved input holds the live-update reload (released when clean/unmounted).
+    // Only a hold this editor actually took is released (releasing lets a
+    // pending update evaluate, so never release one we didn't hold).
     const dirty = !!(first || second || name.trim());
+    const holding = React.useRef(false);
     React.useEffect(() => {
         const LU = window.App?.LiveUpdate;
         if (!LU?.hold) return undefined;
-        if (dirty) LU.hold('wire-rivalry'); else LU.release?.('wire-rivalry');
-        return () => { LU.release?.('wire-rivalry'); };
+        if (dirty && !holding.current) { LU.hold('wire-rivalry'); holding.current = true; }
+        else if (!dirty && holding.current) { holding.current = false; LU.release?.('wire-rivalry'); }
+        return undefined;
     }, [dirty]);
+    React.useEffect(() => () => { if (holding.current) { holding.current = false; window.App?.LiveUpdate?.release?.('wire-rivalry'); } }, []);
     const teams = (league.rosters || []).filter(r => r.owner_id).map(r => ({ owner: String(r.owner_id), name: window.WrWireStories.oldName(league, r.roster_id) }));
     const teamName = owner => teams.find(t => t.owner === owner)?.name || 'Former manager';
     const clear = () => { setFirst(''); setSecond(''); setName(''); setEditing(false); };
