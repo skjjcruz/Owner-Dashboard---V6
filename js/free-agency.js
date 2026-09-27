@@ -641,6 +641,12 @@
     window.App.observeUdfaCrazeFlip = observeUdfaCrazeFlip;
     window.App.blendFaabWithHistory = blendFaabWithHistory;
 
+    // Module-level caches for the waiver tools (FreeAgencyTab below).
+    let _faStreamCache = null;
+    // Bumped whenever FAAB Command (re)reads a league's transactions, so the
+    // drawer's bid-history memo knows the cache may have changed.
+    let _faTxnsVersion = 0;
+
     // ── Waiver-tool styles (C2 wave 2026-09-27) ───────────────────────────
     // Scoped to the FA tab and rendered with it (no index.html / build edit).
     // Corners and type go through the tokens only (rounded identity; type
@@ -751,6 +757,7 @@
             (async () => {
                 try {
                     const txns = await window.WrTxns.fetchLeagueTxns(lid);
+                    _faTxnsVersion++;
                     const failed = window.WrTxns.getFailedWaivers(lid);
                     const evidence = window.App?.WaiverTools?.bidEvidence
                         ? window.App.WaiverTools.bidEvidence(txns || [], league, target.pos, playersData)
@@ -895,7 +902,6 @@
     // callback from FreeAgencyTab, cached module-wide by input signature so a
     // tab switch or an unrelated re-render never re-solves). Inputs are read
     // from a ref at run time; the signature decides WHEN it runs.
-    let _faStreamCache = null;
     function gmFaTickForStreams(league) {
         try {
             const id = league?.league_id || league?.id;
@@ -1721,9 +1727,13 @@
         const selFaab = faSelectedPid ? faabSuggest(selDhq, selPos, selPlayer?.age) : null;
         // Evidence from whatever this league's bid history cache already holds
         // (FAAB Command fills it) — never a fetch from the drawer.
-        const selBidEvidence = (selFaab && hasFAAB && faPlatformNow === 'sleeper' && window.App?.WaiverTools?.bidEvidence && window.WrTxns?.getCached)
-            ? window.App.WaiverTools.bidEvidence(window.WrTxns.getCached(currentLeague?.league_id || currentLeague?.id), currentLeague, selPos, playersData)
-            : null;
+        const selBidLeagueId = currentLeague?.league_id || currentLeague?.id;
+        const selBidEvidence = useMemo(() => {
+            if (!selFaab || !hasFAAB || faPlatformNow !== 'sleeper' || !window.App?.WaiverTools?.bidEvidence || !window.WrTxns?.getCached) return null;
+            return window.App.WaiverTools.bidEvidence(window.WrTxns.getCached(selBidLeagueId), currentLeague, selPos, playersData);
+            // Memoized on league / position / the FAAB Command fetch counter:
+            // getCached parses the whole season's transactions from storage.
+        }, [selBidLeagueId, selPos, !!selFaab, hasFAAB, faPlatformNow, _faTxnsVersion]);
         const selInitials = selPlayer ? ((selPlayer.first_name||'?')[0] + (selPlayer.last_name||'?')[0]).toUpperCase() : '';
 
         function openFaPlayer(pid) {

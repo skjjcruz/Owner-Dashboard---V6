@@ -226,3 +226,64 @@ test('signature stats: rates from season counts, per-game counts, "—" when mis
     assert.equal(M.signature('WR', 0, {}).text, '—');
     assert.equal(M.signature('DEF', 0, {}), null, 'no invented stat for team defense');
 });
+
+// ── Game locks (review 2026-09-27) ──────────────────────────────────
+const gs = (g, now) => { if (g.completed) return 'final'; if (g.state === 'in') return 'live'; const k = Date.parse(g.kickoff); return k <= now ? 'locked' : 'upcoming'; };
+
+test('lock board: kickoff schedule → per-team locks; no schedule → conservative in the game window', () => {
+    const now = Date.parse('2026-09-27T17:41:00Z'); // Sunday, 1pm ET games under way
+    const games = [
+        { home: 'KC', away: 'LV', kickoff: '2026-09-27T17:00:00Z', state: 'in' },
+        { home: 'SF', away: 'LAR', kickoff: '2026-09-27T20:25:00Z', state: 'pre' },
+        { home: 'BUF', away: 'MIA', kickoff: '2026-09-25T00:15:00Z', state: 'post', completed: true },
+    ];
+    const b = W.lockBoard(games, gs, now);
+    assert.equal(b.known, true);
+    assert.equal(b.lockedTeam('KC'), true);
+    assert.equal(b.lockedTeam('BUF'), true, 'final is locked');
+    assert.equal(b.lockedTeam('SF'), false);
+    assert.equal(b.lockedTeam('NYJ'), false, 'bye team: nothing to lock');
+    assert.equal(b.started, true);
+    assert.equal(b.allFinal, false);
+    assert.equal(W.lockBoard(games.map(g => ({ ...g, completed: true })), gs, now).allFinal, true);
+    const none = W.lockBoard([], gs, now);
+    assert.equal(none.known, false);
+    assert.equal(none.lockedTeam('SF'), true, 'Sunday with no schedule: treat as possibly locked');
+    assert.equal(W.lockBoard([], gs, Date.parse('2026-09-30T15:00:00Z')).lockedTeam('SF'), false, 'Wednesday: no games');
+});
+
+test('streams: locked players are never added or dropped for this week; locked starters keep their slot', () => {
+    const w = world();
+    const teams = { LV: true };   // fa_rb's game (LV) has kicked off
+    const lockedOf = pid => !!teams[w.pd[pid] && w.pd[pid].team];
+    const r = W.streamUpgrades({ roster: w.roster, league: w.league, playersData: w.pd, candidates: w.candidates, projOf: w.projOf, valueOf: w.valueOf, horizon: 'week', lockedOf });
+    assert(!r.rows.some(x => x.pid === 'fa_rb'), 'a locked free agent is not a this-week pickup');
+    // Lock my bench WR: he can no longer be the drop.
+    const r2 = W.streamUpgrades({ roster: w.roster, league: w.league, playersData: w.pd, candidates: w.candidates, projOf: w.projOf, valueOf: w.valueOf, horizon: 'week', lockedOf: pid => pid === 'mybench' });
+    assert(r2.rows.every(x => !x.drop || x.drop.pid !== 'mybench'));
+    // Locked starter in the RB slot (starters order = QB,RB,RB,WR,FLEX).
+    const roster = { ...w.roster, starters: ['myqb', 'myrb1', 'myrb2', 'mywr', 'mybench'] };
+    const r3 = W.streamUpgrades({ roster, league: w.league, playersData: w.pd, candidates: w.candidates, projOf: w.projOf, valueOf: w.valueOf, horizon: 'week', lockedOf: pid => pid === 'myrb2' });
+    assert.equal(r3.week.lockedStarters, 1);
+    const rb = r3.rows.find(x => x.pid === 'fa_rb');
+    // myrb2 (6) is locked in his RB slot: the FA back (12) can only take the FLEX from the bench WR (4) → +8 still, via FLEX.
+    assert(rb && rb.weekGain === 8, 'gain counts only open slots');
+    assert(!rb.drop || rb.drop.pid !== 'myrb2', 'a locked starter is never the drop');
+    // Season view keeps a locked free agent, flagged.
+    const ros = { myqb: 200, myrb1: 150, myrb2: 60, mywr: 120, mybench: 30, fa_rb: 90, fa_wr: 140 };
+    const r4 = W.streamUpgrades({ roster: w.roster, league: w.league, playersData: w.pd, candidates: w.candidates, projOf: w.projOf, rosOf: pid => ros[pid] ?? 0, valueOf: () => 1, horizon: 'season', lockedOf });
+    const lk = r4.rows.find(x => x.pid === 'fa_rb');
+    assert(lk && lk.locked === true);
+});
+
+test('faab-league: one definition, platform-aware', () => {
+    const F = require('./faab-league.js');
+    assert.equal(F.isFaabLeague({ settings: { waiver_type: 2, waiver_budget: 100 } }), true);
+    assert.equal(F.isFaabLeague({ settings: { waiver_type: 0, waiver_budget: 100 } }), false);
+    assert.deepEqual(F.faab({ settings: { waiver_type: 0, waiver_budget: 100 } }, { settings: { waiver_budget_used: 30 } }), { isFaab: false, budget: 0, spent: 0, remaining: 0, platform: 'sleeper' });
+    assert.equal(F.faab({ settings: { waiver_type: 2, waiver_budget: 100 } }, { settings: { waiver_budget_used: 30 } }).remaining, 70);
+    assert.equal(F.waiverLabel({ settings: { waiver_type: 0, waiver_budget: 100 } }), 'rolling waivers');
+    assert.equal(F.waiverLabel({ settings: { waiver_type: 1, waiver_budget: 100 } }), 'reverse-standings waivers');
+    assert.equal(F.waiverLabel({ _platform: 'espn', settings: {} }), 'waivers');
+    assert.equal(W.isFaabLeague({ settings: { waiver_type: 0, waiver_budget: 100 } }), false, 'waiver-tools delegates / agrees');
+});
