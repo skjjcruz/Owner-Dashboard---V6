@@ -176,7 +176,7 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         const timeout = setTimeout(() => controller.abort(), 20000);
         setArchive(old => old.key === historyKey && ['ready', 'stale', 'refreshing'].includes(old.status) ? { ...old, status: 'refreshing' } : { key: historyKey, status: 'loading', weeks: [] });
         window.App.LeagueLiveTable.loadHistory({ league: currentLeague, week: historyEnd + 1, signal: controller.signal, force: historyRevision > 0 })
-            .then(result => { if (alive) setArchive({ key: historyKey, status: 'ready', weeks: result.priorWeeks, checkedAt: result.updatedAt || null }); })
+            .then(result => { if (alive) setArchive({ key: historyKey, status: 'ready', weeks: result.priorWeeks, checkedAt: result.updatedAt || null, unplayedFrom: result.unplayedFrom || null }); })
             .catch(() => { if (alive) setArchive(old => old.key === historyKey && ['ready', 'stale', 'refreshing'].includes(old.status) ? { ...old, status: 'stale' } : { key: historyKey, status: 'error', weeks: [] }); })
             .finally(() => clearTimeout(timeout));
         return () => { alive = false; controller.abort(); clearTimeout(timeout); };
@@ -235,7 +235,10 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
     const editionLeague = historicalEdition?.league || currentLeague;
     const editionName = rid => historicalEdition ? window.WrWireStories.oldName(editionLeague, rid) : nameForStory(rid);
     const editionStart = historicalEdition ? window.WrWireStories.bounds(editionLeague).start : startWeek;
-    const editionEnd = historicalEdition ? window.WrWireStories.bounds(editionLeague).end : historyEnd;
+    // The current edition ends at the last PLAYED week: an unplayed week
+    // (all 0.00 / nobody started) is not a result (review B1).
+    const playedEnd = archiveReady && Number(archive.unplayedFrom) > 0 ? Math.min(historyEnd, Number(archive.unplayedFrom) - 1) : historyEnd;
+    const editionEnd = historicalEdition ? window.WrWireStories.bounds(editionLeague).end : playedEnd;
     const selectedWeek = editionWeek === 'latest' ? editionEnd : Number(editionWeek);
     const storyThrough = editionWeek === 'all' || editionWeek === 'latest' ? editionEnd : Math.max(editionStart - 1, Math.min(editionEnd, selectedWeek));
     const headToHead = !window.App?.Chopped?.isChopped?.(editionLeague) && editionLeague?.type !== 'chopped' && editionLeague?.leagueSkin?.type !== 'chopped';
