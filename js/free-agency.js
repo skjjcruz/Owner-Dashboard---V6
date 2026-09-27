@@ -662,6 +662,7 @@
         .fa-stream-main strong { display: block; font-size: var(--text-body, 1rem); font-weight: 700; overflow-wrap: anywhere; }
         .fa-stream-main span { display: block; color: var(--silver); font-size: var(--text-label, 0.75rem); line-height: 1.45; }
         .fa-stream-main .fa-stream-swap { color: var(--white); }
+        .fa-stream-main .fa-stream-lock { color: var(--warn, #f0a500); }
         .fa-stream-nums { display: flex; gap: 12px; text-align: right; }
         .fa-stream-nums span { display: block; color: var(--silver); font-size: var(--text-micro, 0.6875rem); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
         .fa-stream-nums b { display: block; color: var(--white); font-size: var(--text-body, 1rem); font-family: var(--font-mono, 'JetBrains Mono', monospace); font-variant-numeric: tabular-nums; }
@@ -805,12 +806,22 @@
         }
         const needColor = n => n === 'HIGH' ? 'var(--warn)' : n === 'MED' ? 'var(--silver)' : 'var(--text-muted)';
         const engaged = a.rivals.filter(r => r.engaged);
+        // Win odds only where they rest on this league's own history: the
+        // engine out of league-median (cold-start) mode AND at least MIN_BIDS
+        // completed winning bids at this position. Otherwise the model's bid
+        // stays (labelled an estimate) but no percentage is printed — a win
+        // probability off one or two bids is a made-up number (C2 dropped it
+        // outright; review 2026-09-27).
+        const oddsOk = !a.coldStart && !!(evidence && evidence.enough);
+        const posLabel = window.App?.posLabel?.(target.pos) || target.pos || 'this position';
         return (
             <div className="fa-hq-command">
                 <div className="fa-hq-command-head">
                     <b>FAAB Command</b>
                     <span>${a.myLeft} of ${a.budget} left</span>
-                    {a.coldStart ? <span title="Fewer than 15 logged bids this season — showing league-size defaults, not per-rival reads" className="is-warn">league-median mode · {a.sampleSize} bids logged</span> : <span>{a.sampleSize} bids of evidence</span>}
+                    {a.coldStart
+                        ? <span title="Fewer than 15 bids logged this season — the model uses league-size defaults, not per-rival reads" className="is-warn">league-median mode · {a.sampleSize} bids logged, all positions</span>
+                        : <span title="Every FAAB bid this season at any position, winning and losing — the model's input. The history box counts only completed winning bids at this position.">{a.sampleSize} bids logged, all positions (won + lost)</span>}
                 </div>
                 {targets.length > 1 ? (
                     <div className="fa-hq-command-picks">
@@ -824,9 +835,11 @@
                 <div className="fa-hq-command-hero">
                     <strong>${a.rec.bid}</strong>
                     <span>
-                        {engaged.length
+                        {!engaged.length
+                            ? 'uncontested — no rival needs him'
+                            : oddsOk
                             ? 'est. ' + Math.round(a.rec.winPct * 100) + '% to win' + (a.rec.capped ? ' — capped by your remaining budget' : '') + ' · ' + engaged.length + ' rival' + (engaged.length === 1 ? '' : 's') + ' in the market'
-                            : 'uncontested — no rival needs him'}
+                            : engaged.length + ' rival' + (engaged.length === 1 ? '' : 's') + ' with a ' + posLabel + ' need and budget · not enough league bid history for win odds' + (a.rec.capped ? ' · capped by your remaining budget' : '')}
                     </span>
                 </div>
                 {/* CHOPPED pacing: budget you never spend is budget you lose.
@@ -847,16 +860,16 @@
                     thing instead: the minimum bid is enough. */}
                 {!engaged.length ? (
                     <div className="fa-hq-command-note">
-                        No rival has both a need at {target.pos || 'this position'} and the budget to chase him — the league minimum (${a.minBid}) should land him. Spend the difference on someone contested.
+                        No rival has both a need at {posLabel} and the budget to chase him — the league minimum (${a.minBid}) may be enough. Spend the difference on someone contested.
                     </div>
-                ) : a.ladder.map(l => (
+                ) : !oddsOk ? null : a.ladder.map(l => (
                     <div key={l.bid} className={'fa-hq-ladder-row' + (l.bid === a.rec.bid ? ' is-rec' : '')}>
                         <b>${l.bid}</b>
                         <div className="fa-hq-ladder-track"><i className="fa-hq-ladder-fill" style={{ width: Math.round(l.winPct * 100) + '%' }} /></div>
                         <span className="fa-hq-ladder-pct">{Math.round(l.winPct * 100)}%</span>
                     </div>
                 ))}
-                {!a.coldStart && engaged.length ? (
+                {oddsOk && engaged.length ? (
                     <div>
                         <div className="fa-hq-rivals-label">Who else wants him</div>
                         {engaged.slice(0, 4).map(r => (
@@ -876,6 +889,92 @@
                 </div>
             </div>
         );
+    }
+
+    // ── Streaming & season upgrades — the heavy half (runs in an idle
+    // callback from FreeAgencyTab, cached module-wide by input signature so a
+    // tab switch or an unrelated re-render never re-solves). Inputs are read
+    // from a ref at run time; the signature decides WHEN it runs.
+    let _faStreamCache = null;
+    function gmFaTickForStreams(league) {
+        try {
+            const id = league?.league_id || league?.id;
+            const u = window.WR?.GmMode?.effects?.(id)?.untouchable;
+            const tags = window._playerTags || {};
+            return [...(u instanceof Set ? u : [])].sort().join(',') + '/' + Object.keys(tags).filter(k => tags[k] === 'untouchable').sort().join(',');
+        } catch (e) { return ''; }
+    }
+    function faComputeStreams(a) {
+        const week = a.week;
+        const off = { ok: false, reason: 'off', rows: [], lines: 0, rosOn: !!a.ros, week, lock: a.lock };
+        const WP = window.App && window.App.WeeklyProj;
+        const W = faWT();
+        const normPos = window.App?.normPos || (x => x);
+        if (!WP || !WP.projectPlayer || !W || !a.myRoster) return off;
+        const lock = a.lock || { known: false, started: false, allFinal: false, lockedTeam: () => false };
+        const pd = a.playersData || {};
+        // The pool is built from the players that HAVE a published line for
+        // this week (WeeklyProj's own line store), not a scan of every
+        // player in the database.
+        const ctx = WP._ctx || {};
+        const prefix = week + '|';
+        const ids = new Set();
+        Object.keys(ctx.projLines || {}).forEach(k => { if (k.indexOf(prefix) === 0) ids.add(k.slice(prefix.length)); });
+        Object.keys(ctx.platPts || {}).forEach(k => { if (k.indexOf(prefix) === 0) ids.add(k.slice(prefix.length)); });
+        const seasonal = faIsSeasonal(a.currentLeague, a.resolvedLeagueSkin);
+        const pool = [];
+        let lines = 0;
+        ids.forEach(pid => {
+            const p = pd[pid];
+            if (!p || !p.team) return;
+            if (!(WP.projLine(pid, week) || (WP.platformPoints && WP.platformPoints(pid, week) != null))) return;
+            lines++;
+            if (a.rostered.has(pid) || p.active === false || p.status === 'Inactive' || p.status === 'Retired') return;
+            if (a.leaguePosSet && !a.leaguePosSet.has(normPos(p.position) || p.position)) return;
+            if (a.isDraftProspect(pid, p)) return;
+            if (seasonal && !faRoleRead(p, a.currentLeague, a.resolvedLeagueSkin).eligible) return;
+            pool.push({ pid });
+        });
+        if (!lines) return { ...off, ok: true, reason: 'no_lines', lines: 0 };
+        // Week over (every game final) or schedule unknown inside the game
+        // window: no this-week gains. The season view still runs if ROS is on.
+        const weekOver = lock.known && lock.allFinal;
+        const weekUnknown = !lock.known && lock.started;
+        const horizon = (weekOver || weekUnknown) ? 'season' : a.horizon;
+        if ((weekOver || weekUnknown) && !a.ros) return { ...off, ok: true, reason: weekOver ? 'week_over' : 'locks_unknown', lines, weekOver, weekUnknown };
+        const scoring = a.currentLeague?.scoring_settings || {};
+        const projOf = pid => {
+            try {
+                const pr = WP.projectPlayer(pid, { playersData: pd, statsData: a.statsData, priorData: a.prevStatsData, scoring, week, requireSleeper: true });
+                if (!pr || !pr.points || pr.projSource === 'estimate' || !Number.isFinite(pr.points.median)) return null;
+                return { pts: pr.points.median, available: pr.available !== false };
+            } catch (e) { return null; }
+        };
+        const leagueId = String(a.currentLeague?.league_id || a.currentLeague?.id || '');
+        const gm = window.WR?.GmMode?.effects?.(leagueId) || {};
+        const tags = window._playerTags || {};
+        const protectedPids = [...(gm.untouchable instanceof Set ? gm.untouchable : [])]
+            .concat(Object.keys(tags).filter(k => tags[k] === 'untouchable'));
+        const valueOf = pid => (window.App?.PlayerValue?.getValue
+            ? window.App.PlayerValue.getValue(pid, { skin: a.resolvedLeagueSkin })
+            : (window.App?.LI?.playerScores?.[pid] ?? null));
+        let res;
+        try {
+            res = W.streamUpgrades({
+                roster: a.myRoster, league: a.currentLeague, playersData: pd, candidates: pool,
+                projOf, valueOf, protectedPids, perPosition: 4,
+                // Week over: every game is final, nothing is locked for next
+                // week's moves. Schedule unknown: we can't say who is locked, so
+                // there are no this-week gains at all (the card says so).
+                lockedOf: (weekOver || weekUnknown) ? null : (pid => lock.lockedTeam(pd[pid] && pd[pid].team)),
+                rosOf: a.ros ? (pid => (a.ros.points[pid] != null ? a.ros.points[pid] : 0)) : null,
+                horizon,
+            });
+        } catch (e) {
+            if (window.wrLog) window.wrLog('fa.streams', e);
+            return off;
+        }
+        return { ...res, lines, rosOn: !!a.ros, week, lock, horizon, weekOver, weekUnknown, poolSize: pool.length };
     }
 
     window.App.getFreeAgencyBriefTarget = function getFreeAgencyBriefTarget(args) {
@@ -1157,87 +1256,102 @@
         // lineup solver (App.StartSit via App.WaiverTools.streamUpgrades) runs
         // the roster before and after every legal add/drop. Truth rules:
         //   • a pickup must carry Sleeper's (or the league platform's) PUBLISHED
-        //     line for the week — requireSleeper, never the home-grown estimate;
+        //     line for the CURRENT week — requireSleeper, never the home-grown
+        //     estimate, never last week's lines standing in for this week's;
         //   • OUT / IR / bye / Doubtful players are never a this-week pickup;
+        //   • game locks (App.NflContext kickoffs): a player whose game has
+        //     started can't be added or dropped and a locked starter keeps his
+        //     slot; with no schedule inside the game window, this week's gains
+        //     are hidden rather than guessed; a finished week says so;
         //   • one-season formats never offer a backup QB (role check);
         //   • best ball has no lineup to set, so the card says so instead;
         //   • dynasty keeps its E3 ruling (showStreaming false → hidden).
+        // Cost (review 2026-09-27: 19 runs / ~800ms per FA open): the solve is
+        // keyed on a signature of what actually changes the answer — roster,
+        // rostered set, week, Sleeper-line loads (not DHQ batches), ROS build,
+        // locks, horizon — and runs in an idle callback, cached module-wide.
         const [streamHorizon, setStreamHorizon] = useState('week');
         const [streamShowAll, setStreamShowAll] = useState(false);
         const faLeagueTypeNow = faLeagueType(currentLeague, resolvedLeagueSkin);
         const faPlatformNow = faLeaguePlatform(currentLeague);
         const streamBestBall = faLeagueTypeNow === 'best_ball';
+        const streamLeagueId = String(currentLeague?.league_id || currentLeague?.id || '');
         const streamWeek = (() => {
             const WP = window.App && window.App.WeeklyProj;
-            if (!WP) return 1;
-            return WP.displayWeek ? WP.displayWeek() : (WP.currentWeek ? WP.currentWeek() : 1);
+            return WP && WP.currentWeek ? WP.currentWeek() : (Number(window.S?.currentWeek) || 1);
         })();
-        const streamRead = useMemo(() => {
-            const off = { ok: false, reason: 'off', rows: [], lines: 0, rosOn: false, week: streamWeek };
-            if (!isPro) return off; // streaming calls are recommendations — Pro
-            if (skinFeatures.showStreaming === false) return off;
-            if (streamBestBall) return { ...off, reason: 'best_ball' };
-            // CHOPPED: a team already chopped has no lineup left to improve.
-            if (myRoster && window.App?.Chopped?.isEliminated?.(myRoster)) return { ...off, reason: 'chopped' };
-            const WP = window.App && window.App.WeeklyProj;
-            const W = faWT();
-            if (!WP || !WP.projectPlayer || !W || !myRoster || !rosterState.isUsable) return off;
-            const scoring = currentLeague?.scoring_settings || {};
-            const week = streamWeek;
-            const projOf = pid => {
-                try {
-                    const pr = WP.projectPlayer(pid, { playersData, statsData, priorData: prevStatsData, scoring, week, requireSleeper: true });
-                    if (!pr || !pr.points || pr.projSource === 'estimate' || !Number.isFinite(pr.points.median)) return null;
-                    return { pts: pr.points.median, available: pr.available !== false };
-                } catch (e) { return null; }
+        const streamEliminated = !!(myRoster && window.App?.Chopped?.isEliminated?.(myRoster));
+        const streamWanted = isPro && skinFeatures.showStreaming !== false && !streamBestBall && !streamEliminated && !!myRoster && rosterState.isUsable;
+        // Sleeper / platform line loads only — DHQ batches also fire
+        // wr:proj-updated (source 'dhq') and must not re-run the solve.
+        const [streamProjStamp, setStreamProjStamp] = useState(0);
+        useEffect(() => {
+            const h = (e) => { if (e && e.detail && e.detail.source === 'dhq') return; setStreamProjStamp(t => t + 1); };
+            window.addEventListener('wr:proj-updated', h);
+            return () => window.removeEventListener('wr:proj-updated', h);
+        }, []);
+        // Kickoffs for the week — shared, 60s-cached scoreboard call (the live
+        // scoreboard reads the same one). Refreshed every 5 min while visible.
+        const streamSeason = String(currentLeague?.season || window.S?.season || '');
+        const [streamGames, setStreamGames] = useState({ key: '', games: null, at: 0 });
+        const streamGamesKey = streamSeason + '|' + streamWeek;
+        useEffect(() => {
+            if (!streamWanted) return undefined;
+            const NC = window.App && window.App.NflContext;
+            if (!NC || !NC.loadScores) { setStreamGames({ key: streamGamesKey, games: [], at: Date.now() }); return undefined; }
+            let alive = true;
+            const load = () => {
+                if (typeof document !== 'undefined' && document.hidden) return;
+                NC.loadScores(streamWeek, streamSeason, 2)
+                    .then(games => { if (alive) setStreamGames({ key: streamGamesKey, games: games || [], at: Date.now() }); })
+                    .catch(() => { if (alive) setStreamGames({ key: streamGamesKey, games: [], at: Date.now() }); });
             };
-            const leagueId = String(currentLeague?.league_id || currentLeague?.id || '');
-            // Rest of season rides the ROS engine (redraft / chopped only):
-            // this week's published line × weeks left (survival horizon in
-            // chopped). Keeper / other formats get the week view only.
-            const ros = window.App?.PlayerValue?.rosState?.();
-            const rosOn = !!(ros && String(ros.leagueId) === leagueId && ros.points && ros.remainingWeeks > 0);
-            const seasonal = faIsSeasonal(currentLeague, resolvedLeagueSkin);
-            // Pool: every unrostered player with a published line this week —
-            // wider than the DHQ-ranked market, so a streaming D/ST or kicker
-            // with no dynasty value still counts.
-            const pool = [];
-            let lines = 0;
-            Object.keys(playersData || {}).forEach(pid => {
-                const p = playersData[pid];
-                if (!p || !p.team || rostered.has(pid) || p.active === false || p.status === 'Inactive' || p.status === 'Retired') return;
-                if (leaguePosSet && !leaguePosSet.has(normPos(p.position) || p.position)) return;
-                const published = (WP.projLine && WP.projLine(pid, week)) || (WP.platformPoints && WP.platformPoints(pid, week) != null);
-                if (!published) return;
-                lines++;
-                if (isDraftProspect(pid, p)) return;
-                if (seasonal && !faRoleRead(p, currentLeague, resolvedLeagueSkin).eligible) return;
-                pool.push({ pid });
-            });
-            const gm = window.WR?.GmMode?.effects?.(leagueId) || {};
-            const tags = window._playerTags || {};
-            const protectedPids = [...(gm.untouchable instanceof Set ? gm.untouchable : [])]
-                .concat(Object.keys(tags).filter(k => tags[k] === 'untouchable'));
-            const valueOf = pid => (window.App?.PlayerValue?.getValue
-                ? window.App.PlayerValue.getValue(pid, { skin: resolvedLeagueSkin })
-                : (window.App?.LI?.playerScores?.[pid] ?? null));
-            let res;
-            try {
-                res = W.streamUpgrades({
-                    roster: myRoster, league: currentLeague, playersData, candidates: pool,
-                    projOf, valueOf, protectedPids,
-                    rosOf: rosOn ? (pid => (ros.points[pid] != null ? ros.points[pid] : 0)) : null,
-                    horizon: rosOn ? streamHorizon : 'week',
-                });
-            } catch (e) {
-                if (window.wrLog) window.wrLog('fa.streams', e);
-                return off;
-            }
-            return { ...res, lines, rosOn, week };
-        }, [isPro, skinFeatures.showStreaming, streamBestBall, myRoster, playersData, statsData, prevStatsData, currentLeague, resolvedLeagueSkin, rostered, leaguePosSet, isDraftProspect, rosterState.isUsable, streamHorizon, streamWeek, projTick, timeRecomputeTs]);
+            load();
+            const iv = setInterval(load, 300000);
+            return () => { alive = false; clearInterval(iv); };
+        }, [streamWanted, streamGamesKey]);
+        const streamGamesReady = streamGames.key === streamGamesKey && Array.isArray(streamGames.games);
+        const streamLock = (() => {
+            const W = faWT();
+            if (!W || !W.lockBoard || !streamGamesReady) return null;
+            return W.lockBoard(streamGames.games, window.App?.NflContext?.gameStatus, Date.now());
+        })();
+        const streamLockStamp = !streamLock ? 'pending'
+            : (streamLock.known ? 'k:' + Object.keys(streamLock.byTeam).filter(t => streamLock.lockedTeam(t)).sort().join(',') + (streamLock.allFinal ? ':final' : '')
+                : 'u:' + (streamLock.started ? 1 : 0));
+        const streamRos = window.App?.PlayerValue?.rosState?.() || null;
+        // ROS only when it was built on THIS week's published lines.
+        const streamRosOn = !!(streamRos && String(streamRos.leagueId) === streamLeagueId && streamRos.points && streamRos.remainingWeeks > 0 && Number(streamRos.week) === Number(streamWeek));
+        const streamRosStamp = streamRosOn ? streamRos.week + ':' + streamRos.remainingWeeks + ':' + Object.keys(streamRos.points).length : '';
+        const streamRosterKey = myRoster ? [myRoster.players, myRoster.reserve, myRoster.taxi, myRoster.starters].map(a => (a || []).join(',')).join('/') : '';
+        const streamRosteredKey = useMemo(() => (currentLeague?.rosters || []).map(r => (r.players || []).length + ':' + (r.players || []).slice(0, 3).join(',') + ':' + (r.players || []).slice(-3).join(',')).join('|'), [currentLeague]);
+        const streamSig = [streamLeagueId, streamRosterKey, streamRosteredKey, streamWeek, streamProjStamp, streamRosOn ? streamHorizon : 'week', streamRosStamp, streamLockStamp, gmFaTickForStreams(currentLeague)].join('#');
+        const streamInputs = useRef(null);
+        streamInputs.current = { playersData, statsData, prevStatsData, currentLeague, myRoster, rostered, leaguePosSet, isDraftProspect, resolvedLeagueSkin, week: streamWeek, lock: streamLock, ros: streamRosOn ? streamRos : null, horizon: streamRosOn ? streamHorizon : 'week' };
+        const [streamState, setStreamState] = useState(() => (_faStreamCache && _faStreamCache.sig === streamSig ? _faStreamCache : { sig: '', read: null }));
+        useEffect(() => {
+            if (!streamWanted || !streamLock) return undefined;
+            if (_faStreamCache && _faStreamCache.sig === streamSig) { if (streamState.sig !== streamSig) setStreamState(_faStreamCache); return undefined; }
+            let cancelled = false;
+            const run = () => {
+                if (cancelled) return;
+                const read = faComputeStreams(streamInputs.current);
+                if (cancelled) return;
+                _faStreamCache = { sig: streamSig, read };
+                setStreamState(_faStreamCache);
+            };
+            const ric = typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback : null;
+            const handle = ric ? ric(run, { timeout: 1200 }) : setTimeout(run, 50);
+            return () => { cancelled = true; if (ric && window.cancelIdleCallback) window.cancelIdleCallback(handle); else clearTimeout(handle); };
+        }, [streamWanted, streamSig, !!streamLock]);
+        const streamRead = !isPro || skinFeatures.showStreaming === false ? { ok: false, reason: 'off', rows: [], week: streamWeek }
+            : streamBestBall ? { ok: false, reason: 'best_ball', rows: [], week: streamWeek }
+            : streamEliminated ? { ok: false, reason: 'chopped', rows: [], week: streamWeek }
+            : !streamWanted ? { ok: false, reason: 'off', rows: [], week: streamWeek }
+            : (streamState.sig === streamSig && streamState.read) ? streamState.read
+            : { ok: false, reason: 'pending', rows: [], week: streamWeek };
         // Positions with a this-week upgrade (the gold dot on the POS chips).
-        const streaming = (streamRead.rows || []).filter(r => r.weekGain >= 1);
-
+        const streaming = (streamRead.rows || []).filter(r => r.weekGain >= 1 && !r.locked);
         // ── 2-week trend (real weekly points) ────────────────────────────────
         // The last two COMPLETED weeks' Sleeper stat lines, league-scored. Reads
         // App.SOS.getWeekStats (already cached by the SOS / DHQ projection
@@ -1915,7 +2029,8 @@
             const WP = window.App && window.App.WeeklyProj;
             const src = (WP && WP.platformSource && WP.platformSource(r.week) && FA_PLATFORM_NAME[WP.platformSource(r.week)]) || 'Sleeper';
             const plat = FA_PLATFORM_NAME[faPlatformNow] || faPlatformNow;
-            const horizon = r.rosOn ? streamHorizon : 'week';
+            const noWeek = !!(r.weekOver || r.weekUnknown);
+            const horizon = noWeek ? 'season' : (r.rosOn ? streamHorizon : 'week');
             const signed = n => (Number.isFinite(n) ? (n > 0 ? '+' : '') + n.toFixed(1) : '—');
             const head = (
                 <div className="fa-streams-head">
@@ -1931,14 +2046,20 @@
                     </section>
                 );
             }
-            let note = null;
-            if (r.reason === 'chopped') note = 'Your team has been chopped, so there is no lineup left to improve.';
-            else if (!r.ok && r.reason === 'overage') note = 'Your roster is over its limit — clear a spot on ' + plat + ' first. Upgrades are measured on a legal roster.';
-            else if (!r.ok) note = 'This league\u2019s lineup slots aren\u2019t available, so lineup upgrades can\u2019t be measured.';
-            else if (!r.lines) note = src + ' hasn\u2019t published Week ' + r.week + ' projections yet. Upgrades appear once it does — we don\u2019t guess.';
-            else if (!r.rows.length) note = horizon === 'season'
-                ? 'No available player improves your best rest-of-season lineup by a point or more. Holding is a valid move.'
-                : 'No available player improves your best projected lineup this week by a point or more. Holding is a valid move.';
+            const notes = [];
+            if (r.reason === 'pending') notes.push('Checking this week\u2019s lineup upgrades and game times…');
+            else if (r.reason === 'chopped') notes.push('Your team has been chopped, so there is no lineup left to improve.');
+            else if (!r.ok && r.reason === 'overage') notes.push('Your roster is over its limit — clear a spot on ' + plat + ' first. Upgrades are measured on a legal roster.');
+            else if (!r.ok) notes.push('This league\u2019s lineup slots aren\u2019t available, so lineup upgrades can\u2019t be measured.');
+            else if (r.reason === 'no_lines' || !r.lines) notes.push(src + ' hasn\u2019t published Week ' + r.week + ' projections yet. Upgrades appear once it does — we don\u2019t guess, and last week\u2019s lines don\u2019t stand in.');
+            else {
+                if (r.weekOver) notes.push('Every Week ' + r.week + ' game is final — this week\u2019s lineup is settled.' + (r.rosOn ? ' Rest-of-season upgrades are below.' : ' Next week\u2019s upgrades appear once ' + src + ' publishes Week ' + (r.week + 1) + ' projections.'));
+                else if (r.weekUnknown) notes.push('Game times couldn\u2019t be loaded and Week ' + r.week + ' games may be under way, so this week\u2019s upgrades are hidden rather than guessed.' + (r.rosOn ? ' Rest-of-season upgrades are below — some of these players may be locked until their game ends.' : ''));
+                else if (r.lock && r.lock.started) notes.push('Games already under way are locked: those players can\u2019t be added or dropped, and a locked starter keeps his slot. This week\u2019s gains count only the slots still open.');
+                if (!r.rows.length) notes.push(horizon === 'season'
+                    ? 'No available player improves your best rest-of-season lineup by a point or more. Holding is a valid move.'
+                    : 'No available player improves your best projected lineup for the rest of this week by a point or more. Holding is a valid move.');
+            }
             const rows = r.ok ? r.rows : [];
             const shown = streamShowAll ? rows : rows.slice(0, 3);
             const row = o => {
@@ -1951,10 +2072,11 @@
                             <strong>{name}</strong>
                             <span>{window.App?.posLabel?.(o.pos) || o.pos} · {p.team || 'FA'}{p.injury_status ? ' · ' + p.injury_status : ''} <FaTrendSpark trend={trendFor(o.pid)} /></span>
                             <span className="fa-stream-swap">{drop ? 'Add ' + name + ', drop ' + drop : 'Add ' + name + ' · open roster spot'}</span>
+                            {o.locked ? <span className="fa-stream-lock">His game has started — locked until it ends.</span> : null}
                         </span>
                         <span className="fa-stream-nums">
-                            <span><b>{o.addPts != null ? o.addPts.toFixed(1) : '—'}</b>Wk {r.week} proj</span>
-                            <span><b className={o.weekGain > 0 ? 'is-gain' : o.weekGain < 0 ? 'is-loss' : ''}>{signed(o.weekGain)}</b>This week</span>
+                            {noWeek ? null : <span><b>{o.addPts != null && !o.locked ? o.addPts.toFixed(1) : '—'}</b>Wk {r.week} proj</span>}
+                            {noWeek ? null : <span><b className={o.weekGain > 0 ? 'is-gain' : o.weekGain < 0 ? 'is-loss' : ''}>{signed(o.weekGain)}</b>This week</span>}
                             {r.rosOn ? <span><b className={o.rosGain > 0 ? 'is-gain' : o.rosGain < 0 ? 'is-loss' : ''}>{signed(o.rosGain)}</b>Rest of season</span> : null}
                         </span>
                     </button>
@@ -1963,13 +2085,13 @@
             return (
                 <section className="fa-streams" aria-label="Streaming and season upgrades">
                     {head}
-                    {r.rosOn ? (
+                    {r.rosOn && !noWeek && r.ok ? (
                         <div className="fa-streams-toggle" role="group" aria-label="Improve my lineup for">
                             <button type="button" className={horizon === 'week' ? 'is-active' : ''} aria-pressed={horizon === 'week'} onClick={() => setStreamHorizon('week')}>This week</button>
                             <button type="button" className={horizon === 'season' ? 'is-active' : ''} aria-pressed={horizon === 'season'} onClick={() => setStreamHorizon('season')}>Rest of season</button>
                         </div>
                     ) : null}
-                    {note ? <p className="fa-streams-note">{note}</p> : null}
+                    {notes.map((n, i) => <p key={i} className="fa-streams-note">{n}</p>)}
                     {shown.map(row)}
                     {rows.length > 3 ? (
                         <button type="button" className="fa-streams-more" onClick={() => setStreamShowAll(v => !v)}>
@@ -1980,7 +2102,7 @@
                         <p className="fa-streams-foot">
                             Projections are {src}'s published Week {r.week} lines in your league's scoring. Each gain compares your best projected lineup before and after that one move — a projection, not a promise.
                             {r.rosOn ? ' Rest of season = this week\u2019s line × the weeks left' + (faLeagueTypeNow === 'chopped' ? ' you\u2019re expected to survive' : '') + ' — an estimate.' : ''}
-                            {' '}A player whose game has kicked off can't help this week — confirm locks and submit on {plat}.
+                            {r.lock && r.lock.known ? ' Game locks come from the NFL schedule (kickoff times); confirm on ' + plat + ' before you submit.' : ' Confirm locks and submit on ' + plat + '.'}
                         </p>
                     ) : null}
                 </section>

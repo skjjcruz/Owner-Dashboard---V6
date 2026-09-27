@@ -61,7 +61,11 @@
     const uniq = arr => [...new Set((arr || []).filter(x => x != null && String(x) !== '' && String(x) !== '0').map(String))];
 
     // ── League shape ────────────────────────────────────────────────
+    // The boot-loaded js/shared/faab-league.js (App.FaabLeague) is the one
+    // definition every surface uses; these copies keep this file standalone
+    // (Node tests, a failed boot script) and must stay identical to it.
     function leaguePlatform(league) {
+        if (App.FaabLeague && App.FaabLeague.platformOf) return App.FaabLeague.platformOf(league);
         const lg = league || {};
         try {
             const reg = App.Platforms || root.Platforms;
@@ -78,6 +82,7 @@
     // the league runs rolling or reverse-standings waivers; waiver_type 2 is the
     // FAAB setting. Platforms that do not send waiver_type decide on budget.
     function isFaabLeague(league) {
+        if (App.FaabLeague && App.FaabLeague.isFaabLeague) return App.FaabLeague.isFaabLeague(league);
         const st = (league && league.settings) || {};
         const budget = Number(st.waiver_budget) || 0;
         if (!(budget > 0)) return false;
@@ -157,7 +162,14 @@
     //       projOf(pid) → { pts, available } | null   (published line only),
     //       rosOf(pid)  → number | null                 (optional),
     //       valueOf(pid)→ number | null,
+    //       lockedOf(pid) → bool   (his game this week has kicked off / may
+    //                               have — see lockBoard),
     //       protectedPids: iterable, perPosition, minGain }
+    // Game locks: a locked player can't be added or dropped, a locked
+    // STARTER keeps his slot in both the before and after lineup, and a
+    // locked bench player can't be moved in — so this week's gain only
+    // counts slots that are still open. A locked free agent is never a
+    // this-week pickup; the season view keeps him, flagged `locked`.
     // → { ok, reason?, week:{before}, season:{before}|null, rows:[…] }
     function streamUpgrades(o) {
         const SS = App.StartSit;
@@ -173,9 +185,32 @@
         if (active.length > capacity) return { ok: false, reason: 'overage', rows: [] };
         const openSpot = active.length < capacity;
         const protectedSet = new Set(uniq([...(opts.protectedPids || [])].concat(roster.keepers || [], roster.locked_players || [])));
-        const perPosition = Math.max(1, Number(opts.perPosition) || 6);
+        const perPosition = Math.max(1, Number(opts.perPosition) || 4);
         const minGain = Number.isFinite(Number(opts.minGain)) ? Number(opts.minGain) : 1;
         const hasRos = typeof opts.rosOf === 'function';
+        const lockMemo = new Map();
+        const locked = pid => {
+            if (typeof opts.lockedOf !== 'function') return false;
+            if (lockMemo.has(pid)) return lockMemo.get(pid);
+            let v = false;
+            try { v = !!opts.lockedOf(pid); } catch (e) { v = true; }   // unknown → locked (conservative)
+            lockMemo.set(pid, v);
+            return v;
+        };
+        // This week's slots: a locked starter keeps his slot, so it leaves the
+        // pool the solver may fill (it is identical before and after a move).
+        const startersList = (roster.starters || []).map(x => (x == null ? '' : String(x)));
+        const weekSlots = [];
+        const fixed = [];
+        let startIdx = 0;
+        slots.forEach(raw => {
+            const nm = SS.normSlot ? SS.normSlot(raw) : raw;
+            if (NON_START_SLOTS.has(nm)) { weekSlots.push(raw); return; }
+            const pid = startersList[startIdx++];
+            if (pid && pid !== '0' && locked(pid) && roster.players.map(String).includes(pid)) { fixed.push(pid); return; }
+            weekSlots.push(raw);
+        });
+        const fixedSet = new Set(fixed);
 
         const memoW = new Map(), memoR = new Map(), memoV = new Map();
         const wk = pid => {
@@ -205,14 +240,15 @@
             return v;
         };
         const base = pid => { const p = pd[pid]; return { pid, pos: normPos(p && p.position), positions: positionsOf(p) }; };
-        const weekEntry = pid => { const w = wk(pid); return { ...base(pid), available: !!(w && w.available), pts: w ? w.pts : 0 }; };
+        const weekEntry = pid => { const w = wk(pid); const ok = !!(w && w.available) && !locked(pid); return { ...base(pid), available: ok, pts: ok ? w.pts : 0 }; };
         const rosEntry = pid => { const r = ros(pid); return { ...base(pid), available: r != null && r > 0, pts: r || 0 }; };
         // Coverage: could this roster field every starting slot in a normal
         // week? Injury only (a bye is one week, not a hole in the roster).
         const covEntry = pid => { const p = pd[pid]; return { ...base(pid), available: !!(p && p.team) && !isOut(p), pts: 1 }; };
         const solve = (pids, fn) => SS.optimalLineupWeekly(pids.map(fn), slots);
+        const solveWeek = pids => SS.optimalLineupWeekly(pids.filter(x => !fixedSet.has(x)).map(weekEntry), weekSlots);
 
-        const weekBefore = solve(active, weekEntry).total;
+        const weekBefore = solveWeek(active).total;
         const rosBefore = hasRos ? solve(active, rosEntry).total : null;
         const coverBefore = solve(active, covEntry).starters.length;
 
@@ -225,9 +261,12 @@
             if (active.includes(pid) || reserve.has(pid)) return;
             const p = pd[pid];
             if (!p || !p.team) return;
+            const isLocked = locked(pid);
+            // A locked free agent can't help this week — season view only.
+            if (isLocked && opts.horizon !== 'season') return;
             const w = wk(pid);
             const r = ros(pid);
-            const score = (w && w.available) ? w.pts : 0;
+            const score = (w && w.available && !isLocked) ? w.pts : 0;
             if (!(score > 0) && !(r > 0)) return;
             const pos = normPos(p.position);
             (byPos[pos] = byPos[pos] || []).push({ pid, score, ros: r });
@@ -246,6 +285,7 @@
             const p = pd[pid];
             if (!p) return false;
             if (injuryOf(p)) return false;     // never suggest cutting an injured player to stream
+            if (locked(pid)) return false;     // his game has kicked off: the platform won't drop him
             return true;
         });
 
@@ -261,7 +301,7 @@
                 }
                 const after = active.filter(x => x !== drop).concat(pid);
                 if (solve(after, covEntry).starters.length < coverBefore) continue;   // never open a hole to fill a slot
-                const weekGain = Math.round((solve(after, weekEntry).total - weekBefore) * 10) / 10;
+                const weekGain = Math.round((solveWeek(after).total - weekBefore) * 10) / 10;
                 const rosGain = hasRos ? Math.round((solve(after, rosEntry).total - rosBefore) * 10) / 10 : null;
                 const cand = { drop, weekGain, rosGain, dropValue: drop ? val(drop) : null };
                 const better = (a, b) => {
@@ -286,6 +326,7 @@
                 pos: normPos(pd[pid] && pd[pid].position),
                 addPts: w && w.available ? w.pts : null,
                 addRos: ros(pid),
+                locked: locked(pid),
                 drop: best.drop ? {
                     pid: best.drop,
                     name: (dp && (dp.full_name || [dp.first_name, dp.last_name].filter(Boolean).join(' '))) || best.drop,
@@ -300,7 +341,47 @@
         rows.sort((a, b) => opts.horizon === 'season'
             ? ((b.rosGain || 0) - (a.rosGain || 0)) || (b.weekGain - a.weekGain)
             : (b.weekGain - a.weekGain) || ((b.rosGain || 0) - (a.rosGain || 0)));
-        return { ok: true, openSpot, rows, week: { before: weekBefore }, season: hasRos ? { before: rosBefore } : null };
+        return { ok: true, openSpot, rows, week: { before: weekBefore, lockedStarters: fixed.length }, season: hasRos ? { before: rosBefore } : null, candidates: cands.length };
+    }
+
+    // ── Game locks ──────────────────────────────────────────────────
+    // games: App.NflContext.loadScores() rows ([] when the scoreboard could
+    // not load); statusOf: App.NflContext.gameStatus. Returns
+    //   { known, byTeam:{TEAM:status}, started, allFinal, lockedTeam(team) }
+    // Status 'live' | 'locked' | 'final' | 'unknown' (postponed / odd state)
+    // all count as locked — unknown never authorises a move. With no
+    // schedule, the NFL game window (Thu 23:00 → Tue 06:00 UTC) counts as
+    // "may have started": every team is treated as locked and `known` is
+    // false, so the caller can say so instead of guessing.
+    function inGameWindow(now) {
+        const d = new Date(now);
+        const day = d.getUTCDay(), h = d.getUTCHours();
+        if (day === 3) return false;                 // Wed
+        if (day === 4) return h >= 23;               // Thu night
+        if (day === 2) return h < 6;                 // Tue small hours (MNF)
+        return true;                                 // Fri–Mon
+    }
+    function lockBoard(games, statusOf, now) {
+        const t = now == null ? Date.now() : now;
+        const list = Array.isArray(games) ? games : [];
+        const byTeam = {};
+        if (list.length && typeof statusOf === 'function') {
+            list.forEach(g => {
+                const st = statusOf(g, t);
+                if (g.home) byTeam[String(g.home).toUpperCase()] = st;
+                if (g.away) byTeam[String(g.away).toUpperCase()] = st;
+            });
+            const states = Object.values(byTeam);
+            const started = states.some(st => st !== 'upcoming');
+            const allFinal = states.length > 0 && states.every(st => st === 'final');
+            return {
+                known: true, byTeam, started, allFinal,
+                // A team not on the slate is on bye: no line, nothing to lock.
+                lockedTeam: team => { const st = byTeam[String(team || '').toUpperCase()]; return st != null && st !== 'upcoming'; },
+            };
+        }
+        const mayHaveStarted = inGameWindow(t);
+        return { known: false, byTeam, started: mayHaveStarted, allFinal: false, lockedTeam: () => mayHaveStarted };
     }
 
     // ── Real weekly points (trend sparkline) ────────────────────────
@@ -386,7 +467,7 @@
 
     App.WaiverTools = App.WaiverTools || {
         MIN_BIDS, normPos, leaguePlatform, isFaabLeague, isBestBall,
-        bidEvidence, roleRead, streamUpgrades,
+        bidEvidence, roleRead, streamUpgrades, lockBoard, inGameWindow,
         completedWeeks, loadWeeks, weekRows, trendFor, scoreRow,
         _reset() { _weeks.clear(); _scored.clear(); _failedAt.clear(); },
     };

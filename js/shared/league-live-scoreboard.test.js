@@ -111,3 +111,56 @@ test('unsupported (ESPN/MFL): honest Sleeper-only note, no subscription, no cras
     const section = scope.window.WrAroundTheLeague({ currentLeague: { league_id: 'espn_1', _platform: 'espn', season: '2026' }, myRoster: null, playersData: {} });
     assert(text(section).includes('Sleeper leagues only for now'));
 });
+
+test('breakdown with no NFL schedule: a plain 0 reads "—", real scores (incl. negatives) show; no-team players say so', () => {
+    scope.window.WR = { useViewport: () => ({ isPhone: true }) };
+    hooks = [];
+    const r = [
+        { roster_id: 1, matchup_id: 1, points: 5, starters: ['a', 'b', 'c'], players_points: { a: 0, b: -1.28, c: 6.28 } },
+        { roster_id: 2, matchup_id: 1, points: 0, starters: ['d'], players_points: { d: 0 } },
+    ];
+    board = { status: 'ready', supported: true, rows: r, groups: [{ matchupId: 1, teams: r }], updatedAt: Date.now(), error: null };
+    const pd = { a: { position: 'QB', team: 'BUF' }, b: { position: 'K', team: 'DAL' }, c: { position: 'WR', team: 'KC' }, d: { position: 'RB', team: '' } };
+    let tree = render({ board, playersData: pd, myRoster: r[0] });
+    button(tree, 'Matchup breakdown').props.onClick();
+    tree = render({ board, playersData: pd, myRoster: r[0] });
+    const t = text(tree);
+    assert(t.includes('-1.28') && t.includes('6.28'));
+    assert(!/Actual[^]*0\.00/.test(t.split('Hide breakdown')[1] || ''), 'no 0.00 player rows while the schedule is unknown');
+    hooks = [];
+    tree = render({ board, playersData: pd, myRoster: r[0], games: [{ home: 'BUF', away: 'MIA', state: 'pre', kickoff: '2099-01-01T00:00Z' }] });
+    button(tree, 'Matchup breakdown').props.onClick();
+    tree = render({ board, playersData: pd, myRoster: r[0], games: [{ home: 'BUF', away: 'MIA', state: 'pre', kickoff: '2099-01-01T00:00Z' }] });
+    assert(text(tree).includes('No NFL team'), 'a teamless player is not labelled BYE');
+    assert(text(tree).includes('BYE'), 'a player whose team has no game this week is BYE');
+    delete scope.window.WR;
+});
+
+test('week picker covers only the league’s real weeks', () => {
+    hooks = [];
+    board = { status: 'ready', supported: true, rows, groups: [{ matchupId: 1, teams: rows.slice(0, 2) }], updatedAt: Date.now(), error: null };
+    const opts = lg => nodes(render({ currentLeague: { ...props.currentLeague, settings: lg } })).filter(n => n.type === 'option').map(n => n.props.value);
+    assert.deepEqual(opts({ playoff_week_start: 15, playoff_teams: 6, playoff_round_type: 0 }), Array.from({ length: 17 }, (_, i) => i + 1));
+    assert.equal(opts({ playoff_week_start: 15, playoff_teams: 4, playoff_round_type: 2 }).at(-1), 18);
+    assert.equal(opts({ playoff_week_start: 14, playoff_teams: 4, playoff_round_type: 0 }).at(-1), 15);
+    assert.equal(opts({ playoff_week_start: 0, type: 3 }).at(-1), 18);
+    assert.equal(opts({ start_week: 3, playoff_week_start: 15, playoff_teams: 6 })[0], 2, 'the selected week is always offered');
+});
+
+test('relay outage polls only inside NFL game windows (US Eastern)', () => {
+    const w = scope.window.WrAroundTheLeague._inNflWindow;
+    assert.equal(w(Date.parse('2026-09-27T18:00:00Z'), 3), true, 'Sun 2pm ET');
+    assert.equal(w(Date.parse('2026-09-29T18:00:00Z'), 3), false, 'Tue 2pm ET');
+    assert.equal(w(Date.parse('2026-10-02T01:00:00Z'), 4), true, 'Thu 9pm ET');
+    assert.equal(w(Date.parse('2026-10-01T16:00:00Z'), 4), false, 'Thu noon ET');
+    assert.equal(w(Date.parse('2026-12-19T20:00:00Z'), 15), true, 'late-season Sat');
+    assert.equal(w(Date.parse('2026-10-03T20:00:00Z'), 4), false, 'early-season Sat');
+});
+
+test('standings panel with a missing engine shows a note instead of crashing', () => {
+    hooks = [];
+    const saved = App.LeagueLiveTable; delete App.LeagueLiveTable;
+    const t = text(scope.window.LeagueLiveStandingsPanel({ currentLeague: props.currentLeague, board }));
+    assert(t.includes('Standings are unavailable'));
+    if (saved) App.LeagueLiveTable = saved;
+});

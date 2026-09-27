@@ -181,6 +181,24 @@ button.lls-card:hover{border-color:var(--acc-line1,rgba(212,175,55,.3))}
         return { team, game: games.find(g => g.home === team || g.away === team) || null };
     }
 
+    // The league's real week span from Sleeper settings: start_week through the
+    // last playoff week (rounds = ceil(log2(playoff_teams)); playoff_round_type
+    // 1 = two-week final, 2 = two weeks per round). No playoffs (pws 0, e.g.
+    // guillotine) or missing settings → week 18.
+    function leagueWeekSpan(league) {
+        const s = (league && league.settings) || {};
+        const first = Math.max(1, Math.min(18, Number(s.start_week) || 1));
+        const pws = Number(s.playoff_week_start) || 0, teams = Number(s.playoff_teams) || 0;
+        let last = 18;
+        if (pws > 0 && teams >= 2) {
+            const rounds = Math.ceil(Math.log2(teams));
+            const type = Number(s.playoff_round_type) || 0;
+            const weeks = type === 2 ? rounds * 2 : type === 1 ? rounds + 1 : rounds;
+            last = Math.min(18, pws + weeks - 1);
+        } else if (pws > 0) last = Math.min(18, pws - 1);
+        return { first, last: Math.max(first, last) };
+    }
+
     // ── C2's scoreboard (adapted) ─────────────────────────────────────
     function LeagueLiveScoreboard(props) {
         const { currentLeague, myRoster, playersData, getOwnerName, getPlayerName, setActiveTab, selectedWeek, onWeekChange, onRefresh,
@@ -200,6 +218,9 @@ button.lls-card:hover{border-color:var(--acc-line1,rgba(212,175,55,.3))}
         const settings = currentLeague?.settings || {};
         const playoffStart = Number(settings.playoff_week_start) || 0;
         const isPlayoffWeek = !chopped && playoffStart > 0 && week >= playoffStart;
+        const span = leagueWeekSpan(currentLeague);
+        const weekOptions = Array.from({ length: span.last - span.first + 1 }, (_, i) => span.first + i);
+        if (!weekOptions.includes(week)) { weekOptions.push(week); weekOptions.sort((a, b) => a - b); }
         const mine = row => myRoster?.roster_id != null && sameId(row.roster_id, myRoster.roster_id);
         const rosterFor = row => (currentLeague?.rosters || []).find(r => sameId(r.roster_id, row.roster_id));
         const ownerName = row => getOwnerName?.(row.roster_id) || defaultOwnerName(currentLeague, row.roster_id);
@@ -211,9 +232,11 @@ button.lls-card:hover{border-color:var(--acc-line1,rgba(212,175,55,.3))}
         const gamesKnown = Array.isArray(games) && games.length > 0;
         const playerCell = (row, pid) => {
             const actual = service.playerPoints(row, pid);
-            if (!gamesKnown) return { value: fmt(actual), note: null };
-            const { game } = nflGameFor(games, playersData, pid);
-            if (!game) return { value: actual ? fmt(actual) : '—', note: 'BYE' };
+            // Schedule unknown (relay outage): a plain 0 may just be "not played
+            // yet", so it reads "—"; any real non-zero score (incl. negatives) shows.
+            if (!gamesKnown) return { value: actual ? fmt(actual) : '—', note: null };
+            const { team, game } = nflGameFor(games, playersData, pid);
+            if (!game) return { value: actual ? fmt(actual) : '—', note: team ? 'BYE' : 'No NFL team' };
             const st = window.App?.NflContext?.gameStatus?.(game) || 'unknown';
             if (st === 'upcoming' && !actual) return { value: '—', note: null };
             return { value: fmt(actual), note: null };
@@ -327,7 +350,7 @@ button.lls-card:hover{border-color:var(--acc-line1,rgba(212,175,55,.3))}
                 <div className="lls-controls">
                     {headerRight || null}
                     <label>Week <select aria-label="Scoreboard week" value={week} onChange={event => pickWeek(Number(event.target.value))}>
-                        {Array.from({ length: 18 }, (_, i) => i + 1).map(w => <option key={w} value={w}>{w}</option>)}
+                        {weekOptions.map(w => <option key={w} value={w}>{w}</option>)}
                     </select></label>
                     {(!isPhone || expanded || !hasRows || board.error) && <button type="button" disabled={loading || board.supported === false} onClick={() => { board.refresh?.(); onRefresh?.(); }}>{loading ? 'Updating…' : 'Refresh'}</button>}
                     {showCards && <button type="button" aria-expanded={expanded} aria-controls={boardId} onClick={() => { setExpanded(!expanded); setOpenKey(null); }}>{expanded ? (isPhone ? 'Show less' : 'Collapse') : `All ${chopped ? ladder.length + ' teams' : groups.length + (isPhone ? ' games' : ' matchups')}`}</button>}
@@ -367,10 +390,21 @@ button.lls-card:hover{border-color:var(--acc-line1,rgba(212,175,55,.3))}
     }
 
     // ── Live standings table (C2 League Central, adapted) ─────────────
-    function LeagueLiveStandingsPanel({ currentLeague, myRoster, board, playersData, getOwnerName, active = true }) {
+    // Guarded shell: a failed engine load shows a note instead of crashing
+    // (engine presence is fixed for the page's lifetime, so no hook hazard).
+    function LeagueLiveStandingsPanel(props) {
         useStyles();
         const App = window.App || {};
-        const ctx = App.LeagueLiveTable.useContext({ league: currentLeague, board, playersData, enabled: active });
+        if (!App.LeagueLiveTable?.useContext || !App.LeagueLiveStandings?.compute || !App.LeagueLiveScores) {
+            return <div className="lct-live-panel"><p className="lls-note">Standings are unavailable right now. Reload the page to try again.</p></div>;
+        }
+        return <LiveStandingsTable {...props} />;
+    }
+    function LiveStandingsTable({ currentLeague, myRoster, board, playersData, getOwnerName, active = true, games }) {
+        const App = window.App || {};
+        // games (optional): the parent's NFL schedule — reused so the table
+        // adds no relay requests of its own.
+        const ctx = App.LeagueLiveTable.useContext({ league: currentLeague, board, playersData, enabled: active, games });
         const [source, setSource] = React.useState('live');
         const settings = currentLeague?.settings || {};
         const official = React.useMemo(() => App.LeagueLiveStandings.compute({ league: currentLeague, week: 0 }).officialRows, [currentLeague]);
@@ -447,7 +481,7 @@ button.lls-card:hover{border-color:var(--acc-line1,rgba(212,175,55,.3))}
                             <td className="lct-week">{liveReady ? <>
                                 <span className="lct-result" data-result={outcome || 'none'}>{outcome ? (ctx.historical ? outcome : { W: 'Leading', L: 'Trailing', T: 'Tied' }[outcome]) : t.opponentRosterId == null && t.currentPoints != null ? 'Bye' : 'Pending'}</span>
                                 <span className="lct-week-score">{t.opponentRosterId != null && weekPts(t.rosterId, t.currentPoints) === '—' && weekPts(t.opponentRosterId, t.opponentPoints) === '—' ? '—' : <>{weekPts(t.rosterId, t.currentPoints)}{t.opponentRosterId != null && ` – ${weekPts(t.opponentRosterId, t.opponentPoints)}`}</>}</span>
-                                {t.medianResult && <small className="lct-team-meta">Median {t.medianResult}</small>}
+                                {Number(settings.league_average_match) === 1 && !ctx.historical ? <small className="lct-team-meta">Median {t.medianResult || '—'}</small> : t.medianResult && <small className="lct-team-meta">Median {t.medianResult}</small>}
                             </> : <strong style={{ color: String(streak || '').slice(-1) === 'W' ? 'var(--good, #2ecc71)' : 'var(--text-muted, #8d887e)', fontFamily: 'var(--font-mono, monospace)' }}>{streak || '—'}</strong>}</td>
                         </tr>;
                     })}</tbody>
@@ -461,6 +495,24 @@ button.lls-card:hover{border-color:var(--acc-line1,rgba(212,175,55,.3))}
     // ── Game Day section ──────────────────────────────────────────────
     const LIVE_WINDOW_MS = 4.5 * 60 * 60 * 1000; // a kicked-off game counts as live this long unless reported final
     const NFL_RELOAD_MS = 5 * 60 * 1000;          // kickoff schedule refresh while visible
+    // Usual NFL game windows in US Eastern time, used only when the kickoff
+    // schedule could not load: Thu/Mon night, Sunday from the London
+    // kickoffs on, Saturday late season, a Friday opener — plus the hour
+    // after midnight for late finishes.
+    const ET_PARTS = (() => { try { return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', hourCycle: 'h23' }); } catch (_) { return null; } })();
+    function inNflWindow(now, week) {
+        if (!ET_PARTS) return true; // cannot tell → allow the slow poll
+        const parts = ET_PARTS.formatToParts(new Date(now));
+        const day = (parts.find(p => p.type === 'weekday') || {}).value;
+        const hour = Number((parts.find(p => p.type === 'hour') || {}).value);
+        if (!Number.isFinite(hour)) return true;
+        if (hour < 1) return ['Fri', 'Sat', 'Sun', 'Mon', 'Tue'].includes(day);
+        if (day === 'Sun') return hour >= 9;
+        if (day === 'Thu' || day === 'Mon') return hour >= 19;
+        if (day === 'Fri') return Number(week) === 1 && hour >= 19;
+        if (day === 'Sat') return Number(week) >= 15 && hour >= 12;
+        return false;
+    }
     function WrAroundTheLeague({ currentLeague, myRoster, playersData, week: weekProp }) {
         useStyles();
         const App = window.App || {};
@@ -520,8 +572,10 @@ button.lls-card:hover{border-color:var(--acc-line1,rgba(212,175,55,.3))}
         }) : [];
         const liveNow = gamesOk ? liveGames.length > 0 : null;
         // Poll at C2's 30s only while an NFL game of this week is in progress;
-        // unknown schedule → every 2 min; otherwise fetch on open/return only.
-        const interval = !isCurrent ? 0 : liveNow === true ? service.INTERVAL : liveNow === null ? 4 * service.INTERVAL : 0;
+        // unknown schedule (relay outage) → every 2 min, but only inside the
+        // usual NFL game windows; otherwise fetch on open/return only.
+        const interval = !isCurrent ? 0 : liveNow === true ? service.INTERVAL
+            : liveNow === null ? (inNflWindow(clock, week) ? 4 * service.INTERVAL : 0) : 0;
         const board = service ? service.useScores({ league: currentLeague, week, enabled: supported, interval }) : { rows: [], groups: [], status: 'unsupported', supported: false };
 
         const startedIds = React.useMemo(() => {
@@ -553,7 +607,7 @@ button.lls-card:hover{border-color:var(--acc-line1,rgba(212,175,55,.3))}
                     <div className="lls-heading"><h3>Around the league</h3><span className="lls-note">{season} · Week {week} · Sleeper</span></div>
                     <div className="lls-controls">{tabs}</div>
                 </div>
-                <LeagueLiveStandingsPanel currentLeague={currentLeague} myRoster={myRoster} board={board} playersData={playersData} active />
+                <LeagueLiveStandingsPanel currentLeague={currentLeague} myRoster={myRoster} board={board} playersData={playersData} active games={nfl.key === nflKey ? games : null} />
             </section>;
         }
         return <LeagueLiveScoreboard key={leagueId + ':' + season} currentLeague={currentLeague} myRoster={myRoster} playersData={playersData}
@@ -564,4 +618,5 @@ button.lls-card:hover{border-color:var(--acc-line1,rgba(212,175,55,.3))}
     window.LeagueLiveScoreboard = LeagueLiveScoreboard;
     window.LeagueLiveStandingsPanel = LeagueLiveStandingsPanel;
     window.WrAroundTheLeague = React.memo(WrAroundTheLeague);
+    window.WrAroundTheLeague._inNflWindow = inNflWindow; // for tests
 })();

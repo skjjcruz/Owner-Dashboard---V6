@@ -65,3 +65,14 @@ const s=compute({league,week:0});
 assert.equal(s.status,'official');
 assert.deepEqual(s.officialRows.map(r=>[r.rosterId,r.rank,r.pointsFor]),[[1,1,300.5],[2,2,250]]);
 });
+test('median waits for every team to start (no "Median L" at an unstarted 0.00)',()=>{
+const rosters=[1,2,3,4].map(roster_id=>({roster_id,settings:{}}));
+const league={league_id:'m',settings:{start_week:1,playoff_week_start:15,league_average_match:1},rosters};
+const rows=[{roster_id:1,matchup_id:1,points:30},{roster_id:2,matchup_id:1,points:0},{roster_id:3,matchup_id:2,points:12},{roster_id:4,matchup_id:2,points:0}];
+let s=compute({league,week:1,priorWeeks:[],board:{week:1,rows},startedRosterIds:['1','2','3']});
+assert.equal(s.median,null); assert.equal(s.status,'partial');
+assert.ok(s.rows.every(r=>r.medianResult===null),'no median decision while team 4 has not started');
+assert.equal(s.rows.find(r=>r.rosterId===1).wins,1,'head-to-head still counts');
+s=compute({league,week:1,priorWeeks:[],board:{week:1,rows},startedRosterIds:['1','2','3','4']});
+assert.equal(s.median,6); assert.equal(s.rows.find(r=>r.rosterId===4).medianResult,'L');
+});

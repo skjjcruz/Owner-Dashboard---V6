@@ -121,3 +121,59 @@ test('cadence: switching polling on in place, fastest subscriber wins, never und
     h.release(); await new Promise(r => setImmediate(r));
     off2();
 });
+
+test('leaving mid-request is not an error: prior status kept; a quick return retries', async () => {
+    const h = harness(), seen = [];
+    let aborted = 0;
+    const client = L.createClient({
+        now: () => h.clock, document: h.doc,
+        setTimeout: (cb, delay) => { const id = ++h.timerId; h.timers.set(id, { cb, delay }); return id; },
+        clearTimeout: id => h.timers.delete(id),
+        fetch: (_u, opts) => { h.calls++; return new Promise((resolve, reject) => {
+            h.release = () => resolve({ ok: true, json: async () => rows });
+            const fail = () => { aborted++; reject(Object.assign(new Error('Aborted'), { name: 'AbortError' })); };
+            if (opts.signal.aborted) fail(); else opts.signal.addEventListener('abort', fail);
+        }); },
+    });
+    const off = client.subscribe(league, 5, s => seen.push(s), { interval: 0 });
+    await Promise.resolve(); h.release(); await new Promise(r => setImmediate(r));
+    assert.equal(seen.at(-1).status, 'ready');
+    h.clock += 31000;
+    const off2 = client.subscribe(league, 5, s => seen.push(s), { interval: 0 }); // stale → refresh starts
+    off(); off2(); await new Promise(r => setImmediate(r));
+    assert.equal(aborted, 1);
+    const back = [];
+    const off3 = client.subscribe(league, 5, s => back.push(s), { interval: 0 });
+    assert.notEqual(back[0].status, 'error'); assert.notEqual(back[0].status, 'stale');
+    assert.equal(back[0].error, null, 'no "could not refresh" after an abandoned request');
+    await Promise.resolve(); h.release(); await new Promise(r => setImmediate(r));
+    assert.equal(back.at(-1).status, 'ready');
+    // re-subscribing while the abort is still settling retries once it clears
+    h.clock += 31000;
+    const off4 = client.subscribe(league, 5, () => {}, { interval: 0 });
+    off3(); off4();
+    const off5 = client.subscribe(league, 5, s => back.push(s), { interval: 0 });
+    await new Promise(r => setImmediate(r));
+    assert.ok(h.calls >= 4, 'a fresh request follows the cancelled one');
+    h.release(); await new Promise(r => setImmediate(r));
+    assert.equal(back.at(-1).status, 'ready');
+    off5();
+});
+
+test('snapshots nobody watched for 10 min are pruned', async () => {
+    const h = harness();
+    const off = h.client.subscribe(league, 6, () => {}, { interval: 0 });
+    await Promise.resolve(); h.release(); await new Promise(r => setImmediate(r));
+    off();
+    h.clock += 5 * 60 * 1000;
+    const offB = h.client.subscribe(league, 7, () => {}, { interval: 0 }); offB();
+    let first = [];
+    const again = h.client.subscribe(league, 6, s => first.push(s), { interval: 0 });
+    assert.equal(first[0].updatedAt, 1000, 'kept within 10 min'); again();
+    await Promise.resolve(); h.release(); await new Promise(r => setImmediate(r));
+    h.clock += 11 * 60 * 1000;
+    h.client.subscribe(league, 8, () => {}, { interval: 0 })();
+    first = [];
+    h.client.subscribe(league, 6, s => first.push(s), { interval: 0 })();
+    assert.equal(first[0].updatedAt, null, 'pruned after 10 idle minutes');
+});

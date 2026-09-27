@@ -124,3 +124,20 @@ test('a passed kickoff counts as started (the prod NFL relay can lag on game sta
     const postponed = [{ ...games[0], statusName: 'STATUS_POSTPONED' }];
     assert.deepEqual(plain(E.startedRosters({ rows: r, games: postponed, playersData: pd, now: kick + 1 })), []);
 });
+
+test('useContext({ games }) reuses the caller schedule and never calls the relay', async () => {
+    const root = load(), E = root.App.LeagueLiveTable;
+    let relay = 0, effect;
+    root.React = { useState: initial => [initial, () => {}], useEffect: fn => { effect = fn; } };
+    root.S = { nflState: { season: '2026', week: 2, season_type: 'regular' } };
+    root.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
+    root.setTimeout = () => 1; root.clearTimeout = () => {}; root.setInterval = () => 2; root.clearInterval = () => {};
+    root.App.NflContext = { loadScores: async () => { relay++; return []; } };
+    root.App.Matchup = { sleeperWeekRows: async () => rows };
+    const pd = { a: { team: 'BUF' } };
+    const games = [{ home: 'BUF', away: 'LAC', state: 'in' }];
+    const ctx = E.useContext({ league: fixture('g1'), board: { week: 2, rows: [{ roster_id: 1, points: 0, starters: ['a'] }, { roster_id: 2, points: 0, starters: [] }] }, playersData: pd, games });
+    assert.deepEqual(plain(ctx.startedRosterIds), ['1'], 'started evidence from the given games');
+    const cleanup = effect(); await new Promise(r => setImmediate(r)); cleanup();
+    assert.equal(relay, 0);
+});

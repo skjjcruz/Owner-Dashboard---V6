@@ -80,18 +80,24 @@
     // Cache Sleeper weekly matchup rows per (league, week). resolveOpponentRosterId
     // is re-invoked on every lineup-tab revisit (and overlaps with what other tabs
     // fetch), yet the roster→matchup mapping is stable through the week. In-memory
-    // with in-flight dedup; 5-min TTL. Errors are not cached.
+    // with in-flight dedup; 5-min TTL. Errors are not cached (30s backoff only).
+    // A failed request (HTTP error / network / bad JSON) still resolves [] to
+    // every caller, exactly as before, but is NOT stored as the week's rows:
+    // it is only remembered for 30s so a hot re-render can't hammer Sleeper
+    // (e.g. through a 429), then the next call retries.
     const _matchupRowsCache = {};      // 'lid|week' -> { ts, rows }
     const _matchupRowsInflight = {};
+    const _matchupRowsFailedAt = {};   // 'lid|week' -> ts of the last failure
     function _fetchSleeperMatchups(lid, week) {
         const k = lid + '|' + week;
         const hit = _matchupRowsCache[k];
         if (hit && Date.now() - hit.ts < 5 * 60 * 1000) return Promise.resolve(hit.rows);
         if (_matchupRowsInflight[k]) return _matchupRowsInflight[k];
+        if (_matchupRowsFailedAt[k] && Date.now() - _matchupRowsFailedAt[k] < 30 * 1000) return Promise.resolve([]);
         _matchupRowsInflight[k] = fetch('https://api.sleeper.app/v1/league/' + lid + '/matchups/' + week)
-            .then(r => r.ok ? r.json() : [])
-            .then(rows => { rows = rows || []; _matchupRowsCache[k] = { ts: Date.now(), rows }; return rows; })
-            .catch(() => [])
+            .then(r => { if (!r.ok) throw new Error('matchups ' + r.status); return r.json(); })
+            .then(rows => { rows = rows || []; _matchupRowsCache[k] = { ts: Date.now(), rows }; delete _matchupRowsFailedAt[k]; return rows; })
+            .catch(() => { _matchupRowsFailedAt[k] = Date.now(); return []; })
             .finally(() => { delete _matchupRowsInflight[k]; });
         return _matchupRowsInflight[k];
     }

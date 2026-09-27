@@ -15,25 +15,39 @@
             const [phase, setPhase] = React.useState(
                 (window.wrModuleGroupLoaded?.(group) && typeof resolveComponent() === 'function') ? 'ready' : 'loading'
             );
+            // Bumped by "Try again". The loader forgets a failed or stalled group
+            // (js/module-loader.js), so this re-requests only the scripts that
+            // never ran — no page reload, tab/league state kept.
+            const [attempt, setAttempt] = React.useState(0);
             React.useEffect(() => {
-                if (phase === 'ready') return;
+                if (phase === 'ready') return undefined;
                 let alive = true;
+                const settle = () => {
+                    // Loaded but the component never defined itself: show the
+                    // retry instead of "Loading…" forever.
+                    if (alive) setPhase(typeof resolveComponent() === 'function' ? 'ready' : 'error');
+                };
                 const loader = window.wrLoadModuleGroup ? window.wrLoadModuleGroup(group) : Promise.resolve();
-                loader.then(() => { if (alive) setPhase('ready'); })
+                loader.then(settle)
                       .catch((e) => { if (window.wrLog) window.wrLog(group + '.lazyLoad', e); if (alive) setPhase('error'); });
-                return () => { alive = false; };
-            }, []);
+                // A stalled group can still land after the loader gave up; the
+                // loader announces it, and the tab recovers without a tap.
+                const onGroupLoaded = (e) => { if (e && e.detail && e.detail.group === group) settle(); };
+                window.addEventListener('wr:module-group-loaded', onGroupLoaded);
+                return () => { alive = false; window.removeEventListener('wr:module-group-loaded', onGroupLoaded); };
+            }, [attempt, phase === 'ready']);
             if (phase === 'error') {
+                const retryBtn = { marginTop: '12px', padding: '8px 16px', minHeight: '44px', background: 'var(--gold)', color: 'var(--black)', border: 'none', borderRadius: 'var(--card-radius-sm, 8px)', cursor: 'pointer', fontWeight: 600 };
+                const reloadBtn = { ...retryBtn, marginLeft: '8px', background: 'transparent', color: 'var(--silver)', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))' };
                 return React.createElement('div', { style: { padding: '48px 24px', textAlign: 'center', color: 'var(--silver)' } },
-                    label + ' module failed to load. ',
-                    React.createElement('button', {
-                        onClick: () => window.location.reload(),
-                        style: { marginTop: '12px', padding: '8px 16px', background: 'var(--gold)', color: 'var(--black)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 },
-                    }, 'Reload'));
+                    label + ' didn\u2019t load \u2014 check your connection.',
+                    React.createElement('div', null,
+                        React.createElement('button', { onClick: () => { setPhase('loading'); setAttempt(a => a + 1); }, style: retryBtn }, 'Try again'),
+                        React.createElement('button', { onClick: () => window.location.reload(), style: reloadBtn }, 'Reload')));
             }
             const Comp = resolveComponent();
             if (phase !== 'ready' || typeof Comp !== 'function') {
-                return React.createElement('div', { style: { padding: '64px 24px', textAlign: 'center', color: 'var(--silver)', fontSize: 'var(--text-body, 1rem)' } }, 'Loading ' + label + '…');
+                return React.createElement('div', { style: { padding: '64px 24px', textAlign: 'center', color: 'var(--silver)', fontSize: 'var(--text-body, 1rem)' } }, 'Loading ' + label + '\u2026');
             }
             return React.createElement(Comp, props);
         };

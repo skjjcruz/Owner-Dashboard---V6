@@ -20,12 +20,15 @@
 //     least INTERVAL old (C2 refreshed unconditionally).
 // One client per page: every subscriber of a league+week shares one request
 // and one timer. Timers stop while the page is hidden and when the last
-// subscriber leaves. In-memory only — nothing is written to storage.
+// subscriber leaves (an in-flight request is cancelled silently — the prior
+// status is kept, never turned into an error). Snapshots nobody watched for
+// 10 min are pruned. In-memory only — nothing is written to storage.
 // ══════════════════════════════════════════════════════════════════
 (function (root) {
     'use strict';
     const App = root.App = root.App || {};
     const INTERVAL = 30000;
+    const PRUNE_MS = 10 * 60 * 1000; // drop unwatched snapshots after 10 min
     const number = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
     function supported(league) {
         if (!league || !(league.league_id || league.id)) return false;
@@ -76,8 +79,15 @@
         const entries = new Map();
         function entry(league, week) {
             const id = String(league.league_id || league.id), key = id + '|' + week;
-            if (!entries.has(key)) entries.set(key, { id, week, state: empty(week, true), listeners: new Map(), pending: null, timer: null, controller: null });
-            return entries.get(key);
+            // Prune snapshots nobody has watched for PRUNE_MS (week browsing
+            // and league switching would otherwise grow this map forever).
+            entries.forEach((other, k) => {
+                if (k !== key && !other.listeners.size && !other.pending && other.idleSince != null && now() - other.idleSince > PRUNE_MS) entries.delete(k);
+            });
+            if (!entries.has(key)) entries.set(key, { id, week, state: empty(week, true), listeners: new Map(), pending: null, timer: null, controller: null, idleSince: null, abandoned: false });
+            const e = entries.get(key);
+            e.idleSince = null;
+            return e;
         }
         function emit(e) { Array.from(e.listeners.keys()).forEach(fn => { if (e.listeners.has(fn)) fn(e.state); }); }
         function pollEvery(e) {
@@ -94,6 +104,7 @@
         const stale = e => e.state.updatedAt === null || now() - e.state.updatedAt >= INTERVAL;
         function refresh(e) {
             if (e.pending) return e.pending;
+            const prev = { status: e.state.status, error: e.state.error };
             e.state = { ...e.state, status: e.state.updatedAt !== null ? 'refreshing' : 'loading', error: null };
             emit(e);
             const Controller = root.AbortController;
@@ -105,11 +116,20 @@
                     if (!Array.isArray(rows) || rows.some(row => !row || row.roster_id == null)) throw new Error('Score data is unavailable.');
                     e.state = { ...e.state, status: 'ready', rows, groups: groupRows(rows), updatedAt: now(), error: null };
                 })
-                .catch(() => { e.state = { ...e.state, status: e.state.updatedAt !== null ? 'stale' : 'error', error: 'Could not refresh Sleeper scores. Try again shortly.' }; })
+                .catch(() => {
+                    // Cancelled because the last subscriber left: not a failure.
+                    // Restore the prior status so a quick return never shows
+                    // "could not refresh" for a request nobody was waiting on.
+                    if (e.abandoned) { e.state = { ...e.state, status: prev.status, error: prev.error }; return; }
+                    e.state = { ...e.state, status: e.state.updatedAt !== null ? 'stale' : 'error', error: 'Could not refresh Sleeper scores. Try again shortly.' };
+                })
                 .finally(() => {
                     if (timeout !== null) cancel(timeout);
-                    e.pending = null; e.controller = null;
-                    emit(e); later(e);
+                    const retry = e.abandoned && e.listeners.size > 0; // re-subscribed during the abort
+                    e.pending = null; e.controller = null; e.abandoned = false;
+                    emit(e);
+                    if (retry && !doc?.hidden && stale(e)) refresh(e);
+                    else later(e);
                 });
             return e.pending;
         }
@@ -133,7 +153,8 @@
                 if (!e.listeners.size) {
                     if (e.timer !== null) cancel(e.timer);
                     e.timer = null;
-                    e.controller?.abort();
+                    e.idleSince = now();
+                    if (e.controller) { e.abandoned = true; e.controller.abort(); }
                 } else later(e);
             };
             // Change this subscriber's cadence in place (no abort, no refetch

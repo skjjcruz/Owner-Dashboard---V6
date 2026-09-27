@@ -7,7 +7,7 @@
 //   loadHistory({ league, week, signal?, force?, fetcher?, now? })
 //     → Promise<{ priorWeeks: [{ week, rows }], updatedAt }>  (weeks start..week-1)
 //   startedRosters({ rows, games, playersData, historical?, now? }) → [rosterId]
-//   useContext({ league, board, playersData, enabled? })
+//   useContext({ league, board, playersData, enabled?, games? })
 //     → { enabled, historical, future, currentWeek, lastReg, history, startedRosterIds, refresh }
 // Adaptations for Dynasty HQ:
 //   • Completed weeks reuse App.Matchup's per-(league, week) Sleeper cache
@@ -20,7 +20,8 @@
 //     nfl-scoreboard relay caches game state for up to 3h, kickoff times never
 //     go stale.
 //   • useContext({ enabled:false }) keeps the hook mounted but idle, so a
-//     collapsed/hidden standings view costs no requests.
+//     collapsed/hidden standings view costs no requests; useContext({ games })
+//     reuses the caller's NFL schedule instead of polling the relay itself.
 // ══════════════════════════════════════════════════════════════════
 (function (root) {
     'use strict';
@@ -85,7 +86,10 @@
         }).map(row => String(row.roster_id));
     }
 
-    function useContext({ league, board, playersData, enabled: wanted }) {
+    function useContext({ league, board, playersData, enabled: wanted, games: givenGames }) {
+        // givenGames (optional array): the caller's NFL schedule for this week.
+        // When passed, the hook never calls NflContext itself (no extra relay load).
+        const externalGames = Array.isArray(givenGames);
         const React = root.React;
         const id = league?.league_id || league?.id || '';
         const season = String(league?.season || '');
@@ -111,7 +115,7 @@
                 controller = new root.AbortController();
                 const timeout = root.setTimeout(() => controller?.abort(), 20000);
                 setHistory(old => ({ key, status: old.key === key && old.updatedAt ? 'refreshing' : 'loading', priorWeeks: old.key === key ? old.priorWeeks : [], updatedAt: old.key === key ? old.updatedAt : null }));
-                const nflRequest = historical ? Promise.resolve([]) : Promise.resolve().then(() => App.NflContext?.loadScores?.(week, season, 2) || [])
+                const nflRequest = historical || externalGames ? Promise.resolve([]) : Promise.resolve().then(() => App.NflContext?.loadScores?.(week, season, 2) || [])
                     .then(games => { if (alive) setNfl({ key, games }); }).catch(() => {});
                 try {
                     const result = await loadHistory({ league, week, signal: controller.signal, force });
@@ -133,7 +137,7 @@
         const currentHistory = history.key === key ? history : { status: 'loading', priorWeeks: [] };
         return {
             enabled, historical, future, currentWeek, lastReg, history: currentHistory,
-            startedRosterIds: startedRosters({ rows: board.rows, games: nfl.key === key ? nfl.games : [], playersData, historical }),
+            startedRosterIds: startedRosters({ rows: board.rows, games: externalGames ? givenGames : nfl.key === key ? nfl.games : [], playersData, historical }),
             refresh: () => setRevision(n => n + 1),
         };
     }

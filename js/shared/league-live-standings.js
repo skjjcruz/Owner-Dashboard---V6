@@ -9,6 +9,9 @@
 // official Sleeper record is shown) | 'baseline' (entering the week) |
 // 'live' (current scores applied) | 'partial' (some scores missing).
 // Weeks with a missing/malformed/duplicate row are refused, never zeroed.
+// Median (league_average_match) in a live week waits until every team has
+// started when startedRosterIds is given (C2 applied it once every matchup
+// had one started side, so a late team took a "Median L" at 0.00).
 // ══════════════════════════════════════════════════════════════════
 (function (root) {
     'use strict';
@@ -95,7 +98,12 @@
             let median=null;
             if (medianEnabled) {
                 // The league-wide median needs every score, including bye teams.
-                if (all.every(r => points(r)!==null) && groups.every(active)) {
+                // Live weeks with started-roster evidence also need EVERY team
+                // started: an unstarted team's 0 is not a score, so it must not
+                // set the median or take a median loss (matches the scoreboard's
+                // "League median so far", which waits for every team).
+                const everyRowStarted = historical || !startSet || all.every(r => startSet.has(id(r.roster_id)));
+                if (all.every(r => points(r)!==null) && groups.every(active) && everyRowStarted) {
                     const scores=all.map(points).sort((a,b)=>a-b), middle=Math.floor(scores.length/2);
                     median=scores.length%2 ? scores[middle] : (scores[middle-1]+scores[middle])/2;
                     all.forEach(r => {const target=byId.get(id(r.roster_id)), outcome=result(points(r),median); add(target,outcome); if(!historical) target.medianResult=outcome;});

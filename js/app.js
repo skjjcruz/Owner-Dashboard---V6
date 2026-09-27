@@ -1571,6 +1571,8 @@
                         }}
                         activeTab={activeTab}
                         onTabChange={handleTabChange}
+                        allLeagues={sleeperLeagues}
+                        onSelectLeague={handleSelectLeague}
                         sleeperUserId={sleeperUser?.user_id}
                         settingsProps={{
                             initDisplayName: customDisplayName,
