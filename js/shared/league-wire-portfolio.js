@@ -120,5 +120,34 @@
         const key = scoped.map(e => `${keyFor(e.league)}:${e.week}`).sort().join(',');
         return root.WrWireStories.weeklyLookback(stories, key);
     }
-    root.WrWirePortfolio = { load, period, headlines, lookback };
+    // Dynasty HQ addition: the signed-in Sleeper user's leagues for the
+    // all-leagues edition when the host has no list to hand over. One user
+    // request + rosters/users per league (3 at a time), only on an explicit
+    // "All my leagues" open; cached 10 minutes in memory.
+    const userCache = new Map();
+    async function userLeagues(userId, season, { fetcher = (...args) => root.fetch(...args), now = Date.now } = {}) {
+        if (!/^\d+$/.test(String(userId || '')) || !/^\d{4}$/.test(String(season || ''))) return [];
+        const key = userId + '|' + season, hit = userCache.get(key);
+        if (hit && now() - hit.at < 600000) return hit.value;
+        const json = async url => { const r = await fetcher(url, { cache: 'no-store' }); if (!r.ok) throw Error('Sleeper unavailable'); return r.json(); };
+        const list = await json(`https://api.sleeper.app/v1/user/${encodeURIComponent(userId)}/leagues/nfl/${encodeURIComponent(season)}`);
+        if (!Array.isArray(list)) throw Error('Sleeper unavailable');
+        const out = new Array(list.length);
+        let cursor = 0;
+        async function worker() {
+            while (cursor < list.length) {
+                const i = cursor++, info = list[i], id = info?.league_id;
+                if (!id) continue;
+                try {
+                    const [rosters, users] = await Promise.all([json(`https://api.sleeper.app/v1/league/${encodeURIComponent(id)}/rosters`), json(`https://api.sleeper.app/v1/league/${encodeURIComponent(id)}/users`)]);
+                    if (Array.isArray(rosters) && Array.isArray(users)) out[i] = { ...info, id, rosters, users };
+                } catch (_) { /* that league is skipped; the others still publish */ }
+            }
+        }
+        await Promise.all(Array.from({ length: Math.min(3, list.length) }, worker));
+        const value = out.filter(Boolean);
+        userCache.set(key, { at: now(), value });
+        return value;
+    }
+    root.WrWirePortfolio = { load, period, headlines, lookback, userLeagues };
 })(typeof window !== 'undefined' ? window : globalThis);
