@@ -811,6 +811,16 @@ function LineupTab({
         noteFactsRef.current = f;
     }
 
+    // ── Around the league (C2 port, 2026-09-27) ──
+    // Every matchup this week from Sleeper's scored feed + live standings.
+    // Free. Sleeper only (ESPN/MFL get an honest note inside). It owns its
+    // own score subscription (shared poller, 30s only while an NFL game is in
+    // progress and the page is visible) and unmounts with Game Day's week
+    // view, which stops it.
+    const aroundTheLeague = window.WrAroundTheLeague
+        ? <window.WrAroundTheLeague currentLeague={currentLeague} myRoster={myRoster} playersData={playersData} />
+        : null;
+
     // ── MFL lineup push card (write to MyFantasyLeague) ──
     function renderMflPush() {
         if (!isMfl) return null;
@@ -1255,6 +1265,11 @@ function LineupTab({
                     </React.Fragment>
                 ) : null}
 
+                {/* Around the league — every matchup's live Sleeper score +
+                    live standings (js/components/league-live-scoreboard.js).
+                    Its own component: its 30s poll re-renders only itself. */}
+                {aroundTheLeague}
+
                 {/* Alex game-day note as a card (note state is Pro-gated upstream: free = '') */}
                 {note ? (
                     <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderLeft: `3px solid ${GOLD}`, borderRadius: '6px', padding: '12px 14px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -1550,6 +1565,10 @@ function LineupTab({
                     ) : null}
                 </div>
             ) : null}
+
+            {/* Around the league — every matchup's live Sleeper score + live
+                standings, below your own matchup. */}
+            {aroundTheLeague}
 
             {/* Unified interactive lineup table */}
             <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderRadius: '6px', overflow: 'hidden' }}>

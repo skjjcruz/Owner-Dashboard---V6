@@ -8,6 +8,9 @@
 //   dev  → /api/nfl-scoreboard  (serve-static.cjs)
 //   prod → the nfl-scoreboard Supabase edge fn (endpoint() below).
 // Degrades to a no-op (neutral projections) if the proxy is unavailable.
+// Live-score API (C2 port, 2026-09-27): parseScores, loadScoreboard,
+// loadScores, gameStatus, currentPhase, previousPhase — consumed by the
+// league scoreboard (js/components/league-live-scoreboard.js) and The Wire.
 // ══════════════════════════════════════════════════════════════════
 (function (root) {
     'use strict';
@@ -87,10 +90,140 @@
         return out;
     }
 
-    function fetchWeek(week, season) {
-        let u = endpoint() + '?week=' + week + '&seasontype=2';
+    // seasontype is ESPN's: 1 = preseason, 2 = regular, 3 = postseason. It
+    // defaults to 2 so every existing caller (load/loadCurrent → projection
+    // context) sends the byte-identical URL and fetch call it always did;
+    // only the live-score callers below pass it (and an abort signal). The
+    // relay (nfl-scoreboard edge fn / serve-static dev proxy) already
+    // validates and forwards seasontype 1-4.
+    function fetchWeek(week, season, seasontype, signal) {
+        const st = Number(seasontype) || 2;
+        let u = endpoint() + '?week=' + week + '&seasontype=' + st;
         if (season) u += '&season=' + season;
-        return fetch(u).then(r => { if (!r.ok) throw new Error('scoreboard ' + r.status); return r.json(); });
+        const req = signal ? fetch(u, { signal }) : fetch(u);
+        return req.then(r => { if (!r.ok) throw new Error('scoreboard ' + r.status); return r.json(); });
+    }
+
+    // ── Live NFL game state (port of C2's scoreboard additions) ──────────
+    // ESPN scoreboard → [{ id, home, away, homeScore, awayScore, kickoff,
+    // state 'pre'|'in'|'post', shortDetail, completed, statusName, ... }]
+    // for anything that wants "what's the score / has it kicked off" rather
+    // than the matchup-context shape parse() builds for projections.
+    // NOTE (prod): the nfl-scoreboard relay caches each week for up to 3h,
+    // so state/score can lag on deployed pages; kickoff times never do.
+    // Callers that need "has this game started" should use gameStatus(),
+    // which also treats a passed kickoff as 'locked'.
+    const numericScore = value => value == null || String(value).trim() === '' || !Number.isFinite(Number(value)) ? null : Number(value);
+    function scorePeriods(team) {
+        return ((team && team.linescores) || []).map((line, i) => ({ period: Number(line.period) || i + 1, value: numericScore(line.value) }));
+    }
+    function parseScores(espn) {
+        const events = (espn && espn.events) || [];
+        return events.map(ev => {
+            const comp = ev.competitions && ev.competitions[0];
+            const cs = (comp && comp.competitors) || [];
+            const home = cs.find(c => c.homeAway === 'home');
+            const away = cs.find(c => c.homeAway === 'away');
+            const status = (comp && comp.status) || ev.status || {};
+            const type = status.type || {};
+            const teams = new Map(cs.map(c => [String(c.id || (c.team && c.team.id)), normTeam(c.team && c.team.abbreviation)]));
+            const leaders = ((comp && comp.leaders) || []).filter(c => ['passingYards', 'rushingYards', 'receivingYards'].includes(c.name))
+                .flatMap(c => (c.leaders || []).map(l => ({
+                    category: c.name === 'passingYards' ? 'Passing' : c.name === 'rushingYards' ? 'Rushing' : 'Receiving',
+                    name: l.athlete && (l.athlete.displayName || l.athlete.fullName),
+                    team: teams.get(String((l.team && l.team.id) || (l.athlete && l.athlete.team && l.athlete.team.id))) || '',
+                    stats: l.displayValue || '',
+                })))
+                .filter(l => l.name && l.stats);
+            const eventId = String(ev.id || (comp && comp.id) || '');
+            return {
+                id: eventId,
+                homeName: (home && home.team && (home.team.displayName || home.team.abbreviation)) || '',
+                awayName: (away && away.team && (away.team.displayName || away.team.abbreviation)) || '',
+                homePeriods: scorePeriods(home), awayPeriods: scorePeriods(away), leaders,
+                broadcasts: [...new Set(((comp && comp.broadcasts) || []).flatMap(b => b.names || []))],
+                boxScoreUrl: /^\d+$/.test(eventId) ? 'https://www.espn.com/nfl/boxscore/_/gameId/' + eventId : null,
+                home: normTeam(home && home.team && home.team.abbreviation),
+                away: normTeam(away && away.team && away.team.abbreviation),
+                homeScore: numericScore(home && home.score),
+                awayScore: numericScore(away && away.score),
+                kickoff: (comp && comp.date) || ev.date || null,
+                statusName: type.name || '',
+                state: type.state || 'pre',            // 'pre' | 'in' | 'post'
+                shortDetail: type.shortDetail || '',    // "Q3 4:12", "Final", "1:00 PM"
+                completed: !!type.completed,
+            };
+        }).filter(g => g.home && g.away);
+    }
+
+    // 'final' | 'live' | 'locked' (kickoff passed, not reported in progress) |
+    // 'upcoming' | 'unknown'. Unknown/postponed schedules never authorize a
+    // lineup change.
+    function gameStatus(game, now) {
+        if (!game) return 'unknown';
+        if (/POSTPONED|CANCEL|SUSPEND|DELAY/i.test(game.statusName || '')) return 'unknown';
+        if (game.completed) return 'final';
+        if (game.state === 'post') return 'unknown';
+        if (game.state === 'in') return 'live';
+        const kickoff = Date.parse(game.kickoff || '');
+        if (!Number.isFinite(kickoff)) return 'unknown';
+        if (kickoff <= (now == null ? Date.now() : now)) return 'locked';
+        return game.state === 'pre' ? 'upcoming' : 'unknown';
+    }
+
+    // One in-flight/cached request per (season, seasontype, week) for 60s,
+    // shared by every caller. Rejects on failure (never caches a failure).
+    const scoreCache = new Map();
+    function loadScoreboard(week, season, seasontype) {
+        const key = (season || '') + '|' + (Number(seasontype) || 2) + '|' + week;
+        const cached = scoreCache.get(key);
+        if (cached && Date.now() - cached.at < 60000) return cached.promise;
+        const Ctl = root.AbortController;
+        const controller = Ctl ? new Ctl() : null;
+        const timeout = controller ? setTimeout(() => controller.abort(), 15000) : null;
+        const promise = fetchWeek(week, season, seasontype, controller ? controller.signal : undefined).then(data => {
+            if (!data || !Array.isArray(data.events)) throw new Error('Invalid NFL scoreboard');
+            return parseScores(data);
+        }).catch(error => { scoreCache.delete(key); throw error; })
+            .finally(() => { if (timeout !== null) clearTimeout(timeout); });
+        scoreCache.set(key, { at: Date.now(), promise });
+        // Only a few recent weeks need to remain in memory.
+        if (scoreCache.size > 8) scoreCache.delete(scoreCache.keys().next().value);
+        return promise;
+    }
+    // Never rejects: [] on failure. Logged once per week key per page load —
+    // pollers retry every minute or so and must not spam the error log.
+    const _scoreLogged = new Set();
+    function loadScores(week, season, seasontype) {
+        return loadScoreboard(week, season, seasontype).catch(e => {
+            const key = (season || '') + '|' + (Number(seasontype) || 2) + '|' + week;
+            if (!_scoreLogged.has(key)) { _scoreLogged.add(key); if (root.wrLog) root.wrLog('nflContext.loadScores', e); }
+            return [];
+        });
+    }
+
+    // Sleeper's nflState is the authoritative "where are we in the NFL
+    // calendar" source (season_type: 'pre' | 'regular' | 'post' + its own week
+    // counter, which restarts per phase). Mapped to ESPN's seasontype so the
+    // scoreboard is asked for the games actually being played right now — in
+    // August that is preseason, not regular-season week 1.
+    function currentPhase() {
+        const st = (root.S && root.S.nflState) || {};
+        const type = String(st.season_type || 'regular').toLowerCase();
+        const stWeek = Number(st.week) || Number(st.display_week) || 1;
+        if (type === 'pre') return { seasontype: 1, week: stWeek, isPre: true, season: st.season };
+        if (type === 'post') return { seasontype: 3, week: stWeek, isPost: true, season: st.season };
+        const regWeek = Number(App.WeeklyProj && App.WeeklyProj.currentWeek && App.WeeklyProj.currentWeek()) || stWeek;
+        return { seasontype: 2, week: regWeek, season: st.season };
+    }
+
+    function previousPhase(phase) {
+        if (!phase) return null;
+        if (Number(phase.week) > 1) return Object.assign({}, phase, { week: Number(phase.week) - 1 });
+        if (Number(phase.seasontype) === 3) return { season: phase.season, seasontype: 2, week: 18 };
+        // Opening week has no earlier games in this phase. Do not silently
+        // label preseason or last year's games as last week's regular season.
+        return null;
     }
 
     // Load one or more weeks and feed App.WeeklyProj.setContext. Caches per
@@ -131,5 +264,5 @@
         return load([wk], season);
     }
 
-    App.NflContext = App.NflContext || { load, loadCurrent, parse, endpoint, _done };
+    App.NflContext = App.NflContext || { load, loadCurrent, parse, parseScores, loadScores, loadScoreboard, gameStatus, currentPhase, previousPhase, endpoint, _done };
 })(typeof window !== 'undefined' ? window : globalThis);

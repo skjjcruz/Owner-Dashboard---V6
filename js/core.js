@@ -278,12 +278,36 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
     }
 
 
+    // Sign out of this device and leave for `destination` (default landing).
+    // Shared by Settings → Sign out, the hub's Owner Settings, account deletion
+    // and a completed password change. OD.clearSignedInState (shared
+    // supabase-client.js) removes both session tokens (app + legacy Sleeper),
+    // the legacy local login, the guest flag, the Supabase Google/Apple session
+    // and every ESPN/MFL login and personal AI key saved on this device — a
+    // shared iPad no longer hands the next person the last owner's logins.
+    // Before: only od_auth_v1 + fw_session_v1 went, so the legacy token kept
+    // authorizing cloud reads, a guest with a saved ESPN/MFL league bounced
+    // straight back into the app, and a Google user was silently signed back
+    // in by landing.html's OAuth handler.
+    function dhqSignOut(destination) {
+        let cleared = false;
+        try {
+            if (window.OD && typeof window.OD.clearSignedInState === 'function') { window.OD.clearSignedInState(); cleared = true; }
+        } catch (e) { window.wrLog?.('signOut.clear', e); }
+        // The keys that decide whether the next page load is signed in — and,
+        // if the shared client never loaded, the platform logins it would clear.
+        const keys = ['od_auth_v1', 'fw_session_v1', 'od_session_v1', 'wr_guest_v1'];
+        if (!cleared) keys.push('espn_s2', 'espn_swid', 'mfl_api_key', 'mfl_write_cookie', 'mfl_write_host', 'dynastyhq_ai_key', 'dynastyhq_xai_key');
+        keys.forEach(k => {
+            try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ }
+            try { sessionStorage.removeItem(k); } catch (e) { /* storage blocked */ }
+        });
+        window.location.href = destination || 'landing.html';
+    }
+    window.dhqSignOut = dhqSignOut;
+
     function handleLogout() {
-        if (confirm('Are you sure you want to logout?')) {
-            localStorage.removeItem((window.STORAGE_KEYS?.OD_AUTH    || 'od_auth_v1'));
-            localStorage.removeItem((window.STORAGE_KEYS?.FW_SESSION || 'fw_session_v1'));
-            window.location.href = 'landing.html';
-        }
+        if (confirm('Are you sure you want to logout?')) dhqSignOut();
     }
 
 

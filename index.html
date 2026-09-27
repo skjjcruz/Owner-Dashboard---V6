@@ -2995,8 +2995,14 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script src="js/shared/weekly-proj.js?v=20260926b133"></script>
 <script src="js/shared/sleeper-proj.js?v=20260917truth3"></script>
 <script src="js/shared/dhq-proj.js?v=20260926b134"></script>
-<script src="js/shared/nfl-context.js?v=20260823wx2"></script>
-<script src="js/shared/matchup.js?v=20260701gdc1"></script>
+<script src="js/shared/nfl-context.js?v=20260927live1"></script>
+<script src="js/shared/matchup.js?v=20260927live1"></script>
+<!-- League live scores + standings engines (C2 port 2026-09-27): one shared Sleeper
+     scoreboard poller, the completed-week baseline, live standings. Plain JS,
+     loaded at boot because The Wire (league-wide) consumes them too. -->
+<script src="js/shared/league-live-scores.js?v=20260927live1"></script>
+<script src="js/shared/league-live-standings.js?v=20260927live1"></script>
+<script src="js/shared/league-live-table.js?v=20260927live1"></script>
 <!-- Season Odds engines (lab port 2026-08-16): plain Node-testable scripts —
      the luck ledger feeds the playoff Monte Carlo, so luck loads first. -->
 <script src="js/shared/luck-engine.js?v=20260816so1"></script>
@@ -3060,7 +3066,9 @@ WRShared.preloadMany(WR_SHARED_FILES);
      precede lineup.js in the group so window.WrSeasonOdds exists on first render. -->
 <script type="text/babel" data-wr-defer="lineup" src="js/components/season-odds-panel.js?v=20260927b135"></script>
 <script type="text/babel" src="js/components/chop-block-panel.js?v=20260926b134"></script>
-<script type="text/babel" data-wr-defer="lineup" src="js/tabs/lineup.js?v=20260926qa1"></script>
+<!-- Around the league (live scoreboard + standings) — must precede lineup.js in the group. -->
+<script type="text/babel" data-wr-defer="lineup" src="js/components/league-live-scoreboard.js?v=20260927live1"></script>
+<script type="text/babel" data-wr-defer="lineup" src="js/tabs/lineup.js?v=20260927live1"></script>
 <!-- 4b. Draft Command Center modules — group "draft" (~28 scripts, ~1.26MB),
      loaded on first Draft-tab open. -->
 <script type="text/babel" data-wr-defer="draft" src="js/draft/styles.js?v=20260427font1"></script>

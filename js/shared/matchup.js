@@ -203,5 +203,9 @@
         return out;
     }
 
-    App.Matchup = App.Matchup || { normCdf, dist, forecast, resolveOpponentRosterId, resolveSeasonOpponents, _platform };
+    // sleeperWeekRows(lid, week) → Promise<rows[]> ([] on failure): the same
+    // cached, in-flight-deduped rows the opponent/schedule lookups use, shared
+    // with the live standings baseline (js/shared/league-live-table.js) so a
+    // Game Day visit fetches each completed week once.
+    App.Matchup = App.Matchup || { normCdf, dist, forecast, resolveOpponentRosterId, resolveSeasonOpponents, sleeperWeekRows: _fetchSleeperMatchups, _platform };
 })(typeof window !== 'undefined' ? window : globalThis);

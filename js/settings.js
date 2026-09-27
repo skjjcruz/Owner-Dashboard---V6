@@ -36,7 +36,11 @@
             try {
                 ['fw_session_v1', 'od_auth_v1', 'od_display_name', 'od_avatar_emoji', 'dhq_notify_prefs_v1', 'dhq_owner_club_v1'].forEach(k => localStorage.removeItem(k));
             } catch { /* best effort */ }
-            window.location.href = 'landing.html?signout=1';
+            // Same sign-out as Settings (core.js dhqSignOut): also drops the
+            // legacy token, the guest flag, the Google/Apple session and the
+            // ESPN/MFL logins + personal AI keys saved on this device.
+            if (typeof window.dhqSignOut === 'function') window.dhqSignOut('landing.html?signout=1');
+            else window.location.href = 'landing.html?signout=1';
             return true;
         } catch (err) {
             alert('Could not delete the account: ' + (err && err.message ? err.message : 'unknown error') + '. Contact support if this keeps happening.');
@@ -46,6 +50,153 @@
     window.dhqDeleteAccountFlow = dhqDeleteAccountFlow;
 
     // ── Sub-components (hooks require stable component boundaries) ──
+
+    // ── Change password ──────────────────────────────────────────
+    // One component for all three Settings layouts. The server does every
+    // check (window.OD.changePassword in the shared supabase-client.js):
+    //   email account  → fw-change-password verifies the current password,
+    //                    changes it and ends EVERY session, this one included,
+    //                    so on success we sign out and send them to sign in.
+    //   Sleeper login  → current password re-verified by get-session-token,
+    //                    then set-password; also signed out to sign back in.
+    //   Google/Apple   → hinted up front when this browser holds that
+    //                    provider sign-in; once the server says the account
+    //                    has no password, the form is replaced by the reason.
+    //   guest / ended  → nothing to change; explained.
+    // "Password updated" only ever shows after the server confirmed it.
+    const PW_NOTE_STYLE = { fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', lineHeight: 1.5, padding: '0.6rem 0.75rem', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: 'var(--card-radius-sm, 8px)', marginBottom: '0.6rem' };
+    const PW_PROVIDER_LABEL = { google: 'Google', apple: 'Apple' };
+
+    function readPasswordAccount() {
+        try {
+            if (window.OD && typeof window.OD.passwordAccount === 'function') return window.OD.passwordAccount();
+        } catch (e) { window.wrLog?.('settings.passwordAccount', e); }
+        return { kind: 'unavailable' };
+    }
+
+    function PasswordSection({ title, titleStyle, inputStyle, btnPrimary, btnOutline, collapsible = false }) {
+        const [account] = React.useState(readPasswordAccount);
+        const [open, setOpen] = React.useState(!collapsible);
+        const [currentPw, setCurrentPw] = React.useState('');
+        const [newPw, setNewPw] = React.useState('');
+        const [confirmPw, setConfirmPw] = React.useState('');
+        const [busy, setBusy] = React.useState(false);
+        const [msg, setMsg] = React.useState(null); // { tone: 'error' | 'ok', text }
+        const [providerOnly, setProviderOnly] = React.useState(false);
+        const [needsSignIn, setNeedsSignIn] = React.useState(false);
+        const [signedOut, setSignedOut] = React.useState(null); // { dest } after success
+        const leaveTimer = React.useRef(null);
+
+        // Live update (js/shared/live-update.js): typed-but-unsaved password
+        // fields, a request in flight, or the "signing you out" notice hold
+        // the silent reload.
+        const holding = !!(currentPw || newPw || confirmPw) || busy || !!signedOut;
+        React.useEffect(() => {
+            if (!holding) return undefined;
+            const LU = () => window.App && window.App.LiveUpdate;
+            if (LU()) LU().hold('password-form');
+            return () => { if (LU()) LU().release('password-form'); };
+        }, [holding]);
+        // Leaving Settings during the notice must not strand them in the app
+        // with the session already gone — finish the sign-out right away.
+        const leaveDest = React.useRef(null);
+        React.useEffect(() => () => { if (leaveTimer.current && leaveDest.current) leave(leaveDest.current); }, []);
+
+        function leave(dest) {
+            if (leaveTimer.current) { clearTimeout(leaveTimer.current); leaveTimer.current = null; }
+            if (typeof window.dhqSignOut === 'function') window.dhqSignOut(dest);
+            else window.location.href = dest;
+        }
+
+        async function submit(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            if (busy || signedOut) return;
+            setMsg(null);
+            if (!currentPw || !newPw || !confirmPw) { setMsg({ tone: 'error', text: 'Fill in all three fields.' }); return; }
+            if (newPw !== confirmPw) { setMsg({ tone: 'error', text: 'The new passwords don’t match.' }); return; }
+            if (newPw.length < 8) { setMsg({ tone: 'error', text: 'New password must be at least 8 characters.' }); return; }
+            if (newPw === currentPw) { setMsg({ tone: 'error', text: 'Choose a different new password.' }); return; }
+            if (!window.OD || typeof window.OD.changePassword !== 'function') { setMsg({ tone: 'error', text: 'Account services are still loading. Try again in a moment.' }); return; }
+            setBusy(true);
+            let result = null;
+            try {
+                result = await window.OD.changePassword(currentPw, newPw);
+            } catch (err) {
+                setBusy(false);
+                const code = err && err.code;
+                if (code === 'provider') { setProviderOnly(true); setCurrentPw(''); setNewPw(''); setConfirmPw(''); }
+                else if (code === 'current') setCurrentPw('');
+                else if (code === 'signin') setNeedsSignIn(true);
+                setMsg({ tone: 'error', text: (err && err.message) || 'The password change could not be confirmed.' });
+                return;
+            }
+            setBusy(false);
+            setCurrentPw(''); setNewPw(''); setConfirmPw('');
+            if (!result || result.ok !== true) { setMsg({ tone: 'error', text: 'The password change could not be confirmed.' }); return; }
+            if (result.sessionChanged) {
+                // Another tab switched this browser to a different account while
+                // the request ran — don't sign THAT account out.
+                setMsg({ tone: 'ok', text: 'Password changed. This browser has since switched accounts, so you were left signed in to the other one.' });
+                return;
+            }
+            const dest = result.kind === 'legacy' && result.username
+                ? 'login.html?for=' + encodeURIComponent(result.username)
+                : 'landing.html?password=changed';
+            // The old session is dead on the server (email accounts) — drop it
+            // now so nothing on this page keeps calling with it, then leave.
+            try { window.OD.clearSignedInState?.(); } catch (err) { window.wrLog?.('settings.passwordSignOut', err); }
+            leaveDest.current = dest;
+            setSignedOut({ dest });
+            setMsg({ tone: 'ok', text: 'Password changed. For your security you’ve been signed out on every device — sign in again with your new password.' });
+            leaveTimer.current = setTimeout(() => leave(dest), 3500);
+        }
+
+        const heading = title ? <div style={titleStyle}>{title}</div> : null;
+        const note = (text) => <div style={PW_NOTE_STYLE}>{text}</div>;
+        const kind = account && account.kind;
+
+        if (collapsible && !open) {
+            return <button type="button" onClick={() => setOpen(true)} style={{ ...btnOutline, width: '100%', flex: 'none' }}>Change password</button>;
+        }
+        if (kind === 'none') {
+            return <>{heading}{note('You’re using Dynasty HQ as a guest, so there’s no password to change. Create a free account from the sign-in page to get one.')}</>;
+        }
+        if (kind === 'expired') {
+            return <>{heading}{note('Your session has ended. Sign in again to change your password.')}
+                <button type="button" onClick={() => leave('landing.html')} style={{ ...btnOutline, width: '100%', flex: 'none' }}>Sign in again</button></>;
+        }
+        if (kind === 'unavailable') {
+            return <>{heading}{note('Account services didn’t load. Reload the page to change your password.')}</>;
+        }
+        const providerName = PW_PROVIDER_LABEL[account.provider] || null;
+        if (providerOnly) {
+            return <>{heading}{note('This account signs in with ' + (providerName || 'Google or Apple') + ', so it has no Dynasty HQ password. Change your password with ' + (providerName || 'that provider') + '.')}</>;
+        }
+        const msgColor = msg && msg.tone === 'ok' ? 'var(--win-green)' : 'var(--k-e74c3c, #e74c3c)';
+        return (<>
+            {heading}
+            {providerName && !signedOut && note('You signed in with ' + providerName + '. If your account has no Dynasty HQ password, manage your password with ' + providerName + ' instead.')}
+            {signedOut ? (
+                <button type="button" onClick={() => leave(signedOut.dest)} style={{ ...btnPrimary, width: '100%', flex: 'none' }}>Sign in now</button>
+            ) : (
+                <form onSubmit={submit} noValidate>
+                    <input style={inputStyle} type="password" name="current-password" autoComplete="current-password" placeholder="Current password" aria-label="Current password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} disabled={busy} />
+                    <input style={inputStyle} type="password" name="new-password" autoComplete="new-password" placeholder="New password (8+ characters)" aria-label="New password" value={newPw} onChange={e => setNewPw(e.target.value)} disabled={busy} />
+                    <input style={{ ...inputStyle, marginBottom: '0.75rem' }} type="password" name="confirm-password" autoComplete="new-password" placeholder="Confirm new password" aria-label="Confirm new password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} disabled={busy} />
+                    <button type="submit" disabled={busy} style={{ ...btnPrimary, width: '100%', flex: 'none', opacity: busy ? 0.7 : 1, cursor: busy ? 'default' : 'pointer' }}>{busy ? 'Checking…' : 'Update password'}</button>
+                </form>
+            )}
+            {msg && <div role={msg.tone === 'error' ? 'alert' : 'status'} style={{ marginTop: '0.5rem', fontSize: 'var(--text-label, 0.75rem)', lineHeight: 1.45, color: msgColor }}>{msg.text}</div>}
+            {needsSignIn && !signedOut && (
+                <button type="button" onClick={() => leave('landing.html')} style={{ ...btnOutline, width: '100%', flex: 'none', marginTop: '0.5rem' }}>Sign in again</button>
+            )}
+            {kind === 'account' && !signedOut && (
+                <div style={{ marginTop: '0.5rem', fontSize: 'var(--text-label, 0.72rem)', color: 'var(--ov-8, rgba(255,255,255,0.4))', lineHeight: 1.45 }}>
+                    Changing it signs you out everywhere. Forgot your current password? Sign out and use “Forgot password?” on the sign-in page.
+                </div>
+            )}
+        </>);
+    }
 
     function AlexTab({ sectionStyle, sectionTitle }) {
         // One canonical Alex voice (owner ruling 2026-07-08): the coaching-style
@@ -171,21 +322,16 @@
 
     function SettingsContent({ onClose, initDisplayName, onDisplayNameSave, leagueMates, mode = 'modal', accountOnly = false, phoneSheet = false }) {
         const [settingsTab, setSettingsTab] = React.useState('account');
-        const [showPw, setShowPw] = React.useState(false);
-        const [pwMsg, setPwMsg] = React.useState('');
-        const [currentPw, setCurrentPw] = React.useState('');
-        const [newPw, setNewPw] = React.useState('');
-        const [confirmPw, setConfirmPw] = React.useState('');
         const [displayName, setDisplayName] = React.useState(initDisplayName || '');
         const [matesAccess, setMatesAccess] = React.useState(null); // Set of usernames with accounts
         const [giftLinks, setGiftLinks] = React.useState({}); // { username: { url, password } }
         const [giftingFor, setGiftingFor] = React.useState(null);
-        // Live update (js/shared/live-update.js): typed-but-unsaved form fields
-        // (a password change, a new display name) hold the silent reload until
-        // saved / cleared / closed — focus alone isn't enough once they tap away.
+        // Live update (js/shared/live-update.js): a typed-but-unsaved display
+        // name holds the silent reload until saved / cleared / closed — focus
+        // alone isn't enough once they tap away. (The password form holds on
+        // its own — 'password-form' in PasswordSection.)
         const _nameAtMount = React.useRef(initDisplayName || '');
-        const luHoldSettings = !!(currentPw || newPw || confirmPw)
-            || (displayName !== (initDisplayName || '') && displayName !== _nameAtMount.current);
+        const luHoldSettings = (displayName !== (initDisplayName || '') && displayName !== _nameAtMount.current);
         React.useEffect(() => {
             if (!luHoldSettings) return undefined;
             const LU = () => window.App && window.App.LiveUpdate;
@@ -329,40 +475,6 @@
             else localStorage.setItem('od_display_name', displayName);
         }
 
-        async function handleChangePassword() {
-            setPwMsg('');
-            if (!currentPw || !newPw || !confirmPw) { setPwMsg('x Fill in all fields'); return; }
-            if (newPw !== confirmPw) { setPwMsg('x New passwords do not match'); return; }
-            if (newPw.length < 6) { setPwMsg('x Password must be at least 6 characters'); return; }
-            try {
-                // Verify current password against stored hash
-                const AUTH_KEY = 'od_auth_v1';
-                const auth = JSON.parse(localStorage.getItem(AUTH_KEY) || '{}');
-                const encoder = new TextEncoder();
-                const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(currentPw));
-                const currentHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,'0')).join('');
-
-                if (auth.passwordHash && auth.passwordHash !== currentHash) {
-                    // Also try Supabase in case this is a gifted account
-                    const result = await window.OD.verifySupabasePassword(sleeperUsername, currentPw);
-                    if (!result || !result.match) {
-                        setPwMsg('x Current password is incorrect');
-                        return;
-                    }
-                }
-                // Update Supabase
-                await window.OD.updatePassword(sleeperUsername, newPw);
-                // Update localStorage
-                const newHashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(newPw));
-                const newHash = Array.from(new Uint8Array(newHashBuffer)).map(b => b.toString(16).padStart(2,'0')).join('');
-                localStorage.setItem(AUTH_KEY, JSON.stringify({ ...auth, passwordHash: newHash, isGifted: false }));
-                setCurrentPw(''); setNewPw(''); setConfirmPw('');
-                setPwMsg('ok Password updated');
-            } catch (e) {
-                setPwMsg('x Failed to update password');
-            }
-        }
-
         // Load leaguemate access status when modal opens
         React.useEffect(() => {
             if (!leagueMates || leagueMates.length === 0) return;
@@ -437,12 +549,7 @@
                                 </div>
                             </div>
                             <div style={moduleSectionStyle}>
-                                <div style={sectionTitle}>PASSWORD</div>
-                                <input style={inputStyle} type="password" placeholder="Current password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
-                                <input style={inputStyle} type="password" placeholder="New password" value={newPw} onChange={e => setNewPw(e.target.value)} />
-                                <input style={{ ...inputStyle, marginBottom: '0.75rem' }} type="password" placeholder="Confirm new password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} />
-                                <button onClick={handleChangePassword} style={{ ...btnPrimary, width: '100%', flex: 'none' }}>Update Password</button>
-                                {pwMsg && <div style={{ marginTop: '0.5rem', fontSize: 'var(--text-label, 0.75rem)', color: pwMsg.startsWith('ok') ? 'var(--win-green)' : 'var(--k-e74c3c, #e74c3c)' }}>{pwMsg}</div>}
+                                <PasswordSection title="PASSWORD" titleStyle={sectionTitle} inputStyle={inputStyle} btnPrimary={btnPrimary} btnOutline={btnOutline} />
                             </div>
                             <div style={moduleSectionStyle}>
                                 <div style={sectionTitle}>ACCOUNT ACTIONS</div>
@@ -576,16 +683,7 @@
                             </div>
                         </div>
                         <div>
-                            {!showPw ? (
-                                <button onClick={() => setShowPw(true)} style={{ ...btnOutline, width: '100%', flex: 'none' }}>Change password</button>
-                            ) : (<>
-                                <div style={labelStyle}>Change password</div>
-                                <input style={inputStyle} type="password" placeholder="Current password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
-                                <input style={inputStyle} type="password" placeholder="New password" value={newPw} onChange={e => setNewPw(e.target.value)} />
-                                <input style={{ ...inputStyle, marginBottom: '0.75rem' }} type="password" placeholder="Confirm new password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} />
-                                <button onClick={handleChangePassword} style={{ ...btnPrimary, width: '100%', flex: 'none' }}>Update password</button>
-                                {pwMsg && <div style={{ marginTop: '0.5rem', fontSize: 'var(--text-label, 0.75rem)', color: pwMsg.startsWith('ok') ? 'var(--win-green)' : 'var(--k-e74c3c, #e74c3c)' }}>{pwMsg.replace(/^ok /, '').replace(/^x /, '')}</div>}
-                            </>)}
+                            <PasswordSection title="Change password" titleStyle={labelStyle} inputStyle={inputStyle} btnPrimary={btnPrimary} btnOutline={btnOutline} collapsible />
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: '10px' }}>
                             <div style={{ minWidth: 0 }}>
@@ -733,12 +831,7 @@
 
                     {/* ── CHANGE PASSWORD ── */}
                     <div style={sectionStyle}>
-                        <div style={sectionTitle}>CHANGE PASSWORD</div>
-                        <input style={inputStyle} type="password" placeholder="Current password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
-                        <input style={inputStyle} type="password" placeholder="New password" value={newPw} onChange={e => setNewPw(e.target.value)} />
-                        <input style={{ ...inputStyle, marginBottom: '0.75rem' }} type="password" placeholder="Confirm new password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} />
-                        <button onClick={handleChangePassword} style={{ ...btnPrimary, width: '100%', flex: 'none' }}>Update Password</button>
-                        {pwMsg && <div style={{ marginTop: '0.5rem', fontSize: 'var(--text-label, 0.75rem)', color: pwMsg.startsWith('ok') ? 'var(--win-green)' : 'var(--k-e74c3c, #e74c3c)' }}>{pwMsg}</div>}
+                        <PasswordSection title="CHANGE PASSWORD" titleStyle={sectionTitle} inputStyle={inputStyle} btnPrimary={btnPrimary} btnOutline={btnOutline} />
                     </div>
 
                     {/* Phase 10: Leaguemate Access card removed per user feedback (2026-04-18) */}
