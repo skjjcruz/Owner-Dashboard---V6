@@ -1002,6 +1002,25 @@ test('live update: unsaved work holds the silent reload (QA 2026-09-26)',
     }
   });
 
+test('analytics: robots and owner devices are stamped as test traffic (2026-09-27)',
+  () => {
+    // Mission Control leaves any session with metadata.internal out of its
+    // numbers (analytics_test_sessions). Every event sender must stamp it.
+    const landing = fs.readFileSync(path.join(ROOT, 'landing.html'), 'utf8');
+    const connect = fs.readFileSync(path.join(ROOT, 'connect-sleeper.html'), 'utf8');
+    for (const [name, src] of [['landing.html', landing], ['connect-sleeper.html', connect]]) {
+      ok(src.includes('function dhqInternalTag()') && src.includes("navigator.webdriver) return 'automated'"), name + ': robots are stamped');
+      ok(src.includes("DHQ_OWNER_HANDLES = ['skjjcruz', 'bigloco']") && src.includes("localStorage.setItem('dhq_internal_v1', 'owner')"), name + ': owner devices are marked (sticky)');
+    }
+    ok(landing.includes('if (internal) out.internal = internal;'), 'landing events carry the stamp');
+    ok(connect.includes('internal: dhqInternalTag()'), 'connect events carry the stamp');
+    const shared = path.join(ROOT, 'reconai-shared/supabase-client.js');
+    if (fs.existsSync(shared)) {
+      const sc = fs.readFileSync(shared, 'utf8');
+      ok(sc.includes('function dhqInternalTag()') && sc.includes('if (internal) meta.internal = internal;'), 'shared analytics client stamps every queued event');
+    }
+  });
+
 test('retired standalone pages are redirect stubs to the app (2026-09-26)',
   () => {
     // draft-warroom / free-agency / trade-calculator moved into app tabs; the
