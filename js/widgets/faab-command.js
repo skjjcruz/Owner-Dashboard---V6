@@ -44,7 +44,7 @@
             return best;
         }, [currentLeague, playersData]);
 
-        const [plan, setPlan] = React.useState(null); // null | {loading} | {a} | {err}
+        const [plan, setPlan] = React.useState(null); // null | {loading} | {a, est} | {err}
         React.useEffect(() => {
             if (!target || !window.App?.Faab || !window.WrTxns) { setPlan(null); return; }
             let alive = true;
@@ -54,16 +54,18 @@
                     const txns = await window.WrTxns.fetchLeagueTxns(lid);
                     const failed = window.WrTxns.getFailedWaivers(lid);
                     const gmEff = window.WR?.GmMode?.effects?.(lid) || {};
-                    const a = window.App.Faab.analyze({
+                    // bidfix 2026-09-27: App.Faab.estimate is THE bid estimate
+                    // (the FA tab's hero, rows, drawer and FAAB Command all
+                    // print it); analyze() alone is the older raw call.
+                    const est = window.App.Faab.estimate ? window.App.Faab.estimate({
                         league: currentLeague, myRosterId: myRoster?.roster_id,
                         txns: (txns || []).concat(failed || []),
                         playersData,
                         minBidOverride: gmEff.faabMinBid || undefined,
-                        targetPid: target.pid, targetPos: target.pos,
-                        targetStrength: Math.max(0.15, Math.min(1, (Number(target.dhq) || 0) / 6000)),
+                        targetPid: target.pid, targetPos: target.pos, dhq: target.dhq,
                         horizonWeeks: window.App?.ChopOdds?.horizonFor?.(lid, null) || null,
-                    });
-                    if (alive) setPlan(a ? { a } : null);
+                    }) : null;
+                    if (alive) setPlan(est ? { a: est.analysis, est } : null);
                 } catch (e) { if (alive) setPlan({ err: true }); }
             })();
             return () => { alive = false; };
@@ -101,6 +103,8 @@
             );
         }
         const a = plan.a;
+        const est = plan.est;
+        const bandText = est && est.lo !== est.hi && window.App?.Faab?.formatRange ? 'est. range ' + window.App.Faab.formatRange(est) : '';
         if (!a) {
             // Pre-effect, or not a FAAB league at all — engine returns null.
             return (
@@ -119,7 +123,7 @@
                     <div style={{ fontSize: '0.64rem', letterSpacing: '0.06em', color: SILVER, fontWeight: 700 }}>FAAB COMMAND</div>
                     <div style={{ marginTop: 'auto' }}>
                         <div style={{ fontFamily: monoFont, fontSize: '1.9rem', fontWeight: 700, color: GOLD, lineHeight: 1 }}>${a.rec.bid}</div>
-                        <div style={{ fontSize: '0.7rem', color: SILVER, marginTop: '2px' }}>{uncontested ? 'uncontested' : Math.round(a.rec.winPct * 100) + '% to win'} · {target.name}</div>
+                        <div style={{ fontSize: '0.7rem', color: SILVER, marginTop: '2px' }}>{uncontested ? 'uncontested' : bandText || (Math.round(a.rec.winPct * 100) + '% to win')} · {target.name}</div>
                     </div>
                 </div>
             );
@@ -138,7 +142,7 @@
                 <div style={{ marginTop: '6px', fontSize: '0.78rem', color: SILVER }}>
                     {uncontested
                         ? 'No rival has both a need and the budget to chase him — the league minimum should land him.'
-                        : Math.round(a.rec.winPct * 100) + '% to win' + (a.rec.capped ? ' (capped by your remaining budget)' : '') + ' · ' + engaged.length + ' rival' + (engaged.length === 1 ? '' : 's') + ' in the market'}
+                        : (bandText ? bandText + ' · ' : '') + Math.round(a.rec.winPct * 100) + '% to win' + (a.rec.capped ? ' (capped by your remaining budget)' : '') + ' · ' + engaged.length + ' rival' + (engaged.length === 1 ? '' : 's') + ' in the market'}
                 </div>
                 {a.pacing && a.pacing.verdict === 'hoarding' ? (
                     <div style={{ marginTop: '10px', fontSize: '0.76rem', color: WARN }}>

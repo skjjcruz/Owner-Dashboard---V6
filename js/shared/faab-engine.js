@@ -9,8 +9,23 @@
 //     → { coldStart, sampleSize, budget, minBid, myLeft, mySpentPct,
 //         leagueSpentPct, marketBid, medianBid,
 //         ladder: [{ bid, winPct }], rec: { bid, winPct, capped },
+//         band: { lo, hi },                                // see estimate()
 //         rivals: [{ rosterId, name, faabLeft, need, aggr, estBid, engaged }],
 //         comps:  [{ week, pid, bid, rosterId }] }        // newest first
+//
+//   estimate(opts)  — THE one bid estimate every surface shows (bidfix
+//     2026-09-27). Same inputs as analyze, plus `dhq` (the model's
+//     targetStrength is derived from it when targetStrength is absent).
+//     → null when the league does not bid, or nothing legal is left to bid
+//     → { sug, lo, hi, winPct, capped, coldStart, sampleSize, minBid, myLeft,
+//         budget, estimate: true, basis: 'faab-model', analysis }
+//     sug = rec.bid (smallest bid clearing WIN_TARGET); lo / hi = the bids
+//     that first clear BAND_LO / BAND_HI on the same win curve, so the range
+//     is the model's own uncertainty band, not a second formula. Uncontested
+//     → lo = sug = hi = the league minimum.
+//     Before this, the phone hero / board rows / drawer used a value÷250
+//     formula while FAAB Command used this model, and the two disagreed for
+//     the same player on the same screen.
 //
 // The model, stated plainly (all tunables are const-hoisted):
 //  · Evidence = every FAAB bid this season, WINNING AND LOSING (failed claims
@@ -42,8 +57,11 @@
     const ENGAGE_MED = 0.5;
     const LADDER_STEPS = [0.5, 0.75, 1, 1.35, 1.75];
     const WIN_TARGET = 0.6;        // rec = smallest bid clearing this
+    const BAND_LO = 0.45;          // estimate range: first bid clearing this …
+    const BAND_HI = 0.8;           // … to the first bid clearing this
     const SPEND_CAP = 0.65;        // of my remaining, unless strength ≥ CAP_LIFT
     const CAP_LIFT = 0.8;
+    const STRENGTH_DHQ = 6000;     // dhq ≈ a league-winning add → strength 1
 
     function quantile(sorted, q) {
         if (!sorted.length) return null;
@@ -219,11 +237,27 @@
         })();
         // Recommendation: smallest whole bid clearing WIN_TARGET, spend-capped.
         const cap = strength >= CAP_LIFT ? myLeft : Math.max(minBid, Math.round(myLeft * horizonCap));
-        let rec = null;
-        for (let B = minBid; B <= cap; B++) {
-            if (winPct(B) >= WIN_TARGET) { rec = { bid: B, winPct: winPct(B), capped: false }; break; }
-        }
+        // winPct is non-decreasing in B (a product of logistics), so the first
+        // bid clearing a threshold is a binary search — a $10,000-budget
+        // guillotine league would otherwise walk thousands of rungs per player.
+        const firstClearing = (target) => {
+            if (cap < minBid || winPct(cap) < target) return null;
+            let lo = minBid, hi = cap;
+            while (lo < hi) { const mid = Math.floor((lo + hi) / 2); if (winPct(mid) >= target) hi = mid; else lo = mid + 1; }
+            return lo;
+        };
+        const recBid = firstClearing(WIN_TARGET);
+        let rec = recBid != null ? { bid: recBid, winPct: winPct(recBid), capped: false } : null;
         if (!rec) rec = { bid: Math.min(cap, myLeft), winPct: winPct(Math.min(cap, myLeft)), capped: true };
+        // The estimate band on the same curve: where the odds first turn
+        // plausible (BAND_LO) to where they turn comfortable (BAND_HI). Always
+        // brackets rec.bid; a capped rec pins the top of the band to the cap.
+        const bandLo = firstClearing(BAND_LO);
+        const bandHi = firstClearing(BAND_HI);
+        const band = {
+            lo: Math.min(rec.bid, bandLo != null ? bandLo : rec.bid),
+            hi: Math.max(rec.bid, bandHi != null ? bandHi : Math.min(cap, myLeft)),
+        };
 
         const spentPct = r => budget ? Math.round(((budget - leftOf(r)) / budget) * 100) : 0;
         // Average over LIVE teams only — a chopped team's spend is frozen, so
@@ -263,12 +297,40 @@
             mySpentPct: mine ? spentPct(mine) : 0,
             leagueSpentPct: leagueSpent,
             marketBid, medianBid: Math.max(1, Math.round((leagueMed / 100) * budget)),
-            ladder, rec, rivals,
+            ladder, rec, band, rivals,
             comps: bids.filter(b => b.won).slice(0, 8),
         };
     }
 
-    App.Faab = App.Faab || { analyze, extractBids, needAt, quantile };
+    // Strength for the market quantile: DHQ against an elite-FA benchmark.
+    // One mapping, so a $26 read here is the same $26 read everywhere.
+    function strengthOf(dhq) {
+        return Math.max(0.15, Math.min(1, (Number(dhq) || 0) / STRENGTH_DHQ));
+    }
+
+    // The one bid estimate (header comment). Pure; callers gather txns.
+    function estimate(opts) {
+        const o = opts || {};
+        const a = analyze(o.targetStrength != null ? o : Object.assign({}, o, { targetStrength: strengthOf(o.dhq) }));
+        if (!a) return null;
+        if (a.myLeft < a.minBid) return null;   // FAAB exhausted — no legal bid left
+        return {
+            sug: a.rec.bid, lo: a.band.lo, hi: a.band.hi,
+            winPct: a.rec.winPct, capped: a.rec.capped,
+            coldStart: a.coldStart, sampleSize: a.sampleSize,
+            minBid: a.minBid, myLeft: a.myLeft, budget: a.budget,
+            estimate: true, basis: 'faab-model',
+            analysis: a,
+        };
+    }
+
+    // "$26" when the band collapses (uncontested), "$18–34" otherwise.
+    function formatRange(est, dash) {
+        if (!est) return null;
+        return est.lo === est.hi ? '$' + est.lo : '$' + est.lo + (dash || '–') + est.hi;
+    }
+
+    App.Faab = Object.assign(App.Faab || {}, { analyze, estimate, strengthOf, formatRange, extractBids, needAt, quantile });
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.Faab;
 })(typeof window !== 'undefined' ? window : globalThis);

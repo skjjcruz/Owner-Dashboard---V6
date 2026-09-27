@@ -79,6 +79,67 @@ test('faab: failed claims count as bid evidence', () => {
   assert.ok(a.comps.every(c => c.bid !== 30), 'comps show WINNING bids only');
 });
 
+// ── estimate(): the one bid estimate every surface prints (bidfix) ────
+test('estimate: the range is the model\'s own band around rec, never a second formula', () => {
+  const txns = [];
+  for (let w = 1; w <= 6; w++) { txns.push(bidTxn(2, 8 + w, w), bidTxn(3, 20 + w, w), bidTxn(4, 5, w, true)); }
+  const args = { league: faabLeague(), myRosterId: 1, txns, playersData: faabPlayers, targetPos: 'RB' };
+  const e = Faab.estimate({ ...args, dhq: 4200 });
+  const a = Faab.analyze({ ...args, targetStrength: 0.7 });
+  assert.strictEqual(e.basis, 'faab-model');
+  assert.strictEqual(e.estimate, true);
+  assert.strictEqual(e.sug, a.rec.bid, 'dhq 4200 → strength 0.7 → the same rec analyze() gives');
+  assert.ok(e.lo <= e.sug && e.sug <= e.hi, 'band brackets the recommendation');
+  assert.ok(e.lo >= a.minBid && e.hi <= a.myLeft, 'band is legal money');
+  // The band is read off the same win curve: lo first clears 45%, hi first clears 80%.
+  assert.ok(a.band.lo === e.lo && a.band.hi === e.hi);
+  assert.strictEqual(e.analysis.rec.bid, e.sug, 'the full analysis rides along for FAAB Command');
+  assert.ok(Array.isArray(e.analysis.rivals) && e.analysis.rivals.length === 3);
+  assert.strictEqual(Faab.formatRange(e), '$' + e.lo + '–' + e.hi);
+});
+
+test('estimate: rec is the smallest bid clearing the target (binary search = the old linear scan)', () => {
+  const txns = [];
+  for (let w = 1; w <= 6; w++) { txns.push(bidTxn(2, 8 + w, w), bidTxn(3, 20 + w, w)); }
+  for (const s of [0.2, 0.5, 0.7, 0.95]) {
+    const a = Faab.analyze({ league: faabLeague(), myRosterId: 1, txns, playersData: faabPlayers, targetPos: 'RB', targetStrength: s });
+    // Rebuild winPct from the published rivals to check rec independently.
+    const winPct = B => { let p = 1; for (const r of a.rivals) { if (!r.engaged) continue; const sg = Math.max(2, 0.25 * r.estBid, 0.12 * a.marketBid); const u = 1 / (1 + Math.exp(-(B - r.estBid) / sg)); const pe = r.need === 'HIGH' ? 0.85 : 0.5; p *= (1 - pe) + pe * u; } return Math.min(0.97, Math.round(p * 100) / 100); };
+    if (!a.rec.capped) {
+      assert.ok(winPct(a.rec.bid) >= 0.6, 'rec clears the target');
+      assert.ok(a.rec.bid === a.minBid || winPct(a.rec.bid - 1) < 0.6, 'and one dollar less does not');
+    }
+    assert.ok(a.band.lo <= a.rec.bid && a.rec.bid <= a.band.hi);
+  }
+});
+
+test('estimate: uncontested → the band collapses onto the league minimum; no budget → null', () => {
+  const lg = faabLeague();
+  lg.settings.waiver_bid_min = 13;
+  lg.rosters = lg.rosters.filter(r => r.roster_id === 1);           // nobody else to bid
+  const e = Faab.estimate({ league: lg, myRosterId: 1, txns: [], playersData: faabPlayers, targetPos: 'RB', dhq: 3000 });
+  assert.deepStrictEqual([e.sug, e.lo, e.hi], [13, 13, 13]);
+  assert.strictEqual(Faab.formatRange(e), '$13', 'a collapsed band prints as one number');
+  assert.strictEqual(e.coldStart, true);
+  const broke = faabLeague();
+  broke.settings.waiver_bid_min = 13;
+  broke.rosters[0].settings.waiver_budget_used = 95;                 // $5 left, $13 minimum
+  assert.strictEqual(Faab.estimate({ league: broke, myRosterId: 1, txns: [], playersData: faabPlayers, targetPos: 'RB', dhq: 3000 }), null, 'no legal bid left → no estimate');
+  assert.strictEqual(Faab.estimate({ league: { settings: { waiver_budget: 0 } }, myRosterId: 1, txns: [], targetPos: 'RB', dhq: 3000 }), null, 'not a FAAB league');
+});
+
+test('estimate: a $10,000 guillotine budget resolves in one pass (search, not a walk)', () => {
+  const lg = faabLeague();
+  lg.settings.waiver_budget = 10000; lg.settings.waiver_bid_min = 10;
+  lg.rosters = Array.from({ length: 18 }, (_, i) => ({ roster_id: i + 1, owner_id: 'u' + (i + 1), settings: { waiver_budget_used: 1000 + i * 200 }, players: ['rb1'] }));
+  const txns = [];
+  for (let w = 1; w <= 6; w++) for (let r = 2; r <= 18; r++) txns.push(bidTxn(r, 200 + r * 30 + w * 10, w));
+  const t = Date.now();
+  const e = Faab.estimate({ league: lg, myRosterId: 1, txns, playersData: faabPlayers, targetPos: 'RB', dhq: 5900 });
+  assert.ok(Date.now() - t < 50, 'fast');
+  assert.ok(e.lo >= 10 && e.lo <= e.sug && e.sug <= e.hi && e.hi <= e.myLeft);
+});
+
 console.log('\n' + (failed ? 'FAIL' : 'PASS') + ' ' + (passed + failed) + ' tests — ' + passed + ' passed, ' + failed + ' failed');
 if (failed) {
   failures.forEach(f => console.error('\n✗ ' + f.name + '\n' + (f.e && f.e.stack)));

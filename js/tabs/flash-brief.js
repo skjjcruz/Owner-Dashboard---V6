@@ -146,6 +146,24 @@ function IntelligenceBriefWidget({
 	        return () => { alive = false; window.removeEventListener('wr:module-group-loaded', onGroupLoaded); };
 	    }, []);
 
+	    // The action target's bid estimate is the league bid model (bidfix
+	    // 2026-09-27: js/shared/faab-engine.js via the FA board — the same
+	    // number the FA tab's hero and FAAB Command print). Its input is the
+	    // league's cached bid history: fetch it once (6h cache, owned by
+	    // free-agency.js) and recompute when it lands so the brief and the FA
+	    // tab never quote different numbers for the same player.
+	    const [faTxnsTick, setFaTxnsTick] = useState(0);
+	    const faBidLeagueId = String(currentLeague?.league_id || currentLeague?.id || '');
+	    useEffect(() => {
+	        const h = (e) => { if (!e?.detail?.leagueId || e.detail.leagueId === faBidLeagueId) setFaTxnsTick(t => t + 1); };
+	        window.addEventListener('wr:fa-txns-updated', h);
+	        return () => window.removeEventListener('wr:fa-txns-updated', h);
+	    }, [faBidLeagueId]);
+	    useEffect(() => {
+	        if (!_faab.isFaab || typeof window.App?.faEnsureBidHistory !== 'function') return;
+	        window.App.faEnsureBidHistory(currentLeague);
+	    }, [faBidLeagueId, _faab.isFaab, faModuleTick]);
+
 	    // Best waiver target
 	    const waiverTarget = useMemo(() => {
 	        if (!rosterState.isUsable) return null;
@@ -205,7 +223,7 @@ function IntelligenceBriefWidget({
             }
         }
         return candidates[0] || null;
-	    }, [rosterState.isUsable, needs, playersData, statsData, prevStatsData, myRoster, currentLeague, briefDraftInfo, scores, timeRecomputeTs, faModuleTick, gm.faFilters]);
+	    }, [rosterState.isUsable, needs, playersData, statsData, prevStatsData, myRoster, currentLeague, briefDraftInfo, scores, timeRecomputeTs, faModuleTick, faTxnsTick, gm.faFilters]);
 
     // Sell-rule trips — rostered players whose position/age trips a GM sell
     // rule or sell-position (untouchables excluded). Feeds the 'GM plan says
@@ -394,7 +412,9 @@ function IntelligenceBriefWidget({
 	            title: p.waiver(waiverTarget.name, waiverTarget.pos, waiverTarget.dhq),
 	            detail: [
 	                React.createElement('span', { key: 'n', style: { color: 'var(--gold)', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px' }, onClick: e => { e.stopPropagation(); if (typeof window.openPlayerModal === 'function' && waiverTarget.pid) window.openPlayerModal(waiverTarget.pid); } }, waiverTarget.name),
-	                ` · ${waiverTarget.pos} · DHQ ${waiverTarget.dhq.toLocaleString()} · ${waiverTarget.why || ('Fills your ' + waiverTarget.pos + ' gap.')}${waiverIsGmTarget ? ' · GM plan: target position' : ''}`,
+	                // "est. bid": the league bid model's range, labelled as an estimate
+	                // (never a price) — identical to the FA tab's hero for this player.
+	                ` · ${waiverTarget.pos} · DHQ ${waiverTarget.dhq.toLocaleString()}${waiverTarget.faab && window.App?.Faab?.formatRange ? ' · est. bid ' + window.App.Faab.formatRange(waiverTarget.faab) : ''} · ${waiverTarget.why || ('Fills your ' + waiverTarget.pos + ' gap.')}${waiverIsGmTarget ? ' · GM plan: target position' : ''}`,
 	            ],
 	        });
     }

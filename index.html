@@ -14,25 +14,54 @@
     (function () {
       try {
         if (['localhost', '127.0.0.1'].includes(window.location.hostname)) return;
-        var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
-        var token = sess && sess.token;
-        var ok = false;
-        if (token && typeof token === 'string' && token.split('.').length === 3) {
+        // Decode-only JWT payload (never trusted for auth — the server does that).
+        function decodeJwt(t) {
+          if (!t || typeof t !== 'string' || t.split('.').length !== 3) return null;
           try {
-            var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            var part = t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
             var padded = part.length % 4 ? part + '='.repeat(4 - (part.length % 4)) : part;
-            var payload = JSON.parse(decodeURIComponent(window.atob(padded).split('').map(function (c) {
+            return JSON.parse(decodeURIComponent(window.atob(padded).split('').map(function (c) {
               return '%' + c.charCodeAt(0).toString(16).padStart(2, '0');
             }).join('')));
-            ok = !payload.exp || Number(payload.exp) * 1000 > Date.now();
-          } catch (e) { ok = false; }
+          } catch (e) { return null; }
         }
+        var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
+        var token = sess && sess.token;
+        var payload = decodeJwt(token);
+        var ok = !!payload && (!payload.exp || Number(payload.exp) * 1000 > Date.now());
         // Guest lane: a guest with a connected league enters without a JWT
         // (local-only, free tier; server features stay signed-out). An
         // MFL-only guest has no od_auth_v1 — the league id is their proof
         // (owner bug report 2026-08-31).
         var isGuest = false;
         try { isGuest = localStorage.getItem('wr_guest_v1') === '1'; } catch (e) {}
+        // Legacy Sleeper login (login.html) keeps the same JWT in fw_session_v1
+        // and od_session_v1. A 2026-09 client bug deleted fw_session_v1 for
+        // those users (their token got a 401 from fw-refresh-session), so this
+        // gate then bounced them to landing.html and wiped od_auth_v1 — a
+        // forced re-sign-in. Re-hydrate fw_session_v1 from a still-live legacy
+        // copy (sleeper_username claim, no user_id, unexpired) in login.html's
+        // exact shape. Never from an expired token, never over an app-account
+        // session (those keep their own expiry path below), never for a guest
+        // tab. The shared client (ensureFreshAppSession) does the same for
+        // localhost, where this gate returns early.
+        if (!ok && !isGuest && !(payload && payload.app_metadata && payload.app_metadata.user_id)) {
+          try {
+            var legacy = JSON.parse(localStorage.getItem('od_session_v1') || 'null');
+            var lp = decodeJwt(legacy && legacy.token);
+            var meta = lp && lp.app_metadata;
+            var legacyLive = !!lp && typeof lp.exp === 'number' && lp.exp * 1000 > Date.now();
+            if (legacyLive && meta && typeof meta.sleeper_username === 'string' && meta.sleeper_username && !meta.user_id) {
+              sess = {
+                token: legacy.token,
+                expiresAt: legacy.expiresAt || new Date(lp.exp * 1000).toISOString(),
+                user: { sleeperUsername: meta.sleeper_username, isGifted: !!(legacy.isGifted || meta.is_gifted) },
+              };
+              localStorage.setItem('fw_session_v1', JSON.stringify(sess));
+              ok = true;
+            }
+          } catch (e) {}
+        }
         if (!ok && isGuest) {
           try {
             var ga = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
@@ -76,7 +105,7 @@
     <link rel="preload" as="script" href="vendor/supabase.min.js">
     <link rel="preload" as="script" href="vendor/react.production.min.js">
     <link rel="preload" as="script" href="vendor/react-dom.production.min.js">
-    <script src="js/shared/shared-loader.js?v=20260829jan3"></script>
+    <script src="js/shared/shared-loader.js?v=20260927legacy2"></script>
     <!-- Season-rollover cache hygiene — must run early, before any surface reads caches. -->
     <script src="js/shared/season-guard.js?v=20260807sg1"></script>
     <!-- Native-shell external-link guard: outside links must never strand the WKWebView. -->
