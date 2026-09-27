@@ -159,10 +159,13 @@ function IntelligenceBriefWidget({
 	        window.addEventListener('wr:fa-txns-updated', h);
 	        return () => window.removeEventListener('wr:fa-txns-updated', h);
 	    }, [faBidLeagueId]);
+	    // Wait for nflState: before it is known, txn-store's offseason branch
+	    // fetches 19 weeks of transactions instead of the in-season 4.
+	    const nflStateReady = !!(window.S?.nflState);
 	    useEffect(() => {
-	        if (!_faab.isFaab || typeof window.App?.faEnsureBidHistory !== 'function') return;
+	        if (!_faab.isFaab || !nflStateReady || typeof window.App?.faEnsureBidHistory !== 'function') return;
 	        window.App.faEnsureBidHistory(currentLeague);
-	    }, [faBidLeagueId, _faab.isFaab, faModuleTick]);
+	    }, [faBidLeagueId, _faab.isFaab, faModuleTick, nflStateReady]);
 
 	    // Best waiver target
 	    const waiverTarget = useMemo(() => {
