@@ -1161,7 +1161,7 @@
           // mismatch (another owner's cache, or a device from before owner
           // stamping) reconciles against the account first.
           if (!idn || idn.getStamp() === idn.sessionOwner(session)) window.location.href = nextAfterAuth();
-          else routeSignedIn(null);
+          else routeSignedIn(null, { boot: true }); // a session this device already held (not a sign-in)
           return;
         }
         // Damaged (no user.id) or expired session: repair it through
@@ -1180,7 +1180,7 @@
                 if (data?.token && data?.user?.id) {
                   localStorage.setItem(SESSION_KEY, JSON.stringify({ token: data.token, user: data.user }));
                   trackLandingEvent('landing_session_repaired');
-                  await routeSignedIn(data);
+                  await routeSignedIn(data, { boot: true }); // the device's own stored session, repaired
                   return;
                 }
               }

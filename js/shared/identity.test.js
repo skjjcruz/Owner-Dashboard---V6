@@ -236,14 +236,46 @@ test('reconcile, different owner and an empty server → connect page (no inheri
     assert.equal(env.ls.getItem('od_profile_v1'), null);
 });
 
-test('reconcile, first run on this build (no stamp): the local handle is this owner\'s → stamped and uploaded', async () => {
+test('unstamped cache + a live session already on the device at BOOT → trusted: stamped and uploaded', async () => {
     const env = load({ local: { [FW]: account('u1'), od_profile_v1: { sleeperUsername: 'alice', onboardingComplete: true }, espn_league_id: '7' } });
-    const r = await env.id.reconcileAfterSignIn();
+    const r = await env.id.reconcileAfterSignIn(null, { boot: true });
     assert.deepEqual([r.handle, r.source, r.uploaded, r.cleared], ['alice', 'local', true, false]);
     assert.equal(env.ls.getItem(STAMP), 'account:u1');
     assert.equal(env.ls.getItem('espn_league_id'), '7');
-    assert.deepEqual(posts(env)[0].body.platformUsernames.sleeper, 'alice');
+    assert.equal(posts(env)[0].body.platformUsernames.sleeper, 'alice');
     assert.deepEqual(posts(env)[0].body.platformUsernames.espn.map(e => e.leagueId), ['7']);
+});
+
+test('unstamped cache + a FRESH sign-in → someone else\'s: cleared, never uploaded; server handle wins, else connect', async () => {
+    const seed = { od_auth_v1: { username: 'prev' }, od_profile_v1: { sleeperUsername: 'prev', onboardingComplete: true }, mfl_league_id: '5', player_tags_123: '{}', draft_board_123: '[]', od_calendar_events: '[]' };
+    const empty = load({ local: { ...seed } });
+    const r = await empty.id.reconcileAfterSignIn(account('u1'));
+    assert.deepEqual([r.handle, r.onboarded, r.cleared, r.uploaded], [null, false, true, false], 'server empty → connect page');
+    assert.equal(posts(empty).length, 0, 'the unstamped handle is never uploaded');
+    for (const k of Object.keys(seed)) assert.equal(empty.ls.getItem(k), null, k + ' cleared');
+    assert.equal(empty.ls.getItem(STAMP), 'account:u1');
+    const withServer = load({ local: { ...seed } });
+    const r2 = await withServer.id.reconcileAfterSignIn({ ...account('u1'), platformUsernames: { sleeper: 'mine' } });
+    assert.deepEqual([r2.handle, r2.source, r2.cleared], ['mine', 'server', true]);
+    assert.equal(withServer.ls.getItem('mfl_league_id'), null);
+    assert.equal(posts(withServer).length, 0);
+    // Legacy: the handle is the credential — stamped, written.
+    const legacy = load({ local: { ...seed, [FW]: { token: legacyToken('bob'), user: { sleeperUsername: 'bob' } } } });
+    const r3 = await legacy.id.reconcileAfterSignIn();
+    assert.deepEqual([r3.owner, r3.handle, r3.cleared], ['legacy:bob', 'bob', true]);
+});
+
+test('owner change clears per-league boards, tags, notes and targets (clean prefixes only)', async () => {
+    const env = load({ local: { [STAMP]: 'account:uA', [FW]: account('uB'),
+        player_tags_1: '{}', dhq_league_doc_notes_1: '{}', draft_board_1: '[]', od_fa_targets_v1_1: '[]', od_grudges_v1_1: '[]',
+        wr_bigboard_1: '[]', wr_gm_strategy_1: '{}', wr_chat_1: '[]', wr_saved_trades_1: '[]', od_earnings_entries: '[]', scout_field_log_v1: '[]',
+        wr_theme: 'dark', fw_preferred_view: 'warroom' } });
+    await env.id.reconcileAfterSignIn();
+    for (const k of ['player_tags_1', 'dhq_league_doc_notes_1', 'draft_board_1', 'od_fa_targets_v1_1', 'od_grudges_v1_1', 'wr_bigboard_1', 'wr_gm_strategy_1', 'wr_chat_1', 'wr_saved_trades_1', 'od_earnings_entries', 'scout_field_log_v1']) {
+        assert.equal(env.ls.getItem(k), null, k);
+    }
+    assert.equal(env.ls.getItem('wr_theme'), 'dark', 'device preferences stay');
+    assert.equal(env.ls.getItem('fw_preferred_view'), 'warroom');
 });
 
 test('reconcile, first run but this tab was another account\'s → treated as a different owner', async () => {

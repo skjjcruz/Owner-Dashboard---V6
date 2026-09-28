@@ -919,7 +919,7 @@
             setHubStall(null);
             (async () => {
                 let r = null;
-                try { r = await withHubTimeout(idn.reconcileAfterSignIn(null, { timeoutMs: 6000 }), HUB_TIMEOUT_MS); }
+                try { r = await withHubTimeout(idn.reconcileAfterSignIn(null, { timeoutMs: 6000, boot: true }), HUB_TIMEOUT_MS); }
                 catch (e) {
                     window.wrLog?.('app.reconcileIdentity', e);
                     if (alive && !sleeperUsername) { setHubStall('reconcile'); setLoading(false); }
