@@ -927,6 +927,17 @@
                 }
                 if (!alive) return;
                 const h = r && r.handle;
+                // The account (server read OK) has no league source at all and
+                // this device has none either (and never finished onboarding
+                // for this owner): onboarding lives on the connect
+                // page — the same place sign-in sends them (a Demo League
+                // opened in this tab stays here).
+                // (A profile this owner marked onboarding-complete stays on the
+                // hub, which offers "Add a league".)
+                if (r && r.serverOk && !r.onboarded && !idn.localOnboarded() && !readDemoHandle() && String(r.owner || '').indexOf('account:') === 0) {
+                    window.location.replace('connect-sleeper.html');
+                    return;
+                }
                 if (h && h !== sleeperUsername) setSleeperUsername(h);
                 else if (!h) {
                     // Another owner's handle was on screen: drop it (a Demo
