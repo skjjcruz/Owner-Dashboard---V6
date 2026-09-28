@@ -10,6 +10,8 @@
        else (no session, or already onboarded) is redirected without a flash. -->
   <style id="preboot-hide">html{visibility:hidden!important}</style>
   <noscript><style>html{visibility:visible!important}</style></noscript>
+  <!-- Owner-stamped device identity (DHQ-Shared identity.js): server write of the handle + the one sign-out clear. -->
+  <script src="reconai-shared/identity.js?v=20260928auth1"></script>
   <script>
     (function () {
       function reveal(){ var s=document.getElementById('preboot-hide'); if(s&&s.parentNode){ s.parentNode.removeChild(s); } }
@@ -18,12 +20,18 @@
         var guestMode = false;
         try { guestMode = localStorage.getItem('wr_guest_v1') === '1'; } catch (e) {}
         if ((!sess || !sess.token) && !guestMode) { window.location.replace('landing.html'); return; }
+        // ?reconnect=espn|mfl: an onboarded user whose private ESPN league
+        // (cookies) or MFL league (API key) ended with the last app session
+        // re-enters them here — the hub links to it. Let them through.
+        var reconnect = new URLSearchParams(window.location.search).get('reconnect');
+        if (reconnect === 'espn' || reconnect === 'mfl') { reveal(); return; }
         var profile = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
         var legacy  = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
         // Onboarded = any league source bound (Sleeper OR MFL) or an explicit
         // completed flag. MFL-only users must not bounce back to this page.
+        // od_auth_v1 has two shapes ({username} here, {sleeperUsername} from the hub).
         var onboarded = (profile && (profile.onboardingComplete === true || profile.sleeperUsername))
-          || (legacy && legacy.username)
+          || (legacy && (legacy.username || legacy.sleeperUsername))
           || localStorage.getItem('mfl_league_id')
           || localStorage.getItem('espn_league_id');
         if (onboarded) {
@@ -146,6 +154,10 @@
         <input class="input" id="mflLeagueId" placeholder="MFL league ID (e.g. 41208)" inputmode="numeric" autocomplete="off">
         <input class="input" id="mflYear" value="2026" aria-label="Season" inputmode="numeric" autocomplete="off">
       </div>
+      <button class="private-toggle" id="mflPrivateToggle" type="button" onclick="toggleMflPrivate()">Private league? Add your MFL API key</button>
+      <div class="private" id="mflPrivate">
+        <input class="input" id="mflApiKey" placeholder="MFL API key (kept only until you close the app)" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
       <div class="espn-box" id="mflTeams" hidden>
         <h2 id="mflTeamsTitle">Which team is yours?</h2>
         <div class="team-list" id="mflTeamList"></div>
@@ -251,10 +263,18 @@
         if (localStorage.getItem('dhq_internal_v1')) return 'owner';
         const auth = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
         const prof = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
-        const names = [auth && auth.username, prof && prof.sleeperUsername].map(n => String(n || '').toLowerCase());
+        const names = [auth && auth.username, auth && auth.sleeperUsername, prof && prof.sleeperUsername].map(n => String(n || '').toLowerCase());
         if (names.some(n => DHQ_OWNER_HANDLES.includes(n))) { localStorage.setItem('dhq_internal_v1', 'owner'); return 'owner'; }
       } catch (e) {}
       return null;
+    }
+    // The deploy stamps <meta name="dhq-build"> (scripts/build-deploy.cjs);
+    // no stamp (local dev) → no field.
+    function buildId() {
+      try {
+        const b = window.DHQ_BUILD || (document.querySelector('meta[name="dhq-build"]') || {}).content;
+        return typeof b === 'string' && b.trim() ? b.trim().slice(0, 80) : null;
+      } catch (e) { return null; }
     }
     function trackConnectEvent(eventName, username, metadata) {
       // This page posts with the anonymous key, and the insert policy only
@@ -288,6 +308,7 @@
               surface: detectSurface(),
               host: location.hostname || null,
               ...(dhqInternalTag() ? { internal: dhqInternalTag() } : {}),
+              ...(buildId() ? { build: buildId() } : {}),
               ...(metadata || {}),
             },
           }]),
@@ -302,6 +323,25 @@
     });
 
     const linked = { sleeper: false, mfl: false, espn: false };
+    const IDN = (window.OD && window.OD.identity) || null;
+
+    // Record what was just connected on the signed-in ACCOUNT (the Sleeper
+    // handle and the ESPN/MFL league pointers — never cookies or API keys).
+    // This page used to write only this device, so every signup's handle
+    // lived nowhere else and a new device / sign-out stranded them (B1).
+    // keepalive: survives the navigation into the app. Guests: no account,
+    // nothing to write. enterApp awaits the last one (capped).
+    let pendingPush = Promise.resolve(false);
+    function pushToAccount() {
+      if (!IDN || !IDN.accountToken()) return pendingPush;
+      try {
+        // First connect on a device from before owner stamping: this device's
+        // identity is now this account's.
+        if (!IDN.getStamp()) IDN.setStamp(IDN.currentOwner());
+        pendingPush = IDN.pushIdentity();
+      } catch (e) { pendingPush = Promise.resolve(false); }
+      return pendingPush;
+    }
 
     function destForUser() {
       const pref = localStorage.getItem('fw_preferred_view');
@@ -376,10 +416,13 @@
           return;
         }
         const uname = user.username || username;
-        localStorage.setItem(AUTH_KEY, JSON.stringify({ username: uname, sleeperUserId: user.user_id, createdAt: new Date().toISOString() }));
+        // Both od_auth_v1 shapes ({username} and {sleeperUsername}), so every
+        // reader finds it.
+        localStorage.setItem(AUTH_KEY, JSON.stringify({ username: uname, sleeperUsername: uname, sleeperUserId: user.user_id, createdAt: new Date().toISOString() }));
         localStorage.setItem('od_locked_username_v2', uname);
         try { if (localStorage.getItem('wr_guest_v1') !== '1') patchProfile({ sleeperUsername: uname, sleeperUserId: user.user_id }); } catch (e) {}
         input.disabled = true;
+        pushToAccount();
         trackConnectEvent('sleeper_connected', uname, { sleeperUsername: uname });
         markLinked('sleeper', '@' + uname);
       } catch (err) {
@@ -402,7 +445,9 @@
         // succeeded here (found 2026-09-25). Ask through our server relay
         // (the same mfl-proxy the app uses); fall back to a direct call only
         // when the relay itself can't be reached.
-        const mflUrl = `https://api.myfantasyleague.com/${encodeURIComponent(year)}/export?TYPE=league&L=${encodeURIComponent(leagueId)}&JSON=1`;
+        const mflKey = (document.getElementById('mflApiKey').value || '').trim();
+        const mflUrl = `https://api.myfantasyleague.com/${encodeURIComponent(year)}/export?TYPE=league&L=${encodeURIComponent(leagueId)}&JSON=1`
+          + (mflKey ? `&APIKEY=${encodeURIComponent(mflKey)}` : '');
         let data = null;
         let relayed = false;
         try {
@@ -424,10 +469,23 @@
           btn.disabled = false; btn.textContent = 'Connect MFL league';
           return;
         }
+        const sameLeague = localStorage.getItem('mfl_league_id') === leagueId && localStorage.getItem('mfl_year') === year;
+        const keptTeam = sameLeague ? localStorage.getItem('mfl_franchise_id') : null;
         localStorage.setItem('mfl_league_id', leagueId);
         localStorage.setItem('mfl_year', year);
         // A team saved from an earlier connect is not known to be this league's.
         try { localStorage.removeItem('mfl_franchise_id'); } catch (e) {}
+        // A private league's API key lives only for this app session (like
+        // the ESPN cookies); the app reads it from sessionStorage.
+        try { if (mflKey) { sessionStorage.setItem('mfl_api_key', mflKey); localStorage.removeItem('mfl_api_key'); } } catch (e) {}
+        // Reconnecting the same league (a private key that ended with the last
+        // app session): the team is already known — keep it and go back in.
+        if (RECONNECT === 'mfl' && keptTeam) {
+          idInput.disabled = true; yearInput.disabled = true;
+          mflPending = { leagueId, year, leagueName };
+          finishMfl(keptTeam, leagueName);
+          return;
+        }
         idInput.disabled = true; yearInput.disabled = true;
         mflPending = { leagueId, year, leagueName };
         // Which franchise is yours? Same step as ESPN — without it the app
@@ -475,10 +533,17 @@
         else localStorage.removeItem('mfl_franchise_id');
       } catch (e) {}
       document.getElementById('mflTeams').hidden = true;
+      pushToAccount();
       trackConnectEvent('mfl_connected', null, { mflLeagueId: mflPending.leagueId, teamPicked: franchiseId != null });
       markLinked('mfl', teamName || mflPending.leagueName);
       mflPending = null;
       if (mflAutoEnter) enterApp();
+    }
+
+    function toggleMflPrivate() {
+      const el = document.getElementById('mflPrivate');
+      el.classList.toggle('show');
+      if (el.classList.contains('show')) document.getElementById('mflApiKey').focus();
     }
 
     function toggleEspnPrivate() {
@@ -595,27 +660,46 @@
         else localStorage.removeItem('espn_team_id');
       } catch (e) {}
       document.getElementById('espnTeams').hidden = true;
+      pushToAccount();
       trackConnectEvent('espn_connected', null, { espnLeagueId: espnPending.leagueId, teamPicked: teamId != null });
       markLinked('espn', teamName || espnPending.leagueName);
       espnPending = null;
       if (espnAutoEnter) enterApp();
     }
 
-    function enterApp() {
+    let entering = false;
+    async function enterApp() {
       if (!Object.keys(TABS).some(k => linked[k])) return;
+      if (entering) return;
+      entering = true;
       const platforms = Object.keys(TABS).filter(k => linked[k]);
-      patchProfile({ platforms, onboardingComplete: true });
+      // Reconnecting keeps the platforms already on the profile.
+      const prevPlatforms = RECONNECT ? (getProfile().platforms || []) : [];
+      patchProfile({ platforms: Array.from(new Set([...prevPlatforms, ...platforms])), onboardingComplete: true });
       let connectedName = null;
-      try { connectedName = (JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}).username || null; } catch (e) {}
-      trackConnectEvent('entered_app', connectedName, { platforms: platforms.join('+') });
+      try { const a = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}; connectedName = a.sleeperUsername || a.username || null; } catch (e) {}
+      trackConnectEvent('entered_app', connectedName, { platforms: platforms.join('+'), ...(RECONNECT ? { reconnect: RECONNECT } : {}) });
       showAlert('success', 'You’re in! Loading Dynasty HQ…');
-      setTimeout(() => { window.location.href = destForUser(); }, 700);
+      // The account write must land before we leave (keepalive covers a
+      // slow one; the cap keeps a dead network from holding the user here).
+      const settle = (p) => (IDN ? IDN.settle(p, 4000) : Promise.resolve());
+      await Promise.all([settle(pushToAccount()), new Promise(r => setTimeout(r, 700))]);
+      window.location.href = destForUser();
     }
 
-    function signOut() {
+    // "Not you? Sign out": the same one clear as every other sign-out
+    // (DHQ-Shared identity.js signOutClear — credentials only; the Supabase
+    // session is dropped with local scope).
+    async function signOut() {
+      if (IDN) {
+        try { await IDN.signOutClear(); } catch (e) {}
+        window.location.href = 'landing.html';
+        return;
+      }
       try {
+        // identity.js missing (stale cache / partial deploy): credentials by
+        // hand; the handle cache stays, like every other sign-out.
         localStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(AUTH_KEY);
         localStorage.removeItem('od_session_v1');
         // Clear the guest flag too — landing.html forwards mid-setup guests
         // back here, so a lingering flag would trap them in a loop.
@@ -640,7 +724,7 @@
     // be skipped). Hold until they go in.
     try {
       window.App.LiveUpdate.hold('connect', () => !!(mflPending || espnPending || Object.keys(linked).some(k => linked[k]) ||
-        ['sleeperName', 'mflLeagueId', 'espnLeagueId', 'espnS2', 'espnSwid'].some(id => {
+        ['sleeperName', 'mflLeagueId', 'mflApiKey', 'espnLeagueId', 'espnS2', 'espnSwid'].some(id => {
           const el = document.getElementById(id);
           return el && !el.disabled && el.value.trim();
         })));
@@ -653,6 +737,40 @@
       if (id === 'mflLeagueId' || id === 'mflYear') connectMfl();
       if (id === 'espnLeagueId' || id === 'espnYear') connectEspn();
     });
+
+    // ── ?reconnect=espn|mfl — a private league whose cookies / API key
+    // ended with the last app session (the hub links here). Open that
+    // platform with the saved league filled in and the private fields shown.
+    const RECONNECT = (function () {
+      const r = new URLSearchParams(window.location.search).get('reconnect');
+      return r === 'espn' || r === 'mfl' ? r : null;
+    })();
+    (function reconnectPrivate() {
+      if (!RECONNECT) return;
+      try {
+        document.querySelector('.step').textContent = 'Reconnect';
+        document.querySelector('h1').textContent = RECONNECT === 'espn' ? 'Reconnect your ESPN league' : 'Reconnect your MFL league';
+        document.querySelector('.sub').textContent = 'Private leagues need their sign-in again after the app restarts. It stays only until you close the app.';
+      } catch (e) {}
+      pick(RECONNECT);
+      if (RECONNECT === 'espn') {
+        const id = localStorage.getItem('espn_league_id');
+        if (id) document.getElementById('espnLeagueId').value = id;
+        const y = localStorage.getItem('espn_year');
+        if (y) document.getElementById('espnYear').value = y;
+        document.getElementById('espnPrivate').classList.add('show');
+        espnAutoEnter = true;
+        setTimeout(() => { try { document.getElementById('espnS2').focus(); } catch (e) {} }, 50);
+      } else {
+        const id = localStorage.getItem('mfl_league_id');
+        if (id) document.getElementById('mflLeagueId').value = id;
+        const y = localStorage.getItem('mfl_year');
+        if (y) document.getElementById('mflYear').value = y;
+        document.getElementById('mflPrivate').classList.add('show');
+        mflAutoEnter = true;
+        setTimeout(() => { try { document.getElementById('mflApiKey').focus(); } catch (e) {} }, 50);
+      }
+    })();
 
     // ── Handoff from the one-page front door (owner ruling 2026-09-24) ──
     // landing.html's one box leaves a one-time note of what the visitor
