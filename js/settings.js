@@ -34,6 +34,9 @@
         try {
             await window.OD.deleteAccount();
             try {
+                // The account is gone, so is its identity on this device
+                // (handle, league pointers, club) and the owner stamp.
+                if (window.OD?.identity) { window.OD.identity.clearDeviceIdentity(); localStorage.removeItem(window.OD.identity.OWNER_KEY); }
                 ['fw_session_v1', 'od_auth_v1', 'od_display_name', 'od_avatar_emoji', 'dhq_notify_prefs_v1', 'dhq_owner_club_v1'].forEach(k => localStorage.removeItem(k));
             } catch { /* best effort */ }
             // Same sign-out as Settings (core.js dhqSignOut): also drops the
@@ -164,14 +167,18 @@
             return <button type="button" onClick={() => setOpen(true)} style={{ ...btnOutline, width: '100%', flex: 'none' }}>Change password</button>;
         }
         if (kind === 'guest') {
-            return <>{heading}{note('You’re using Dynasty HQ as a guest, so there’s no password to change. Create a free account from the sign-in page to get one.')}</>;
+            // Straight to the sign-in sheet (?signin skips landing's guest
+            // bounce back into the app). The guest's leagues come along: the
+            // sign-up adopts them (DHQ-Shared identity.js).
+            return <>{heading}{note('You’re using Dynasty HQ as a guest, so there’s no password to change. Create a free account to get one — your leagues come with you.')}
+                <button type="button" onClick={() => { window.location.href = 'landing.html?signin'; }} style={{ ...btnOutline, width: '100%', flex: 'none' }}>Create a free account</button></>;
         }
         if (kind === 'expired' || kind === 'local' || kind === 'none') {
             const why = kind === 'expired'
                 ? 'Your session has ended. Sign in again to change your password.'
                 : 'You’re not signed in to a Dynasty HQ account on this device. Sign in to change your password.';
             return <>{heading}{note(why)}
-                <button type="button" onClick={() => leave('landing.html')} style={{ ...btnOutline, width: '100%', flex: 'none' }}>{kind === 'expired' ? 'Sign in again' : 'Sign in'}</button></>;
+                <button type="button" onClick={() => leave(kind === 'expired' ? 'landing.html?reauth=1' : 'landing.html?signin')} style={{ ...btnOutline, width: '100%', flex: 'none' }}>{kind === 'expired' ? 'Sign in again' : 'Sign in'}</button></>;
         }
         if (kind === 'unavailable') {
             return <>{heading}{note('Account services didn’t load. Reload the page to change your password.')}</>;
@@ -196,7 +203,7 @@
             )}
             {msg && <div role={msg.tone === 'error' ? 'alert' : 'status'} style={{ marginTop: '0.5rem', fontSize: 'var(--text-label, 0.75rem)', lineHeight: 1.45, color: msgColor }}>{msg.text}</div>}
             {needsSignIn && !signedOut && (
-                <button type="button" onClick={() => leave('landing.html')} style={{ ...btnOutline, width: '100%', flex: 'none', marginTop: '0.5rem' }}>Sign in again</button>
+                <button type="button" onClick={() => leave('landing.html?reauth=1')} style={{ ...btnOutline, width: '100%', flex: 'none', marginTop: '0.5rem' }}>Sign in again</button>
             )}
             {kind === 'account' && !signedOut && (
                 <div style={{ marginTop: '0.5rem', fontSize: 'var(--text-label, 0.72rem)', color: 'var(--ov-8, rgba(255,255,255,0.4))', lineHeight: 1.45 }}>

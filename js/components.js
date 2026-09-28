@@ -524,7 +524,10 @@
     try {
         if (legacyAuth && !sleeperUsername) {
             const credentials = JSON.parse(legacyAuth);
-            sleeperUsername = credentials.username || '';
+            // Two shapes: {username} (connect page, login.html) and
+            // {sleeperUsername} (the hub). Another owner's cache is not synced.
+            const mine = !window.OD?.identity || window.OD.identity.cacheIsMine();
+            sleeperUsername = mine ? (credentials.sleeperUsername || credentials.username || '') : '';
             // Sync username to Team Comps page localStorage key so it auto-logs in
             if (sleeperUsername) {
                 localStorage.setItem('od_locked_username_v2', sleeperUsername);

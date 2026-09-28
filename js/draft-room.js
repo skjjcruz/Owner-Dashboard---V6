@@ -4133,7 +4133,7 @@
                             <span style={{ fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', color: 'var(--silver)', flex: '1 1 220px', minWidth: 0 }}>
                                 <strong style={{ color: 'var(--gold)' }}>Your board lives only on this device.</strong> Create a free account and DHQ guards it in the cloud with a 30-day undo history.
                             </span>
-                            <button type="button" onClick={() => { try { window.location.href = 'login.html'; } catch (e) { /* navigation blocked */ } }} style={{ padding: '8px 14px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', fontWeight: 900, letterSpacing: '0.06em', background: 'var(--gold)', color: '#151515', border: 'none', borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}>SIGN IN FREE</button>
+                            <button type="button" onClick={() => { try { window.location.href = 'landing.html?signin'; } catch (e) { /* navigation blocked */ } }} style={{ padding: '8px 14px', fontSize: 'var(--text-micro, 0.6875rem)', fontFamily: 'var(--font-body)', fontWeight: 900, letterSpacing: '0.06em', background: 'var(--gold)', color: '#151515', border: 'none', borderRadius: 'var(--card-radius-sm, 8px)', cursor: 'pointer', whiteSpace: 'nowrap' }}>SIGN IN FREE</button>
                             <button type="button" aria-label="Dismiss" onClick={() => setBoardUnprotected(false)} style={{ padding: '6px 9px', background: 'transparent', color: 'var(--silver)', border: '1px solid var(--acc-line1, rgba(255,255,255,0.15))', borderRadius: 6, cursor: 'pointer' }}>✕</button>
                         </div>
                     ) : null;

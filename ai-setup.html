@@ -12,7 +12,9 @@
       function reveal(){ var s=document.getElementById('preboot-hide'); if(s&&s.parentNode){ s.parentNode.removeChild(s); } }
       try {
         var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
-        if (!sess || !sess.token) { window.location.replace('landing.html'); return; }
+        // No account yet (a guest, or signed out): the sign-in sheet, not the
+        // landing page's guest bounce straight back into the app (a loop).
+        if (!sess || !sess.token) { window.location.replace('landing.html?signin'); return; }
         reveal();
       } catch (e) { reveal(); }
     })();
