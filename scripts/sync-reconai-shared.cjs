@@ -27,7 +27,7 @@ const TARGET = path.join(ROOT, 'reconai-shared');
 const FALLBACK_MODULES = [
   'app-config.js', 'bug-capture.js', 'constants.js', 'utils.js', 'storage.js',
   'event-bus.js', 'platform-provider.js', 'sleeper-api.js', 'espn-api.js',
-  'mfl-api.js', 'yahoo-api.js', 'supabase-client.js', 'tier.js',
+  'mfl-api.js', 'yahoo-api.js', 'identity.js', 'supabase-client.js', 'tier.js',
   'pick-value-model.js', 'dhq-providers.js', 'dhq-core.js', 'intelligence-context.js',
   'dhq-engine.js', 'nfl-fit.js', 'nfl-roles.js', 'team-assess.js', 'analytics-engine.js',
   'dhq-ai.js', 'assistant-tutorial.js', 'ai-dispatch.js', 'strategy.js',

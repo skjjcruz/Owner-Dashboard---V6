@@ -10,6 +10,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'reconai-shared', 'supabase-client.js'), 'utf8');
+// index.html loads identity.js right before supabase-client.js.
+const IDENTITY_SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'reconai-shared', 'identity.js'), 'utf8');
 const FW = 'fw_session_v1';
 const OD_SESSION = 'od_session_v1';
 const SB = 'sb-sxshiqyxhhifvtfqawbq-auth-token';
@@ -33,7 +35,7 @@ function makeStore(seed) {
     };
 }
 
-function load({ local, session, fetchImpl } = {}) {
+function load({ local, session, fetchImpl, noIdentity } = {}) {
     const ls = makeStore(local), ss = makeStore(session);
     const calls = [];
     const ctx = {
@@ -54,6 +56,7 @@ function load({ local, session, fetchImpl } = {}) {
     };
     ctx.window = ctx;
     vm.createContext(ctx);
+    if (!noIdentity) vm.runInContext(IDENTITY_SRC, ctx);
     vm.runInContext(SRC, ctx);
     return { ctx, OD: ctx.OD, ls, ss, calls };
 }
@@ -61,15 +64,17 @@ function load({ local, session, fetchImpl } = {}) {
 const SECRETS = { espn_s2: 'S2', espn_swid: '{SWID}', mfl_api_key: 'KEY', mfl_write_cookie: 'C', dynastyhq_ai_key: 'AI' };
 
 // ── sign-out hygiene ────────────────────────────────────────────────────────
-test('explicit sign-out clears sessions, platform logins, AI keys and Google session — keeps league ids', () => {
-    const env = load({
+for (const noIdentity of [false, true]) test('explicit sign-out clears sessions, platform logins, AI keys and Google session — keeps the identity cache' + (noIdentity ? ' (identity.js missing)' : ''), () => {
+    const env = load({ noIdentity,
         local: { [FW]: { token: accountToken('u1'), user: { id: 'u1' } }, [OD_SESSION]: { token: legacyToken('bob') }, od_auth_v1: { username: 'bob' },
             wr_guest_v1: '1', [SB]: { user: { email: 'u1@x.test' } }, espn_s2: 'OLD', espn_league_id: '687493', mfl_league_id: '10005', mfl_franchise_id: '0001',
             espn_creds_espn_687493: { leagueId: '687493', espnS2: 'LEAK', swid: 'LEAK' }, mfl_creds_mfl_10005: { leagueId: '10005' }, wr_bigboard_x: '[1]' },
         session: { ...SECRETS },
     });
     env.OD.clearSignedInState();
-    for (const k of [FW, OD_SESSION, 'od_auth_v1', 'wr_guest_v1', SB, 'espn_s2']) assert.equal(env.ls.getItem(k), null, k);
+    for (const k of [FW, OD_SESSION, 'wr_guest_v1', SB, 'espn_s2']) assert.equal(env.ls.getItem(k), null, k);
+    // The handle is not a credential: kept (owner-stamped, identity.js).
+    assert.equal(JSON.parse(env.ls.getItem('od_auth_v1')).username, 'bob', 'od_auth_v1 kept');
     for (const k of Object.keys(SECRETS)) assert.equal(env.ss.getItem(k), null, k);
     assert.deepEqual(JSON.parse(env.ls.getItem('espn_creds_espn_687493')), { leagueId: '687493' }, 'secret fields stripped, record kept');
     assert.equal(env.ls.getItem('mfl_creds_mfl_10005'), '{"leagueId":"10005"}');

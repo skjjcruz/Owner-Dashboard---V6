@@ -23,6 +23,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'reconai-shared', 'supabase-client.js'), 'utf8');
+// index.html loads identity.js right before supabase-client.js.
+const IDENTITY_SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'reconai-shared', 'identity.js'), 'utf8');
 const FW = 'fw_session_v1';
 const OD_SESSION = 'od_session_v1';
 
@@ -61,7 +63,7 @@ function makeStore(seed) {
     };
 }
 
-function load({ local, session, fetchImpl } = {}) {
+function load({ local, session, fetchImpl, noIdentity } = {}) {
     const ls = makeStore(local), ss = makeStore(session);
     const calls = [];
     const events = [];
@@ -83,6 +85,7 @@ function load({ local, session, fetchImpl } = {}) {
     };
     ctx.window = ctx;
     vm.createContext(ctx);
+    if (!noIdentity) vm.runInContext(IDENTITY_SRC, ctx);
     vm.runInContext(SRC, ctx);
     return { ctx, OD: ctx.OD, ls, ss, calls, events };
 }
@@ -254,9 +257,11 @@ test('a token with neither claim shape is still treated as a dead app session on
 });
 
 // ── sign-out still removes everything for a legacy login ────────────────────
-test('explicit sign-out removes a legacy login completely', () => {
+test('explicit sign-out removes a legacy login\'s credentials (the handle cache stays)', () => {
     const env = load({ local: legacyStore('bob'), session: { espn_s2: 'S2' } });
     env.OD.clearSignedInState();
-    for (const k of [FW, OD_SESSION, 'od_auth_v1']) assert.equal(env.ls.getItem(k), null, k);
+    for (const k of [FW, OD_SESSION]) assert.equal(env.ls.getItem(k), null, k);
+    assert.ok(env.ls.getItem('od_auth_v1'), 'identity cache kept');
+    assert.equal(env.OD.getSessionToken(), null, 'nothing left that signs in');
     assert.equal(env.ss.getItem('espn_s2'), null);
 });
