@@ -25,6 +25,10 @@
         // re-enters them here — the hub links to it. Let them through.
         var reconnect = new URLSearchParams(window.location.search).get('reconnect');
         if (reconnect === 'espn' || reconnect === 'mfl') { reveal(); return; }
+        // A handle / league this device remembers but the account doesn't
+        // have yet waits here for a one-tap confirm (identity.js).
+        var idn = window.OD && window.OD.identity;
+        if (idn && idn.pendingConfirm && idn.pendingConfirm()) { reveal(); return; }
         var profile = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
         var legacy  = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
         // Onboarded = any league source bound (Sleeper OR MFL) or an explicit
@@ -136,6 +140,16 @@
     <p class="sub">Your account is set. Where do you play? Connect one or both.</p>
 
     <div class="alert" id="alert"></div>
+
+    <div class="espn-box" id="confirmBox" hidden>
+      <h2>Welcome back. Is this you?</h2>
+      <p>This device remembers:</p>
+      <ul id="confirmList" style="margin:6px 0 10px 18px"></ul>
+      <div class="row">
+        <button class="btn-link" type="button" id="confirmYes">Yes, use these</button>
+        <button class="btn-link" type="button" id="confirmNo">Not mine</button>
+      </div>
+    </div>
 
     <div class="switch" role="group" aria-label="Where do you play?">
       <button id="tabSleeper" onclick="pick('sleeper')">Sleeper<span class="sm" id="smSleeper">username</span><span class="tick">&#10003;</span></button>
@@ -791,6 +805,34 @@
         mflAutoEnter = true;
         setTimeout(() => { try { document.getElementById('mflApiKey').focus(); } catch (e) {} }, 50);
       }
+    })();
+
+    // ── One-tap confirm of what this device remembers (identity.js) ──
+    // A fresh sign-in on a device from before owner stamping can't know whose
+    // cached handle / leagues these are, so they were set aside instead of
+    // used or uploaded. The user confirms (uploaded to the account) or not.
+    (function offerRemembered() {
+      const p = IDN && IDN.pendingConfirm ? IDN.pendingConfirm() : null;
+      if (!p) return;
+      const box = document.getElementById('confirmBox');
+      const list = document.getElementById('confirmList');
+      const add = (text) => { const li = document.createElement('li'); li.textContent = text; list.appendChild(li); };
+      if (p.handle) add('Sleeper: @' + p.handle);
+      if (p.mfl) add('MFL league ' + p.mfl.leagueId + ' (' + p.mfl.year + ')');
+      if (p.espn) add('ESPN league ' + p.espn.leagueId + ' (' + p.espn.year + ')');
+      box.hidden = false;
+      document.getElementById('confirmYes').addEventListener('click', () => holdBusy(async () => {
+        document.getElementById('confirmYes').disabled = true;
+        await IDN.settle(IDN.confirmPending(), 4000);
+        trackConnectEvent('remembered_confirmed', p.handle || null, { platforms: ['sleeper', 'mfl', 'espn'].filter(k => k === 'sleeper' ? p.handle : p[k]).join('+') });
+        window.location.href = destForUser();
+      }));
+      document.getElementById('confirmNo').addEventListener('click', () => {
+        IDN.dropPending();
+        box.hidden = true;
+        // Already has a league through the account (server handle): go in.
+        if (IDN.hasLeagueSource()) window.location.href = destForUser();
+      });
     })();
 
     // ── Handoff from the one-page front door (owner ruling 2026-09-24) ──

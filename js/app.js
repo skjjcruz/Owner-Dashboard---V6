@@ -876,6 +876,8 @@
             try { return sessionStorage.getItem(DEMO_HANDLE_KEY) || null; } catch (e) { return null; }
         }
         const HUB_TIMEOUT_MS = 8000;
+        // The boot reconcile's own worst case is a 6s read + a 3s write settle.
+        const RECONCILE_CAP_MS = 12000;
         function withHubTimeout(promise, ms) {
             let timer = null;
             return Promise.race([
@@ -892,7 +894,9 @@
                 const stamp = idn.getStamp();
                 if (!stamp || stamp === idn.currentOwner()) {
                     const h = idn.localHandle();
-                    if (h) return h;
+                    // The old Demo button's residue is not trusted until the
+                    // account's server handle says it is this account's.
+                    if (h && !(idn.isDemo && idn.isDemo(h))) return h;
                 }
                 return readDemoHandle();
             }
@@ -911,7 +915,8 @@
             // holds a handle: nothing to ask the server.
             // (An account write that never landed — hub connect offline, a
             // 5xx — is retried here: needsSync.)
-            if (!signedIn || (idn.getStamp() === owner && idn.localHandle() && !reconcileNonce && !(idn.needsSync && idn.needsSync()))) {
+            const lh = idn.localHandle();
+            if (!signedIn || (idn.getStamp() === owner && lh && !(idn.isDemo && idn.isDemo(lh)) && !reconcileNonce && !(idn.needsSync && idn.needsSync()))) {
                 if (!sleeperUsername) setLoading(false);
                 return undefined;
             }
@@ -919,7 +924,7 @@
             setHubStall(null);
             (async () => {
                 let r = null;
-                try { r = await withHubTimeout(idn.reconcileAfterSignIn(null, { timeoutMs: 6000, boot: true }), HUB_TIMEOUT_MS); }
+                try { r = await withHubTimeout(idn.reconcileAfterSignIn(null, { timeoutMs: 6000, boot: true }), RECONCILE_CAP_MS); }
                 catch (e) {
                     window.wrLog?.('app.reconcileIdentity', e);
                     if (alive && !sleeperUsername) { setHubStall('reconcile'); setLoading(false); }

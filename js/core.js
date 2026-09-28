@@ -335,6 +335,15 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
             const link = document.createElement('a');
             link.href = 'landing.html?reauth=1';
             link.textContent = 'Sign in';
+            // The stored session is dead (revoked elsewhere, account gone): drop
+            // it — after stamping whose identity cache this is — so nothing
+            // routes back into the app on it.
+            link.addEventListener('click', () => {
+                try {
+                    if (window.OD?.identity?.discardSession) window.OD.identity.discardSession();
+                    else localStorage.removeItem('fw_session_v1');
+                } catch (e) { /* storage blocked */ }
+            });
             link.style.cssText = 'color:var(--gold, #D4AF37);font-weight:700;text-decoration:none;white-space:nowrap';
             const close = document.createElement('button');
             close.type = 'button';

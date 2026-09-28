@@ -285,7 +285,8 @@
     // (the server decides), and a copy of it on the device is only a risk.
     async function finishSignIn(session, username) {
         storeSession(session, username);
-        try { if (window.OD?.identity) await window.OD.identity.reconcileAfterSignIn(); } catch (e) {}
+        let needsConfirm = false;
+        try { if (window.OD?.identity) needsConfirm = !!(await window.OD.identity.reconcileAfterSignIn()).needsConfirm; } catch (e) {}
         let prev = {};
         try { prev = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}; } catch (e) { prev = {}; }
         delete prev.passwordHash;
@@ -297,7 +298,9 @@
             createdAt: prev.createdAt || new Date().toISOString(),
         }));
         localStorage.setItem('od_locked_username_v2', username);
-        window.location.href = 'index.html';
+        // League pointers this device remembers but no one confirmed yet: the
+        // connect page offers them for one tap.
+        window.location.href = needsConfirm ? 'connect-sleeper.html' : 'index.html';
     }
 
     // Pre-fill username from ?for= URL param (gifted dashboard links)

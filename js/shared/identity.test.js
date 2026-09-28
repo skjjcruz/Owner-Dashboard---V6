@@ -474,3 +474,147 @@ test('window.__dhqBusy is held while a reconcile / account write is in flight', 
     await p;
     assert.equal(env.ctx.__dhqBusy, 0, 'released after');
 });
+
+// ── review fixes (2026-09-28) ───────────────────────────────────────────────
+test('B1: a token discarded on an unstamped device stamps its owner first — the same owner signing back in keeps the cache', async () => {
+    const lapsed = { token: accountToken('u1', nowS() - 60), user: { id: 'u1' } };
+    const cache = { od_auth_v1: { username: 'alice' }, od_profile_v1: { sleeperUsername: 'alice', onboardingComplete: true }, mfl_league_id: '5', mfl_year: '2026', player_tags_5: '{}' };
+    // (a) the shared client clearing an expired session
+    const env = load({ local: { [FW]: lapsed, ...cache }, withClient: true });
+    await env.OD.ensureFreshAppSession();
+    assert.equal(env.ls.getItem(FW), null);
+    assert.equal(env.ls.getItem(STAMP), 'account:u1', 'stamped from the dead token');
+    const r = await env.id.reconcileAfterSignIn(account('u1'));
+    assert.deepEqual([r.cleared, r.handle, r.source, !!r.needsConfirm], [false, 'alice', 'local', false]);
+    assert.equal(env.ls.getItem('player_tags_5'), '{}', 'per-league work kept');
+    // (b) a sign-out on an unstamped device
+    const so = load({ local: { [FW]: account('u1'), ...cache } });
+    await so.id.signOutClear();
+    assert.equal(so.ls.getItem(STAMP), 'account:u1');
+    // (c) legacy
+    const lg = load({ local: { [FW]: { token: legacyToken('Bob'), user: { sleeperUsername: 'Bob' } } } });
+    lg.id.clearCredentials();
+    assert.equal(lg.ls.getItem(STAMP), 'legacy:bob');
+    // (d) the notice's discardSession
+    const dn = load({ local: { [FW]: account('u9') } });
+    dn.id.discardSession();
+    assert.deepEqual([dn.ls.getItem(STAMP), dn.ls.getItem(FW)], ['account:u9', null]);
+    // An existing stamp is never overwritten.
+    const keep = load({ local: { [STAMP]: 'account:uA', [FW]: account('uB') } });
+    keep.id.clearCredentials();
+    assert.equal(keep.ls.getItem(STAMP), 'account:uA');
+});
+
+test('B1: unstamped device, no token, fresh sign-in, server has nothing → offered on the connect page, never auto-uploaded; confirm uploads', async () => {
+    // landing stores the new session, then reconciles.
+    const env = load({ local: { [FW]: account('u1'), od_auth_v1: { username: 'alice', sleeperUserId: '42' }, mfl_league_id: '5', mfl_year: '2026', mfl_franchise_id: '0002' } });
+    const r = await env.id.reconcileAfterSignIn(account('u1'));
+    assert.deepEqual([r.cleared, r.handle, r.needsConfirm, r.uploaded], [true, null, true, false]);
+    assert.equal(posts(env).length, 0, 'nothing uploaded unconfirmed');
+    assert.equal(env.ls.getItem('od_auth_v1'), null, 'not used unconfirmed');
+    const p = env.id.pendingConfirm();
+    assert.equal(p.handle, 'alice');
+    assert.deepEqual(JSON.parse(JSON.stringify(p.mfl)), { leagueId: '5', year: 2026, franchiseId: '0002' });
+    // Someone else signed in on this tab never sees it.
+    const other = load({ local: { [FW]: account('u2'), dhq_identity_unconfirmed_v1: env.ls.getItem('dhq_identity_unconfirmed_v1') } });
+    assert.equal(other.id.pendingConfirm(), null);
+    await env.id.confirmPending();
+    assert.equal(authOf(env).username, 'alice');
+    assert.equal(env.ls.getItem('mfl_league_id'), '5');
+    const body = posts(env).at(-1).body.platformUsernames;
+    assert.equal(body.sleeper, 'alice');
+    assert.equal(body.sleeperUserId, '42');
+    assert.equal(body.mfl[0].leagueId, '5');
+    assert.equal(env.id.pendingConfirm(), null);
+});
+
+test('B1: server has a handle but no ESPN/MFL → the handle is the server\'s, the remembered leagues are offered', async () => {
+    const env = load({ local: { [FW]: account('u1'), od_auth_v1: { username: 'old' }, espn_league_id: '687493', espn_year: '2026' } });
+    const r = await env.id.reconcileAfterSignIn({ ...account('u1'), platformUsernames: { sleeper: 'alice' } });
+    assert.deepEqual([r.handle, r.source, r.needsConfirm], ['alice', 'server', true]);
+    const p = env.id.pendingConfirm();
+    assert.equal(p.handle, undefined, 'the server has a handle: the cached one is not offered');
+    assert.equal(p.espn.leagueId, '687493');
+    assert.equal(posts(env).length, 0);
+    // Server already has leagues → nothing to offer.
+    const full = load({ local: { od_auth_v1: { username: 'old' }, espn_league_id: '1' } });
+    const r2 = await full.id.reconcileAfterSignIn({ ...account('u1'), platformUsernames: { sleeper: 'alice', espn: [{ leagueId: '9', year: 2026, teamId: null }] } });
+    assert.equal(!!r2.needsConfirm, false);
+});
+
+test('S1: an unsynced local handle beats the server\'s older one and is uploaded; without the marker the server wins', async () => {
+    const env = load({ local: { [STAMP]: 'account:u1', [FW]: account('u1'), od_auth_v1: { username: 'newh' }, dhq_identity_unsynced_v1: 'account:u1' }, server: 'oldh' });
+    const r = await env.id.reconcileAfterSignIn(null, { boot: true });
+    assert.deepEqual([r.handle, r.source, r.uploaded], ['newh', 'local', true]);
+    assert.equal(posts(env)[0].body.platformUsernames.sleeper, 'newh');
+    assert.equal(env.id.needsSync(), false);
+    const synced = load({ local: { [STAMP]: 'account:u1', [FW]: account('u1'), od_auth_v1: { username: 'newh' } }, server: 'backfilled' });
+    const r2 = await synced.id.reconcileAfterSignIn(null, { boot: true });
+    assert.deepEqual([r2.handle, r2.source, posts(synced).length], ['backfilled', 'server', 0], 'the backfill is never fought');
+    // First boot of an unstamped cache with a live token: local wins.
+    const first = load({ local: { [FW]: account('u1'), od_auth_v1: { username: 'newh' } }, server: 'oldh' });
+    const r3 = await first.id.reconcileAfterSignIn(null, { boot: true });
+    assert.deepEqual([r3.handle, posts(first)[0].body.platformUsernames.sleeper], ['newh', 'newh']);
+});
+
+test('S2: Demo residue (bigloco) is never adopted or uploaded unless the account\'s server handle is bigloco', async () => {
+    const env = load({ local: { [STAMP]: 'account:u1', [FW]: account('u1'), od_auth_v1: { sleeperUsername: 'bigloco' }, od_locked_username_v2: 'bigloco' } });
+    const r = await env.id.reconcileAfterSignIn(null, { boot: true });
+    assert.equal(r.handle, null);
+    assert.equal(posts(env).length, 0, 'never posted');
+    assert.equal(env.ls.getItem('od_auth_v1'), null, 'residue dropped');
+    assert.equal(env.ls.getItem('od_locked_username_v2'), null);
+    const unstamped = load({ local: { [FW]: account('u1'), od_auth_v1: { sleeperUsername: 'bigloco' } } });
+    await unstamped.id.reconcileAfterSignIn(null, { boot: true });
+    assert.equal(posts(unstamped).length, 0);
+    const owner = load({ local: { [STAMP]: 'account:u0', [FW]: account('u0'), od_auth_v1: { sleeperUsername: 'bigloco' } }, server: 'bigloco' });
+    const ro = await owner.id.reconcileAfterSignIn(null, { boot: true });
+    assert.deepEqual([ro.handle, ro.source], ['bigloco', 'server']);
+    const push = load({ local: { [FW]: account('u1'), od_auth_v1: { sleeperUsername: 'bigloco' } } });
+    await push.id.pushIdentity();
+    assert.equal(posts(push).length, 0, 'pushIdentity refuses it too');
+    const pend = load({ local: { od_auth_v1: { sleeperUsername: 'bigloco' } } });
+    const rp = await pend.id.reconcileAfterSignIn(account('u1'));
+    assert.equal(!!rp.needsConfirm, false, 'not even offered');
+});
+
+test('S4: beginGuest clears an unstamped cache when there is no guest flag (and keeps a flagged guest\'s own)', () => {
+    const env = load({ local: { od_profile_v1: { sleeperUsername: 'alice', onboardingComplete: true }, mfl_league_id: '5' } });
+    env.id.beginGuest();
+    assert.equal(env.ls.getItem('od_profile_v1'), null);
+    assert.equal(env.ls.getItem('mfl_league_id'), null);
+    const guest = load({ local: { wr_guest_v1: '1', od_auth_v1: { username: 'gina' } } });
+    guest.id.beginGuest();
+    assert.equal(guest.id.localHandle(), 'gina');
+});
+
+test('nit: Scout\'s handle is adopted once at the boot migration only (live token, no other handle anywhere)', async () => {
+    const boot = load({ local: { [FW]: account('u1'), dynastyhq_username: 'scouty' } });
+    const r = await boot.id.reconcileAfterSignIn(null, { boot: true });
+    assert.deepEqual([r.handle, posts(boot)[0].body.platformUsernames.sleeper], ['scouty', 'scouty']);
+    const withServer = load({ local: { [FW]: account('u1'), dynastyhq_username: 'scouty' } , server: 'real' });
+    assert.equal((await withServer.id.reconcileAfterSignIn(null, { boot: true })).handle, 'real');
+    const fresh = load({ local: { dynastyhq_username: 'scouty' } });
+    const rf = await fresh.id.reconcileAfterSignIn(account('u1'));
+    assert.equal(rf.handle, null, 'never on a sign-in');
+    assert.equal(posts(fresh).length, 0);
+});
+
+test('nit: RevenueCat logOut goes through the app\'s DHQBilling module when it has one', async () => {
+    let n = 0;
+    const env = load({ local: { [FW]: account('u1') }, extra: { DHQBilling: { logOut: async () => { n++; } } } });
+    await env.id.signOutClear();
+    assert.equal(n, 1);
+});
+
+test('B2: the shared sync refuses a DHQ-Shared source whose manifest lacks identity.js', () => {
+    const { spawnSync } = require('node:child_process');
+    const os = require('node:os');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dhq-shared-old-'));
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ modules: ['supabase-client.js'], data: [] }));
+    const res = spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'sync-reconai-shared.cjs')], { env: { ...process.env, DHQ_SHARED_SOURCE: dir }, encoding: 'utf8' });
+    fs.rmSync(dir, { recursive: true, force: true });
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /identity\.js/);
+    assert.ok(fs.existsSync(path.join(SHARED, 'identity.js')), 'the vendored snapshot is left intact');
+});

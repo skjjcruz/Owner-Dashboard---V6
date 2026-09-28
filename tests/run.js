@@ -885,6 +885,26 @@ test('index gate: an expired account session keeps the identity cache and asks t
     eq(runIndexGate({ wr_guest_v1: '1', od_auth_v1: { sleeperUsername: 'g' } }).nav.length, 0);
   });
 
+test('index gate: a lapsed token on an unstamped device stamps its owner before it is dropped (B1)',
+  () => {
+    const acct = runIndexGate({ fw_session_v1: { token: gateAccount(inPast), user: { id: 'u1' } }, od_auth_v1: { username: 'alice' } });
+    eq(acct.store.get('dhq_identity_owner_v1'), 'account:u1');
+    ok(!acct.store.has('fw_session_v1') && acct.store.has('od_auth_v1'));
+    const leg = runIndexGate({ fw_session_v1: { token: gateLegacy(inPast) } });
+    eq(leg.store.get('dhq_identity_owner_v1'), 'legacy:bob');
+    const stamped = runIndexGate({ fw_session_v1: { token: gateAccount(inPast), user: { id: 'u1' } }, dhq_identity_owner_v1: 'account:uA' });
+    eq(stamped.store.get('dhq_identity_owner_v1'), 'account:uA', 'an existing stamp is never overwritten');
+  });
+
+test('landing honours ?reauth before any signed-in routing (S3 / T11)',
+  () => {
+    const landing = fs.readFileSync(path.join(ROOT, 'landing.html'), 'utf8');
+    const head = landing.slice(0, landing.indexOf('</head>'));
+    const reauthAt = head.indexOf("if (q.has('reauth')) { reveal(); return; }");
+    ok(reauthAt > 0, 'head reveals on ?reauth');
+    ok(reauthAt < head.indexOf("var sess = JSON.parse(localStorage.getItem('fw_session_v1')"), 'before the stored session is read');
+  });
+
 test('index gate: legacy re-hydration only for the stamped owner',
   () => {
     const token = gateLegacy(inFuture);

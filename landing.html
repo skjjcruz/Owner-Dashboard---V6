@@ -102,6 +102,10 @@
         // land exactly here (owner bug report 2026-08-31). Sign out on the
         // connect page clears the flag, so this can't loop.
         if (!wantsSignIn && localStorage.getItem('wr_guest_v1') === '1') { window.location.replace('connect-sleeper.html'); return; }
+        // ?reauth: the app said the session ended (a revoked token can still
+        // look valid locally — an AI 401). Show the sign-in sheet; never route
+        // back into the app on the stored session.
+        if (q.has('reauth')) { reveal(); return; }
         var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
         if (!sess || !sess.token) { reveal(); return; } // not signed in -> show landing
         // The device's identity cache belongs to someone other than this
@@ -786,7 +790,9 @@
         const idn = window.OD?.identity;
         if (idn) {
           const r = await idn.reconcileAfterSignIn(session || null, opts || {});
-          return r.onboarded ? destForUser() : CONNECT_URL;
+          // needsConfirm: this device remembers a handle / league the account
+          // doesn't have — the connect page offers it for a one-tap confirm.
+          return r.needsConfirm ? CONNECT_URL : (r.onboarded ? destForUser() : CONNECT_URL);
         }
       } catch (e) { console.warn('[WR] identity reconcile:', e); }
       return (opts && opts.isNew) ? CONNECT_URL : nextAfterAuth();
@@ -1148,6 +1154,7 @@
         }
         if (FRESH_OAUTH_RETURN || RESUME_OAUTH) return; // the OAuth callback owns this visit
         if (window.__dhqHandoff) return; // the handoff below owns this visit
+        if (new URLSearchParams(window.location.search).has('reauth')) return; // the sign-in sheet owns this visit
         const session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
         if (!session?.token) return;
         const idn = window.OD?.identity;
@@ -1189,6 +1196,8 @@
               }
             } catch {}
           }
+          // Whose cache this is outlives the dead token (owner stamp).
+          try { window.OD?.identity?.stampFromSession(session); } catch {}
           localStorage.removeItem(SESSION_KEY);
           trackLandingEvent('landing_dead_session_cleared');
         })();
@@ -1208,10 +1217,14 @@
     (function signInRequested() {
       const q = new URLSearchParams(window.location.search);
       if (!(q.has('signin') || q.has('reauth')) || FRESH_OAUTH_RETURN || RESUME_OAUTH || LANDING_EDITOR_PREVIEW) return;
-      try {
-        const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
-        if (sessionHealthy(s)) return;
-      } catch {}
+      // ?signin with a healthy session was routed into the app by the head;
+      // ?reauth always gets the sheet (the stored session may be revoked).
+      if (!q.has('reauth')) {
+        try {
+          const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+          if (sessionHealthy(s)) return;
+        } catch {}
+      }
       try { openAuthSheet('signin'); } catch {}
       if (q.has('reauth')) { try { showAlert('success', 'Your session ended. Sign in to pick up where you left off.'); } catch {} }
     })();
@@ -1296,7 +1309,10 @@
       // leagues — beginGuest clears them).
       var idn = window.OD && window.OD.identity;
       var stamp = idn ? idn.getStamp() : null;
-      if (stamp && stamp !== 'guest' && !form.dataset.guestOk) {
+      // Also an unstamped device that remembers a league (a signed-out user
+      // of an older build) — becoming a guest would clear it.
+      var remembers = !!(idn && !stamp && localStorage.getItem('wr_guest_v1') !== '1' && idn.localOnboarded());
+      if (((stamp && stamp !== 'guest') || remembers) && !form.dataset.guestOk) {
         form.dataset.guestOk = '1';
         try { openAuthSheet('signin'); } catch (err) {}
         try { showAlert('success', 'Welcome back \u2014 sign in to your account. Not you? Close this and tap Go again to look around as a guest.'); } catch (err) {}

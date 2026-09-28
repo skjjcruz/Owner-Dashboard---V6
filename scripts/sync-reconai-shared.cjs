@@ -69,6 +69,33 @@ if (!SOURCE) {
 
 const { modules, data } = readManifest(SOURCE);
 
+// Every shared module the pages load must be in the source manifest — a
+// DHQ-Shared checkout that predates one (e.g. identity.js, loaded by
+// landing / connect / login / index) would otherwise vendor a snapshot the
+// pages 404 on, and the deploy would go live broken. Fail the build instead.
+function requiredModules() {
+  const need = new Set(['identity.js', 'supabase-client.js']);
+  const read = f => { try { return fs.readFileSync(path.join(ROOT, f), 'utf8'); } catch { return ''; } };
+  // Pages that reference reconai-shared/<file>.js directly.
+  for (const page of ['index.html', 'landing.html', 'connect-sleeper.html', 'login.html', 'upgrade.html', 'ai-setup.html']) {
+    for (const m of read(page).matchAll(/reconai-shared\/([A-Za-z0-9_.-]+\.js)/g)) need.add(m[1]);
+    // WRShared.load('<file>.js') calls.
+    for (const m of read(page).matchAll(/WRShared\.load\(\s*['"]([A-Za-z0-9_.-]+\.js)['"]/g)) need.add(m[1]);
+  }
+  // index.html's WR_SHARED_FILES list (+ its splices).
+  const index = read('index.html');
+  const list = index.match(/const WR_SHARED_FILES = \[([\s\S]*?)\];/);
+  if (list) for (const m of list[1].matchAll(/'([A-Za-z0-9_.-]+\.js)'/g)) need.add(m[1]);
+  for (const m of index.matchAll(/WR_SHARED_FILES\.splice\([^)]*'([A-Za-z0-9_.-]+\.js)'\)/g)) need.add(m[1]);
+  return [...need];
+}
+const missing = requiredModules().filter(f => !modules.includes(f));
+if (missing.length) {
+  console.error(`[sync-reconai-shared] ${SOURCE}/manifest.json lacks modules the pages load: ${missing.join(', ')}`);
+  console.error('[sync-reconai-shared] Update DHQ-Shared (merge the branch that adds them) before building.');
+  process.exit(1);
+}
+
 // reconai-shared/ is 100% vendored, so a clean wipe + recopy is safe.
 fs.rmSync(TARGET, { recursive: true, force: true });
 fs.mkdirSync(TARGET, { recursive: true });
