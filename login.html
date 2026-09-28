@@ -248,8 +248,8 @@
 
 <script src="vendor/supabase.min.js"></script>
 <script>window.supabase||document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"><\/script>')</script>
-<script src="js/shared/shared-loader.js?v=20260531sandbox2"></script>
-<script>WRShared.load('supabase-client.js');</script>
+<script src="js/shared/shared-loader.js?v=20260928auth1"></script>
+<script>WRShared.load('identity.js'); WRShared.load('supabase-client.js');</script>
 <script>
     const AUTH_KEY = 'od_auth_v1';
     const SESSION_KEY = 'fw_session_v1';
@@ -276,6 +276,28 @@
             expiresAt: session.expiresAt || null,
             user: { sleeperUsername: username, isGifted: session.isGifted || false },
         }));
+    }
+
+    // A successful legacy sign-in: stamp this device's identity for this
+    // login (DHQ-Shared identity.js — another owner's cached leagues are
+    // cleared, the guest flag goes), then keep the local login record
+    // (both od_auth_v1 shapes + the password hash for the next offline check).
+    async function finishSignIn(session, username, password) {
+        storeSession(session, username);
+        try { if (window.OD?.identity) await window.OD.identity.reconcileAfterSignIn(); } catch (e) {}
+        let prev = {};
+        try { prev = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}; } catch (e) { prev = {}; }
+        const passwordHash = await hashPassword(password);
+        localStorage.setItem(AUTH_KEY, JSON.stringify({
+            ...prev,
+            username,
+            sleeperUsername: username,
+            passwordHash,
+            isGifted: session.isGifted || false,
+            createdAt: prev.createdAt || new Date().toISOString(),
+        }));
+        localStorage.setItem('od_locked_username_v2', username);
+        window.location.href = 'index.html';
     }
 
     // Pre-fill username from ?for= URL param (gifted dashboard links)
@@ -325,52 +347,24 @@
         }
 
         const loginBtn = document.querySelector('.login-btn');
-        const existingLocal = localStorage.getItem(AUTH_KEY);
 
-        if (existingLocal) {
-            // Returning user — verify locally, then refresh session token in background
-            try {
-                const auth = JSON.parse(existingLocal);
-                const inputHash = await hashPassword(password);
-                if (auth.username === username && auth.passwordHash === inputHash) {
-                    const session = await window.OD.acquireSessionToken(username, password);
-                    if (session?.token) {
-                        storeSession(session, username);
-                        window.location.href = 'index.html';
-                    } else {
-                        showError('This legacy login now requires a password-backed gifted account. Use email sign-in for Dynasty HQ accounts.');
-                    }
-                } else {
-                    showError('Incorrect username or password');
-                }
-            } catch {
-                showError('Authentication error. Please try again.');
-            }
-            return;
-        }
-
-        // No local auth — authenticate via get-session-token Edge Function.
-        // Handles password-backed gifted/legacy users only.
+        // The server (get-session-token, bcrypt) decides. The local SHA-256
+        // copy in od_auth_v1 used to gate this: it is missing whenever the
+        // handle came from the connect page or the hub, and stale after a
+        // password change on another device — either way the user got
+        // "Incorrect username or password" forever with no way to the
+        // server. It is no longer consulted.
         loginBtn.textContent = 'Verifying...';
         loginBtn.disabled = true;
         try {
             const session = await window.OD.acquireSessionToken(username, password);
             if (session?.token) {
-                const passwordHash = await hashPassword(password);
-                localStorage.setItem(AUTH_KEY, JSON.stringify({
-                    username,
-                    passwordHash,
-                    isGifted: session.isGifted || false,
-                    createdAt: new Date().toISOString()
-                }));
-                storeSession(session, username);
-                localStorage.setItem('od_locked_username_v2', username);
-                window.location.href = 'index.html';
+                await finishSignIn(session, username, password);
                 return;
             }
         } catch {}
 
-        showError('This legacy login now requires a password-backed gifted account. Use email sign-in for Dynasty HQ accounts.');
+        showError('Incorrect username or password — or this login isn’t a password-backed gifted account. Dynasty HQ accounts sign in with email on the main sign-in page.');
         loginBtn.textContent = 'Access Dynasty HQ';
         loginBtn.disabled = false;
     });
