@@ -240,7 +240,8 @@ class App {
 
   // Connect page: link Sleeper, then Enter.
   async connectPageSleeper(handle) {
-    await this.page.waitForSelector('#sleeperName', { state: 'visible', timeout: 8000 });
+    await this.page.waitForSelector('#tabSleeper', { state: 'visible', timeout: 8000 });
+    if (!(await this.page.isVisible('#sleeperName'))) await this.page.click('#tabSleeper');
     await this.page.fill('#sleeperName', handle);
     this.mark('connect page: link Sleeper ' + handle);
     await this.page.click('#btnSleeper');
@@ -249,9 +250,17 @@ class App {
     await this.page.click('#enterBtn');
   }
   // Hub "Add a league" card: type the handle, CONNECT.
-  async hubConnect(handle) {
+  async openAddLeague() {
     const input = this.page.locator('#wr-sleeper-input');
+    if (await input.isVisible().catch(() => false)) return input;
+    const add = this.page.getByText('Add a league', { exact: true }).filter({ visible: true }).first();
+    await add.waitFor({ state: 'visible', timeout: 8000 });
+    await add.click();
     await input.waitFor({ state: 'visible', timeout: 8000 });
+    return input;
+  }
+  async hubConnect(handle) {
+    const input = await this.openAddLeague();
     await input.fill(handle);
     this.mark('hub connect ' + handle);
     await input.press('Enter');
@@ -306,6 +315,20 @@ const test = base.test.extend({
   context: async ({ context, backend }, use) => {
     await backend.install(context, ORIGIN);
     await use(context);
+  },
+  // A second device (separate browser context = separate storage) talking to
+  // the same fake server.
+  newDevice: async ({ browser, backend }, use, testInfo) => {
+    const made = [];
+    await use(async () => {
+      const u = testInfo.project.use || {};
+      const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: u.viewport, userAgent: u.userAgent, isMobile: u.isMobile, hasTouch: u.hasTouch, deviceScaleFactor: u.deviceScaleFactor });
+      made.push(ctx);
+      await backend.install(ctx, ORIGIN);
+      const page = await ctx.newPage();
+      return new App({ context: ctx, page, backend, testInfo });
+    });
+    for (const c of made) await c.close().catch(() => {});
   },
   app: async ({ context, page, backend }, use, testInfo) => {
     const app = new App({ context, page, backend, testInfo });

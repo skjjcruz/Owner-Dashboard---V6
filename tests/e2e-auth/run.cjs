@@ -44,10 +44,40 @@ function freePort() {
     process.exit(2);
   }
   const port = process.env.E2E_AUTH_PORT || String(await freePort());
-  const env = { ...process.env, E2E_AUTH_PORT: port, NODE_PATH: [pw.dir, process.env.NODE_PATH].filter(Boolean).join(path.delimiter) };
+  // --ref=<git ref>: serve a clean snapshot of that commit instead of the
+  // working tree (useful while someone else is editing the app). The
+  // gitignored vendor mirror reconai-shared/ is copied from the working tree.
+  let argv = process.argv.slice(2);
+  const refArg = argv.find(a => a.startsWith('--ref='));
+  // --shared-ref=<ref>: with --ref, vendor DHQ-Shared at that ref (from
+  // $DHQ_SHARED_SOURCE or ../DHQ-Shared) instead of copying reconai-shared/.
+  const sharedArg = argv.find(a => a.startsWith('--shared-ref='));
+  argv = argv.filter(a => a !== refArg && a !== sharedArg);
+  let siteRoot = process.env.E2E_AUTH_SITE_ROOT || '';
+  if (refArg) {
+    const ref = refArg.slice('--ref='.length);
+    const sha = execSync(`git rev-parse ${ref}`, { cwd: ROOT }).toString().trim();
+    siteRoot = path.join(require('os').tmpdir(), 'dhq-e2e-auth-site-' + sha.slice(0, 12));
+    fs.rmSync(siteRoot, { recursive: true, force: true });
+    fs.mkdirSync(siteRoot, { recursive: true });
+    execSync(`git archive --format=tar ${sha} | tar -x -C "${siteRoot}"`, { cwd: ROOT, shell: '/bin/sh' });
+    const vendor = path.join(siteRoot, 'reconai-shared');
+    if (sharedArg) {
+      const sref = sharedArg.slice('--shared-ref='.length);
+      const src = process.env.DHQ_SHARED_SOURCE || path.resolve(ROOT, '..', 'DHQ-Shared');
+      const ssha = execSync(`git rev-parse ${sref}`, { cwd: src }).toString().trim();
+      fs.mkdirSync(vendor, { recursive: true });
+      execSync(`git archive --format=tar ${ssha} | tar -x -C "${vendor}"`, { cwd: src, shell: '/bin/sh' });
+      console.log(`[e2e-auth] reconai-shared = ${src} @ ${sref} (${ssha.slice(0, 9)})`);
+    } else if (fs.existsSync(path.join(ROOT, 'reconai-shared'))) {
+      fs.cpSync(path.join(ROOT, 'reconai-shared'), vendor, { recursive: true });
+    }
+    console.log(`[e2e-auth] serving snapshot of ${ref} (${sha.slice(0, 9)}) from ${siteRoot}`);
+  }
+  const env = { ...process.env, E2E_AUTH_PORT: port, E2E_AUTH_SITE_ROOT: siteRoot, NODE_PATH: [pw.dir, process.env.NODE_PATH].filter(Boolean).join(path.delimiter) };
   if (!env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
   console.log(`[e2e-auth] playwright ${pw.version} from ${pw.dir}; serving on 127.0.0.1:${port} as http://dhq.test:${port}/`);
-  const args = [pw.cli, 'test', '-c', path.join(__dirname, 'playwright.config.cjs'), ...process.argv.slice(2)];
+  const args = [pw.cli, 'test', '-c', path.join(__dirname, 'playwright.config.cjs'), ...argv];
   const child = spawn(process.execPath, args, { cwd: ROOT, env, stdio: 'inherit' });
   child.on('exit', code => process.exit(code == null ? 1 : code));
 })();

@@ -9,6 +9,8 @@ const { defineConfig } = require('playwright/test');
 const ROOT = path.resolve(__dirname, '..', '..');
 if (!process.env.E2E_AUTH_PORT) process.env.E2E_AUTH_PORT = String(41000 + (process.pid % 15000));
 const PORT = Number(process.env.E2E_AUTH_PORT);
+// Directory the site is served from (default: this working tree).
+const SITE_ROOT = process.env.E2E_AUTH_SITE_ROOT || ROOT;
 
 // Use Playwright's own Chromium when it is installed for this Playwright
 // version; otherwise fall back to the container's /opt/pw-browsers/chromium.
@@ -56,7 +58,7 @@ module.exports = defineConfig({
     { name: 'ipad-app', grep: /@native/, use: { viewport: { width: 820, height: 1180 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: IPAD_APP_UA } },
   ],
   webServer: {
-    command: `node scripts/serve-static.cjs --host=127.0.0.1 --port=${PORT} --compile`,
+    command: `node scripts/serve-static.cjs --host=127.0.0.1 --port=${PORT} --root=${JSON.stringify(SITE_ROOT)} --compile`,
     cwd: ROOT,
     url: `http://127.0.0.1:${PORT}/landing.html`,
     reuseExistingServer: false,

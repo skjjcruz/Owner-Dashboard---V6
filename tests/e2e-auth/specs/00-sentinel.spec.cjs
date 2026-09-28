@@ -40,6 +40,6 @@ test.describe('harness sentinels', () => {
       espn_league_id: '777001', espn_year: '2026', espn_team_id: '1',
     } });
     await app.open('index.html');
-    await app.expectFinal({ page: 'hub', leagues: [...data.leagueNamesFor('alpha_x'), 'Alpha MFL League', 'Alpha ESPN League'] }, { within: 15000 });
+    await app.expectFinal({ page: 'hub', leagues: [...data.leagueNamesFor('alpha_x'), 'Alpha MFL League', 'Alpha ESPN League'] });
   });
 });

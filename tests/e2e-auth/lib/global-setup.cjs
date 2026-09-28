@@ -7,7 +7,7 @@ const path = require('path');
 
 module.exports = async function globalSetup() {
   const port = Number(process.env.E2E_AUTH_PORT);
-  const root = path.resolve(__dirname, '..', '..', '..');
+  const root = process.env.E2E_AUTH_SITE_ROOT || path.resolve(__dirname, '..', '..', '..');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const srcs = [...html.matchAll(/<script[^>]*type="text\/babel"[^>]*src="([^"]+)"/g)].map(m => m[1]);
   const base = `http://127.0.0.1:${port}/`;

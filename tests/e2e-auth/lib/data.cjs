@@ -16,6 +16,7 @@ const SLEEPER_USERS = {
 
 const MFL_LEAGUES = {
   '41208': { name: 'Alpha MFL League', year: SEASON, franchises: [{ id: '0001', name: 'Alpha MFL Team' }, { id: '0002', name: 'Other MFL Team' }] },
+  '66601': { name: 'Private MFL League', year: SEASON, private: true, franchises: [{ id: '0001', name: 'Private MFL Team' }, { id: '0002', name: 'Rival MFL Team' }] },
   '55501': { name: 'Guest MFL League', year: SEASON, franchises: [{ id: '0001', name: 'Guest MFL Team' }, { id: '0002', name: 'Rival MFL Team' }] },
 };
 

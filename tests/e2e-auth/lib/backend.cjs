@@ -48,6 +48,8 @@ class FakeBackend {
     this.refreshMode = 'auto';      // 'auto' | 401
     this.writeLatencyMs = 150;      // server-side latency for writes (see _commitIfAlive)
     this.logoutScopes = [];
+    this.delays = {};               // fn name -> ms before answering (e.g. { 'fw-profile': 1500 })
+    this._waiters = [];
     this._hung = [];
     this._failed = new WeakSet();
     this._disposed = false;
@@ -101,6 +103,17 @@ class FakeBackend {
   }
   // Queue the identity the next Google/Apple round trip returns as.
   nextOAuth(acctOrProfile) { this.oauthQueue.push(acctOrProfile); }
+
+  // Resolves when the next request for `fn` (and method) reaches the server.
+  nextRequest(fn, method) {
+    return new Promise(resolve => this._waiters.push({ fn, method, resolve }));
+  }
+  _arrived(fn, method) {
+    this._waiters = this._waiters.filter(w => {
+      if (w.fn === fn && (!w.method || w.method === method)) { w.resolve(); return false; }
+      return true;
+    });
+  }
 
   calls(fn, method) {
     return this.log.filter(r => r.fn === fn && (!method || r.method === method));
@@ -205,6 +218,8 @@ class FakeBackend {
 
   async _fn(route, req, fn, headers, body, url) {
     const method = req.method();
+    this._arrived(fn, method);
+    if (this.delays[fn]) await new Promise(r => setTimeout(r, this.delays[fn]));
     const J = (status, b, extra) => this._json(route, req, status, b, fn, { body, ...(extra || {}) });
     switch (fn) {
       case 'fw-signin': {
@@ -402,6 +417,7 @@ class FakeBackend {
     const lg = lid && data.MFL_LEAGUES[lid];
     if (type === 'players') return { players: { player: [] } };
     if (!lg) return type === 'league' ? { error: { $t: 'Invalid league' } } : {};
+    if (lg.private && !u.searchParams.get('APIKEY')) return { error: { $t: 'API key required for private league' } };
     if (type === 'league') {
       return { league: { id: lid, name: lg.name, franchises: { count: String(lg.franchises.length), franchise: lg.franchises.map(f => ({ id: f.id, name: f.name })) }, starters: { position: [] }, rosterSize: '20' } };
     }
