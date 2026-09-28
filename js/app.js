@@ -862,9 +862,48 @@
         const visibleMflLeagues = MFL_SANDBOX_ACCESS ? mflLeagues : [];
         const [espnError, setEspnError] = useState(null);
         // Sleeper username — read from localStorage (login.html stores 'username', inline connect stores 'sleeperUsername')
-        const sleeperUsername = React.useMemo(() => {
-            return window.OD?.getCurrentUsername?.() || null;
-        }, []);
+        // Sign-out removes od_auth_v1, and signing back in (Google/Apple/email)
+        // never re-wrote it, so a returning owner whose profile still said
+        // onboardingComplete landed on a hub that waited forever for a username
+        // it would never get ("Loading more leagues…", 0 leagues — owner report
+        // 2026-09-28). Recover it: local profile first, then the account's
+        // server profile (app_users.platform_usernames.sleeper), and re-store it
+        // where every other screen reads it. No handle anywhere → stop loading
+        // so the hub offers "Add a league" instead of spinning.
+        function storeSleeperHandle(handle) {
+            try {
+                const prev = JSON.parse(localStorage.getItem('od_auth_v1') || 'null') || {};
+                localStorage.setItem('od_auth_v1', JSON.stringify({ ...prev, sleeperUsername: handle }));
+            } catch (e) { window.wrLog?.('app.storeSleeperHandle', e); }
+        }
+        const [sleeperUsername, setSleeperUsername] = useState(() => {
+            const current = window.OD?.getCurrentUsername?.();
+            if (current) return current;
+            try {
+                const prof = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
+                if (prof && typeof prof.sleeperUsername === 'string' && prof.sleeperUsername) {
+                    storeSleeperHandle(prof.sleeperUsername);
+                    return prof.sleeperUsername;
+                }
+            } catch (e) { /* unreadable profile — fall through to the server */ }
+            return null;
+        });
+        useEffect(() => {
+            if (sleeperUsername) return undefined;
+            let alive = true;
+            (async () => {
+                let handle = null;
+                try {
+                    const prof = window.OD?.loadProfile ? await window.OD.loadProfile() : null;
+                    const h = prof && prof.platforms && prof.platforms.sleeper;
+                    if (typeof h === 'string' && h.trim()) handle = h.trim();
+                } catch (e) { window.wrLog?.('app.recoverSleeperHandle', e); }
+                if (!alive) return;
+                if (handle) { storeSleeperHandle(handle); setSleeperUsername(handle); }
+                else setLoading(false);
+            })();
+            return () => { alive = false; };
+        }, [sleeperUsername]);
 
         // Display name state
         const [customDisplayName, setCustomDisplayName] = useState(() => {
@@ -924,7 +963,7 @@
 
         useEffect(() => {
             if (sleeperUsername) loadSleeperData();
-        }, [selectedYear]);
+        }, [selectedYear, sleeperUsername]);
 
         // Build the hub league object from a mapped MFL result. Shared by the
         // connect flow (finalizeMFLConnect) and the on-load rehydrator

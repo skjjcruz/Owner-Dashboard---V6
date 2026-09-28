@@ -3040,7 +3040,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script src="js/shared/chopped.js?v=20260926b133"></script>
 <script src="js/shared/chop-odds.js?v=20260926b133"></script>
 <script src="js/shared/playoff-odds.js?v=20260926b133"></script>
-<script src="js/shared/faab-engine.js?v=20260927bidfix1"></script>
+<script src="js/shared/faab-engine.js?v=20260928bidfix2"></script>
 <script src="js/utils/schedule-engine.js?v=20260926b133"></script>
 <script src="js/utils/gamelog-engine.js?v=20260702scout1"></script>
 <script src="js/shared/draft-gameplan.js?v=20260616ros1"></script>
@@ -3097,7 +3097,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="fa" src="js/shared/league-stats.js?v=20260927waivers1"></script>
 <script type="text/babel" data-wr-defer="fa" src="js/shared/fa-market-data.js?v=20260927waivers1"></script>
 <script type="text/babel" data-wr-defer="fa" src="js/shared/waiver-tools.js?v=20260927waivers2"></script>
-<script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260927bidfix1"></script>
+<script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260928bidfix2"></script>
 <!-- Season Odds panel loads with Game Day (owner ruling 2026-07-30) — must
      precede lineup.js in the group so window.WrSeasonOdds exists on first render. -->
 <script type="text/babel" data-wr-defer="lineup" src="js/components/season-odds-panel.js?v=20260927b135"></script>
@@ -3166,7 +3166,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/widgets/league-landscape.js?v=20260927b135"></script>
 <script type="text/babel" src="js/widgets/txn-ticker.js?v=20260908tick3"></script>
 <script type="text/babel" src="js/widgets/market-radar.js?v=20260927faab1"></script>
-<script type="text/babel" src="js/widgets/faab-command.js?v=20260927bidfix1"></script>
+<script type="text/babel" src="js/widgets/faab-command.js?v=20260928bidfix2"></script>
 <script type="text/babel" src="js/widgets/draft-capital.js?v=20260916spent2"></script>
 <!-- SI-3: Tag-driven widgets (Trade Block / Cut Candidates / Waiver Targets) -->
 <script type="text/babel" src="js/widgets/player-tags.js?v=20260516liveclick1"></script>
@@ -3178,7 +3178,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- League Calendar widget — depends on window.WrCalendar (js/tabs/calendar.js) -->
 <script type="text/babel" src="js/widgets/league-calendar.js?v=20260827cal4"></script>
 <script type="text/babel" src="js/tabs/dashboard.js?v=20260927b135"></script>
-<script type="text/babel" src="js/tabs/flash-brief.js?v=20260927bidfix1"></script>
+<script type="text/babel" src="js/tabs/flash-brief.js?v=20260928bidfix2"></script>
 <!-- Group "analysis": analytics.js embeds LeagueMapTab, so both defer together
      (league-map.js first — DOM order is execution order within a group). -->
 <script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20260926qa1"></script>
@@ -3201,7 +3201,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- 7. League detail: coordinator shell, depends on all above -->
     <script type="text/babel" src="js/league-detail.js?v=20260927wire2"></script>
 <!-- 8. App: OwnerDashboard + ReactDOM.render (loads last) -->
-<script type="text/babel" src="js/app.js?v=20260927wire1"></script>
+<script type="text/babel" src="js/app.js?v=20260928hub1"></script>
 
 <!-- All JSX code extracted to js/ modules. Only bootstrap remains. -->
 <script>
@@ -3274,7 +3274,7 @@ window.addEventListener('appinstalled', () => {
 <!-- Deploy tag (owner ask 2026-08-19): a tiny always-visible build code so the
      owner can read back exactly which version his device is running before
      testing — kills the stale-cache guessing game. Bump the code every deploy. -->
-<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b142</div>
+<div id="dhq-build-tag" style="position:fixed;bottom:2px;right:6px;z-index:2147483647;font:700 9px/1.4 monospace;color:rgba(255,255,255,0.30);pointer-events:none;user-select:none;">b144</div>
 </body>
 </html>
 <!-- build 1774212614 -->
