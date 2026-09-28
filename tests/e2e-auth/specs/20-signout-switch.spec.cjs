@@ -4,7 +4,7 @@
 const { test, expect, seeds, inv, data } = require('../lib/harness.cjs');
 const { scenarios, X, Y } = require('../lib/scenarios.cjs');
 
-test('T4 connect-page onboarded A → Settings sign-out → Google A → hub x', async ({ app }) => {
+test('T4 connect-page onboarded A → Settings sign-out → Google A → hub x (I6a, I6c)', async ({ app }) => {
   await scenarios.T4(app);
 });
 
@@ -23,7 +23,7 @@ test('T5 A connects Sleeper in the hub → Settings sign-out → sign in A → h
   await app.expectFinal({ page: 'hub', leagues: X });
 });
 
-test('T6 A → landing ?signout → sign in A (server x) → hub x', async ({ app }) => {
+test('T6 A → landing ?signout → sign in A → hub x from the kept cache (I6a, I6c)', async ({ app }) => {
   const A = app.backend.addAccount({ email: 't6@x.test', sleeper: 'alpha_x' });
   await app.seed({ local: seeds.connectOnboarded(app.backend, A, 'alpha_x') });
   await app.open('index.html');
@@ -31,6 +31,8 @@ test('T6 A → landing ?signout → sign in A (server x) → hub x', async ({ ap
   await app.logoSignOut();
   await app.expectFinal({ page: 'landing' });
   await app.soft(() => inv.expectSignedOutClean(app, { label: 'after ?signout' }));
+  await app.soft(() => inv.expectIdentityCacheKept(app, 'alpha_x', { label: 'after ?signout' }));
+  app.backend.serverIdentityDown = true; // I6c: no server round trip needed
   await app.emailSignIn(A);
   await app.expectFinal({ page: 'hub', leagues: X });
 });

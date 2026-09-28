@@ -6,7 +6,18 @@ const { legacyToken, nowS, DAY } = require('../lib/jwt.cjs');
 const { X } = require('../lib/scenarios.cjs');
 
 const L = data.leagueNamesFor('legacy_l');
-const SESSION_ENDED_RE = /session (has )?ended|signed out.*sign in again|sign in again/i;
+// The shell's notice (js/core.js showSessionEndedNotice): #dhq-session-ended,
+// "Your session ended." + a "Sign in" link to landing.html?reauth=1.
+const SESSION_ENDED_RE = /Your session ended/;
+async function followSessionEndedNotice(app) {
+  const notice = app.page.locator('#dhq-session-ended');
+  await notice.waitFor({ state: 'visible', timeout: 8000 });
+  const link = notice.getByRole('link', { name: 'Sign in' });
+  expect(await link.getAttribute('href')).toBe('landing.html?reauth=1');
+  app.mark('notice: Sign in');
+  await link.click();
+  await app.expectFinal({ page: 'landing', sheet: true, sheetMode: 'signin' });
+}
 
 test('T9 A\'s token expired → open app → landing ?reauth, handle kept → sign in → hub x', async ({ app }) => {
   const A = app.backend.addAccount({ email: 't9@x.test', sleeper: 'alpha_x' });
@@ -14,7 +25,7 @@ test('T9 A\'s token expired → open app → landing ?reauth, handle kept → si
   seed.od_profile_v1 = { onboardingComplete: true, platforms: ['sleeper'] }; // only od_auth_v1 carries the handle
   await app.seed({ local: seed });
   await app.open('index.html');
-  await app.expectFinal({ page: 'landing', search: /[?&]reauth=1\b/ });
+  await app.expectFinal({ page: 'landing', search: /[?&]reauth=1\b/, sheet: true, sheetMode: 'signin' });
   const { local } = await app.storage();
   expect(inv.localHandleFrom(local), 'the Sleeper handle is not a credential and must survive the gate').toBe('alpha_x');
   await app.emailSignIn(A);
@@ -27,10 +38,7 @@ test('T10 password reset elsewhere (fw-profile 401) → "session ended" banner �
   app.backend.revoke(A); // session_version bump on another device
   await app.open('index.html');
   await app.expectFinal({ page: 'hub', text: SESSION_ENDED_RE });
-  const signIn = app.page.getByRole('button', { name: /sign in/i }).or(app.page.getByRole('link', { name: /sign in/i })).filter({ visible: true }).first();
-  app.mark('banner: sign in');
-  await signIn.click();
-  await app.expectFinal({ page: 'landing' });
+  await followSessionEndedNotice(app);
   await app.emailSignIn(A);
   await app.expectFinal({ page: 'hub', leagues: X });
 });
@@ -44,7 +52,9 @@ test('T11 AI call with a revoked token → "sign in again", not the raw "Valid s
   app.mark('Ask Alex (OD.callAI)');
   const msg = await app.page.evaluate(() => window.OD.callAI({ type: 'home-chat', context: 'who should I start?' }).then(() => 'ok', e => String(e && e.message)));
   expect(msg).not.toMatch(/Valid session token required/);
+  expect(msg).toMatch(/session ended.*sign in again/i);
   await app.expectFinal({ page: 'hub', text: SESSION_ENDED_RE });
+  await followSessionEndedNotice(app);
 });
 
 test('T18 legacy Sleeper-username login survives 5 reloads (fw-refresh-session 401 is not a revocation)', async ({ app }) => {
@@ -93,7 +103,7 @@ test('T25 delete account while device 2 keeps a Google session → device 2 does
   await app.page.evaluate(() => window.dhqDeleteAccountFlow());
   await app.expectFinal({ page: 'landing' });
   expect(A.deleted).toBe(true);
-  const syncsBefore = app.backend.calls('fw-oauth-sync').length;
+  const syncsBefore = app.backend.calls('fw-oauth-sync').filter(c => c.status === 200).length;
   // Device 2: next launch hits a 401 (account gone), then the landing page.
   await d2.relaunch('index.html');
   await d2.expectFinal({ page: 'landing' }, { within: 8000 }).catch(() => {});
@@ -101,7 +111,9 @@ test('T25 delete account while device 2 keeps a Google session → device 2 does
   await d2.expectFinal({ page: 'landing' });
   const recreated = [...app.backend.accounts.values()].filter(a => !a.deleted && a.email === A.email);
   expect(recreated.map(a => a.id), 'no new account for the deleted email').toEqual([]);
-  expect(app.backend.calls('fw-oauth-sync').length - syncsBefore, 'fw-oauth-sync without a fresh OAuth return').toBe(0);
+  // The client must not re-sync a leftover provider session; if it does, the
+  // server's 410 account_deleted (app repo db778f9) is the backstop.
+  expect(app.backend.calls('fw-oauth-sync').filter(c => c.status === 200).length - syncsBefore, 'successful fw-oauth-sync from a leftover session').toBe(0);
 });
 
 test('T26 change password → landing ?password=changed → sign in with the new password → hub x', async ({ app }) => {

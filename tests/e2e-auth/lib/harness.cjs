@@ -55,6 +55,7 @@ class App {
   _watch(page) {
     page.on('request', req => {
       try {
+        if (page !== this.page) return; // helper pages (e.g. I6a's probe) don't count
         if (!req.isNavigationRequest() || req.frame() !== page.mainFrame()) return;
         const u = new URL(req.url());
         if (u.origin !== ORIGIN || u.pathname === '/__e2e/blank') return;

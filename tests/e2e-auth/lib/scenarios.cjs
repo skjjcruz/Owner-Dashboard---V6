@@ -33,6 +33,9 @@ const scenarios = {
     await app.settingsSignOut();
     await app.expectFinal({ page: 'landing' });
     await app.soft(() => inv.expectSignedOutClean(app));
+    await app.soft(() => inv.expectIdentityCacheKept(app, 'alpha_x'));
+    // I6c: the same owner needs no server round trip to get x back.
+    app.backend.serverIdentityDown = true;
     await app.googleSignIn(A);
     const want = { page: 'hub', leagues: X };
     await app.expectFinal(want);
@@ -78,6 +81,7 @@ const scenarios = {
     await app.open('index.html');
     await app.expectFinal({ page: 'hub', leagues: G });
     await app.clickBilling();
+    // upgrade.html sends a signed-out visitor to landing.html?signin.
     const want = { page: 'landing', sheet: true, sheetMode: 'signin' };
     await app.expectFinal(want);
     return { want };

@@ -84,10 +84,10 @@ test('T28 fw-profile hangs → hub stops loading within 8 s and offers a retry',
   app.backend.profileMode = 'hang';
   await app.seed({ local: { fw_session_v1: app.backend.sessionFor(A), od_profile_v1: { onboardingComplete: true, platforms: ['sleeper'] } } });
   await app.open('index.html');
-  await app.expectFinal({ page: 'hub', text: /retry|try again/i });
+  await app.expectFinal({ page: 'hub', text: /Try again/ });
   // The retry works once the server answers.
   app.backend.profileMode = 'ok';
-  const retry = app.page.getByRole('button', { name: /retry|try again/i }).filter({ visible: true }).first();
+  const retry = app.page.getByRole('button', { name: 'Try again' }).filter({ visible: true }).first();
   app.mark('retry');
   await retry.click();
   await app.expectFinal({ page: 'hub', leagues: X });

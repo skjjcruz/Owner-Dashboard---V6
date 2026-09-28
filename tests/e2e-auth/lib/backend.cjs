@@ -48,6 +48,7 @@ class FakeBackend {
     this.refreshMode = 'auto';      // 'auto' | 401
     this.writeLatencyMs = 150;      // server-side latency for writes (see _commitIfAlive)
     this.logoutScopes = [];
+    this.serverIdentityDown = false; // true: sign-in responses carry platformUsernames:null and fw-profile answers 500
     this.delays = {};               // fn name -> ms before answering (e.g. { 'fw-profile': 1500 })
     this._waiters = [];
     this._hung = [];
@@ -97,6 +98,7 @@ class FakeBackend {
     return typeof s === 'string' ? s : (s.username || null);
   }
   platformUsernamesJson(acct) {
+    if (this.serverIdentityDown) return null;
     const out = {};
     for (const [k, v] of Object.entries(acct.platforms)) out[k] = v;
     return out;
@@ -138,6 +140,28 @@ class FakeBackend {
     const u = claims && claims.app_metadata && claims.app_metadata.sleeper_username;
     if (!u || (typeof claims.exp === 'number' && claims.exp < nowS())) return null;
     return u;
+  }
+
+  // Mirrors supabase/functions/_shared/platforms.ts mergePlatformUsernames
+  // (app repo ad88c1d): keys the body does not name are kept; sleeper may be
+  // a string or {username,userId}; espn/mfl lists replace ([] clears);
+  // credential fields are never stored.
+  _mergePlatforms(acct, pu) {
+    const out = acct.platforms;
+    const sRaw = pu.sleeper !== undefined ? pu.sleeper : pu.sleeperUsername;
+    const handle = sRaw && typeof sRaw === 'object' ? sRaw.username : sRaw;
+    if (typeof handle === 'string' && /^[A-Za-z0-9_.-]{1,40}$/.test(handle.trim())) {
+      const prev = typeof out.sleeper === 'string' ? out.sleeper : '';
+      out.sleeper = handle.trim();
+      const uid = sRaw && typeof sRaw === 'object' && sRaw.userId !== undefined ? sRaw.userId : pu.sleeperUserId;
+      if (typeof uid === 'string' && /^\d+$/.test(uid)) out.sleeperUserId = uid;
+      else if (prev.toLowerCase() !== out.sleeper.toLowerCase()) delete out.sleeperUserId;
+    }
+    const strip = e => { const c = { ...e }; for (const k of ['espnS2', 'espn_s2', 'swid', 'SWID', 'apiKey', 'api_key', 'cookie']) delete c[k]; return c; };
+    for (const k of ['espn', 'mfl']) {
+      if (!Object.prototype.hasOwnProperty.call(pu, k) || !Array.isArray(pu[k])) continue;
+      if (pu[k].length) out[k] = pu[k].map(strip); else delete out[k];
+    }
   }
 
   // ── Installation ─────────────────────────────────────────────
@@ -238,6 +262,10 @@ class FakeBackend {
         if (!claims || !claims.email) return J(401, { error: 'Invalid or expired session.' });
         let acct = this.findByEmail(claims.email);
         let isNew = false;
+        // app repo db778f9: a leftover Supabase session of a deleted account
+        // is refused (410 account_deleted), never resurrected.
+        const tomb = [...this.accounts.values()].find(a => a.deleted && a.email.toLowerCase() === String(claims.email).toLowerCase() && a.authUserId === claims.sub);
+        if (!acct && tomb) return J(410, { error: 'This account was deleted. Sign in again to create a new account.', code: 'account_deleted' });
         if (!acct) { acct = this.addAccount({ email: claims.email, provider: 'google', authUserId: claims.sub }); isNew = true; }
         return J(200, { token: accountToken(acct), isNew, user: this.userJson(acct), platformUsernames: this.platformUsernamesJson(acct) }, { isNew, accountId: acct.id });
       }
@@ -254,7 +282,7 @@ class FakeBackend {
         }
         const acct = this._session(headers);
         if (this.profileMode === 401 || !acct) return J(401, { error: 'Unauthorized' });
-        if (this.profileMode === 500) return J(500, { error: 'Internal server error' });
+        if (this.profileMode === 500 || this.serverIdentityDown) return J(500, { error: 'Internal server error' });
         if (method === 'GET') {
           return J(200, { user: { ...this.userJson(acct) }, tutorialState: {}, platformUsernames: this.platformUsernamesJson(acct) });
         }
@@ -262,13 +290,7 @@ class FakeBackend {
           if (this.profilePostMode === 500) return J(500, { error: 'Internal server error' });
           const pu = (body && body.platformUsernames) || null;
           const committed = await this._commitIfAlive(req, () => {
-            if (pu && typeof pu === 'object') {
-              // Merge semantics (fix design, fw-profile L63-66/L125-135).
-              for (const [k, v] of Object.entries(pu)) {
-                if (v === null || v === undefined || v === '') delete acct.platforms[k];
-                else acct.platforms[k] = v;
-              }
-            }
+            if (pu && typeof pu === 'object') this._mergePlatforms(acct, pu);
           });
           this.log.push({ fn, method, url: req.url(), status: committed ? 200 : 'client-aborted', body, committed, keepalive: undefined });
           if (!committed) return route.abort().catch(() => {});

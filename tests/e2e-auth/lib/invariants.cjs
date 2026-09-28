@@ -118,35 +118,49 @@ async function checkI4(app) {
   }
 }
 
-// ── I6 ─────────────────────────────────────────────────────────
+// ── I6 (final design, coordinator ruling 2026-09-28) ─────────────
+// Sign-out removes CREDENTIALS only. The identity cache (od_auth_v1,
+// od_profile_v1, league pointers, display name, club) stays on the device,
+// guarded by the owner stamp dhq_identity_owner_v1.
+//   (a) after any sign-out no credential/session key remains and the next
+//       page load is signed out                      → expectSignedOutClean
+//   (b) a DIFFERENT owner signing in next inherits none of it (= I2) and sees
+//       only their own leagues                       → expectNoForeignIdentity + expectFinal
+//   (c) the SAME owner signing in again still has handle + league pointers,
+//       with no server round trip needed            → expectIdentityCacheKept (+ T4/T6 with fw-profile down)
+const CREDENTIAL_KEYS = ['fw_session_v1', 'od_session_v1', 'wr_guest_v1'];
 async function expectSignedOutClean(app, { label = 'after sign-out' } = {}) {
   const { local, session } = await app.storage();
   const left = [];
-  for (const k of IDENTITY_KEYS) {
-    if (local[k] == null) continue;
-    if (k === 'dhq_owner_club_v1') {
-      // The hub writes a defaults-only record for everyone; only personal
-      // content (club/owner name, contact, avatar) is identity.
-      const c = parse(local[k]) || {};
-      const personal = ['clubName', 'ownerName', 'email', 'phone', 'avatarId', 'avatarData'].filter(f => c[f]);
-      if (personal.length) left.push(`dhq_owner_club_v1 (${personal.join(', ')})`);
-      continue;
-    }
-    if (k === 'od_display_name' && !local[k]) continue;
-    if (k === 'od_profile_v1') {
-      const p = parse(local[k]) || {};
-      if (p.sleeperUsername || p.onboardingComplete === true) left.push(`od_profile_v1 still holds ${p.sleeperUsername ? 'sleeperUsername=' + p.sleeperUsername : 'onboardingComplete=true'}`);
-      continue;
-    }
-    left.push(k);
-  }
-  for (const k of SB_KEYS) if (local[k] != null) left.push(k);
+  for (const k of CREDENTIAL_KEYS) if (local[k] != null) left.push(k);
+  for (const k of Object.keys(local)) if (/^sb-.*-auth-token/.test(k)) left.push(k);
   for (const k of SECRET_KEYS) if (local[k] != null || session[k] != null) left.push(k);
-  if (left.length) throw new Error(`I6 ${label}: signed-in state left behind: ${left.join(', ')}`);
+  if (left.length) throw new Error(`I6a ${label}: credential/session keys left behind: ${left.join(', ')}`);
+  // …and the next page load is signed out: index.html must not open the app.
+  const probe = await app.context.newPage();
+  try {
+    await probe.goto(app.url('index.html'), { waitUntil: 'commit' });
+    const deadline = Date.now() + 8000;
+    let path = '';
+    while (Date.now() < deadline) {
+      path = new URL(probe.url()).pathname;
+      if (path !== '/index.html' && path !== '/') break;
+      await probe.waitForTimeout(150);
+    }
+    if (path === '/index.html' || path === '/') throw new Error(`I6a ${label}: the next page load of index.html stayed in the app (still signed in)`);
+  } finally { await probe.close().catch(() => {}); }
+}
+// I6c: same owner — identity cache still on the device after sign-out.
+async function expectIdentityCacheKept(app, handle, { label = 'after sign-out' } = {}) {
+  const { local } = await app.storage();
+  const h = localHandleFrom(local);
+  if (!h || h.toLowerCase() !== String(handle).toLowerCase()) {
+    throw new Error(`I6c ${label}: identity cache lost — local handle is "${h}", want "${handle}"`);
+  }
 }
 
 module.exports = {
   IDENTITY_KEYS, SECRET_KEYS, SB_KEYS, localHandleFrom, accountInSession,
   stateMismatches, describeWant, describeState,
-  expectNoForeignIdentity, expectServerHandleMatchesLocal, checkI4, expectSignedOutClean,
+  expectNoForeignIdentity, expectServerHandleMatchesLocal, checkI4, expectSignedOutClean, expectIdentityCacheKept, CREDENTIAL_KEYS,
 };

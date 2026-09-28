@@ -45,7 +45,8 @@ test('T23 ESPN private league, app relaunch (cookies gone) → reconnect prompt 
   });
   await app.relaunch('index.html');
   await app.expectFinal({ page: 'hub', includes: X });
-  const reconnect = app.page.locator('a[href*="reconnect=espn"], button:has-text("Reconnect")').filter({ visible: true }).first();
+  const reconnect = app.page.getByRole('link', { name: 'Reconnect ESPN' }).filter({ visible: true }).first();
+  await expect(reconnect).toHaveAttribute('href', 'connect-sleeper.html?reconnect=espn');
   await expect(reconnect, 'a visible way to reconnect the private ESPN league').toBeVisible({ timeout: 8000 });
   app.mark('reconnect ESPN');
   await reconnect.click();
@@ -61,7 +62,8 @@ test('T24 MFL private league, app relaunch (API key gone) → reconnect prompt i
   });
   await app.relaunch('index.html');
   await app.expectFinal({ page: 'hub', includes: X });
-  const reconnect = app.page.locator('a[href*="reconnect=mfl"], button:has-text("Reconnect")').filter({ visible: true }).first();
+  const reconnect = app.page.getByRole('link', { name: 'Reconnect MFL' }).filter({ visible: true }).first();
+  await expect(reconnect).toHaveAttribute('href', 'connect-sleeper.html?reconnect=mfl');
   await expect(reconnect, 'a visible way to reconnect the private MFL league').toBeVisible({ timeout: 8000 });
   app.mark('reconnect MFL');
   await reconnect.click();
