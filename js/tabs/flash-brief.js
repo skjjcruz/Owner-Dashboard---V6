@@ -167,6 +167,22 @@ function IntelligenceBriefWidget({
 	        window.App.faEnsureBidHistory(currentLeague);
 	    }, [faBidLeagueId, _faab.isFaab, faModuleTick, nflStateReady]);
 
+	    // The board now prices and gates exactly like the FA tab: format-aware
+	    // value (App.PlayerValue — ROS in redraft/chopped) and Sleeper's
+	    // published weekly line + depth slot as the recommendation truth gate
+	    // (review B1). Load the lines here too and recompute when they (or the
+	    // roster budgets, refreshed in place — S1) change.
+	    const [briefProjTick, setBriefProjTick] = useState(0);
+	    useEffect(() => {
+	        let alive = true;
+	        const SP = window.App && window.App.SleeperProj;
+	        if (SP && SP.loadCurrent) SP.loadCurrent(currentLeague && currentLeague.season).then(wk => { if (alive && wk) setBriefProjTick(t => t + 1); }).catch(() => {});
+	        const onProj = (e) => { if (alive && !(e && e.detail && e.detail.source === 'dhq')) setBriefProjTick(t => t + 1); };
+	        window.addEventListener('wr:proj-updated', onProj);
+	        return () => { alive = false; window.removeEventListener('wr:proj-updated', onProj); };
+	    }, [faBidLeagueId, currentLeague?.season]);
+	    const briefRosterSig = (currentLeague?.rosters || []).map(r => r.roster_id + ':' + (Number(r.settings?.waiver_budget_used) || 0) + ':' + (r.players || []).length).join(',');
+
 	    // Best waiver target
 	    const waiverTarget = useMemo(() => {
 	        if (!rosterState.isUsable) return null;
@@ -226,7 +242,7 @@ function IntelligenceBriefWidget({
             }
         }
         return candidates[0] || null;
-	    }, [rosterState.isUsable, needs, playersData, statsData, prevStatsData, myRoster, currentLeague, briefDraftInfo, scores, timeRecomputeTs, faModuleTick, faTxnsTick, gm.faFilters]);
+	    }, [rosterState.isUsable, needs, playersData, statsData, prevStatsData, myRoster, currentLeague, briefDraftInfo, scores, timeRecomputeTs, faModuleTick, faTxnsTick, briefProjTick, briefRosterSig, gm.faFilters]);
 
     // Sell-rule trips — rostered players whose position/age trips a GM sell
     // rule or sell-position (untouchables excluded). Feeds the 'GM plan says
@@ -417,7 +433,7 @@ function IntelligenceBriefWidget({
 	                React.createElement('span', { key: 'n', style: { color: 'var(--gold)', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px' }, onClick: e => { e.stopPropagation(); if (typeof window.openPlayerModal === 'function' && waiverTarget.pid) window.openPlayerModal(waiverTarget.pid); } }, waiverTarget.name),
 	                // "est. bid": the league bid model's range, labelled as an estimate
 	                // (never a price) — identical to the FA tab's hero for this player.
-	                ` · ${waiverTarget.pos} · DHQ ${waiverTarget.dhq.toLocaleString()}${waiverTarget.faab && window.App?.Faab?.formatRange ? ' · est. bid ' + window.App.Faab.formatRange(waiverTarget.faab) : ''} · ${waiverTarget.why || ('Fills your ' + waiverTarget.pos + ' gap.')}${waiverIsGmTarget ? ' · GM plan: target position' : ''}`,
+	                ` · ${waiverTarget.pos} · ${window.App?.LeagueSkin?.getCurrent?.()?.vocabulary?.valueShortLabel || 'DHQ'} ${waiverTarget.dhq.toLocaleString()}${waiverTarget.faab && window.App?.Faab?.formatRange ? ' · est. bid ' + window.App.Faab.formatRange(waiverTarget.faab) : ''} · ${waiverTarget.why || ('Fills your ' + waiverTarget.pos + ' gap.')}${waiverIsGmTarget ? ' · GM plan: target position' : ''}`,
 	            ],
 	        });
     }

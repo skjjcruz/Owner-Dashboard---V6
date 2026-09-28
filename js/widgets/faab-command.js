@@ -3,9 +3,9 @@
 //
 // Surfaces the league-aware FAAB bid plan on Home, auto-picking the top
 // unrostered add (same relevance floor as Market Radar's waiver-target
-// list — DHQ > 1500, not on any roster) and running it through
-// App.Faab.analyze — the same engine the Free Agency tab's FaabCommandCard
-// uses for a hand-picked target. This is that same intelligence, surfaced
+// list — value > 1500, not on any roster) and pricing it with App.faModelBid
+// (fallback App.Faab.estimate) — the ONE bid estimate the Free Agency tab and
+// the Flash Brief print, on the same value resolver and cached bid history. This is that same intelligence, surfaced
 // without requiring a visit to the FA tab first.
 //
 // sizes: sm (hero bid + win%) · md/lg (+ pacing verdict + contested read)
@@ -44,32 +44,68 @@
             return best;
         }, [currentLeague, playersData]);
 
-        const [plan, setPlan] = React.useState(null); // null | {loading} | {a, est} | {err}
+        // Inputs the estimate depends on beyond the target: roster budgets /
+        // sizes (refreshed in place on the same league object — review S1) and
+        // the league's bid history (wr:fa-txns-updated from free-agency.js).
+        const rosterSig = (currentLeague?.rosters || []).map(r => r.roster_id + ':' + (Number(r.settings?.waiver_budget_used) || 0) + ':' + (r.players || []).length + ':' + (r.reserve || []).length).join(',');
+        const [txnsTick, setTxnsTick] = React.useState(0);
         React.useEffect(() => {
-            if (!target || !window.App?.Faab || !window.WrTxns) { setPlan(null); return; }
+            const h = (e) => { if (!e?.detail?.leagueId || e.detail.leagueId === String(lid)) setTxnsTick(t => t + 1); };
+            window.addEventListener('wr:fa-txns-updated', h);
+            return () => window.removeEventListener('wr:fa-txns-updated', h);
+        }, [lid]);
+
+        const FL = window.App?.FaabLeague;
+        const isFaab = FL?.isFaabLeague ? FL.isFaabLeague(currentLeague) : (Number(currentLeague?.settings?.waiver_budget) || 0) > 0;
+        const platform = FL?.platformOf ? FL.platformOf(currentLeague) : 'sleeper';
+
+        const [plan, setPlan] = React.useState(null); // null | {loading} | {noFaab} | {notImported} | {est, a, evidence, limits} | {err}
+        React.useEffect(() => {
+            if (!target || !window.App?.Faab) { setPlan(null); return; }
+            // Rolling / reverse waivers, or an import whose bids we don't have:
+            // say so — and never hit Sleeper's transaction endpoints with an
+            // ESPN / MFL league id.
+            if (!isFaab) { setPlan({ noFaab: true }); return; }
+            if (platform !== 'sleeper') { setPlan({ notImported: true }); return; }
+            if (!window.WrTxns) { setPlan(null); return; }
             let alive = true;
-            setPlan({ loading: true });
+            setPlan(p => (p && p.est && p.pid === target.pid ? p : { loading: true })); // no flash on a roster / history refresh
             (async () => {
                 try {
-                    const txns = await window.WrTxns.fetchLeagueTxns(lid);
-                    const failed = window.WrTxns.getFailedWaivers(lid);
+                    // The FA tab's fetch (one in-flight per league, 6h cache) when
+                    // the fa group is loaded; the same WrTxns cache otherwise.
+                    if (window.App?.faEnsureBidHistory) await window.App.faEnsureBidHistory(currentLeague);
+                    else await window.WrTxns.fetchLeagueTxns(lid);
                     const gmEff = window.WR?.GmMode?.effects?.(lid) || {};
-                    // bidfix 2026-09-27: App.Faab.estimate is THE bid estimate
-                    // (the FA tab's hero, rows, drawer and FAAB Command all
-                    // print it); analyze() alone is the older raw call.
-                    const est = window.App.Faab.estimate ? window.App.Faab.estimate({
-                        league: currentLeague, myRosterId: myRoster?.roster_id,
-                        txns: (txns || []).concat(failed || []),
-                        playersData,
-                        minBidOverride: gmEff.faabMinBid || undefined,
-                        targetPid: target.pid, targetPos: target.pos, dhq: target.dhq,
-                        horizonWeeks: window.App?.ChopOdds?.horizonFor?.(lid, null) || null,
-                    }) : null;
-                    if (alive) setPlan(est ? { a: est.analysis, est } : null);
-                } catch (e) { if (alive) setPlan({ err: true }); }
+                    // ONE estimate (bidfix): App.faModelBid is the call every FA
+                    // surface makes — it resolves the player's value itself
+                    // (App.PlayerValue: ROS in redraft) and reads the cached
+                    // history (getCached), so this tile can't disagree with the
+                    // FA tab or the Flash Brief for the same player. Without the
+                    // fa group: the identical engine call on identical inputs.
+                    const cached = window.WrTxns.getCached ? (window.WrTxns.getCached(lid) || []) : [];
+                    const failed = window.WrTxns.getFailedWaivers ? (window.WrTxns.getFailedWaivers(lid) || []) : [];
+                    const est = window.App.faModelBid
+                        ? window.App.faModelBid({ league: currentLeague, myRoster, playersData, pid: target.pid, pos: target.pos })
+                        : (window.App.Faab.estimate ? window.App.Faab.estimate({
+                            league: currentLeague, myRosterId: myRoster?.roster_id,
+                            txns: cached.concat(failed),
+                            playersData,
+                            minBidOverride: gmEff.faabMinBid || undefined,
+                            targetPid: target.pid, targetPos: target.pos, dhq: target.dhq,
+                            playerValue: (rp) => (window.App?.PlayerValue?.getValue ? window.App.PlayerValue.getValue(rp) : (window.App?.LI?.playerScores?.[rp] || 0)),
+                            horizonWeeks: window.App?.ChopOdds?.horizonFor?.(lid, null) || null,
+                        }) : null);
+                    // Win odds only on this league's own history (the FA card's
+                    // rule): out of league-median mode AND enough completed
+                    // winning bids at the position (review S2).
+                    const evidence = window.App?.WaiverTools?.bidEvidence ? window.App.WaiverTools.bidEvidence(cached, currentLeague, target.pos, playersData) : null;
+                    const limits = window.App.Faab.limits ? window.App.Faab.limits({ league: currentLeague, myRosterId: myRoster?.roster_id, minBidOverride: gmEff.faabMinBid || undefined }) : null;
+                    if (alive) setPlan({ pid: target.pid, est, a: est ? est.analysis : null, evidence, limits });
+                } catch (e) { if (window.wrLog) window.wrLog('faab-widget', e); if (alive) setPlan({ err: true }); }
             })();
             return () => { alive = false; };
-        }, [lid, target?.pid]);
+        }, [lid, target?.pid, target?.dhq, isFaab, platform, rosterSig, txnsTick]);
 
         const GOLD = 'var(--gold, #d4af37)', SILVER = 'var(--silver, #bdb8ad)', WARN = 'var(--warn, #f0a500)', WHITE = 'var(--white, #f5f2ea)';
         const monoFont = 'var(--font-mono, monospace)';
@@ -102,18 +138,31 @@
                 </div>
             );
         }
+        const muted = (text) => (
+            <div style={base} onClick={go}>
+                <div style={{ fontSize: '0.7rem', letterSpacing: '0.07em', color: SILVER, fontWeight: 700 }}>FAAB COMMAND</div>
+                <div style={{ marginTop: 'auto', color: SILVER, opacity: 0.7, fontSize: '0.8rem' }}>{text}</div>
+            </div>
+        );
+        if (plan.noFaab) {
+            const wl = FL?.waiverLabel ? FL.waiverLabel(currentLeague) : 'waivers';
+            return muted(wl === 'waivers' ? "This league doesn't run FAAB waivers." : 'This league uses ' + wl + ' — claims go by waiver order, not bids.');
+        }
+        if (plan.notImported) {
+            const plat = ({ espn: 'ESPN', mfl: 'MFL', yahoo: 'Yahoo' })[platform] || platform;
+            return muted('Dynasty HQ doesn\u2019t import FAAB bids from ' + plat + ' leagues yet, so there is no bid estimate here.');
+        }
         const a = plan.a;
         const est = plan.est;
         const bandText = est && est.lo !== est.hi && window.App?.Faab?.formatRange ? 'est. range ' + window.App.Faab.formatRange(est) : '';
         if (!a) {
-            // Pre-effect, or not a FAAB league at all — engine returns null.
-            return (
-                <div style={base} onClick={go}>
-                    <div style={{ fontSize: '0.7rem', letterSpacing: '0.07em', color: SILVER, fontWeight: 700 }}>FAAB COMMAND</div>
-                    <div style={{ marginTop: 'auto', color: SILVER, opacity: 0.7, fontSize: '0.8rem' }}>This league doesn't run FAAB waivers.</div>
-                </div>
-            );
+            // A FAAB league with no estimate: out of money (the model has no
+            // legal bid to give — review S3), or the engine is missing.
+            const lim = plan.limits;
+            if (lim && lim.exhausted) return muted('Out of FAAB ($' + lim.myLeft + ' left, $' + lim.minBid + ' minimum bid).');
+            return muted('No bid estimate right now.');
         }
+        const oddsOk = !a.coldStart && !!(plan.evidence && plan.evidence.enough);
         const engaged = a.rivals.filter(r => r.engaged);
         const uncontested = !engaged.length;
 
@@ -123,7 +172,7 @@
                     <div style={{ fontSize: '0.64rem', letterSpacing: '0.06em', color: SILVER, fontWeight: 700 }}>FAAB COMMAND</div>
                     <div style={{ marginTop: 'auto' }}>
                         <div style={{ fontFamily: monoFont, fontSize: '1.9rem', fontWeight: 700, color: GOLD, lineHeight: 1 }}>${a.rec.bid}</div>
-                        <div style={{ fontSize: '0.7rem', color: SILVER, marginTop: '2px' }}>{uncontested ? 'uncontested' : bandText || (Math.round(a.rec.winPct * 100) + '% to win')} · {target.name}</div>
+                        <div style={{ fontSize: '0.7rem', color: SILVER, marginTop: '2px' }}>est. · {uncontested ? 'uncontested' : oddsOk ? Math.round(a.rec.winPct * 100) + '% to win' : (bandText || 'thin bid history')} · {target.name}</div>
                     </div>
                 </div>
             );
@@ -137,12 +186,12 @@
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '8px' }}>
                     <span style={{ fontFamily: monoFont, fontSize: '2rem', fontWeight: 700, color: GOLD, lineHeight: 1 }}>${a.rec.bid}</span>
-                    <span style={{ fontSize: '0.78rem', color: SILVER }}>on {target.name} ({target.pos})</span>
+                    <span style={{ fontSize: '0.78rem', color: SILVER }}>est. bid on {target.name} ({target.pos})</span>
                 </div>
                 <div style={{ marginTop: '6px', fontSize: '0.78rem', color: SILVER }}>
                     {uncontested
                         ? 'No rival has both a need and the budget to chase him — the league minimum should land him.'
-                        : (bandText ? bandText + ' · ' : '') + Math.round(a.rec.winPct * 100) + '% to win' + (a.rec.capped ? ' (capped by your remaining budget)' : '') + ' · ' + engaged.length + ' rival' + (engaged.length === 1 ? '' : 's') + ' in the market'}
+                        : (bandText ? bandText + ' · ' : '') + (oddsOk ? Math.round(a.rec.winPct * 100) + '% to win' + (a.rec.capped ? ' (capped by your remaining budget)' : '') : 'not enough league bid history for win odds') + ' · ' + engaged.length + ' rival' + (engaged.length === 1 ? '' : 's') + ' in the market'}
                 </div>
                 {a.pacing && a.pacing.verdict === 'hoarding' ? (
                     <div style={{ marginTop: '10px', fontSize: '0.76rem', color: WARN }}>

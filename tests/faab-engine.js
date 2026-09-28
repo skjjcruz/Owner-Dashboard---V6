@@ -95,7 +95,48 @@ test('estimate: the range is the model\'s own band around rec, never a second fo
   assert.ok(a.band.lo === e.lo && a.band.hi === e.hi);
   assert.strictEqual(e.analysis.rec.bid, e.sug, 'the full analysis rides along for FAAB Command');
   assert.ok(Array.isArray(e.analysis.rivals) && e.analysis.rivals.length === 3);
-  assert.strictEqual(Faab.formatRange(e), '$' + e.lo + '–' + e.hi);
+  // In this fixture 80% odds are out of reach under the spend cap, so the top
+  // of the band IS the cap — and the text says so (review N7).
+  assert.strictEqual(e.hiCapped, true);
+  assert.strictEqual(e.hi, Math.round(a.myLeft * 0.65), 'hi = the SPEND_CAP of my remaining');
+  assert.strictEqual(Faab.formatRange(e), '$' + e.lo + '–' + e.hi + ' (your cap)');
+  assert.strictEqual(Faab.formatRange(e, '-', { capLabel: false }), '$' + e.lo + '-' + e.hi, 'compact cells drop the words');
+});
+
+test('needAt: a single-slot position that is filled is not a need (K / DEF / 1-QB) — review S4', () => {
+  const lg = { roster_positions: ['QB', 'RB', 'RB', 'K', 'BN'] };
+  const pd = { k1: { position: 'K' }, k2: { position: 'K', injury_status: 'IR' }, q1: { position: 'QB' } };
+  assert.strictEqual(Faab.needAt({ players: ['k1'] }, 'K', lg, pd), 'LOW', 'one healthy kicker for one K slot → not in the market');
+  assert.strictEqual(Faab.needAt({ players: ['k2'] }, 'K', lg, pd), 'HIGH', 'his only kicker is on IR → a real hole');
+  assert.strictEqual(Faab.needAt({ players: [] }, 'K', lg, pd), 'HIGH');
+  assert.strictEqual(Faab.needAt({ players: ['q1'] }, 'QB', lg, pd), 'LOW', '1-QB league, starter healthy, no values → not in the market');
+  // With values: a filled single slot engages (MED) only for an upgrade.
+  const val = { q1: 3000, k1: 900 };
+  const ctxUp = { playerValue: pid => val[pid] || 0, targetValue: 4000 };
+  const ctxDown = { playerValue: pid => val[pid] || 0, targetValue: 2500 };
+  assert.strictEqual(Faab.needAt({ players: ['q1'] }, 'QB', lg, pd, ctxUp), 'MED', 'target out-values his starter → he may bid');
+  assert.strictEqual(Faab.needAt({ players: ['q1'] }, 'QB', lg, pd, ctxDown), 'LOW', 'not an upgrade → sits it out');
+  // Multi-slot positions keep the old read (exactly filled = one injury from a hole).
+  assert.strictEqual(Faab.needAt({ players: ['rb1', 'rb2'] }, 'RB', lg, faabPlayers), 'HIGH');
+  // A kicker with every rival's K slot filled is uncontested → the league minimum.
+  const kl = faabLeague();
+  kl.roster_positions = ['QB', 'RB', 'RB', 'WR', 'K', 'BN'];
+  kl.rosters.forEach(r => { r.players = r.players.concat('k1'); });
+  const e = Faab.estimate({ league: kl, myRosterId: 1, txns: [], playersData: { ...faabPlayers, k1: { position: 'K' } }, targetPos: 'K', dhq: 2000 });
+  assert.deepStrictEqual([e.sug, e.lo, e.hi], [1, 1, 1]);
+  assert.strictEqual(e.analysis.rivals.filter(r => r.engaged).length, 0);
+  // …unless he is an upgrade on their kickers: then they're in the market (MED).
+  const up = Faab.estimate({ league: kl, myRosterId: 1, txns: [], playersData: { ...faabPlayers, k1: { position: 'K' } }, targetPos: 'K', dhq: 2000, playerValue: () => 800 });
+  assert.ok(up.analysis.rivals.filter(r => r.engaged).every(r => r.need === 'MED') && up.analysis.rivals.some(r => r.engaged));
+  assert.ok(up.sug > 1, 'an upgrade is contested');
+});
+
+test('limits: out of FAAB is told apart from "no FAAB" (review S3)', () => {
+  const lg = faabLeague(); lg.settings.waiver_bid_min = 5; lg.rosters[0].settings.waiver_budget_used = 97;
+  assert.deepStrictEqual(Faab.limits({ league: lg, myRosterId: 1 }), { budget: 100, minBid: 5, myLeft: 3, exhausted: true });
+  assert.strictEqual(Faab.estimate({ league: lg, myRosterId: 1, txns: [], playersData: faabPlayers, targetPos: 'RB', dhq: 3000 }), null);
+  assert.strictEqual(Faab.limits({ league: { settings: {} }, myRosterId: 1 }), null, 'no budget → not a FAAB league');
+  assert.strictEqual(Faab.limits({ league: lg, myRosterId: 1, minBidOverride: 2 }).exhausted, false, 'GM Strategy minimum override wins');
 });
 
 test('estimate: rec is the smallest bid clearing the target (binary search = the old linear scan)', () => {
