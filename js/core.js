@@ -280,23 +280,27 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
     // Sign out of this device and leave for `destination` (default landing).
     // Shared by Settings → Sign out, the hub's Owner Settings, account deletion
-    // and a completed password change. OD.clearSignedInState (shared
-    // supabase-client.js) removes both session tokens (app + legacy Sleeper),
-    // the legacy local login, the guest flag, the Supabase Google/Apple session
-    // and every ESPN/MFL login and personal AI key saved on this device — a
-    // shared iPad no longer hands the next person the last owner's logins.
-    // Before: only od_auth_v1 + fw_session_v1 went, so the legacy token kept
-    // authorizing cloud reads, a guest with a saved ESPN/MFL league bounced
-    // straight back into the app, and a Google user was silently signed back
-    // in by landing.html's OAuth handler.
+    // and a completed password change. ONE clear for every sign-out surface
+    // (this, Settings, landing ?signout, connect "Not you?"): OD.signOutClear
+    // (DHQ-Shared supabase-client.js → identity.js signOutClear) removes both
+    // session tokens (app + legacy Sleeper), the guest flag, the Supabase
+    // Google/Apple session (local scope — other devices stay signed in), every
+    // ESPN/MFL login and personal AI key, and logs RevenueCat out when the
+    // native bridge has it. The owner-stamped identity cache (Sleeper handle,
+    // league pointers) stays: the stamp clears it when someone else signs in,
+    // and keeping it means signing back in is never a full reconnect.
     function dhqSignOut(destination) {
+        let left = false;
+        const go = () => { if (left) return; left = true; window.location.href = destination || 'landing.html'; };
+        let pending = null;
         let cleared = false;
         try {
-            if (window.OD && typeof window.OD.clearSignedInState === 'function') { window.OD.clearSignedInState(); cleared = true; }
+            if (window.OD && typeof window.OD.signOutClear === 'function') { pending = window.OD.signOutClear(); cleared = true; }
+            else if (window.OD && window.OD.identity && typeof window.OD.identity.signOutClear === 'function') { pending = window.OD.identity.signOutClear(); cleared = true; }
         } catch (e) { window.wrLog?.('signOut.clear', e); }
         // The keys that decide whether the next page load is signed in — and,
         // if the shared client never loaded, the platform logins it would clear.
-        const keys = ['od_auth_v1', 'fw_session_v1', 'od_session_v1', 'wr_guest_v1'];
+        const keys = ['fw_session_v1', 'od_session_v1', 'wr_guest_v1'];
         // Keep in step with DEVICE_SECRET_KEYS in DHQ-Shared supabase-client.js
         // (js/shared/device-secret-keys.test.js fails if a key is missing here).
         if (!cleared) keys.push('espn_s2', 'espn_swid', 'mfl_api_key', 'mfl_write_cookie', 'mfl_write_host', 'yahoo_session_id',
@@ -306,9 +310,46 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
             try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ }
             try { sessionStorage.removeItem(k); } catch (e) { /* storage blocked */ }
         });
-        window.location.href = destination || 'landing.html';
+        // Credentials are already gone; the async part (SDK sign-out,
+        // RevenueCat) gets a moment, never more than 2s.
+        Promise.resolve(pending).then(go, go);
+        setTimeout(go, 2000);
     }
     window.dhqSignOut = dhqSignOut;
+
+    // ── "Your session ended" notice (one listener for the whole shell) ──
+    // The shared client raises dhq:session-expired when the server rejects
+    // the stored session (revoked by a password change elsewhere, deleted
+    // account) and OD.callAI on a 401. It used to have no listener: the
+    // session vanished silently mid-use. One unobtrusive notice, one link
+    // back to the sign-in sheet; the league data on screen stays.
+    function showSessionEndedNotice() {
+        try {
+            if (document.getElementById('dhq-session-ended')) return;
+            const bar = document.createElement('div');
+            bar.id = 'dhq-session-ended';
+            bar.setAttribute('role', 'status');
+            bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom, 0px));z-index:2147483000;display:flex;align-items:center;gap:12px;max-width:calc(100vw - 32px);box-sizing:border-box;padding:10px 12px 10px 14px;background:var(--off-black, #141414);color:var(--white, #fff);border:1px solid var(--acc-line2, rgba(212,175,55,0.3));border-radius:var(--card-radius-sm, 8px);box-shadow:0 6px 24px rgba(0,0,0,0.45);font:500 13px/1.4 var(--font-body, system-ui, sans-serif)';
+            const text = document.createElement('span');
+            text.textContent = 'Your session ended.';
+            const link = document.createElement('a');
+            link.href = 'landing.html?reauth=1';
+            link.textContent = 'Sign in';
+            link.style.cssText = 'color:var(--gold, #D4AF37);font-weight:700;text-decoration:none;white-space:nowrap';
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.setAttribute('aria-label', 'Dismiss');
+            close.textContent = '\u00d7';
+            close.style.cssText = 'background:none;border:0;color:var(--silver, #aaa);font-size:18px;line-height:1;cursor:pointer;padding:0 2px';
+            close.onclick = () => { try { bar.remove(); } catch (e) { /* gone */ } };
+            bar.append(text, link, close);
+            (document.body || document.documentElement).appendChild(bar);
+        } catch (e) { window.wrLog?.('sessionEnded.notice', e); }
+    }
+    if (!window.__dhqSessionEndedListener) {
+        window.__dhqSessionEndedListener = true;
+        window.addEventListener('dhq:session-expired', showSessionEndedNotice);
+    }
 
     function handleLogout() {
         if (confirm('Are you sure you want to logout?')) dhqSignOut();

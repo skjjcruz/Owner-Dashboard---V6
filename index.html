@@ -45,13 +45,20 @@
         // session (those keep their own expiry path below), never for a guest
         // tab. The shared client (ensureFreshAppSession) does the same for
         // localhost, where this gate returns early.
+        // Only this device's own legacy login is re-hydrated: the identity
+        // owner stamp (DHQ-Shared identity.js) must be that handle's — a
+        // leftover od_session_v1 from another person must not sign them in.
+        // No stamp = a device from before stamping (the bitten users above).
+        var stamp = null;
+        try { stamp = localStorage.getItem('dhq_identity_owner_v1'); } catch (e) {}
         if (!ok && !isGuest && !(payload && payload.app_metadata && payload.app_metadata.user_id)) {
           try {
             var legacy = JSON.parse(localStorage.getItem('od_session_v1') || 'null');
             var lp = decodeJwt(legacy && legacy.token);
             var meta = lp && lp.app_metadata;
             var legacyLive = !!lp && typeof lp.exp === 'number' && lp.exp * 1000 > Date.now();
-            if (legacyLive && meta && typeof meta.sleeper_username === 'string' && meta.sleeper_username && !meta.user_id) {
+            var stampOk = !stamp || (meta && typeof meta.sleeper_username === 'string' && stamp === 'legacy:' + meta.sleeper_username.toLowerCase());
+            if (legacyLive && stampOk && meta && typeof meta.sleeper_username === 'string' && meta.sleeper_username && !meta.user_id) {
               sess = {
                 token: legacy.token,
                 expiresAt: legacy.expiresAt || new Date(lp.exp * 1000).toISOString(),
@@ -65,7 +72,7 @@
         if (!ok && isGuest) {
           try {
             var ga = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
-            if ((ga && ga.username) || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id')) ok = true;
+            if ((ga && (ga.username || ga.sleeperUsername)) || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id')) ok = true;
           } catch (e) {}
         }
         if (!ok) {
@@ -73,9 +80,17 @@
           // marketing page, and never with their keys wiped (an app relaunch
           // between tapping Guest and connecting a league hit this path).
           if (isGuest) { window.location.replace('connect-sleeper.html'); return; }
-          try { localStorage.removeItem('od_auth_v1'); } catch (e) {}
-          if (sess && !ok) { try { localStorage.removeItem('fw_session_v1'); } catch (e) {} }
-          window.location.replace('landing.html');
+          // The dead token is a credential and goes. The identity cache
+          // (od_auth_v1 & co.) is NOT touched: a handle is not a credential,
+          // and wiping it here stranded every user whose 7-day token lapsed.
+          // The owner stamp keeps it safe for whoever signs in next.
+          if (sess) { try { localStorage.removeItem('fw_session_v1'); } catch (e) {} }
+          // A lapsed legacy (Sleeper-username) login signs back in on
+          // login.html; an account on landing's sign-in sheet (?reauth).
+          var legacyName = (payload && payload.app_metadata && !payload.app_metadata.user_id && payload.app_metadata.sleeper_username) || '';
+          if (legacyName) { window.location.replace('login.html?for=' + encodeURIComponent(legacyName)); return; }
+          var hadAccount = !!(sess && sess.token) || (!!stamp && stamp.indexOf('account:') === 0);
+          window.location.replace(hadAccount ? 'landing.html?reauth=1' : 'landing.html');
         }
       } catch (e) {}
     })();

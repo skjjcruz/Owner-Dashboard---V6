@@ -860,13 +860,40 @@ const gateAccount = (exp) => gateJwt({ sub: 'u1', exp, app_metadata: { user_id: 
 const inFuture = Math.floor(Date.now() / 1000) + 5 * 86400;
 const inPast = Math.floor(Date.now() / 1000) - 86400;
 
-test('index gate: a live legacy token in fw_session_v1 gets in; an expired one is cleared and sent to landing',
+test('index gate: a live legacy token in fw_session_v1 gets in; an expired one is cleared and sent to its login page, handle kept',
   () => {
     const live = runIndexGate({ fw_session_v1: { token: gateLegacy(inFuture), user: { sleeperUsername: 'bob' } }, od_auth_v1: { username: 'bob' } });
     eq(live.nav.length, 0);
     const dead = runIndexGate({ fw_session_v1: { token: gateLegacy(inPast) }, od_session_v1: { token: gateLegacy(inPast) }, od_auth_v1: { username: 'bob' } });
-    eq(dead.nav[0], 'landing.html');
-    ok(!dead.store.has('fw_session_v1') && !dead.store.has('od_auth_v1'), 'dead session cleared');
+    eq(dead.nav[0], 'login.html?for=bob');
+    ok(!dead.store.has('fw_session_v1'), 'dead session cleared');
+    ok(dead.store.has('od_auth_v1'), 'the handle is not a credential: kept');
+  });
+
+test('index gate: an expired account session keeps the identity cache and asks to sign in again (?reauth)',
+  () => {
+    const acct = runIndexGate({ fw_session_v1: { token: gateAccount(inPast), user: { id: 'u1' } }, dhq_identity_owner_v1: 'account:u1',
+      od_auth_v1: { sleeperUsername: 'alice' }, od_profile_v1: { sleeperUsername: 'alice' }, mfl_league_id: '1' });
+    eq(acct.nav[0], 'landing.html?reauth=1');
+    ok(!acct.store.has('fw_session_v1'), 'dead token gone');
+    for (const k of ['od_auth_v1', 'od_profile_v1', 'mfl_league_id', 'dhq_identity_owner_v1']) ok(acct.store.has(k), k + ' kept');
+    // Signed out on an account-stamped device (no token at all): also ?reauth.
+    eq(runIndexGate({ dhq_identity_owner_v1: 'account:u1', od_auth_v1: { username: 'alice' } }).nav[0], 'landing.html?reauth=1');
+    // A device that never signed in: the plain landing page.
+    eq(runIndexGate({}).nav[0], 'landing.html');
+    // A guest whose handle came from the hub ({sleeperUsername} shape) still gets in.
+    eq(runIndexGate({ wr_guest_v1: '1', od_auth_v1: { sleeperUsername: 'g' } }).nav.length, 0);
+  });
+
+test('index gate: legacy re-hydration only for the stamped owner',
+  () => {
+    const token = gateLegacy(inFuture);
+    const other = runIndexGate({ od_session_v1: { token }, dhq_identity_owner_v1: 'account:uA' });
+    ok(!other.store.has('fw_session_v1'), "another person's leftover legacy copy is not signed in");
+    eq(other.nav[0], 'landing.html?reauth=1');
+    const mine = runIndexGate({ od_session_v1: { token }, dhq_identity_owner_v1: 'legacy:bob' });
+    eq(mine.nav.length, 0);
+    ok(mine.store.has('fw_session_v1'));
   });
 
 test('index gate: a user bitten by the refresh bug (no fw_session_v1, live legacy od_session_v1) is re-hydrated, not bounced',
@@ -890,7 +917,7 @@ test('index gate: re-hydration refuses an expired copy, an app-account token, th
     ok(!expired.store.has('fw_session_v1'), 'never from an expired token');
     // An account token that merely lacks a JWT shape the gate accepts (expired) is app-account behaviour: untouched.
     const acct = runIndexGate({ fw_session_v1: { token: gateAccount(inPast), user: { id: 'u1' } }, od_session_v1: { token: gateLegacy(inFuture) } });
-    eq(acct.nav[0], 'landing.html');
+    eq(acct.nav[0], 'landing.html?reauth=1');
     ok(!acct.store.has('fw_session_v1'), 'expired app session still cleared, not swapped for a legacy one');
     const notLegacy = runIndexGate({ od_session_v1: { token: gateAccount(inFuture) } });
     eq(notLegacy.nav[0], 'landing.html');

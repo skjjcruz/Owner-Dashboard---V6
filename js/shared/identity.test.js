@@ -60,7 +60,7 @@ function load({ local, session, server, withClient, extra } = {}) {
             if (/fw-profile/.test(url) && method === 'GET') {
                 if (server === 'hang') return new Promise(() => {});
                 if (typeof server === 'number') r = { status: server, body: { error: 'x' } };
-                else r = { status: 200, body: { user: { id: 'x' }, platformUsernames: server ? { sleeper: server } : {} } };
+                else r = { status: 200, body: { user: { id: 'x' }, platformUsernames: server && typeof server === 'object' ? server : (server ? { sleeper: server } : {}) } };
             } else if (/ai-analyze/.test(url)) {
                 r = { status: 401, body: { error: 'Valid session token required.' } };
             }
@@ -107,11 +107,83 @@ test('writeHandle writes both shapes, the profile and the Team Comps key — and
 
 // ── reconcile ───────────────────────────────────────────────────────────────
 test('reconcile, same owner: server agrees → nothing cleared, nothing uploaded', async () => {
-    const env = load({ local: { [STAMP]: 'account:u1', [FW]: account('u1'), od_auth_v1: { username: 'alice' }, mfl_league_id: '10005' }, server: 'alice' });
+    const env = load({ local: { [STAMP]: 'account:u1', [FW]: account('u1'), od_auth_v1: { username: 'alice' }, mfl_league_id: '10005', mfl_year: '2026', mfl_franchise_id: '0001' },
+        server: { sleeper: 'alice', mfl: [{ leagueId: '10005', year: 2026, franchiseId: '0001' }] } });
     const r = await env.id.reconcileAfterSignIn();
     assert.deepEqual([r.owner, r.handle, r.source, r.onboarded, r.cleared], ['account:u1', 'alice', 'server', true, false]);
     assert.equal(posts(env).length, 0);
     assert.equal(env.ls.getItem('mfl_league_id'), '10005', 'league pointers kept');
+});
+
+test('reconcile uploads a league only this device knows — merged into the server list, pointers only', async () => {
+    const env = load({
+        local: { [STAMP]: 'account:u1', [FW]: account('u1'), od_auth_v1: { username: 'alice' }, mfl_league_id: '10005', mfl_year: '2026', mfl_franchise_id: '1', mfl_api_key: 'SECRET' },
+        session: { espn_s2: 'SECRET', espn_swid: '{SECRET}' },
+        server: { sleeper: 'alice', mfl: [{ leagueId: '777', year: 2025, franchiseId: '0003' }] },
+    });
+    const r = await env.id.reconcileAfterSignIn();
+    assert.equal(r.uploaded, true);
+    const body = posts(env)[0].body;
+    assert.deepEqual(body, { platformUsernames: { mfl: [{ leagueId: '10005', year: 2026, franchiseId: '0001' }, { leagueId: '777', year: 2025, franchiseId: '0003' }] } },
+        'the other device\'s league is kept; the handle the server already has is not resent');
+    assert.doesNotMatch(JSON.stringify(body), /SECRET/, 'no credentials, ever');
+    assert.equal(posts(env)[0].opts.keepalive, true);
+});
+
+test('reconcile restores ESPN / MFL pointers from the server on a fresh device, and never sends an empty list', async () => {
+    const env = load({ local: { [FW]: account('u1') },
+        server: { sleeper: 'alice', sleeperUserId: '123456789012345678', espn: [{ leagueId: '555', year: 2025, teamId: '2' }, { leagueId: '687493', year: 2026, teamId: '4' }], mfl: [{ leagueId: '10005', year: 2026, franchiseId: null }] } });
+    const r = await env.id.reconcileAfterSignIn();
+    assert.deepEqual([r.handle, r.source, r.onboarded], ['alice', 'server', true]);
+    assert.equal(JSON.stringify(r.restored), '["espn","mfl"]');
+    assert.equal(env.ls.getItem('espn_league_id'), '687493', 'the latest season wins');
+    assert.equal(env.ls.getItem('espn_year'), '2026');
+    assert.equal(env.ls.getItem('espn_team_id'), '4');
+    assert.equal(env.ls.getItem('mfl_league_id'), '10005');
+    assert.equal(env.ls.getItem('mfl_franchise_id'), null);
+    assert.equal(authOf(env).sleeperUserId, '123456789012345678');
+    assert.equal(posts(env).length, 0, 'nothing new to upload');
+    // A device with its own pointer keeps it (restore only fills empty keys).
+    const own = load({ local: { [STAMP]: 'account:u1', [FW]: account('u1'), espn_league_id: '42', espn_year: '2026' }, server: { espn: [{ leagueId: '687493', year: 2026, teamId: null }] } });
+    await own.id.reconcileAfterSignIn();
+    assert.equal(own.ls.getItem('espn_league_id'), '42');
+    const sent = posts(own)[0].body.platformUsernames;
+    assert.equal(JSON.stringify(sent.espn.map(e => e.leagueId)), '["42","687493"]');
+    // No local league and none on the server: espn/mfl are never sent ([] would clear).
+    const none = load({ local: { [STAMP]: 'account:u1', [FW]: account('u1'), od_auth_v1: { username: 'alice' } } });
+    await none.id.reconcileAfterSignIn();
+    assert.deepEqual(posts(none)[0].body, { platformUsernames: { sleeper: 'alice' } });
+});
+
+test('reconcile uses platformUsernames from the sign-in response and skips the fw-profile GET; null or absent → GET', async () => {
+    const env = load({ local: { [STAMP]: 'account:u1', od_auth_v1: { username: 'alice' } } });
+    const r = await env.id.reconcileAfterSignIn({ ...account('u1'), platformUsernames: { sleeper: 'alice' } });
+    assert.deepEqual([r.handle, r.source], ['alice', 'server']);
+    assert.equal(env.calls.length, 0, 'no extra round trip');
+    const empty = load({ local: { [STAMP]: 'account:u1', od_auth_v1: { username: 'alice' } } });
+    await empty.id.reconcileAfterSignIn({ ...account('u1'), platformUsernames: {} });
+    assert.equal(empty.calls.filter(c => c.opts.method === 'GET').length, 0, '{} = none on file: no GET');
+    assert.deepEqual(posts(empty)[0].body, { platformUsernames: { sleeper: 'alice' } }, '… and the device handle is uploaded');
+    for (const pu of [null, undefined]) {
+        const s = account('u1'); if (pu === null) s.platformUsernames = null;
+        const e = load({ local: { [STAMP]: 'account:u1' }, server: 'alice' });
+        const r2 = await e.id.reconcileAfterSignIn(s);
+        assert.equal(r2.handle, 'alice');
+        assert.equal(e.calls.filter(c => (c.opts.method || 'GET') === 'GET').length, 1, 'fell back to the GET (' + pu + ')');
+    }
+});
+
+test('pushIdentity (connect page / hub): reads the server list, posts the union; a failed read sends only the handle', async () => {
+    const env = load({ local: { [STAMP]: 'account:u1', [FW]: account('u1'), od_auth_v1: { username: 'alice', sleeperUserId: '99' }, espn_league_id: '1', espn_year: '2026' },
+        server: { espn: [{ leagueId: '2', year: 2026, teamId: null }] } });
+    assert.equal(await env.id.pushIdentity(), true);
+    assert.deepEqual(posts(env)[0].body.platformUsernames, { sleeper: 'alice', sleeperUserId: '99', espn: [{ leagueId: '1', year: 2026, teamId: null }, { leagueId: '2', year: 2026, teamId: null }] });
+    const down = load({ local: { [FW]: account('u1'), od_auth_v1: { username: 'alice' }, espn_league_id: '1' }, server: 503 });
+    await down.id.pushIdentity();
+    assert.deepEqual(posts(down)[0].body.platformUsernames, { sleeper: 'alice' });
+    const guest = load({ local: { wr_guest_v1: '1', od_auth_v1: { username: 'g' } } });
+    assert.equal(await guest.id.pushIdentity(), false, 'no account, nothing sent');
+    assert.equal(guest.calls.length, 0);
 });
 
 test('reconcile, same owner, server empty → the local handle is uploaded with keepalive', async () => {
@@ -170,7 +242,8 @@ test('reconcile, first run on this build (no stamp): the local handle is this ow
     assert.deepEqual([r.handle, r.source, r.uploaded, r.cleared], ['alice', 'local', true, false]);
     assert.equal(env.ls.getItem(STAMP), 'account:u1');
     assert.equal(env.ls.getItem('espn_league_id'), '7');
-    assert.deepEqual(posts(env)[0].body, { platformUsernames: { sleeper: 'alice' } });
+    assert.deepEqual(posts(env)[0].body.platformUsernames.sleeper, 'alice');
+    assert.deepEqual(posts(env)[0].body.platformUsernames.espn.map(e => e.leagueId), ['7']);
 });
 
 test('reconcile, first run but this tab was another account\'s → treated as a different owner', async () => {
@@ -188,7 +261,8 @@ test('reconcile, guest signs up: leagues adopted, handle uploaded, guest flag go
     assert.equal(env.ls.getItem('wr_guest_v1'), null);
     assert.equal(env.ls.getItem('mfl_league_id'), '5');
     assert.equal(env.ls.getItem(STAMP), 'account:uNew');
-    assert.deepEqual(posts(env)[0].body, { platformUsernames: { sleeper: 'gina' } });
+    assert.equal(posts(env)[0].body.platformUsernames.sleeper, 'gina');
+    assert.deepEqual(posts(env)[0].body.platformUsernames.mfl, [{ leagueId: '5', year: new Date().getUTCFullYear(), franchiseId: '0002' }]);
     // An MFL-only guest (no handle) still enters the app, uploads nothing.
     const mflOnly = load({ local: { wr_guest_v1: '1', [FW]: account('uNew'), mfl_league_id: '5' } });
     const r2 = await mflOnly.id.reconcileAfterSignIn(null, { isNew: true });
