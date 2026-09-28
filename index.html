@@ -3015,7 +3015,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 
 <!-- War Room modules — loaded in dependency order by Babel standalone -->
 <!-- 1. Core: tier system, React hooks, fetch helpers (everything depends on this) -->
-<script type="text/babel" src="js/core.js?v=20260928auth1"></script>
+<script type="text/babel" src="js/core.js?v=20260928auth2"></script>
 <!-- 1a. Central data-sync manager — window.WR.Sync — stale-while-revalidate on tab return + in-season interval (plain JS) -->
 <script src="js/shared/sync-manager.js?v=20260706sync1"></script>
 <!-- 1a2. Shared viewport seam — WR.useViewport() hook + WR.viewport() snapshot (plain JS; must precede components.js and all tab files) -->
@@ -3217,7 +3217,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- 7. League detail: coordinator shell, depends on all above -->
     <script type="text/babel" src="js/league-detail.js?v=20260927wire2"></script>
 <!-- 8. App: OwnerDashboard + ReactDOM.render (loads last) -->
-<script type="text/babel" src="js/app.js?v=20260928auth1"></script>
+<script type="text/babel" src="js/app.js?v=20260928auth2"></script>
 
 <!-- All JSX code extracted to js/ modules. Only bootstrap remains. -->
 <script>
