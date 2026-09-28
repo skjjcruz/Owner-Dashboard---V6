@@ -324,6 +324,13 @@
 
     const linked = { sleeper: false, mfl: false, espn: false };
     const IDN = (window.OD && window.OD.identity) || null;
+    // A guest on a device whose identity cache is an account's (the guest
+    // flag was set by an older page): start the guest clean, so they never
+    // see — or connect on top of — the account's leagues.
+    try {
+      if (IDN && !IDN.accountToken() && localStorage.getItem('wr_guest_v1') === '1' && IDN.getStamp() && IDN.getStamp() !== 'guest'
+        && !new URLSearchParams(window.location.search).get('reconnect')) IDN.beginGuest();
+    } catch (e) {}
 
     // Record what was just connected on the signed-in ACCOUNT (the Sleeper
     // handle and the ESPN/MFL league pointers — never cookies or API keys).
