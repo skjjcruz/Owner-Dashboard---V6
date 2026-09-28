@@ -349,6 +349,12 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
     if (!window.__dhqSessionEndedListener && typeof window.addEventListener === 'function') {
         window.__dhqSessionEndedListener = true;
         window.addEventListener('dhq:session-expired', showSessionEndedNotice);
+        // It may already have happened (tier.js reads the profile before this
+        // Babel-compiled file runs): the shared client leaves a marker.
+        if (window.__dhqSessionExpired) {
+            if (document.body) showSessionEndedNotice();
+            else document.addEventListener('DOMContentLoaded', showSessionEndedNotice, { once: true });
+        }
     }
 
     function handleLogout() {

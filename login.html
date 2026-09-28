@@ -280,19 +280,19 @@
 
     // A successful legacy sign-in: stamp this device's identity for this
     // login (DHQ-Shared identity.js — another owner's cached leagues are
-    // cleared, the guest flag goes), then keep the local login record
-    // (both od_auth_v1 shapes + the password hash for the next offline check).
-    async function finishSignIn(session, username, password) {
+    // cleared, the guest flag goes), then keep the local login record in
+    // both od_auth_v1 shapes. No password hash any more: nothing checks it
+    // (the server decides), and a copy of it on the device is only a risk.
+    async function finishSignIn(session, username) {
         storeSession(session, username);
         try { if (window.OD?.identity) await window.OD.identity.reconcileAfterSignIn(); } catch (e) {}
         let prev = {};
         try { prev = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null') || {}; } catch (e) { prev = {}; }
-        const passwordHash = await hashPassword(password);
+        delete prev.passwordHash;
         localStorage.setItem(AUTH_KEY, JSON.stringify({
             ...prev,
             username,
             sleeperUsername: username,
-            passwordHash,
             isGifted: session.isGifted || false,
             createdAt: prev.createdAt || new Date().toISOString(),
         }));
@@ -308,14 +308,6 @@
         usernameInput.value = forUsername;
         usernameInput.readOnly = true;
         usernameInput.style.opacity = '0.7';
-    }
-
-    async function hashPassword(password) {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(password);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
     function showError(message) {
@@ -359,7 +351,7 @@
         try {
             const session = await window.OD.acquireSessionToken(username, password);
             if (session?.token) {
-                await finishSignIn(session, username, password);
+                await finishSignIn(session, username);
                 return;
             }
         } catch {}

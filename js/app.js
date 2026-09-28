@@ -909,7 +909,9 @@
             const signedIn = owner && owner !== 'guest';
             // Guest / signed out, or the cache is already this owner's and
             // holds a handle: nothing to ask the server.
-            if (!signedIn || (idn.getStamp() === owner && idn.localHandle() && !reconcileNonce)) {
+            // (An account write that never landed — hub connect offline, a
+            // 5xx — is retried here: needsSync.)
+            if (!signedIn || (idn.getStamp() === owner && idn.localHandle() && !reconcileNonce && !(idn.needsSync && idn.needsSync()))) {
                 if (!sleeperUsername) setLoading(false);
                 return undefined;
             }
@@ -930,6 +932,9 @@
                     // Another owner's handle was on screen: drop it (a Demo
                     // League opened in this tab stays).
                     if (sleeperUsername && sleeperUsername !== readDemoHandle()) setSleeperUsername(readDemoHandle());
+                    // The account couldn't be read (offline / timeout / 5xx):
+                    // offer a retry instead of an empty "Add a league".
+                    if (r && r.serverOk === false) setHubStall('reconcile');
                     setLoading(false);
                 }
             })();
@@ -1068,7 +1073,10 @@
                 let franchiseId = localStorage.getItem('mfl_franchise_id') || null;
                 try {
                     const raw = await window.MFL.fetchLeague(leagueId, year, apiKey);
-                    if (!alive || !raw?.leagueData?.league) return;
+                    if (!alive) return;
+                    // MFL answers a private league without its key with an
+                    // error body (HTTP 200): say so instead of vanishing.
+                    if (!raw?.leagueData?.league) throw new Error((raw?.leagueData?.error && (raw.leagueData.error.$t || raw.leagueData.error)) || 'no league data');
                     const franchisesRaw = raw.leagueData?.league?.franchises?.franchise || [];
                     const franchiseArr = Array.isArray(franchisesRaw) ? franchisesRaw : [franchisesRaw];
                     // Owner default: if bigloco hasn't picked a team yet, lock in the

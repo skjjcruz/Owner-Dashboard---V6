@@ -419,3 +419,18 @@ test('analytics events carry metadata.build only when the page knows its build',
     assert.match(src, /window\.DHQ_BUILD/);
     assert.match(src, /meta\[name="dhq-build"\]/);
 });
+
+test('a failed account write is remembered and retried by the next reconcile', async () => {
+    const env = load({ local: { [STAMP]: 'account:u1', [FW]: account('u1'), od_auth_v1: { username: 'alice' } }, server: {} });
+    // POST fails: override fetch for POSTs only.
+    const realFetch = env.ctx.fetch;
+    env.ctx.fetch = (url, opts) => (opts && opts.method === 'POST')
+        ? Promise.resolve({ status: 500, ok: false, json: async () => ({}) })
+        : realFetch(url, opts);
+    assert.equal(await env.id.pushIdentity(), false);
+    assert.equal(env.id.needsSync(), true, 'marked unsynced');
+    env.ctx.fetch = realFetch;
+    const r = await env.id.reconcileAfterSignIn();
+    assert.equal(r.uploaded, true);
+    assert.equal(env.id.needsSync(), false, 'cleared once the server confirmed');
+});
