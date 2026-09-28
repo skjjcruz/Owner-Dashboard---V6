@@ -579,7 +579,12 @@
     function clearCachedAiInsights(props) { try { localStorage.removeItem(getAiCacheKey(props)); } catch (_) {} }
 
     async function generateAiInsights({ myRoster, currentLeague, playersData }, kpis, heuristicTitles) {
-        const structuredFn = (window.OD?.callAI && window.WR?.AIContext) ? window.OD.callAI : null;
+        // The structured route needs a signed-in session (ai-analyze answers a
+        // guest with 401 "Valid session token required."), so gate it on the
+        // same check every other server-AI caller uses. Guests go straight to
+        // the dhqAI path below instead of logging a handled client_error.
+        const serverAI = typeof window.hasServerAI === 'function' ? !!window.hasServerAI() : !!window.OD?.getSessionToken?.();
+        const structuredFn = (serverAI && window.OD?.callAI && window.WR?.AIContext) ? window.OD.callAI : null;
         const aiFn = typeof window.dhqAI === 'function' ? window.dhqAI : null;
         if (!structuredFn && !aiFn) return { error: 'AI not loaded' };
 

@@ -34,6 +34,18 @@
 // successful response navigates (offline never reloads into an error page).
 // A backwards wall-clock jump is rebased; a stalled probe times out.
 // Thresholds: window.WR_UPDATE_TUNING.
+//
+// Deploy safety (2026-09-28, "website down" incident):
+//  - Settle: a version.json built < 4 min ago is ignored (unless critical)
+//    while the Pages CDN propagates; mixed old/new edges are the risk window.
+//  - Before navigating, every script the new page boots with is fetched
+//    (version.json `pages`/`assets` from build-deploy, else the fetched HTML's
+//    same-origin scripts) and must answer 200 with the expected content hash.
+//    Otherwise: no reload, retry with back-off (1, 2, 4 … min, capped 30 min).
+//  - Idle is measured from the later of the last interaction and the last
+//    return to the page (resumeAt): a user who just came back is reading.
+//  - window.__dhqBusy (a counter other code bumps around sign-in requests) and
+//    an OAuth return in the URL at load hold updates.
 (function (root) {
     'use strict';
 
@@ -43,12 +55,83 @@
         minGapMs: 15000, maxBackoffMs: 1800000, staleMs: 600000, maxPerHour: 3,
         fetchTimeoutMs: 30000, prefetchTimeoutMs: 20000, retryApplyMs: 60000,
         holdMaxMs: 7200000, holdAwayMs: 1800000,
+        settleMs: 240000, assetBudgetMs: 60000, assetTimeoutMs: 20000, assetConcurrency: 6,
     };
     var UNREACHABLE = {};
 
     // ── Pure decision logic (unit-tested in live-update.test.js) ──────────────
     function isPending(own, latest) {
         return !!(own && latest && typeof latest.build === 'string' && latest.build && latest.build !== own);
+    }
+    // How long this build has been out: wall time since version.json's builtAt,
+    // or since this page first saw it if that is longer (a client clock running
+    // behind can't hold the update forever). null = no builtAt (older builds):
+    // no settle wait.
+    function buildAge(latest, seenAt, now) {
+        var b = latest && typeof latest.builtAt === 'string' ? Date.parse(latest.builtAt) : NaN;
+        if (!(b > 0)) return null;
+        return Math.max(now - b, seenAt ? now - seenAt : 0);
+    }
+
+    // Analytics surface. The iOS shell is a WKWebView (AppleWebKit, no
+    // "Safari/" token) on an iOS device: an iPhone/iPad/iPod UA, or an iPad in
+    // desktop mode (MacIntel + touch). A Mac app's webview looks the same minus
+    // the touch; it is not the iOS app (mislabelled ios_app until 2026-09-28).
+    function surfaceOf(nav) {
+        var ua = (nav && nav.userAgent) || '';
+        if (!/AppleWebKit/.test(ua) || /Safari\//.test(ua)) return 'web';
+        var ipadDesktop = nav.platform === 'MacIntel' && nav.maxTouchPoints > 1;
+        return /iPhone|iPad|iPod/.test(ua) || ipadDesktop ? 'ios_app' : 'web';
+    }
+
+    // ── Pre-reload asset check ────────────────────────────────────────────────
+    // The scripts `page` boots with in `latest`: version.json's own list when
+    // the build wrote one, else the same-origin <script src> of the fetched
+    // HTML (only when that HTML is the target build). Each entry carries the
+    // expected content hash: the `assets` map, else a ?v= that is a build hash.
+    function assetList(latest, page, html) {
+        var urls = latest && latest.pages && Array.isArray(latest.pages[page]) ? latest.pages[page] : null;
+        if (!urls) {
+            urls = [];
+            var re = /<script\b[^>]*?\bsrc=["']([^"']+)["']/gi, m;
+            while (html && (m = re.exec(html))) urls.push(m[1]);
+        }
+        var map = (latest && latest.assets) || {}, seen = {}, out = [];
+        urls.forEach(function (u) {
+            if (typeof u !== 'string' || !u || /^([a-z][a-z0-9+.-]*:|\/\/)/i.test(u) || seen[u]) return; // cross-origin / data: / dup
+            seen[u] = 1;
+            var path = u.split(/[?#]/)[0].replace(/^\.?\//, ''), v = /[?&]v=([0-9a-f]{10})(?:&|$)/.exec(u);
+            out.push({ url: u, path: path, hash: map[path] || (v ? v[1] : null) });
+        });
+        return out;
+    }
+    // Fetch every asset (bounded concurrency, per-asset timeout). fetchAsset(a)
+    // resolves { status, hash? }. Resolves { ok, checked } or the first failure
+    // { ok: false, why: 'http-404' | 'hash' | 'timeout' | 'error', url }.
+    function checkAssets(list, fetchAsset, opts) {
+        var o = opts || {}, n = Math.max(1, o.concurrency || 6), next = 0, active = 0, ok = 0, done = false;
+        var after = o.after || function (ms, fn) { setTimeout(fn, ms); };
+        return new Promise(function (resolve) {
+            function finish(r) { if (!done) { done = true; resolve(r); } }
+            function fail(a, why) { finish({ ok: false, why: why, url: a.url, checked: ok }); }
+            function pump() {
+                if (done) return;
+                if (next >= list.length && !active) return finish({ ok: true, checked: ok });
+                while (!done && active < n && next < list.length) run(list[next++]);
+            }
+            function run(a) {
+                var settled = false;
+                active++;
+                function end(fn) { return function (x) { if (settled) return; settled = true; active--; fn(x); }; }
+                if (o.timeoutMs) after(o.timeoutMs, end(function () { fail(a, 'timeout'); }));
+                Promise.resolve().then(function () { return fetchAsset(a); }).then(end(function (r) {
+                    if (!r || r.status !== 200) return fail(a, 'http-' + (r && r.status));
+                    if (a.hash && r.hash && r.hash !== a.hash) return fail(a, 'hash');
+                    ok++; pump();
+                }), end(function () { fail(a, 'error'); }));
+            }
+            pump();
+        });
     }
     // Reload history of the last hour. Entries stamped in the "future" were
     // written before the wall clock went backwards — they no longer count.
@@ -64,14 +147,18 @@
         if (last && last.to === target && own !== target && now - last.at < cfg.staleMs) return 'stale';
         return null;
     }
-    // s: { own, latest, hidden, hiddenFor, resumeAway (ms away, null = not a
-    //      fresh resume), idleFor, unsafe, loop }; c: thresholds
+    // s: { own, latest, age (ms since the build, null = unknown), hidden,
+    //      hiddenFor, resumeAway (ms away, null = not a fresh resume), idleFor
+    //      (since the later of last interaction / last return), unsafe, loop };
+    // c: thresholds
     function decide(s, c) {
         if (!s.own) return { act: 'none', why: 'dev' };
         if (!isPending(s.own, s.latest)) return { act: 'none', why: 'current' };
+        var crit = s.latest.critical === true, away = crit ? c.critAwayMs : c.minAwayMs, idle = crit ? c.critIdleMs : c.idleMs;
+        // Pages CDN propagation: a fresh build may be only half-served yet.
+        if (!crit && s.age != null && s.age < c.settleMs) return { act: 'wait', why: 'settling' };
         if (s.loop) return { act: 'none', why: s.loop };
         if (s.unsafe) return { act: 'wait', why: s.unsafe };
-        var crit = s.latest.critical === true, away = crit ? c.critAwayMs : c.minAwayMs, idle = crit ? c.critIdleMs : c.idleMs;
         if (s.hidden) return s.hiddenFor >= away ? { act: 'reload', why: 'hidden' } : { act: 'wait', why: 'away-short' };
         if (s.resumeAway != null && s.resumeAway >= away) return { act: 'reload', why: 'resume' };
         if (s.idleFor >= idle) return { act: 'reload', why: 'idle' };
@@ -88,8 +175,8 @@
             return c;
         }
         var st = { own: null, latest: null, lastCheck: -1e15, errors: 0, nextAt: 0, busy: false, busyAt: 0, seq: 0,
-            applying: false, applyAfter: 0, hiddenAt: 0, resumeAt: 0, resumeAway: null, activity: 0, beatAt: 0,
-            lastNow: 0, holds: {} };
+            applying: false, applyAfter: 0, applyFails: 0, failTarget: null, lastFail: null, seenAt: 0,
+            hiddenAt: 0, resumeAt: 0, resumeAway: null, activity: 0, beatAt: 0, lastNow: 0, holds: {} };
 
         // Wall clock. iOS freezes timers, so elapsed time must be wall time —
         // but a clock set backwards (user / NTP) would freeze polling, the idle
@@ -97,7 +184,7 @@
         function now() {
             var t = env.now(), d = t - st.lastNow;
             if (st.lastNow && d < -5000) {
-                ['lastCheck', 'nextAt', 'busyAt', 'applyAfter', 'hiddenAt', 'resumeAt', 'activity', 'beatAt'].forEach(function (k) {
+                ['lastCheck', 'nextAt', 'busyAt', 'applyAfter', 'seenAt', 'hiddenAt', 'resumeAt', 'activity', 'beatAt'].forEach(function (k) {
                     if (st[k] > 0) st[k] += d;
                 });
                 Object.keys(st.holds).forEach(function (r) { var h = st.holds[r]; h.at += d; if (h.since) h.since += d; });
@@ -129,8 +216,12 @@
             // a resume counts until the user touches something (or the window lapses)
             var resumeAway = st.resumeAt && st.activity < st.resumeAt && t - st.resumeAt <= c.resumeWindowMs ? st.resumeAway : null;
             return {
-                own: st.own, latest: st.latest, hidden: hidden, hiddenFor: hiddenFor, resumeAway: resumeAway,
-                idleFor: t - st.activity,
+                own: st.own, latest: st.latest, age: buildAge(st.latest, st.seenAt, t),
+                hidden: hidden, hiddenFor: hiddenFor, resumeAway: resumeAway,
+                // Idle counts from the later of the last touch and the last return:
+                // someone who just came back is reading, not idle — even when a
+                // guard held the resume reload and the resume window lapsed.
+                idleFor: t - Math.max(st.activity, st.resumeAt),
                 unsafe: held(t, hidden ? hiddenFor : resumeAway || 0, c) || guard(),
                 loop: pend ? loopBlock(env.store.get(), st.own, st.latest.build, t, c) : null,
             };
@@ -139,33 +230,54 @@
             var c = cfg(), d = decide(snapshot(c), c);
             d.trigger = trig;
             if (d.act !== 'reload') return d;
-            if (st.applyAfter && now() < st.applyAfter) return { act: 'wait', why: 'unreachable', trigger: trig };
+            if (st.applyAfter && now() < st.applyAfter) return { act: 'wait', why: (st.lastFail && st.lastFail.why) || 'unreachable', trigger: trig };
             return apply(d.why, trig);
+        }
+        // Resolves p() — or UNREACHABLE after ms, or when it throws / rejects.
+        function timed(p, ms) {
+            return new Promise(function (resolve) {
+                env.after(ms, function () { resolve(UNREACHABLE); });
+                Promise.resolve().then(p).then(resolve, function () { resolve(UNREACHABLE); });
+            });
+        }
+        // Don't navigate now; retry after 1, 2, 4 … min (capped) for this target.
+        function defer(target, why, detail, trig) {
+            var c = cfg(), t = now();
+            if (st.failTarget !== target) { st.failTarget = target; st.applyFails = 0; }
+            st.applyFails++;
+            st.applying = false;
+            st.lastFail = { why: why, detail: detail || null, at: t, target: target };
+            st.applyAfter = t + Math.min(c.maxBackoffMs, c.retryApplyMs * Math.pow(2, st.applyFails - 1));
+            var r = { act: 'wait', why: why, trigger: trig };
+            if (detail) r.detail = detail;
+            return r;
         }
         function apply(why, trig) {
             if (st.applying) return Promise.resolve({ act: 'busy' });
             st.applying = true;
-            var target = st.latest.build, own = st.own;
-            // Re-fetch the page first (refreshes the HTTP-cached copy and says which
-            // build it serves). No answer (offline, 404, stalled) → don't navigate:
-            // a reload now would land on an error page and wipe the app.
-            var probe = new Promise(function (resolve) {
-                env.after(cfg().prefetchTimeoutMs, function () { resolve(UNREACHABLE); });
-                Promise.resolve().then(env.prefetch).then(resolve, function () { resolve(UNREACHABLE); });
-            });
-            return probe.then(function (served) {
-                var c = cfg();
-                if (served === UNREACHABLE) {
-                    st.applying = false; st.applyAfter = now() + c.retryApplyMs;
-                    return { act: 'wait', why: 'unreachable', trigger: trig };
-                }
-                var d = decide(snapshot(c), c); // the fetch took time: re-verify
+            var target = st.latest.build, own = st.own, latest = st.latest, served;
+            // 1. Re-fetch the page (refreshes the HTTP-cached copy and says which
+            //    build it serves). No answer (offline, 404, stalled) → don't
+            //    navigate: a reload now would land on an error page.
+            // 2. Fetch every script the new page boots with. A 404 or stale bytes
+            //    (CDN still propagating) would reload into "Module Load Error".
+            return timed(env.prefetch, cfg().prefetchTimeoutMs).then(function (s) {
+                served = s;
+                if (served === UNREACHABLE) return defer(target, 'unreachable', null, trig);
+                if (typeof env.verify !== 'function') return null;
+                return timed(function () { return env.verify(target, latest, served); }, cfg().assetBudgetMs).then(function (bad) {
+                    if (bad === UNREACHABLE) return defer(target, 'assets', 'budget', trig);
+                    return bad ? defer(target, 'assets', String(bad), trig) : null;
+                });
+            }).then(function (stop) {
+                if (stop) return stop;
+                var c = cfg(), d = decide(snapshot(c), c); // the fetches took time: re-verify
                 if (d.act !== 'reload') { st.applying = false; return d; }
                 var t = now(), hist = lastHour(env.store.get(), t);
                 var tried = hist.some(function (h) { return h.to === target; });
                 // Served HTML is still the old build, or a plain reload already failed → cache-bust.
                 var mode = served === own || tried ? 'bust' : 'reload';
-                hist.push({ from: own, to: target, at: t, why: d.why, mode: mode });
+                hist.push({ from: own, to: target, at: t, why: d.why, via: trig, mode: mode });
                 env.store.set(hist);
                 env.navigate(mode, target);
                 env.after(30000, function () { st.applying = false; }); // navigation never happened
@@ -176,6 +288,7 @@
             if (!st.own) return Promise.resolve({ act: 'none', why: 'dev' });
             var c = cfg(), t = now(), eager = trig === 'resume' || trig === 'online';
             var soon = eager || trig === 'hidden';
+            if (trig === 'online' && st.lastFail && st.lastFail.why === 'unreachable') st.applyAfter = 0; // back online: retry now
             var busy = st.busy && t - st.busyAt < c.fetchTimeoutMs; // a probe that never settled can't wedge us
             if (busy || st.applying || t - st.lastCheck < (soon ? 5000 : c.minGapMs) || (!eager && t < st.nextAt)) {
                 return Promise.resolve(evaluate(trig));
@@ -184,7 +297,10 @@
             st.busy = true; st.busyAt = st.lastCheck = t;
             return Promise.resolve().then(env.fetchLatest).then(function (v) {
                 if (!v || typeof v.build !== 'string' || !v.build) throw new Error('bad version.json');
-                if (seq === st.seq) { st.busy = false; st.errors = 0; st.nextAt = 0; st.latest = v; }
+                if (seq === st.seq) {
+                    if (!st.latest || st.latest.build !== v.build) st.seenAt = now(); // settle clock (clock-skew fallback)
+                    st.busy = false; st.errors = 0; st.nextAt = 0; st.latest = v;
+                }
             }).then(null, function () { // 404 / offline / parse error: quiet exponential back-off
                 if (seq !== st.seq) return; // superseded by a newer probe
                 st.busy = false; st.errors++;
@@ -221,7 +337,10 @@
             if (!last || last.rep || last.from === st.own || t - last.at > cfg().staleMs) return null;
             last.rep = 1;
             env.store.set(hist);
-            var meta = { from: last.from, to: last.to, landed: st.own, ok: st.own === last.to, trigger: last.why, mode: last.mode };
+            // `why` is the reason (idle / resume / hidden); `trigger` repeats it for
+            // older reports that read it; `via` is the event that ran the check.
+            var meta = { from: last.from, to: last.to, landed: st.own, ok: st.own === last.to, why: last.why, trigger: last.why, mode: last.mode };
+            if (last.via) meta.via = last.via;
             try { env.track('live_update_applied', meta); } catch (e) { /* tracking is best-effort */ }
             return meta;
         }
@@ -250,7 +369,8 @@
         };
     }
 
-    var api = { CFG: CFG, isPending: isPending, loopBlock: loopBlock, decide: decide, createUpdater: createUpdater };
+    var api = { CFG: CFG, isPending: isPending, buildAge: buildAge, loopBlock: loopBlock, decide: decide,
+        assetList: assetList, checkAssets: checkAssets, surfaceOf: surfaceOf, createUpdater: createUpdater };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     var doc = root && root.document;
@@ -258,16 +378,13 @@
 
     // ── Browser wiring ────────────────────────────────────────────────────────
     var loc = root.location, KEY = 'dhq_lu_log_v1', AI_STALL_MS = 180000, aiCalls = {}, aiSeq = 0;
+    var BUSY_STALL_MS = 180000, HANDOFF_MS = 180000, loadedAt = Date.now(), busySince = 0, lastHtml = null;
     function noop() { /* swallow: the updater must never surface an error */ }
     function ss(k, v) {
         try {
             if (v === undefined) { var a = JSON.parse(root.sessionStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; }
             root.sessionStorage.setItem(k, JSON.stringify(v));
         } catch (e) { return []; }
-    }
-    function surface() {
-        var ua = root.navigator.userAgent || '';
-        return /iPhone|iPad|iPod|Macintosh/.test(ua) && /AppleWebKit/.test(ua) && !/Safari\//.test(ua) ? 'ios_app' : 'web';
     }
     // Count AI calls in flight (same promise returned, untouched). dhqAI and
     // callClaude are wrapped too: the BYO-key path never reaches OD.callAI, and
@@ -298,9 +415,26 @@
         return /[#&](access_token|refresh_token|error_description|dhq_session)=/.test(loc.hash || '') ||
             /[?&](code|error_description)=/.test(loc.search || '');
     }
+    // The Supabase client strips the OAuth tokens from the URL as soon as it
+    // reads them, while the page is still exchanging them (fw-oauth-sync). So a
+    // handoff seen at load holds for 3 min: sign-in either navigates away or
+    // fails well inside that.
+    var handoffAtLoad = handoff();
+    // window.__dhqBusy: a counter any page bumps around a request that must not
+    // be cut off by a reload (sign-in, account creation, a connect):
+    //   window.__dhqBusy = (window.__dhqBusy || 0) + 1; try { await … } finally { window.__dhqBusy--; }
+    // A count stuck above 0 (a missed decrement) stops holding after 3 min.
+    if (typeof root.__dhqBusy !== 'number') root.__dhqBusy = 0;
+    function busy() {
+        var n = +root.__dhqBusy || 0, t = Date.now();
+        if (n <= 0) { busySince = 0; return false; }
+        if (!busySince) busySince = t;
+        return t - busySince < BUSY_STALL_MS;
+    }
     function unsafe() {
         wrapAI();
-        if (handoff()) return 'auth-handoff';
+        if (handoff() || (handoffAtLoad && Date.now() - loadedAt < HANDOFF_MS)) return 'auth-handoff';
+        if (busy()) return 'busy';
         var a = doc.activeElement, tag = a && a.tagName;
         if (a && (tag === 'TEXTAREA' || tag === 'SELECT' || a.isContentEditable ||
             (tag === 'INPUT' && !/^(button|submit|reset|checkbox|radio|range|color|file|image|hidden)$/i.test(a.type || '')))) return 'typing';
@@ -322,8 +456,30 @@
         if (ac) { opts.signal = ac.signal; root.setTimeout(function () { try { ac.abort(); } catch (e) { noop(); } }, ms); }
         return root.fetch(url, opts);
     }
+    // index.html for "/", else the file name of this page.
+    function pageName() {
+        var p = loc.pathname || '/';
+        return p.slice(p.lastIndexOf('/') + 1) || 'index.html';
+    }
+    function hex(buf) {
+        var b = new Uint8Array(buf), s = '';
+        for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+        return s;
+    }
+    // One asset of the new build. no-cache always asks the server (so a CDN
+    // edge still serving old bytes or a 404 is seen) but revalidates files the
+    // browser already has instead of re-downloading them; a fresh 200 lands in
+    // the HTTP cache, so the reload that follows starts warm.
+    function fetchAsset(a) {
+        var subtle = root.crypto && root.crypto.subtle;
+        return timedFetch(a.url, { cache: 'no-cache', credentials: 'same-origin' }, CFG.assetTimeoutMs).then(function (r) {
+            if (r.status !== 200 || !a.hash || !subtle) return { status: r.status };
+            return r.arrayBuffer().then(function (buf) { return subtle.digest('SHA-256', buf); })
+                .then(function (d) { return { status: 200, hash: hex(d).slice(0, 10) }; });
+        });
+    }
     function track(name, meta) {
-        meta.surface = surface();
+        meta.surface = surfaceOf(root.navigator);
         var tries = 0;
         (function go() {
             try {
@@ -348,7 +504,18 @@
         // Refresh the HTTP-cached page (max-age=600) and report which build it serves.
         prefetch: function () {
             return timedFetch(loc.pathname + loc.search, { cache: 'reload', credentials: 'same-origin' }, CFG.prefetchTimeoutMs)
-                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(metaBuild);
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                .then(function (html) { lastHtml = html; return metaBuild(html); });
+        },
+        // Every script the target page boots with must be served, with the
+        // right bytes. Resolves null (go) or the first problem ("http-404 js/app.js").
+        verify: function (target, latest, served) {
+            var html = served === target ? lastHtml : null, c = lu.cfg();
+            lastHtml = null;
+            var list = assetList(latest, pageName(), html);
+            if (!list.length) return null; // nothing to check against (old HTML, no map)
+            return checkAssets(list, fetchAsset, { concurrency: c.assetConcurrency, timeoutMs: c.assetTimeoutMs })
+                .then(function (r) { return r.ok ? null : r.why + ' ' + r.url; });
         },
         navigate: function (mode, target) {
             if (mode !== 'bust') return loc.reload();

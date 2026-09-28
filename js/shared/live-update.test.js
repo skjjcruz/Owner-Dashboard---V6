@@ -297,7 +297,7 @@ test('after the reload: logs live_update_applied once, with from/to/trigger', ()
   const f = rig({ own: V2 });
   f.hist = [{ from: V1, to: V2, at: f.t - 5000, why: 'resume', mode: 'reload' }];
   f.u.start();
-  assert.deepEqual(f.tracks, [{ name: 'live_update_applied', meta: { from: V1, to: V2, landed: V2, ok: true, trigger: 'resume', mode: 'reload' } }]);
+  assert.deepEqual(f.tracks, [{ name: 'live_update_applied', meta: { from: V1, to: V2, landed: V2, ok: true, why: 'resume', trigger: 'resume', mode: 'reload' } }]);
   f.u.arrived();
   assert.equal(f.tracks.length, 1, 'once');
   const g = rig({ own: V1 });                      // reload landed on the old page: not applied
@@ -328,8 +328,10 @@ test('offline / 404 page: the prefetch fails → never navigate; retry after a m
   assert.equal(f.prefetches, 1, 'no HTML re-fetch every heartbeat while unreachable');
   await run(f, 30000);
   assert.equal(f.prefetches, 2, 'retried after a minute');
+  await run(f, 90000);
+  assert.equal(f.prefetches, 2, 'second failure: back-off doubles to 2 min');
   f.prefetchImpl = null;
-  await run(f, 75000);
+  await run(f, 45000);
   assert.deepEqual(f.why(), ['idle'], 'back online: applies');
 });
 
@@ -465,4 +467,203 @@ test('hidden with no visibility event (hiddenAt unset): starts counting at the n
   f.u.touch(); f.hidden = true;                    // no hide() call
   await run(f, 2 * MIN + 30000);
   assert.deepEqual(f.why(), ['hidden']);
+});
+
+// ── Deploy safety (2026-09-28 "website down" incident) ───────────────────────
+const iso = ms => new Date(ms).toISOString();
+
+test('settle: a version.json built < 4 min ago is ignored unless critical', () => {
+  const c = LU.CFG, now = 1_790_000_000_000;
+  const base = { own: V1, hidden: true, hiddenFor: 60 * MIN, resumeAway: null, idleFor: 60 * MIN, unsafe: null, loop: null };
+  const d = (latest, seenAt = 0) => LU.decide({ ...base, latest, age: LU.buildAge(latest, seenAt, now) }, c);
+  assert.deepEqual(d({ build: V2, builtAt: iso(now - 3 * MIN) }), { act: 'wait', why: 'settling' });
+  assert.deepEqual(d({ build: V2, builtAt: iso(now - 4 * MIN) }), { act: 'reload', why: 'hidden' });
+  assert.equal(d({ build: V2, builtAt: iso(now - 30000), critical: true }).why, 'hidden', 'critical skips the settle');
+  assert.equal(d({ build: V2 }).why, 'hidden', 'no builtAt (older build): no settle wait');
+  assert.equal(d({ build: V2, builtAt: 'garbage' }).why, 'hidden');
+  // Client clock 1 h behind: builtAt looks like the future; time since first seen still settles it.
+  const ahead = { build: V2, builtAt: iso(now + HOUR) };
+  assert.equal(d(ahead, now - MIN).why, 'settling');
+  assert.equal(d(ahead, now - 4 * MIN).why, 'hidden');
+  assert.equal(LU.buildAge({ build: V2, builtAt: iso(now - MIN) }, now - 5 * MIN, now), 5 * MIN, 'the longer of the two');
+});
+
+test('settle: the controller holds a fresh deploy for 4 min, then applies it', async () => {
+  const f = await booted({ noDeploy: true });
+  f.latest = { build: V2, builtAt: iso(f.t) };      // deploy lands right now
+  f.tick(20000); await f.u.check('focus');
+  f.u.touch(); f.hidden = true; await f.u.hide();
+  await run(f, 3 * MIN);
+  assert.equal(f.navs.length, 0, 'hidden 3 min, but the build is < 4 min old');
+  await run(f, MIN);
+  assert.deepEqual(f.why(), ['hidden']);
+});
+
+test('idle rule: a user who just came back is reading, not idle (incident repro)', async () => {
+  // Mirrors the 16:40:06 reload: away 13 min, a guard held the resume reload,
+  // it cleared 20 s later with no touch since — the old rule saw 13 min idle.
+  const f = await booted();
+  f.u.touch();
+  f.tick(30000); f.hidden = true; await f.u.hide();
+  f.tick(13 * MIN); f.hidden = false; f.unsafe = 'modal';
+  const r = await f.u.resume();
+  assert.equal(r.act, 'wait');
+  f.tick(20000); f.unsafe = null;
+  const b = await f.u.beat();
+  assert.equal(f.navs.length, 0, 'not reloaded 20 s after coming back');
+  assert.equal(b.why, 'active');
+  await run(f, 4 * MIN);
+  assert.equal(f.navs.length, 0, 'still reading 4 min later');
+  await run(f, MIN);
+  assert.deepEqual(f.why(), ['idle'], 'five untouched minutes after the return: idle applies');
+});
+
+test('idle rule: resumeAt vs activity — the later one wins', () => {
+  const f = rig();
+  f.u.start();
+  f.u.st.latest = { build: V2 };
+  f.u.st.activity = f.t - 10 * MIN; f.u.st.resumeAt = f.t - MIN;
+  assert.equal(f.u.evaluate('beat').why, 'active', 'returned 1 min ago, last touch 10 min ago');
+  f.u.st.activity = f.t - MIN; f.u.st.resumeAt = f.t - 10 * MIN;
+  assert.equal(f.u.evaluate('beat').why, 'active', 'touched 1 min ago');
+});
+
+// Asset check -----------------------------------------------------------------
+const ASSETS = { 'js/app.js': 'aaaaaaaaaa', 'js/core.js': 'bbbbbbbbbb', 'reconai-shared/tier.js': 'cccccccccc' };
+const LATEST = {
+  build: V2, assets: ASSETS,
+  pages: { 'index.html': ['js/core.js?v=bbbbbbbbbb', 'js/app.js?v=aaaaaaaaaa', 'reconai-shared/tier.js?v=stamp12345'] },
+};
+
+test('assetList: version.json pages/assets first, else the fetched HTML scripts', () => {
+  assert.deepEqual(LU.assetList(LATEST, 'index.html', null).map(a => [a.path, a.hash]), [
+    ['js/core.js', 'bbbbbbbbbb'], ['js/app.js', 'aaaaaaaaaa'], ['reconai-shared/tier.js', 'cccccccccc'],
+  ]);
+  const html = `<script src="vendor/react.js?v=0123456789"></script>
+    <script type="text/wr-deferred" data-wr-defer="alex" src="js/tabs/x.js?v=20260928deploy1"></script>
+    <script src="https://cdn.example.com/lib.js"></script><script src="//cdn.example.com/b.js"></script>
+    <script src="/js/root.js?v=abcdefabcd"></script><script src="vendor/react.js?v=0123456789"></script>`;
+  assert.deepEqual(LU.assetList({ build: V2 }, 'landing.html', html), [
+    { url: 'vendor/react.js?v=0123456789', path: 'vendor/react.js', hash: '0123456789' },
+    { url: 'js/tabs/x.js?v=20260928deploy1', path: 'js/tabs/x.js', hash: null },
+    { url: '/js/root.js?v=abcdefabcd', path: 'js/root.js', hash: 'abcdefabcd' },
+  ], 'same-origin only, deduped; a ?v= build hash doubles as the expected hash');
+  assert.deepEqual(LU.assetList({ build: V2 }, 'index.html', null), [], 'no map and no HTML: nothing to check');
+});
+
+function served(table) { // url -> { status, hash } | 'hang' | Error
+  const calls = [];
+  const fetchAsset = a => {
+    calls.push(a.url);
+    const r = table[a.path];
+    if (r === 'hang') return never();
+    if (r instanceof Error) return Promise.reject(r);
+    return Promise.resolve(r || { status: 200, hash: ASSETS[a.path] });
+  };
+  return { calls, fetchAsset };
+}
+
+test('checkAssets: all served with the right bytes → ok', async () => {
+  const s = served({});
+  const r = await LU.checkAssets(LU.assetList(LATEST, 'index.html'), s.fetchAsset, { concurrency: 2, timeoutMs: 1000 });
+  assert.deepEqual(r, { ok: true, checked: 3 });
+  assert.equal(s.calls.length, 3);
+});
+
+test('checkAssets: one 404 → fails naming the asset', async () => {
+  const s = served({ 'js/app.js': { status: 404 } });
+  const r = await LU.checkAssets(LU.assetList(LATEST, 'index.html'), s.fetchAsset, { concurrency: 1, timeoutMs: 1000 });
+  assert.equal(r.ok, false);
+  assert.equal(r.why, 'http-404');
+  assert.equal(r.url, 'js/app.js?v=aaaaaaaaaa');
+});
+
+test('checkAssets: stale bytes (CDN still on the old file) → hash mismatch', async () => {
+  const s = served({ 'js/core.js': { status: 200, hash: 'oldoldoldo' } });
+  const r = await LU.checkAssets(LU.assetList(LATEST, 'index.html'), s.fetchAsset, {});
+  assert.deepEqual([r.ok, r.why, r.url], [false, 'hash', 'js/core.js?v=bbbbbbbbbb']);
+  const noHash = await LU.checkAssets([{ url: 'a.js', path: 'a.js', hash: null }], () => Promise.resolve({ status: 200, hash: 'x' }), {});
+  assert.equal(noHash.ok, true, 'nothing to compare against: status only');
+});
+
+test('checkAssets: a stalled asset times out; a network error fails', async () => {
+  const s = served({ 'reconai-shared/tier.js': 'hang' });
+  const r = await LU.checkAssets(LU.assetList(LATEST, 'index.html'), s.fetchAsset, { concurrency: 6, timeoutMs: 20 });
+  assert.deepEqual([r.ok, r.why, r.checked], [false, 'timeout', 2]);
+  const e = served({ 'js/core.js': new TypeError('Failed to fetch') });
+  assert.equal((await LU.checkAssets(LU.assetList(LATEST, 'index.html'), e.fetchAsset, {})).why, 'error');
+  assert.deepEqual(await LU.checkAssets([], e.fetchAsset, {}), { ok: true, checked: 0 });
+});
+
+test('checkAssets: concurrency is bounded', async () => {
+  let live = 0, peak = 0;
+  const list = Array.from({ length: 20 }, (_, i) => ({ url: 'f' + i + '.js', path: 'f' + i + '.js', hash: null }));
+  const r = await LU.checkAssets(list, () => { live++; peak = Math.max(peak, live); return new Promise(res => setTimeout(() => { live--; res({ status: 200 }); }, 2)); }, { concurrency: 4 });
+  assert.equal(r.ok, true);
+  assert.equal(peak, 4);
+});
+
+test('pre-reload check: a missing asset blocks the reload; retries back off 1, 2, 4 min; then applies', async () => {
+  const f = await booted();
+  let bad = 'http-404 js/app.js?v=aaaaaaaaaa', verifies = 0;
+  const u = LU.createUpdater({
+    now: () => f.t, own: () => V1, hidden: () => f.hidden, unsafe: () => null,
+    fetchLatest: () => Promise.resolve({ build: V2 }), prefetch: () => Promise.resolve(V2),
+    verify: (target, latest, servedBuild) => { verifies++; assert.equal(target, V2); assert.equal(servedBuild, V2); return Promise.resolve(bad); },
+    navigate: (mode, target) => f.navs.push({ mode, target }), track() {},
+    store: { get: () => [], set() {} }, after: () => {}, every: () => {},
+  }, null);
+  u.start(); f.tick(10000); await u.check('load');
+  const beat = async ms => { for (let t = 0; t < ms; t += 15000) { f.tick(15000); await u.beat(); } };
+  await beat(5 * MIN);
+  assert.equal(verifies, 1);
+  assert.equal(f.navs.length, 0, '404 on the new build: no reload');
+  assert.deepEqual(u.st.lastFail.why + ' ' + u.st.lastFail.detail, 'assets http-404 js/app.js?v=aaaaaaaaaa');
+  await beat(MIN); assert.equal(verifies, 2, 'retried after 1 min');
+  await beat(MIN); assert.equal(verifies, 2, 'then waits 2 min');
+  await beat(MIN); assert.equal(verifies, 3);
+  await beat(3 * MIN); assert.equal(verifies, 3, 'then 4 min');
+  bad = null;
+  await beat(MIN + 15000);
+  assert.equal(verifies, 4);
+  assert.deepEqual(f.navs, [{ mode: 'reload', target: V2 }], 'fully served: applies');
+});
+
+test('pre-reload check: an asset check over budget counts as not ready', async () => {
+  const f = await booted();
+  f.u.touch();
+  const timers = [];
+  const u = LU.createUpdater({
+    now: () => f.t, own: () => V1, hidden: () => false, unsafe: () => null,
+    fetchLatest: () => Promise.resolve({ build: V2 }), prefetch: () => Promise.resolve(V2),
+    verify: () => never(),
+    navigate: (mode, target) => f.navs.push({ mode, target }), track() {},
+    store: { get: () => [], set() {} }, after: (ms, fn) => timers.push({ ms, fn }), every: () => {},
+  }, null);
+  u.start(); f.tick(10000); await u.check('load');
+  f.tick(6 * MIN); const p = u.beat();
+  await flush(); await flush();
+  const budget = timers.find(x => x.ms === LU.CFG.assetBudgetMs);
+  assert.ok(budget, 'budget timer armed');
+  budget.fn();
+  const d = await p;
+  assert.deepEqual([d.act, d.why, d.detail], ['wait', 'assets', 'budget']);
+  assert.equal(f.navs.length, 0);
+  assert.equal(u.st.applying, false);
+});
+
+test('surface: iOS shell only on iPhone/iPad/iPod or iPad desktop mode — not a Mac webview', () => {
+  const wk = 'Mozilla/5.0 (%s) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
+  assert.equal(LU.surfaceOf({ userAgent: wk.replace('%s', 'iPhone; CPU iPhone OS 18_7 like Mac OS X') }), 'ios_app');
+  assert.equal(LU.surfaceOf({ userAgent: wk.replace('%s', 'Macintosh; Intel Mac OS X 10_15_7'), platform: 'MacIntel', maxTouchPoints: 5 }), 'ios_app', 'iPad desktop mode');
+  assert.equal(LU.surfaceOf({ userAgent: wk.replace('%s', 'Macintosh; Intel Mac OS X 10_15_7'), platform: 'MacIntel', maxTouchPoints: 0 }), 'web', 'Mac app webview');
+  assert.equal(LU.surfaceOf({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1' }), 'web', 'mobile Safari');
+  assert.equal(LU.surfaceOf({}), 'web');
+});
+
+test('live_update_applied carries why (reason), trigger (legacy copy) and via (the check that ran)', () => {
+  const f = rig({ own: V2 });
+  f.hist = [{ from: V1, to: V2, at: f.t - 5000, why: 'idle', via: 'beat', mode: 'reload' }];
+  f.u.start();
+  assert.deepEqual(f.tracks[0].meta, { from: V1, to: V2, landed: V2, ok: true, why: 'idle', trigger: 'idle', mode: 'reload', via: 'beat' });
 });

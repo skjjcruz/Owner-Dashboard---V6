@@ -2977,12 +2977,127 @@ WRShared.preloadMany(WR_SHARED_FILES);
          payload downloads + parses. ReactDOM.render replaces it on mount. -->
     <div id="root">
         <style>@keyframes wr-boot-pulse{0%,100%{opacity:.35}50%{opacity:1}}</style>
-        <div style="min-height:80vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+        <div id="wr-boot-splash" style="min-height:80vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
             <img src="icon-192.png" alt="" width="56" height="56" style="border-radius:14px">
             <div class="wr-wordmark" style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;letter-spacing:.12em;color:var(--gold)">DYNASTY HQ</div>
             <div style="font-size:13px;color:var(--silver);animation:wr-boot-pulse 1.4s ease-in-out infinite">Opening the war room…</div>
         </div>
     </div>
+    <!-- Boot guard (deploy safety, 2026-09-28): the splash above must never be a
+         dead end. Records which scripts failed to load (capture-phase error
+         listener: everything below this point), and if the app does not mount —
+         the bootstrap check at the end of <body> calls __dhqBoot.fail(), or the
+         splash is still up after 25s — it reports a client_error, retries ONCE
+         with a cache-busting reload (sessionStorage guard: no loops), then shows
+         a Reload button. Error recovery, not an update banner. -->
+    <script>
+    (function () {
+        var failed = [], done = false, t0 = Date.now(), KEY = 'dhq_boot_retry_v1';
+        // Same row shape / endpoint as connect-sleeper.html's trackConnectEvent.
+        // sendBeacon can't carry the apikey + JSON content-type PostgREST needs,
+        // so this is a keepalive fetch (survives the retry navigation).
+        var TRACK_URL = 'https://sxshiqyxhhifvtfqawbq.supabase.co/rest/v1/analytics_events';
+        var TRACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4c2hpcXl4aGhpZnZ0ZnFhd2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTExMzAsImV4cCI6MjA4ODI4NzEzMH0.zJi9W986ZLaANiZN6pt6ReFwaQU6yPeidsERIWo2ibI';
+        window.addEventListener('error', function (e) {
+            var el = e && e.target, u = el && el !== window && (el.tagName === 'SCRIPT' || el.tagName === 'LINK') ? (el.src || el.href) : '';
+            if (u && failed.indexOf(u) < 0 && failed.length < 20) failed.push(u);
+        }, true);
+        function failedUrls() {
+            var out = failed.slice();
+            try { // Chromium also records the status of scripts that failed before this listener
+                performance.getEntriesByType('resource').forEach(function (r) {
+                    if (r.initiatorType === 'script' && r.responseStatus >= 400 && out.indexOf(r.name) < 0) out.push(r.name);
+                });
+            } catch (e) {}
+            return out.slice(0, 20);
+        }
+        // Still parsing: the last script in the document is the one the parser waits on (a hung request).
+        function blockedOn() {
+            if (document.readyState !== 'loading') return null;
+            var s = document.scripts[document.scripts.length - 1];
+            return s && s.src ? rel(s.src) : null;
+        }
+        function build() { var m = document.querySelector('meta[name="dhq-build"]'); return m ? m.content : null; }
+        function rel(u) { try { var x = new URL(u, location.href); return x.origin === location.origin ? x.pathname.replace(/^\//, '') + x.search : u; } catch (e) { return u; } }
+        function report(reason, list, attempt) {
+            if (!build()) return; // local dev: no deploy to report on
+            var sid;
+            try {
+                sid = sessionStorage.getItem('od_analytics_session_v1');
+                if (!sid) { sid = 'sess_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); sessionStorage.setItem('od_analytics_session_v1', sid); }
+            } catch (e) { sid = 'sess_' + Date.now().toString(36); }
+            try {
+                fetch(TRACK_URL, {
+                    method: 'POST', keepalive: true,
+                    headers: { apikey: TRACK_KEY, Authorization: 'Bearer ' + TRACK_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+                    body: JSON.stringify([{
+                        event_id: 'evt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10),
+                        username: null, league_id: null, session_id: sid, platform: 'warroom', module: 'boot', widget: null,
+                        event_name: 'client_error', event_ts: new Date().toISOString(), entity_type: 'error', entity_id: 'boot-recovery',
+                        metadata: {
+                            source: 'boot-recovery', errorName: 'ModuleLoadError', handled: true, reason: reason,
+                            failed: list.map(rel), build: build(), attempt: attempt, route: location.pathname,
+                            online: navigator.onLine, visible: document.visibilityState, secs: Math.round((Date.now() - t0) / 1000),
+                            blockedOn: blockedOn(),
+                        },
+                    }]),
+                }).catch(function () {});
+            } catch (e) {}
+        }
+        // Auto-retries in the last 10 min of this tab. Unreadable storage → treat as
+        // already retried (a reload loop is worse than one extra tap).
+        function retries() {
+            try { var r = JSON.parse(sessionStorage.getItem(KEY) || 'null'); return r && Date.now() - r.at < 600000 ? r.n : 0; } catch (e) { return 1; }
+        }
+        function markRetry(n) {
+            try { sessionStorage.setItem(KEY, JSON.stringify({ n: n, at: Date.now() })); return retries() === n; } catch (e) { return false; }
+        }
+        // Re-fetch what failed so a cached 404 / stale copy is replaced, then
+        // reload past any cached page (?lu= is tidied off by live-update.js).
+        function reload(list) {
+            var ps = list.map(function (u) { return fetch(u, { cache: 'reload', credentials: 'same-origin' }).catch(function () {}); });
+            Promise.race([Promise.all(ps), new Promise(function (r) { setTimeout(r, 8000); })]).then(function () {
+                var q = location.search.replace(/[?&]lu=[^&]*/g, '').replace(/^&/, '?');
+                location.replace(location.pathname + (q ? q + '&' : '?') + 'lu=boot' + Date.now().toString(36) + location.hash);
+            });
+        }
+        function show(retrying) {
+            var root = document.getElementById('root');
+            if (!root) return;
+            root.innerHTML = '<div style="min-height:80vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center">' +
+                '<img src="icon-192.png" alt="" width="56" height="56" style="border-radius:var(--card-radius-lg, 14px)">' +
+                '<div style="font-size:17px;font-weight:700;color:var(--white, #fff)">' + (retrying ? 'Reloading Dynasty HQ…' : 'Dynasty HQ didn’t finish loading') + '</div>' +
+                (retrying ? '' : '<div style="font-size:13px;line-height:1.5;color:var(--silver, #aaa);max-width:320px">A new version may still be arriving, or the connection dropped. Reload to try again.</div>' +
+                    '<button type="button" id="wr-boot-reload" style="padding:10px 24px;background:var(--gold, #D4AF37);color:#0a0a0a;border:none;border-radius:var(--card-radius-sm, 8px);font-size:14px;font-weight:700;cursor:pointer">Reload</button>') +
+                '</div>';
+            var b = document.getElementById('wr-boot-reload');
+            if (b) b.onclick = function () { b.disabled = true; b.textContent = 'Reloading…'; reload(failedUrls()); };
+        }
+        // Acts after a short beat: if the pre-paint gate (or anything else) is
+        // already navigating away, this document unloads first and nothing runs.
+        function fail(reason) {
+            if (done) return;
+            done = true;
+            setTimeout(function () {
+                var list = failedUrls(), n = retries();
+                report(reason, list, n + 1);
+                if (n < 1 && navigator.onLine !== false && markRetry(n + 1)) { show(true); reload(list); return; }
+                show(false);
+            }, 1500);
+        }
+        // Splash watchdog: 25s, plus up to 20s more while the parser is still
+        // fetching scripts (a slow connection, not a failure). A hidden tab waits.
+        function watch() {
+            if (done) return;
+            if (!document.getElementById('wr-boot-splash')) { try { sessionStorage.removeItem(KEY); } catch (e) {} return; } // mounted
+            var slow = document.readyState === 'loading' && Date.now() - t0 < 45000;
+            if (document.visibilityState === 'hidden' || slow) { setTimeout(watch, 5000); return; }
+            fail('splash-timeout');
+        }
+        setTimeout(watch, 25000);
+        window.__dhqBoot = { fail: fail, failed: failedUrls };
+    })();
+    </script>
 
 <script src="vendor/supabase.min.js"></script>
 <script>window.supabase||document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"><\/script>')</script>
@@ -3021,7 +3136,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- 1a2. Shared viewport seam — WR.useViewport() hook + WR.viewport() snapshot (plain JS; must precede components.js and all tab files) -->
 <script src="js/shared/viewport.js?v=20260826wake1"></script>
 <!-- 1a3. Live update — picks up a new deploy in a running page / resumed app (plain JS; replaces update-sentinel.js) -->
-<script src="js/shared/live-update.js?v=20260926lu2"></script>
+<script src="js/shared/live-update.js?v=20260928deploy1"></script>
 <!-- 1b. Format/phase skin contract for league-type-aware modules -->
 <script src="js/league-skin.js?v=20260817chp1"></script>
 <!-- 2. Shared components: UpgradeGate, GMMessage, PlayerInlineCard -->
@@ -3205,7 +3320,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="trophies" src="js/tabs/trophy-room.js?v=20260926qa1"></script>
 <script type="text/babel" src="js/tabs/calendar.js?v=20260927faab1"></script>
 <!-- Alex Insights (Option A): top-level tab for behavioral analysis + AI settings -->
-<script type="text/babel" data-wr-defer="alex" src="js/tabs/alex-insights.js?v=20260927faab1"></script>
+<script type="text/babel" data-wr-defer="alex" src="js/tabs/alex-insights.js?v=20260928deploy1"></script>
 <!-- Group "empire": hub-level Empire Dashboard (Pro mode), loaded by app.js when
      Pro mode activates — also provides window.App.buildEmpireDna etc. -->
 <script type="text/babel" data-wr-defer="empire" src="js/tabs/global-view.js?v=20260902onemsg1"></script>
@@ -3229,7 +3344,8 @@ WRShared.preloadMany(WR_SHARED_FILES);
   function check() {
     if (typeof OwnerDashboard !== 'undefined') return; // Babel compiled successfully
     if (++attempts < 50) { setTimeout(check, 200); return; } // wait up to 10s
-    document.getElementById('root').innerHTML = '<div style="color:#E74C3C;padding:40px;text-align:center;font-family:sans-serif"><h2>Module Load Error</h2><p>Dynasty HQ modules failed to load. Try clearing your cache (Cmd+Shift+R) or check the browser console for errors.</p></div>';
+    if (window.__dhqBoot) return window.__dhqBoot.fail('modules'); // boot guard (after the splash): report, retry once, Reload button
+    document.getElementById('root').innerHTML = '<div style="color:#E74C3C;padding:40px;text-align:center;font-family:sans-serif"><h2>Module Load Error</h2><p>Dynasty HQ modules failed to load. Reload the page to try again.</p></div>';
   }
   window.addEventListener('DOMContentLoaded', function() { setTimeout(check, 500); });
 })();
