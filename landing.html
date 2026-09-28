@@ -10,6 +10,8 @@
 <link rel="apple-touch-icon" href="img/logo.png">
   <style id="preboot-hide">html{visibility:hidden!important}</style>
   <noscript><style>html{visibility:visible!important}</style></noscript>
+  <!-- Owner-stamped device identity (DHQ-Shared identity.js): sign-in reconcile + the one sign-out clear. -->
+  <script src="reconai-shared/identity.js?v=20260928auth1"></script>
   <script>
     (function () {
       function reveal(){ var s=document.getElementById('preboot-hide'); if(s&&s.parentNode){ s.parentNode.removeChild(s); } }
@@ -49,10 +51,16 @@
               // it here so later visits don't re-trigger onboarding.
               handedIsNew = handed.isNew === true;
               delete handed.isNew;
+              var handedPlatforms = handed.platformUsernames;
+              delete handed.platformUsernames;
               localStorage.setItem('fw_session_v1', JSON.stringify(handed));
+              // A sign-in: the body reconciles the device identity against the
+              // account (OD.identity.reconcileAfterSignIn), then routes.
+              window.__dhqHandoff = { isNew: handedIsNew, session: Object.assign({}, handed, handedPlatforms !== undefined ? { platformUsernames: handedPlatforms } : {}) };
             }
           } catch (e) {}
           try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) {}
+          if (window.__dhqHandoff && window.OD && window.OD.identity) { showSigningIn(); setTimeout(function () { var sp = document.getElementById('wr-signing-in'); if (sp && sp.parentNode) sp.parentNode.removeChild(sp); reveal(); }, 10000); return; }
         }
         // Editor preview, explicit sign-out, and ?home (the league hub's
         // brand icon — a deliberate visit to this page) stay on this page.
@@ -78,48 +86,39 @@
           }, 8000);
           return;
         }
+        // ?signin / ?reauth: someone asked for the sign-in sheet (a guest
+        // tapping "Create a free account", a lapsed session). Never bounce
+        // them back into the app as a guest first — that was the only way
+        // out of the guest lane (the hub logo's ?home).
+        var wantsSignIn = q.has('signin') || q.has('reauth');
         // Returning guest: a guest with a connected league goes straight in
         // (restored 2026-08-21 — same line the pre-swap page carried; MFL-only
-        // guests count too, 2026-08-31).
+        // guests count too, 2026-08-31). od_auth_v1 has two shapes.
         var ga = null; try { ga = JSON.parse(localStorage.getItem('od_auth_v1') || 'null'); } catch (e) {}
-        if (localStorage.getItem('wr_guest_v1') === '1' && ((ga && ga.username) || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id'))) { window.location.replace('index.html'); return; }
+        if (!wantsSignIn && localStorage.getItem('wr_guest_v1') === '1' && ((ga && (ga.username || ga.sleeperUsername)) || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id'))) { window.location.replace('index.html'); return; }
         // Guest mid-setup (flag set, no league yet): resume at the connect
         // page instead of stranding them on the marketing page. An app
         // relaunch between tapping Guest and connecting a league used to
         // land exactly here (owner bug report 2026-08-31). Sign out on the
         // connect page clears the flag, so this can't loop.
-        if (localStorage.getItem('wr_guest_v1') === '1') { window.location.replace('connect-sleeper.html'); return; }
+        if (!wantsSignIn && localStorage.getItem('wr_guest_v1') === '1') { window.location.replace('connect-sleeper.html'); return; }
         var sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
         if (!sess || !sess.token) { reveal(); return; } // not signed in -> show landing
+        // The device's identity cache belongs to someone other than this
+        // session (or predates owner stamping): don't route on it. The body
+        // reconciles against the account first (checkSession).
+        var idn = window.OD && window.OD.identity;
+        if (idn && idn.accountToken(sess) && idn.getStamp() !== idn.sessionOwner(sess)) {
+          showSigningIn();
+          setTimeout(function () { var sp = document.getElementById('wr-signing-in'); if (sp && sp.parentNode) sp.parentNode.removeChild(sp); reveal(); }, 10000);
+          return;
+        }
         var profile = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
         var legacy  = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
         var onboarded = (profile && (profile.onboardingComplete === true || profile.sleeperUsername))
-          || (legacy && legacy.username)
+          || (legacy && (legacy.username || legacy.sleeperUsername))
           || localStorage.getItem('mfl_league_id')
           || localStorage.getItem('espn_league_id');
-        // Brand-new accounts ALWAYS start at the connect-your-leagues page —
-        // even on a device where a previous account already finished
-        // onboarding. That progress is stored per DEVICE, so without this
-        // reset a fresh account inherits the old session's linked leagues
-        // and jumps straight to the league page.
-        if (handedIsNew) {
-          try {
-            var np = JSON.parse(localStorage.getItem('od_profile_v1') || 'null') || {};
-            delete np.sleeperUsername; delete np.sleeperUserId;
-            np.onboardingComplete = false;
-            localStorage.setItem('od_profile_v1', JSON.stringify(np));
-          } catch (e) {}
-          try { localStorage.removeItem('od_auth_v1'); } catch (e) {}
-          try { localStorage.removeItem('od_locked_username_v2'); } catch (e) {}
-          try { localStorage.removeItem('dynastyhq_username'); } catch (e) {}
-          try { localStorage.removeItem('mfl_league_id'); } catch (e) {}
-          try { localStorage.removeItem('mfl_year'); } catch (e) {}
-          try { localStorage.removeItem('mfl_franchise_id'); } catch (e) {}
-          try { localStorage.removeItem('espn_league_id'); } catch (e) {}
-          try { localStorage.removeItem('espn_year'); } catch (e) {}
-          try { localStorage.removeItem('espn_team_id'); } catch (e) {}
-          window.location.replace('connect-sleeper.html'); return;
-        }
         if (!onboarded) { window.location.replace('connect-sleeper.html'); return; }
         var pref = localStorage.getItem('fw_preferred_view');
         window.location.replace(pref === 'scout' ? 'https://skjjcruz.github.io/ReconAI-sandbox-dev/' : 'index.html');
@@ -585,7 +584,7 @@
         if (localStorage.getItem('dhq_internal_v1')) return 'owner';
         const auth = JSON.parse(localStorage.getItem('od_auth_v1') || 'null');
         const prof = JSON.parse(localStorage.getItem('od_profile_v1') || 'null');
-        const names = [auth && auth.username, prof && prof.sleeperUsername].map(n => String(n || '').toLowerCase());
+        const names = [auth && auth.username, auth && auth.sleeperUsername, prof && prof.sleeperUsername].map(n => String(n || '').toLowerCase());
         if (names.some(n => DHQ_OWNER_HANDLES.includes(n))) { localStorage.setItem('dhq_internal_v1', 'owner'); return 'owner'; }
       } catch (e) {}
       return null;
@@ -598,6 +597,12 @@
       };
       const internal = dhqInternalTag();
       if (internal) out.internal = internal;
+      // The deploy stamps <meta name="dhq-build"> (scripts/build-deploy.cjs);
+      // no stamp (local dev) → no field.
+      try {
+        const b = window.DHQ_BUILD || (document.querySelector('meta[name="dhq-build"]') || {}).content;
+        if (typeof b === 'string' && b.trim()) out.build = b.trim().slice(0, 80);
+      } catch (e) {}
       Object.entries(meta || {}).forEach(([key, value]) => {
         if (/email|password|token|secret|message|content|body/i.test(key)) return;
         if (key === 'accountId') return; // first-class column now, not metadata
@@ -753,15 +758,46 @@
     }
 
     // Where to send a signed-in user: the connect-your-leagues page until a
-    // league source (Sleeper or MFL) is bound; the app once one is.
+    // league source (Sleeper, MFL or ESPN) is bound; the app once one is.
+    // Reads both od_auth_v1 shapes ({username} / {sleeperUsername}).
     function nextAfterAuth() {
       try {
+        if (window.OD?.identity) return window.OD.identity.localOnboarded() ? destForUser() : CONNECT_URL;
         const profile = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
         const legacy = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
-        if (profile?.onboardingComplete === true || profile?.sleeperUsername || legacy?.username
+        if (profile?.onboardingComplete === true || profile?.sleeperUsername || legacy?.username || legacy?.sleeperUsername
           || localStorage.getItem('mfl_league_id') || localStorage.getItem('espn_league_id')) return destForUser();
       } catch {}
       return CONNECT_URL;
+    }
+
+    // After EVERY successful sign-in (email, Google/Apple return, handoff,
+    // repaired session): reconcile the device's identity cache with the
+    // account (DHQ-Shared identity.js — a previous owner's cache is cleared,
+    // the server's Sleeper handle wins, a handle only this device knew is
+    // uploaded), then route on what the account actually has: the app when a
+    // league source is bound, the connect page when not. Never on a stale
+    // onboardingComplete another person left on this device.
+    async function destAfterSignIn(session, opts) {
+      try {
+        const idn = window.OD?.identity;
+        if (idn) {
+          const r = await idn.reconcileAfterSignIn(session || null, opts || {});
+          return r.onboarded ? destForUser() : CONNECT_URL;
+        }
+      } catch (e) { console.warn('[WR] identity reconcile:', e); }
+      return (opts && opts.isNew) ? CONNECT_URL : nextAfterAuth();
+    }
+    async function routeSignedIn(session, opts) {
+      window.location.href = await destAfterSignIn(session, opts);
+    }
+    // The stored copy never keeps platformUsernames (it would go stale); the
+    // reconcile gets it from the response itself.
+    function storeSession(data) {
+      const copy = Object.assign({}, data);
+      delete copy.platformUsernames;
+      delete copy.isNew;
+      localStorage.setItem(SESSION_KEY, JSON.stringify(copy));
     }
 
     function toggleAuthMode() {
@@ -803,13 +839,15 @@
           btn.disabled = false; btn.textContent = signup ? 'Create account \u2192' : 'Sign in \u2192';
           return;
         }
-        localStorage.setItem(SESSION_KEY, JSON.stringify(data));
-        if (signup) resetDeviceOnboardingForNewAccount();
+        storeSession(data);
         trackLandingEvent(signup ? 'signup_succeeded' : 'signin_succeeded', { accountId: data?.user?.id || null });
         showAlert('success', signup ? 'Account ready \u2014 connect your leagues\u2026' : 'Welcome back\u2026');
-        // New accounts go straight to the connect-your-leagues page;
-        // returning sign-ins resume wherever they left off.
-        setTimeout(() => { window.location.href = signup ? CONNECT_URL : nextAfterAuth(); }, 600);
+        // New accounts start at the connect-your-leagues page (a guest who
+        // signs up keeps the leagues they connected); returning sign-ins go
+        // wherever the account's own identity says.
+        if (!window.OD?.identity && signup) resetDeviceOnboardingForNewAccount();
+        const [dest] = await Promise.all([destAfterSignIn(data, { isNew: signup }), new Promise(r => setTimeout(r, 600))]);
+        window.location.href = dest;
       } catch (err) {
         trackLandingEvent(signup ? 'signup_failed' : 'signin_failed', { reason: 'network' });
         showAlert('error', 'Network error: ' + (err?.message || String(err)));
@@ -910,6 +948,10 @@
         const oauthProvider = user.app_metadata?.provider || 'oauth';
         const fallbackName = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
         const existing = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+        // Not a fresh provider return and the app session is fine: nothing to
+        // sign in. checkSession (or the handoff) routes this visit — this
+        // handler used to route it too, logging a phantom signin_succeeded.
+        if (!FRESH_OAUTH_RETURN && (window.__dhqHandoff || sessionHealthy(existing))) { dropOAuthOverlay(); return; }
         let appSession = null;
         // Re-sync on a fresh OAuth return, when nothing usable is stored, and
         // also when the stored session is damaged (no user.id / expired) —
@@ -917,6 +959,7 @@
         if (FRESH_OAUTH_RETURN || !sessionHealthy(existing)) {
           // Exchange the Supabase OAuth token for a Dynasty HQ app session so the
           // user is registered in app_users and accepted by authenticated APIs.
+          let accountDeleted = false;
           try {
             const res = await fetch(`${FW_API_BASE}/fw-oauth-sync`, {
               method: 'POST',
@@ -924,7 +967,26 @@
               body: JSON.stringify({ productSlug: 'war_room' }),
             });
             if (res.ok) appSession = await res.json();
+            else if (res.status === 410) {
+              const body = await res.json().catch(() => ({}));
+              accountDeleted = body?.code === 'account_deleted';
+            }
           } catch (syncErr) { console.warn('[WR] OAuth sync error:', syncErr); }
+
+          if (accountDeleted) {
+            // The Google/Apple sign-in belongs to an account that was deleted.
+            // Drop the provider session on THIS device (local scope) so the
+            // next visit doesn't try again, and say what happened.
+            dropOAuthOverlay();
+            try { await Promise.race([db.auth.signOut({ scope: 'local' }), new Promise(r => setTimeout(r, 1500))]); } catch {}
+            try {
+              for (const k of Object.keys(localStorage)) if (/^sb-.+-auth-token/.test(k)) localStorage.removeItem(k);
+            } catch {}
+            trackLandingEvent('oauth_account_deleted', { provider: oauthProvider });
+            try { if (authMode !== 'signup') toggleAuthMode(); } catch {}
+            showAlert('error', 'This account was deleted. Sign up again to start fresh.');
+            return;
+          }
 
           if (appSession?.token && appSession?.user?.id) {
             // Store the WHOLE user record — id/tier/products included. The
@@ -958,14 +1020,11 @@
           trackLandingEvent('oauth_succeeded', { provider: oauthProvider, isNew: oauthIsNew, accountId: oauthAccountId }),
           trackLandingEvent(oauthIsNew ? 'signup_succeeded' : 'signin_succeeded', { method: oauthProvider, accountId: oauthAccountId }),
         ]);
-        // First-ever sign-in (fw-oauth-sync just created the account): route
-        // to the connect-your-leagues page instead of straight in.
-        if (appSession && appSession.isNew === true) {
-          resetDeviceOnboardingForNewAccount();
-          window.location.href = CONNECT_URL;
-        } else {
-          window.location.href = nextAfterAuth();
-        }
+        // Reconcile the device identity with the account, then route: a
+        // first-ever sign-in (fw-oauth-sync just created the account) goes to
+        // the connect-your-leagues page unless it adopted a guest's leagues.
+        if (!window.OD?.identity && oauthIsNew) resetDeviceOnboardingForNewAccount();
+        await routeSignedIn(appSession || null, { isNew: oauthIsNew });
       } catch (e) {
         dropOAuthOverlay();
         console.warn('[WR] OAuth callback error:', e);
@@ -993,29 +1052,29 @@
     // else straight into the app.
     // Forced sign-out (DHQ logo → ?signout): clear local + Supabase sessions and
     // stay on this page. The redirect guards above already bail on FORCE_SIGNOUT.
+    // The same one clear as every other sign-out (DHQ-Shared identity.js
+    // signOutClear): credentials only — sessions, the guest flag, the
+    // Google/Apple session (LOCAL scope: the user's other devices stay signed
+    // in), platform logins, AI keys. The owner-stamped identity cache (the
+    // Sleeper handle, league pointers) stays, so signing back in is never a
+    // full reconnect; the stamp clears it if someone else signs in.
     (async function forceSignOut() {
       if (!FORCE_SIGNOUT) return;
-      try { localStorage.removeItem(SESSION_KEY); } catch {}
-      try { localStorage.removeItem(AUTH_KEY); } catch {}
-      try { localStorage.removeItem('od_locked_username_v2'); } catch {}
-      try { localStorage.removeItem('od_session_v1'); } catch {}
-      // Platform logins + personal AI keys (same list as DHQ-Shared
-      // supabase-client.js DEVICE_SECRET_KEYS) leave with the person.
-      ['espn_s2','espn_swid','mfl_api_key','mfl_write_cookie','mfl_write_host','yahoo_session_id',
+      const idn = window.OD?.identity;
+      if (idn) {
+        try { await idn.signOutClear({ supabase: getSbClient() }); } catch {}
+      } else {
+        // identity.js missing (stale cache / partial deploy): the same keys by hand.
+        try { localStorage.removeItem(SESSION_KEY); } catch {}
+        try { localStorage.removeItem('od_session_v1'); } catch {}
+        try { localStorage.removeItem('wr_guest_v1'); } catch {}
+        // Platform logins + personal AI keys (same list as DHQ-Shared
+        // supabase-client.js DEVICE_SECRET_KEYS) leave with the person.
+        ['espn_s2','espn_swid','mfl_api_key','mfl_write_cookie','mfl_write_host','yahoo_session_id',
  'dynastyhq_ai_key','dynastyhq_xai_key','dynastyhq_gemini_key','dynastyhq_anthropic_key','dynastyhq_apikey',
  'dynastyhq_ai_provider','dynastyhq_ai_model','dhq_credentials_owner_v1'].forEach(k => { try { sessionStorage.removeItem(k); localStorage.removeItem(k); } catch (e) {} });
-      // Drop the Sleeper binding so signing back in lands on the Sleeper connect
-      // page (connect-sleeper.html) rather than skipping straight into the app.
-      // Tier/onboarding state is preserved.
-      try {
-        const prof = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
-        if (prof) {
-          delete prof.sleeperUsername;
-          delete prof.sleeperUserId;
-          localStorage.setItem(PROFILE_KEY, JSON.stringify(prof));
-        }
-      } catch {}
-      try { const db = getSbClient(); if (db) await db.auth.signOut(); } catch {}
+        try { const db = getSbClient(); if (db) await Promise.race([db.auth.signOut({ scope: 'local' }), new Promise(r => setTimeout(r, 1500))]); } catch {}
+      }
       try { if (authMode === 'signup') toggleAuthMode(); } catch {}
       try { history.replaceState(null, '', window.location.pathname); } catch {}
     })();
@@ -1046,11 +1105,24 @@
           return;
         }
         if (FRESH_OAUTH_RETURN) return; // the OAuth callback owns this visit
+        if (window.__dhqHandoff) return; // the handoff below owns this visit
         const session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
         if (!session?.token) return;
+        const idn = window.OD?.identity;
+        // A legacy (Sleeper-username) login is not an app account: never send
+        // it to fw-refresh-session (401 → it was cleared here). Its own exp
+        // governs it; the app / login.html handle the rest.
+        if (idn && String(idn.sessionOwner(session) || '').indexOf('legacy:') === 0) {
+          if (!jwtExpired(session.token)) { window.location.href = nextAfterAuth(); }
+          return;
+        }
         if (sessionHealthy(session)) {
           trackLandingEvent('landing_existing_session_redirected');
-          window.location.href = nextAfterAuth();
+          // Stamp matches: the cache is this account's — route on it. A
+          // mismatch (another owner's cache, or a device from before owner
+          // stamping) reconciles against the account first.
+          if (!idn || idn.getStamp() === idn.sessionOwner(session)) window.location.href = nextAfterAuth();
+          else routeSignedIn(null);
           return;
         }
         // Damaged (no user.id) or expired session: repair it through
@@ -1069,7 +1141,7 @@
                 if (data?.token && data?.user?.id) {
                   localStorage.setItem(SESSION_KEY, JSON.stringify({ token: data.token, user: data.user }));
                   trackLandingEvent('landing_session_repaired');
-                  window.location.href = nextAfterAuth();
+                  await routeSignedIn(data);
                   return;
                 }
               }
@@ -1079,6 +1151,27 @@
           trackLandingEvent('landing_dead_session_cleared');
         })();
       } catch {}
+    })();
+
+    // Session handoff from the marketing site (head script ingested it).
+    (async function handoff() {
+      const h = window.__dhqHandoff;
+      if (!h || LANDING_EDITOR_PREVIEW) return;
+      await routeSignedIn(h.session, { isNew: h.isNew === true });
+    })();
+
+    // ?signin (a guest's "Create a free account", upgrade / AI setup pages)
+    // and ?reauth (a lapsed session, the app's "Your session ended" notice)
+    // open the sign-in sheet. A still-healthy session was routed above.
+    (function signInRequested() {
+      const q = new URLSearchParams(window.location.search);
+      if (!(q.has('signin') || q.has('reauth')) || FRESH_OAUTH_RETURN || LANDING_EDITOR_PREVIEW) return;
+      try {
+        const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+        if (sessionHealthy(s)) return;
+      } catch {}
+      try { openAuthSheet('signin'); } catch {}
+      if (q.has('reauth')) { try { showAlert('success', 'Your session ended. Sign in to pick up where you left off.'); } catch {} }
     })();
 
     document.addEventListener('keydown', (e) => {
@@ -1154,7 +1247,21 @@
         }
       }
       note.hidden = true;
+      // A device that belongs to an account (owner stamp): a returning
+      // account holder typing here would silently become a guest and lose
+      // their account's leagues. Offer the sign-in sheet first; a second
+      // submit continues as a guest (the guest never sees the account's
+      // leagues — beginGuest clears them).
+      var idn = window.OD && window.OD.identity;
+      var stamp = idn ? idn.getStamp() : null;
+      if (stamp && stamp !== 'guest' && !form.dataset.guestOk) {
+        form.dataset.guestOk = '1';
+        try { openAuthSheet('signin'); } catch (err) {}
+        try { showAlert('success', 'Welcome back \u2014 sign in to your account. Not you? Close this and tap Go again to look around as a guest.'); } catch (err) {}
+        return;
+      }
       try { sessionStorage.setItem('dhq_connect_prefill', JSON.stringify({ platform: platform, value: v, ts: Date.now() })); } catch (err) {}
+      try { if (idn) idn.beginGuest(); } catch (err) {}
       try{localStorage.setItem('wr_guest_v1','1')}catch(e){};window.location.href='connect-sleeper.html';
     });
   })();

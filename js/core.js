@@ -346,7 +346,7 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
             (document.body || document.documentElement).appendChild(bar);
         } catch (e) { window.wrLog?.('sessionEnded.notice', e); }
     }
-    if (!window.__dhqSessionEndedListener) {
+    if (!window.__dhqSessionEndedListener && typeof window.addEventListener === 'function') {
         window.__dhqSessionEndedListener = true;
         window.addEventListener('dhq:session-expired', showSessionEndedNotice);
     }

@@ -1226,8 +1226,12 @@ test('league hub brand icon returns to the app front page, which stays put',
     // A brand-new account walks the FULL funnel even on a device where a
     // previous account finished onboarding — that memory is per device, and
     // inheriting it skips plan selection + Sleeper connect entirely.
+    // Since 2026-09-28 the reset is the identity reconcile (DHQ-Shared
+    // identity.js, isNew: a new account starts clean unless it adopts a
+    // guest's own leagues); the old reset stays as the no-identity.js fallback.
     ok(landing.includes('resetDeviceOnboardingForNewAccount'), 'new accounts must reset device onboarding memory');
-    ok(landing.includes('if (signup) resetDeviceOnboardingForNewAccount()'), 'email signup must reset onboarding memory');
+    ok(landing.includes('destAfterSignIn(data, { isNew: signup })'), 'email signup must reconcile as a new account');
+    ok(landing.includes('routeSignedIn(appSession || null, { isNew: oauthIsNew })'), 'OAuth signup must reconcile as a new account');
     // A fresh OAuth return must never be hijacked by the existing-session
     // redirect before the sync/repair completes.
     ok(landing.includes('if (FRESH_OAUTH_RETURN) return;'), 'checkSession must yield to the OAuth callback');
