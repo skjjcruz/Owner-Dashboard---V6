@@ -21,6 +21,16 @@
 // <meta name="dhq-build"> and written to dist-deploy/version.json, which running
 // pages poll to notice a new deploy. DHQ_UPDATE_CRITICAL=1 / DHQ_UPDATE_NOTES
 // set version.json's critical/notes for an urgent push.
+//
+// Deploy safety (2026-09-28): version.json also carries
+//   pages:  { "<page>.html": ["js/app.js?v=<hash>", "reconai-shared/tier.js?v=<stamp>", …] }
+//           — every same-origin script each self-updating page boots with,
+//           exactly as the browser requests it;
+//   assets: { "<path>": "<sha256[:10] of the served bytes>" } for each of
+//           those scripts, plus each stamped page itself.
+// live-update.js fetches a page's list before it reloads onto a new build and
+// refuses while any file is missing or stale; scripts/verify-deploy.cjs checks
+// the live site against the same map after the Pages deploy.
 
 const fs = require('fs');
 const path = require('path');
@@ -40,6 +50,8 @@ const ENTRIES = ['index.html'];
 const STAMP_ONLY = ['landing.html', 'connect-sleeper.html', 'upgrade.html'];
 const LIVE_UPDATE_SRC = 'js/shared/live-update.js';
 const pages = new Map(); // page -> rewritten HTML, written after the build stamp
+const SHARED_LOADER_SRC = 'js/shared/shared-loader.js';
+let sharedStamp = null; // ?v= the shared-loader puts on reconai-shared/* (step 0)
 
 const compiled = new Set(); // source pathnames already compiled (dedupe across entries)
 const assetHash = new Map(); // pathname -> content hash of the compiled output
@@ -121,18 +133,27 @@ function processEntry(entry) {
     return `<script${attrs ? ' ' + attrs : ''}>${transform(body, entry + ' (inline)')}</script>`;
   });
 
-  // 3. Refresh the boot guard: it polled for asynchronous in-browser Babel, which
-  //    no longer runs now that modules are precompiled plain JS. (index.html only.)
+  // 3. Refresh the bootstrap check: it polled for asynchronous in-browser Babel,
+  //    which no longer runs now that modules are precompiled plain JS, so the
+  //    check runs once at DOMContentLoaded. A failure goes to the boot guard
+  //    (window.__dhqBoot, inline after the splash in index.html): it reports a
+  //    client_error, retries once with a cache-busting reload, then shows a
+  //    Reload button — never the old dead-end "Module Load Error" screen.
+  const hadBootstrap = /\/\/ NON-JSX BOOTSTRAP:/.test(html);
   html = html.replace(
     /\/\/ NON-JSX BOOTSTRAP:[\s\S]*?window\.addEventListener\('DOMContentLoaded', function\(\) \{ setTimeout\(check, 500\); \}\);\n\}\)\(\);/,
     `// PRECOMPILED BOOTSTRAP: modules are plain JS (no in-browser Babel). Verify they loaded.
 (function() {
   window.addEventListener('DOMContentLoaded', function() {
     if (typeof OwnerDashboard !== 'undefined') return;
-    document.getElementById('root').innerHTML = '<div style="color:#E74C3C;padding:40px;text-align:center;font-family:sans-serif"><h2>Module Load Error</h2><p>Dynasty HQ modules failed to load. Try a hard refresh (Cmd+Shift+R) or check the console.</p></div>';
+    if (window.__dhqBoot) return window.__dhqBoot.fail('modules');
+    document.getElementById('root').innerHTML = '<div style="color:#E74C3C;padding:40px;text-align:center;font-family:sans-serif"><h2>Module Load Error</h2><p>Dynasty HQ modules failed to load. Reload the page to try again.</p></div>';
   });
 })();`,
   );
+  if (hadBootstrap && /\/\/ NON-JSX BOOTSTRAP:/.test(html)) {
+    throw new Error(`${entry}: NON-JSX BOOTSTRAP block changed shape — the precompiled bootstrap was not swapped in`);
+  }
 
   // 4. Content-hash cache-bust every local script's ?v= (see hashLocalScripts).
   html = hashLocalScripts(html);
@@ -188,6 +209,42 @@ function listFiles(dir, out = []) {
 // ?v= stamps already fingerprint each script it loads, incl. the shared-loader
 // stamp of reconai-shared/) plus the whole shipped js/ tree (anything loaded
 // dynamically). Deterministic: rebuilding unchanged sources yields the same id.
+// The hash of a local script's SERVED bytes: the compiled overlay for JSX
+// modules, the source file otherwise (the artifact copies it unchanged).
+function servedHash(pathname) {
+  if (assetHash.has(pathname)) return assetHash.get(pathname);
+  const p = path.join(ROOT, pathname);
+  return fs.existsSync(p) && fs.statSync(p).isFile() ? contentHash(fs.readFileSync(p)) : null;
+}
+
+// Every same-origin script a page boots with, as the browser requests it:
+// its <script src> tags (incl. inert data-wr-defer ones the module loader
+// injects later) and, when it loads the shared-loader, the vendored engine
+// under reconai-shared/ at the loader's stamp.
+function pageAssets(html, assets) {
+  const urls = [];
+  const add = (url, pathname) => {
+    const h = servedHash(pathname);
+    if (!h) { console.warn(`[build-deploy]   asset map: ${pathname} not in the build — skipped`); return; }
+    if (!urls.includes(url)) urls.push(url);
+    assets[pathname] = h;
+  };
+  const re = /<script\b[^>]*?\bsrc=(["'])([^"']+)\1/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const src = m[2];
+    if (/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(src)) continue; // external / CDN / data:
+    add(src, src.split(/[?#]/)[0].replace(/^\.?\//, ''));
+  }
+  const sharedDir = path.join(ROOT, 'reconai-shared');
+  if (html.includes(SHARED_LOADER_SRC) && sharedStamp && fs.existsSync(sharedDir)) {
+    for (const f of fs.readdirSync(sharedDir).sort()) {
+      if (f.endsWith('.js') && fs.statSync(path.join(sharedDir, f)).isFile()) add(`reconai-shared/${f}?v=${sharedStamp}`, `reconai-shared/${f}`);
+    }
+  }
+  return urls;
+}
+
 function computeBuildId() {
   const tagMatch = (pages.get('index.html') || '').match(/id=["']dhq-build-tag["'][^>]*>\s*([^<\s]+)\s*</);
   const tag = tagMatch ? tagMatch[1] : 'b0';
@@ -203,6 +260,7 @@ function computeBuildId() {
 function stampAndWrite() {
   const { tag, build } = computeBuildId();
   const meta = `<meta name="dhq-build" content="${build}">`;
+  const assets = {}, pageLists = {};
   for (const [page, raw] of pages) {
     if (!raw.includes(LIVE_UPDATE_SRC)) throw new Error(`${page}: does not load ${LIVE_UPDATE_SRC} — it would never self-update`);
     let html = raw.replace(/<meta\s+name=["']dhq-build["'][^>]*>\s*/gi, '');
@@ -215,6 +273,8 @@ function stampAndWrite() {
     html = html.slice(0, at) + '\n' + indent + meta + html.slice(at);
     ensureDir(OUT_DIR);
     fs.writeFileSync(path.join(OUT_DIR, page), html, 'utf8');
+    pageLists[page] = pageAssets(html, assets);
+    assets[page] = contentHash(html);
   }
   const sha = process.env.GITHUB_SHA || null;
   const version = {
@@ -224,9 +284,11 @@ function stampAndWrite() {
     critical: /^(1|true|yes)$/i.test(String(process.env.DHQ_UPDATE_CRITICAL || '').trim()),
     notes: String(process.env.DHQ_UPDATE_NOTES || ''),
     commit: sha ? sha.slice(0, 12) : null,
+    pages: pageLists,
+    assets,
   };
   fs.writeFileSync(path.join(OUT_DIR, 'version.json'), JSON.stringify(version, null, 2) + '\n', 'utf8');
-  console.log(`[build-deploy] build ${build} stamped into ${pages.size} pages -> version.json${version.critical ? ' (CRITICAL)' : ''}`);
+  console.log(`[build-deploy] build ${build} stamped into ${pages.size} pages -> version.json${version.critical ? ' (CRITICAL)' : ''}, ${Object.keys(assets).length} assets mapped`);
 }
 
 // 0. Stamp the shared-loader's DEFAULT_VERSION with a content hash of the
@@ -256,6 +318,7 @@ function stampSharedLoaderVersion() {
     throw new Error('shared-loader.js: DEFAULT_VERSION line not found — cache stamping broken');
   }
   fs.writeFileSync(loaderPath, next, 'utf8');
+  sharedStamp = stamp;
   console.log(`[build-deploy] shared-loader DEFAULT_VERSION stamped -> ${stamp}`);
 }
 
