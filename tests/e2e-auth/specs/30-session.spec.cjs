@@ -49,11 +49,7 @@ test('T11 AI call with a revoked token → "sign in again", not the raw "Valid s
 
 test('T18 legacy Sleeper-username login survives 5 reloads (fw-refresh-session 401 is not a revocation)', async ({ app }) => {
   const rec = app.backend.addLegacy('legacy_l', 'legacy-pw-1');
-  await app.open('login.html');
-  await app.page.fill('#username', rec.username);
-  await app.page.fill('#password', rec.password);
-  app.mark('legacy login');
-  await app.page.click('.login-btn');
+  await app.legacyLogin(rec.username, rec.password);
   await app.expectFinal({ page: 'hub', leagues: L });
   for (let i = 1; i <= 5; i++) {
     app.mark('reload ' + i);
@@ -66,11 +62,7 @@ test('T19 legacy login when od_auth_v1 came from the connect page (no local hash
   const rec = app.backend.addLegacy('legacy_l', 'legacy-pw-1');
   const u = data.SLEEPER_USERS.legacy_l;
   await app.seed({ local: { od_auth_v1: { username: u.username, sleeperUserId: u.user_id, createdAt: '2026-09-01T00:00:00.000Z' } } });
-  await app.open('login.html');
-  await app.page.fill('#username', rec.username);
-  await app.page.fill('#password', rec.password);
-  app.mark('legacy login');
-  await app.page.click('.login-btn');
+  await app.legacyLogin(rec.username, rec.password);
   await app.expectFinal({ page: 'hub', leagues: L });
 });
 
@@ -88,9 +80,10 @@ test('T20 expired legacy session → open app → login.html?for=<handle>', asyn
 
 test('T25 delete account while device 2 keeps a Google session → device 2 does not recreate the account', async ({ app, newDevice }) => {
   const A = app.backend.addAccount({ email: 't25@x.test', provider: 'google', sleeper: 'alpha_x' });
+  // Device 2: signed in with Google earlier (app session + Supabase session).
   const d2 = await newDevice();
-  await d2.open('landing.html');
-  await d2.googleSignIn(A);
+  await d2.seed({ local: { ...seeds.connectOnboarded(app.backend, A, 'alpha_x'), ...seeds.sbSession(A) } });
+  await d2.open('index.html');
   await d2.expectFinal({ page: 'hub', leagues: X });
   // Device 1 deletes the account (Settings → Delete account; dialogs accepted).
   await app.seed({ local: seeds.connectOnboarded(app.backend, A, 'alpha_x') });

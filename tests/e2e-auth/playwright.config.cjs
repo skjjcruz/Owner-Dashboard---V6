@@ -11,15 +11,19 @@ if (!process.env.E2E_AUTH_PORT) process.env.E2E_AUTH_PORT = String(41000 + (proc
 const PORT = Number(process.env.E2E_AUTH_PORT);
 // Directory the site is served from (default: this working tree).
 const SITE_ROOT = process.env.E2E_AUTH_SITE_ROOT || ROOT;
+// Traces, per-test network logs and results.json (gitignored output/ by default).
+const OUT = process.env.E2E_AUTH_OUTPUT || path.join(ROOT, 'output', 'e2e-auth');
 
-// Use Playwright's own Chromium when it is installed for this Playwright
-// version; otherwise fall back to the container's /opt/pw-browsers/chromium.
+// Always the FULL Chromium (not chromium-headless-shell): only it honours
+// --unsafely-treat-insecure-origin-as-secure, needed for crypto.subtle on
+// http://dhq.test. Playwright's own build when installed for this version,
+// else the container's /opt/pw-browsers/chromium.
 function chromiumPath() {
   if (process.env.E2E_CHROMIUM) return process.env.E2E_CHROMIUM;
   try {
     const { chromium } = require('playwright');
     const p = chromium.executablePath();
-    if (p && fs.existsSync(p)) return undefined;
+    if (p && fs.existsSync(p)) return p;
   } catch { /* fall through */ }
   return fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined;
 }
@@ -32,15 +36,14 @@ const IPAD_APP_UA = 'Mozilla/5.0 (iPad; CPU OS 18_6 like Mac OS X) AppleWebKit/6
 module.exports = defineConfig({
   testDir: path.join(__dirname, 'specs'),
   testMatch: /.*\.spec\.cjs$/,
-  outputDir: path.join(ROOT, 'output', 'e2e-auth'),
+  outputDir: OUT,
   globalSetup: path.join(__dirname, 'lib', 'global-setup.cjs'),
   fullyParallel: true,
-  workers: process.env.E2E_AUTH_WORKERS ? Number(process.env.E2E_AUTH_WORKERS) : 3,
+  workers: process.env.E2E_AUTH_WORKERS ? Number(process.env.E2E_AUTH_WORKERS) : 2,
   retries: 0,
   timeout: 90_000,
   expect: { timeout: 8_000 },
-  reporter: process.env.CI ? [['list'], ['json', { outputFile: path.join(ROOT, 'output', 'e2e-auth', 'results.json') }]]
-    : [['list'], ['json', { outputFile: path.join(ROOT, 'output', 'e2e-auth', 'results.json') }]],
+  reporter: [['list'], ['json', { outputFile: path.join(OUT, 'results.json') }]],
   use: {
     headless: true,
     serviceWorkers: 'block',
@@ -49,7 +52,9 @@ module.exports = defineConfig({
       executablePath: chromiumPath(),
       // dhq.test → 127.0.0.1 so the site runs on a non-localhost host (gates ON).
       // No proxy: every non-app request is intercepted by page routes anyway.
-      args: ['--host-resolver-rules=MAP dhq.test 127.0.0.1', '--no-proxy-server'],
+      // Production is https (a secure context); http://dhq.test is not, which
+      // would remove crypto.subtle (login.html hashes with it) — so mark it secure.
+      args: ['--host-resolver-rules=MAP dhq.test 127.0.0.1', '--no-proxy-server', `--unsafely-treat-insecure-origin-as-secure=http://dhq.test:${PORT}`],
     },
   },
   projects: [

@@ -11,7 +11,7 @@ test('T1 email sign-up → connect page → link Sleeper → hub; handle reaches
   await app.expectFinal({ page: 'hub', leagues: X });
   const acct = app.backend.findByEmail('t1-new@x.test');
   expect(acct, 'account created by fw-signup').toBeTruthy();
-  await inv.expectServerHandleMatchesLocal(app, acct, 'alpha_x');
+  await app.soft(() => inv.expectServerHandleMatchesLocal(app, acct, 'alpha_x'));
 });
 
 test('T2 Google sign-in, brand-new account → connect page', async ({ app }) => {

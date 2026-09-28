@@ -51,6 +51,7 @@ function stateMismatches(p, want) {
   if (want.page && p.kind !== want.page) r.push(`page is ${p.kind}, want ${want.page}`);
   if (p.preboot && p.kind !== 'hub') r.push('page still hidden (pre-paint gate)');
   if (p.loading) r.push('still showing a loading indicator');
+  else if (p.booting && p.kind === 'hub') r.push('app still booting');
   if (want.page === 'hub' && !p.hubReady) r.push('hub not rendered yet');
   if (want.leagues) {
     const got = [...p.leagues].sort().join(' | '); const exp = [...want.leagues].sort().join(' | ');
@@ -123,6 +124,15 @@ async function expectSignedOutClean(app, { label = 'after sign-out' } = {}) {
   const left = [];
   for (const k of IDENTITY_KEYS) {
     if (local[k] == null) continue;
+    if (k === 'dhq_owner_club_v1') {
+      // The hub writes a defaults-only record for everyone; only personal
+      // content (club/owner name, contact, avatar) is identity.
+      const c = parse(local[k]) || {};
+      const personal = ['clubName', 'ownerName', 'email', 'phone', 'avatarId', 'avatarData'].filter(f => c[f]);
+      if (personal.length) left.push(`dhq_owner_club_v1 (${personal.join(', ')})`);
+      continue;
+    }
+    if (k === 'od_display_name' && !local[k]) continue;
     if (k === 'od_profile_v1') {
       const p = parse(local[k]) || {};
       if (p.sleeperUsername || p.onboardingComplete === true) left.push(`od_profile_v1 still holds ${p.sleeperUsername ? 'sleeperUsername=' + p.sleeperUsername : 'onboardingComplete=true'}`);

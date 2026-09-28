@@ -30,7 +30,7 @@ test('T6 A → landing ?signout → sign in A (server x) → hub x', async ({ ap
   await app.expectFinal({ page: 'hub', leagues: X });
   await app.logoSignOut();
   await app.expectFinal({ page: 'landing' });
-  await inv.expectSignedOutClean(app, { label: 'after ?signout' });
+  await app.soft(() => inv.expectSignedOutClean(app, { label: 'after ?signout' }));
   await app.emailSignIn(A);
   await app.expectFinal({ page: 'hub', leagues: X });
 });
@@ -45,18 +45,19 @@ test('T8 A signs out → B (empty server profile) signs in → connect page, no 
 
 test('T29 Google user → landing ?signout → Supabase sign-out uses local scope (other devices keep their session)', async ({ app, newDevice }) => {
   const A = app.backend.addAccount({ email: 't29@x.test', provider: 'google', sleeper: 'alpha_x' });
-  // Device 2 is signed in with Google too.
+  // Both devices signed in with Google earlier (app session + Supabase session).
   const d2 = await newDevice();
-  await d2.open('landing.html');
-  await d2.googleSignIn(A);
+  await d2.seed({ local: { ...seeds.connectOnboarded(app.backend, A, 'alpha_x'), ...seeds.sbSession(A) } });
+  await d2.open('index.html');
   await d2.expectFinal({ page: 'hub', leagues: X });
-  // Device 1: Google sign-in, then the logo ?signout.
-  await app.open('landing.html');
-  await app.googleSignIn(A);
+  // Device 1: the logo ?signout.
+  await app.seed({ local: { ...seeds.connectOnboarded(app.backend, A, 'alpha_x'), ...seeds.sbSession(A) } });
+  await app.open('index.html');
   await app.expectFinal({ page: 'hub', leagues: X });
   await app.logoSignOut();
   await app.expectFinal({ page: 'landing' });
   const scopes = app.backend.logoutScopes;
+  expect(scopes.length, 'landing ?signout signed the Supabase session out').toBeGreaterThan(0);
   expect(scopes.filter(s => s !== 'local'), `Supabase /auth/v1/logout scopes seen: ${JSON.stringify(scopes)}`).toEqual([]);
   // Device 2 still holds its Supabase session and stays signed in.
   const st = await d2.storage();

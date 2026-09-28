@@ -32,7 +32,7 @@ const scenarios = {
     await app.expectFinal({ page: 'hub', leagues: X });
     await app.settingsSignOut();
     await app.expectFinal({ page: 'landing' });
-    await inv.expectSignedOutClean(app);
+    await app.soft(() => inv.expectSignedOutClean(app));
     await app.googleSignIn(A);
     const want = { page: 'hub', leagues: X };
     await app.expectFinal(want);
@@ -48,10 +48,11 @@ const scenarios = {
     await app.expectFinal({ page: 'hub', leagues: X });
     await app.settingsSignOut();
     await app.expectFinal({ page: 'landing' });
+    await app.soft(() => inv.expectSignedOutClean(app, { label: 'after Settings sign-out' }));
     await app.emailSignIn(B);
     const want = { page: 'hub', leagues: Y };
     await app.expectFinal(want);
-    await inv.expectNoForeignIdentity(app, alphaMarkers(A), { label: 'B signed in after A' });
+    await app.soft(() => inv.expectNoForeignIdentity(app, alphaMarkers(A), { label: 'B signed in after A' }));
     return { want, A, B };
   },
 
@@ -67,7 +68,7 @@ const scenarios = {
     await app.emailSignIn(B);
     const want = { page: 'connect', leagues: [] };
     await app.expectFinal(want);
-    await inv.expectNoForeignIdentity(app, alphaMarkers(A), { label: 'B (no server handle) signed in after A' });
+    await app.soft(() => inv.expectNoForeignIdentity(app, alphaMarkers(A), { label: 'B (no server handle) signed in after A' }));
     return { want, A, B };
   },
 
@@ -95,7 +96,7 @@ const scenarios = {
     await app.expectFinal(want);
     const acct = app.backend.findByEmail('t14-new@x.test');
     if (!acct) throw new Error('T14: sign-up did not create the account');
-    await inv.expectServerHandleMatchesLocal(app, acct, 'guest_g');
+    await app.soft(() => inv.expectServerHandleMatchesLocal(app, acct, 'guest_g'));
     const st = await app.storage();
     if (st.local.wr_guest_v1 != null) throw new Error('T14: wr_guest_v1 survived the sign-up');
     return { want, acct };
@@ -113,7 +114,7 @@ const scenarios = {
     await app.emailSignIn(B);
     const want = { page: 'hub', leagues: Y };
     await app.expectFinal(want);
-    await inv.expectNoForeignIdentity(app, ['guest_g', ...data.SLEEPER_USERS.guest_g.leagues.map(([id]) => id)], { label: 'B signed in over a guest' });
+    await app.soft(() => inv.expectNoForeignIdentity(app, ['guest_g', ...data.SLEEPER_USERS.guest_g.leagues.map(([id]) => id)], { label: 'B signed in over a guest' }));
     return { want, B };
   },
 };

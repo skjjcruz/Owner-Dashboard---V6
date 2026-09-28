@@ -18,7 +18,7 @@ test('T21 hub connect Sleeper → fw-profile POST completes before the reload (I
   await app.expectFinal({ page: 'hub', leagues: X });
   const posts = app.backend.calls('fw-profile', 'POST');
   expect(posts.length, 'the hub sent the handle to fw-profile').toBeGreaterThan(0);
-  await inv.expectServerHandleMatchesLocal(app, A, 'alpha_x');
+  await app.soft(() => inv.expectServerHandleMatchesLocal(app, A, 'alpha_x'));
 });
 
 test('T22 hub connect while fw-profile POST fails (500) → handle stays local, sync retried on the next launch', async ({ app }) => {

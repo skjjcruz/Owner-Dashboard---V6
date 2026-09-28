@@ -1,42 +1,72 @@
 'use strict';
 // Reloads, hangs and relaunches (audit T27, T28, T33).
-const { test, seeds } = require('../lib/harness.cjs');
+const { test, expect, seeds } = require('../lib/harness.cjs');
 const { scenarios, expectRelaunchStable, X } = require('../lib/scenarios.cjs');
 
+// T27 is reload-invariance: the same flow is run on a control device without
+// the reload and on the test device with a reload at the risky moment; both
+// must settle on the same page with the same leagues. (Absolute outcomes are
+// asserted by T1/T3; this does not double-count them.)
+async function settled(app) {
+  const p = await app.expectFinal({});
+  return { page: p.kind, leagues: [...p.leagues].sort() };
+}
+
 test.describe('T27 live-update reload mid-flow reaches the same final state', () => {
-  test('T27a reload mid-OAuth (while fw-oauth-sync is in flight) → hub x', async ({ app }) => {
-    const A = app.backend.addAccount({ email: 't27a@x.test', provider: 'google', sleeper: 'alpha_x' });
+  test('T27a reload mid-OAuth (while fw-oauth-sync is in flight)', async ({ app, newDevice }) => {
+    const control = await newDevice();
+    const A1 = app.backend.addAccount({ email: 't27a-1@x.test', provider: 'google', sleeper: 'alpha_x' });
+    await control.open('landing.html');
+    await control.googleSignIn(A1);
+    const want = await settled(control);
+
+    const A2 = app.backend.addAccount({ email: 't27a-2@x.test', provider: 'google', sleeper: 'alpha_x' });
     app.backend.delays['fw-oauth-sync'] = 800;
     const arrived = app.backend.nextRequest('fw-oauth-sync', 'POST');
     await app.open('landing.html');
-    await app.googleSignIn(A);
+    await app.googleSignIn(A2);
     await arrived;
     delete app.backend.delays['fw-oauth-sync'];
     app.mark('live-update reload');
     await app.page.evaluate(() => location.reload()).catch(() => {});
-    await app.expectFinal({ page: 'hub', leagues: X });
+    expect(await settled(app)).toEqual(want);
   });
 
-  test('T27b reload mid-connect (Sleeper linked, Enter not tapped) → hub x and the server has x', async ({ app }) => {
+  test('T27b reload mid-connect (Sleeper linked, Enter not tapped)', async ({ app, newDevice }) => {
+    const control = await newDevice();
+    await control.open('landing.html');
+    await control.emailSignUp('t27b-1@x.test');
+    await control.expectFinal({ page: 'connect' });
+    await control.connectPageSleeper('alpha_x');
+    const want = await settled(control);
+
     await app.open('landing.html');
-    await app.emailSignUp('t27b-new@x.test');
+    await app.emailSignUp('t27b-2@x.test');
     await app.expectFinal({ page: 'connect' });
-    await app.page.waitForSelector('#tabSleeper', { state: 'visible' });
+    await app.page.waitForLoadState('load');
     await app.page.click('#tabSleeper');
     await app.page.fill('#sleeperName', 'alpha_x');
     await app.page.click('#btnSleeper');
     await app.page.waitForSelector('#enterBtn:not([disabled])');
     app.mark('live-update reload');
     await app.page.reload({ waitUntil: 'commit' });
-    await app.expectFinal({ page: 'hub', leagues: X });
-    const acct = app.backend.findByEmail('t27b-new@x.test');
-    const { inv } = require('../lib/harness.cjs');
-    await inv.expectServerHandleMatchesLocal(app, acct, 'alpha_x');
+    expect(await settled(app)).toEqual(want);
+    // Whatever the control device sent to the server, the reloaded one did too.
+    const c = app.backend.serverHandle(app.backend.findByEmail('t27b-1@x.test'));
+    const t = app.backend.serverHandle(app.backend.findByEmail('t27b-2@x.test'));
+    expect(t, 'server handle after a reload equals the no-reload server handle').toBe(c);
   });
 
-  test('T27c reload mid-hydrate (fw-profile GET in flight at index boot) → hub x', async ({ app }) => {
-    const A = app.backend.addAccount({ email: 't27c@x.test', sleeper: 'alpha_x' });
-    await app.seed({ local: { fw_session_v1: app.backend.sessionFor(A), od_profile_v1: { onboardingComplete: true, platforms: ['sleeper'] } } });
+  test('T27c reload mid-hydrate (fw-profile GET in flight at index boot)', async ({ app, newDevice }) => {
+    const seedFor = (dev, A) => dev.seed({ local: { fw_session_v1: app.backend.sessionFor(A), od_profile_v1: { onboardingComplete: true, platforms: ['sleeper'] } } });
+    const control = await newDevice();
+    const A1 = app.backend.addAccount({ email: 't27c-1@x.test', sleeper: 'alpha_x' });
+    await seedFor(control, A1);
+    await control.open('index.html');
+    const want = await settled(control);
+
+    const A2 = app.backend.addAccount({ email: 't27c-2@x.test', sleeper: 'alpha_x' });
+    await seedFor(app, A2);
     app.backend.delays['fw-profile'] = 1500;
     const arrived = app.backend.nextRequest('fw-profile', 'GET');
     await app.open('index.html');
@@ -44,7 +74,8 @@ test.describe('T27 live-update reload mid-flow reaches the same final state', ()
     delete app.backend.delays['fw-profile'];
     app.mark('live-update reload');
     await app.page.reload({ waitUntil: 'commit' });
-    await app.expectFinal({ page: 'hub', leagues: X });
+    expect(await settled(app)).toEqual(want);
+    expect(want).toEqual({ page: 'hub', leagues: [...X].sort() });
   });
 });
 

@@ -27,7 +27,12 @@ const PAGE_KIND = {
 };
 
 // Text that means "not settled yet" (I1).
-const LOADING_RE = /Loading more leagues|Signing you in|Finding your leagues|Loading Dynasty HQ/i;
+const LOADING_RE = /Loading more leagues|Signing you in|Finding your leagues|Loading Dynasty HQ|SYNCING FRANCHISES|Opening the war room/i;
+// The app shell is still booting (dev server serves ~90 separately compiled
+// scripts). Time spent here is NOT charged to the 8 s I1 budget, up to
+// BOOT_BUDGET_MS — production ships one bundle; see README "Harness caveats".
+const BOOT_RE = /Opening the war room/i;
+const BOOT_BUDGET_MS = Number(process.env.E2E_AUTH_BOOT_BUDGET_MS || 20000);
 // The hub has mounted (franchise board, empty state or connect card).
 const HUB_READY_RE = /SELECT FRANCHISE|Add a league|Connect your account|FRANCHISES|Sleeper username/i;
 
@@ -41,6 +46,8 @@ class App {
     this.navs = [];          // app-origin main-frame document loads
     this.marks = [{ at: 0, label: 'start' }];
     this.steps = [];
+    this.softErrors = [];
+    this.consoleErrors = [];
     this._watch(page);
     context.on('page', p => this._watch(p));
   }
@@ -55,6 +62,14 @@ class App {
       } catch { /* detached frame */ }
     });
     page.on('dialog', d => d.accept().catch(() => {}));
+    page.on('pageerror', e => this.consoleErrors.push('pageerror ' + page.url() + ': ' + String(e && e.message).slice(0, 300)));
+    page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') this.consoleErrors.push(m.type() + ' ' + page.url() + ': ' + m.text().slice(0, 300)); });
+  }
+
+  // Invariant checks that should not stop the flow: recorded, and the test
+  // fails at teardown with all of them listed.
+  async soft(fn) {
+    try { await fn(); } catch (e) { this.softErrors.push(String(e && e.message || e)); }
   }
 
   url(path) { return ORIGIN + '/' + String(path || '').replace(/^\//, ''); }
@@ -146,6 +161,7 @@ class App {
       leagues: dom ? dom.leagues : [],
       loading: dom ? LOADING_RE.test(text) : true,
       hubReady: kind === 'hub' && dom ? HUB_READY_RE.test(text) : false,
+      booting: !dom || dom.ready === 'loading' || (kind === 'hub' && (BOOT_RE.test(text) || !HUB_READY_RE.test(text))),
       sheetOpen: dom ? dom.sheetOpen : false,
       sheetMode: dom ? dom.sheetMode : null,
       hubConnect: dom ? dom.hubConnect : false,
@@ -164,8 +180,18 @@ class App {
   async expectFinal(want, { within = 8000, stableMs = 900, label } = {}) {
     const start = Date.now();
     let last = null; let okSince = 0; let navCountAtOk = -1; let reasons = [];
-    while (Date.now() - start < within) {
+    let bootMs = 0; let prevT = start;
+    while (Date.now() - start < within + Math.min(bootMs, BOOT_BUDGET_MS)) {
+      // I5 fast path: a redirect loop never settles; say so directly.
+      const sinceMark = this.navsSinceMark();
+      const cap = (want.maxNav === undefined ? 3 : want.maxNav) + 3;
+      if (sinceMark.length > cap) {
+        throw new Error(`I5: redirect loop after "${label || this.marks[this.marks.length - 1].label}" — ${sinceMark.length} navigations without user input: ${sinceMark.slice(0, 12).map(n => n.url).join(' -> ')}${sinceMark.length > 12 ? ' -> …' : ''}`);
+      }
       last = await this.probe();
+      const now = Date.now();
+      if (last.booting) bootMs += now - prevT;
+      prevT = now;
       reasons = inv.stateMismatches(last, want);
       if (!reasons.length) {
         if (!okSince || this.navs.length !== navCountAtOk) { okSince = Date.now(); navCountAtOk = this.navs.length; }
@@ -173,11 +199,10 @@ class App {
       } else okSince = 0;
       await this.page.waitForTimeout(150).catch(() => {});
     }
-    const elapsed = Date.now() - start;
     const trail = this.navsSinceMark().map(n => n.url);
     const step = label || this.marks[this.marks.length - 1].label;
     if (reasons.length || !okSince) {
-      throw new Error(`I1: after "${step}" expected ${inv.describeWant(want)} within ${within} ms.\n` +
+      throw new Error(`I1: after "${step}" expected ${inv.describeWant(want)} within ${within} ms (+${Math.round(Math.min(bootMs, BOOT_BUDGET_MS))} ms app boot).\n` +
         `  last state: ${inv.describeState(last)}\n  mismatch: ${reasons.join('; ') || 'state did not hold steady'}\n` +
         `  navigations since the action: ${trail.join(' -> ') || '(none)'}`);
     }
@@ -187,12 +212,13 @@ class App {
       throw new Error(`I5: ${trail.length} navigations after "${step}" without user input (max ${maxNav}): ${trail.join(' -> ')}`);
     }
     // I4 on every settled state.
-    if (last.kind !== 'external' && !String(last.kind).startsWith('external')) await inv.checkI4(this);
+    if (!String(last.kind).startsWith('external')) await this.soft(() => inv.checkI4(this));
     return last;
   }
 
   // ── Flows (each is one user action) ─────────────────────────
   async _openSheet(mode) {
+    await this.page.waitForLoadState('load').catch(() => {});
     const p = await this.probe();
     if (p.kind !== 'landing') throw new Error(`cannot sign in: expected the landing page, on ${p.kind} (${p.url})`);
     await this.page.waitForFunction(() => !document.getElementById('preboot-hide') && typeof window.openAuthSheet === 'function', null, { timeout: 8000 });
@@ -231,6 +257,7 @@ class App {
   }
   // Settings → Sign out (core.js dhqSignOut, which Settings calls).
   async settingsSignOut() {
+    await this.page.waitForLoadState('load').catch(() => {});
     await this.page.waitForFunction(() => typeof window.dhqSignOut === 'function', null, { timeout: 8000 });
     this.mark('Settings sign-out');
     await this.page.evaluate(() => window.dhqSignOut());
@@ -240,6 +267,7 @@ class App {
 
   // Connect page: link Sleeper, then Enter.
   async connectPageSleeper(handle) {
+    await this.page.waitForLoadState('load').catch(() => {});
     await this.page.waitForSelector('#tabSleeper', { state: 'visible', timeout: 8000 });
     if (!(await this.page.isVisible('#sleeperName'))) await this.page.click('#tabSleeper');
     await this.page.fill('#sleeperName', handle);
@@ -251,6 +279,7 @@ class App {
   }
   // Hub "Add a league" card: type the handle, CONNECT.
   async openAddLeague() {
+    await this.page.waitForLoadState('load').catch(() => {});
     const input = this.page.locator('#wr-sleeper-input');
     if (await input.isVisible().catch(() => false)) return input;
     const add = this.page.getByText('Add a league', { exact: true }).filter({ visible: true }).first();
@@ -258,6 +287,16 @@ class App {
     await add.click();
     await input.waitFor({ state: 'visible', timeout: 8000 });
     return input;
+  }
+  // Legacy Sleeper-username login page (login.html).
+  async legacyLogin(username, password) {
+    if ((await this.probe()).kind !== 'login') await this.open('login.html', 'open login.html');
+    await this.page.waitForLoadState('load').catch(() => {});
+    await this.page.waitForFunction(() => window.OD && typeof window.OD.acquireSessionToken === 'function', null, { timeout: 8000 });
+    await this.page.fill('#username', username);
+    await this.page.fill('#password', password);
+    this.mark('legacy login ' + username);
+    await this.page.click('.login-btn');
   }
   async hubConnect(handle) {
     const input = await this.openAddLeague();
@@ -293,6 +332,17 @@ const seeds = {
       od_auth_v1: { sleeperUsername: u.username, sleeperUserId: u.user_id },
       od_locked_username_v2: u.username,
       od_profile_v1: { onboardingComplete: true, platforms: ['sleeper'] },
+    };
+  },
+  // Supabase Auth session as supabase-js persists it after a Google sign-in.
+  sbSession(acct) {
+    const { supabaseAccessToken, nowS: now } = require('./jwt.cjs');
+    const user = { id: acct.authUserId, email: acct.email, provider: 'google' };
+    return {
+      'sb-sxshiqyxhhifvtfqawbq-auth-token': {
+        access_token: supabaseAccessToken(user), token_type: 'bearer', expires_in: 3600, expires_at: now() + 3600,
+        refresh_token: 'rt-seeded', user: { id: user.id, aud: 'authenticated', role: 'authenticated', email: acct.email, app_metadata: { provider: 'google', providers: ['google'] }, user_metadata: { full_name: acct.displayName } },
+      },
     };
   },
   // Guest (landing one-box) with a Sleeper league.
@@ -336,7 +386,10 @@ const test = base.test.extend({
     // Evidence for every run: what was stubbed, what was blocked.
     const unstubbed = backend.unstubbed.filter(u => !/sentry|googletagmanager|gstatic/.test(u.url));
     if (unstubbed.length) testInfo.annotations.push({ type: 'unstubbed', description: unstubbed.map(u => u.method + ' ' + u.url).join('\n').slice(0, 2000) });
-    await testInfo.attach('network-log.json', { body: JSON.stringify({ log: backend.log.map(l => ({ ...l, body: undefined })), unstubbed: backend.unstubbed, steps: app.steps, navs: app.navs.map(n => n.url) }, null, 2), contentType: 'application/json' });
+    const logPath = testInfo.outputPath('network-log.json');
+    require('fs').writeFileSync(logPath, JSON.stringify({ steps: app.steps, navs: app.navs.map(n => n.url), console: app.consoleErrors, log: backend.log.map(l => ({ ...l, body: l.fn === 'fw-profile' ? l.body : undefined })), unstubbed: backend.unstubbed }, null, 2));
+    await testInfo.attach('network-log.json', { path: logPath, contentType: 'application/json' });
+    if (app.softErrors.length) throw new Error('Invariant violations during the flow:\n- ' + app.softErrors.join('\n- '));
     const errs = backend.log.filter(l => l.fn === 'harness-error');
     if (errs.length) throw new Error('harness route errors: ' + JSON.stringify(errs).slice(0, 500));
   },
