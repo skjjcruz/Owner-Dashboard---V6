@@ -115,8 +115,9 @@ identical result: **52 of 53 pass**.
 ## Pass/fail on the pre-fix code
 
 Baseline: app at `a145e7a` (branch tip before any fix commit) and DHQ-Shared
-at `6e6a6b2`. Command: `--ref=a145e7a --shared-ref=6e6a6b2`. Two runs gave the
-same matrix. "fail (expected)" means the test encodes the new behaviour from
+at `6e6a6b2`. Command: `--ref=a145e7a --shared-ref=6e6a6b2`. The table is from one
+run of the final suite. Two earlier runs, made before the I6 rewrite, gave
+identical results to each other. "fail (expected)" means the test encodes the new behaviour from
 the fix design.
 
 | ID | Today | Why it fails today (audit ref) |
