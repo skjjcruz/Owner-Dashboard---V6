@@ -434,3 +434,11 @@ test('a failed account write is remembered and retried by the next reconcile', a
     assert.equal(r.uploaded, true);
     assert.equal(env.id.needsSync(), false, 'cleared once the server confirmed');
 });
+
+test('window.__dhqBusy is held while a reconcile / account write is in flight', async () => {
+    const env = load({ local: { [STAMP]: 'account:u1', [FW]: account('u1'), od_auth_v1: { username: 'alice' } }, server: 'hang' });
+    const p = env.id.reconcileAfterSignIn(null, { timeoutMs: 80 });
+    assert.equal(env.ctx.__dhqBusy, 1, 'held during the reconcile');
+    await p;
+    assert.equal(env.ctx.__dhqBusy, 0, 'released after');
+});

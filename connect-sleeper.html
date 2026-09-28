@@ -338,6 +338,17 @@
     // lived nowhere else and a new device / sign-out stranded them (B1).
     // keepalive: survives the navigation into the app. Guests: no account,
     // nothing to write. enterApp awaits the last one (capped).
+    // Hold live-update reloads while a connect or its account write is in
+    // flight (window.__dhqBusy, read by js/shared/live-update.js).
+    async function holdBusy(run) {
+      window.__dhqBusy = (window.__dhqBusy || 0) + 1;
+      try { return await run(); }
+      finally { window.__dhqBusy = Math.max(0, (window.__dhqBusy || 1) - 1); }
+    }
+    function connectSleeper() { return holdBusy(connectSleeperRun); }
+    function connectMfl() { return holdBusy(connectMflRun); }
+    function connectEspn() { return holdBusy(connectEspnRun); }
+    function enterApp() { return holdBusy(enterAppRun); }
     let pendingPush = Promise.resolve(false);
     function pushToAccount() {
       if (!IDN || !IDN.accountToken()) return pendingPush;
@@ -408,7 +419,7 @@
       }
     }
 
-    async function connectSleeper() {
+    async function connectSleeperRun() {
       const input = document.getElementById('sleeperName');
       const username = input.value.trim();
       const btn = document.getElementById('btnSleeper');
@@ -438,7 +449,7 @@
       }
     }
 
-    async function connectMfl() {
+    async function connectMflRun() {
       const idInput = document.getElementById('mflLeagueId');
       const yearInput = document.getElementById('mflYear');
       const leagueId = idInput.value.trim().replace(/\D/g, '');
@@ -573,7 +584,7 @@
     let espnPending = null;      // { leagueId, year, leagueName } while a team is being picked
     let espnAutoEnter = false;   // came from the front door: go straight in once linked
 
-    async function connectEspn() {
+    async function connectEspnRun() {
       const idInput = document.getElementById('espnLeagueId');
       const yearInput = document.getElementById('espnYear');
       const typed = idInput.value;
@@ -675,7 +686,7 @@
     }
 
     let entering = false;
-    async function enterApp() {
+    async function enterAppRun() {
       if (!Object.keys(TABS).some(k => linked[k])) return;
       if (entering) return;
       entering = true;

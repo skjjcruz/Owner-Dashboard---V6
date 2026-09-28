@@ -825,6 +825,8 @@
       if (signup && password.length < 8) { showAlert('error', 'Password must be at least 8 characters.'); return; }
       trackLandingEvent(signup ? 'signup_started' : 'signin_started');
       btn.disabled = true; btn.textContent = signup ? 'Creating account\u2026' : 'Signing in\u2026';
+      // Hold live-update reloads while the sign-in is in flight.
+      window.__dhqBusy = (window.__dhqBusy || 0) + 1;
       try {
         const path = signup ? 'fw-signup' : 'fw-signin';
         const res = await fetch(`${FW_API_BASE}/${path}`, {
@@ -852,6 +854,8 @@
         trackLandingEvent(signup ? 'signup_failed' : 'signin_failed', { reason: 'network' });
         showAlert('error', 'Network error: ' + (err?.message || String(err)));
         btn.disabled = false; btn.textContent = signup ? 'Create account \u2192' : 'Sign in \u2192';
+      } finally {
+        window.__dhqBusy = Math.max(0, (window.__dhqBusy || 1) - 1);
       }
     }
 
@@ -919,6 +923,7 @@
       try { if (_oauthOverlay) { _oauthOverlay.remove(); _oauthOverlay = null; } } catch {}
     }
     (async function handleOAuthCallback() {
+      let oauthBusy = false;
       try {
         if (LANDING_EDITOR_PREVIEW || FORCE_SIGNOUT || STAY_HOME) { dropOAuthOverlay(); return; }
         // A provider bounced us back with an error in the URL — this used to
@@ -933,6 +938,9 @@
         }
         const db = getSbClient();
         if (!db) { dropOAuthOverlay(); return; }
+        // A fresh provider return is a sign-in in flight: hold live-update
+        // reloads until it has landed (released in finally).
+        if (FRESH_OAUTH_RETURN) { window.__dhqBusy = (window.__dhqBusy || 0) + 1; oauthBusy = true; }
         const { data } = await db.auth.getSession();
         if (!data?.session) {
           dropOAuthOverlay();
@@ -951,7 +959,13 @@
         // Not a fresh provider return and the app session is fine: nothing to
         // sign in. checkSession (or the handoff) routes this visit — this
         // handler used to route it too, logging a phantom signin_succeeded.
-        if (!FRESH_OAUTH_RETURN && (window.__dhqHandoff || sessionHealthy(existing))) { dropOAuthOverlay(); return; }
+        // Only a FRESH provider return signs anyone in. A Supabase session
+        // merely lingering on this device used to be re-synced whenever the
+        // app session was unhealthy — which silently re-minted a session after
+        // "sign out everywhere" / a password reset, and recreated an account
+        // deleted on another device. A damaged app session is repaired by
+        // checkSession (fw-refresh-session) or the user signs in again.
+        if (!FRESH_OAUTH_RETURN) { dropOAuthOverlay(); return; }
         let appSession = null;
         // Re-sync on a fresh OAuth return, when nothing usable is stored, and
         // also when the stored session is damaged (no user.id / expired) —
@@ -1029,6 +1043,8 @@
         dropOAuthOverlay();
         console.warn('[WR] OAuth callback error:', e);
         trackLandingEvent('oauth_callback_error', { detail: String(e && e.message || e).slice(0, 120) });
+      } finally {
+        if (oauthBusy) window.__dhqBusy = Math.max(0, (window.__dhqBusy || 1) - 1);
       }
     })();
 
