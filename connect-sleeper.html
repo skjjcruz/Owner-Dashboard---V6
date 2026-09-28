@@ -226,11 +226,14 @@
       } catch { return 'sess_' + Date.now().toString(36); }
     }
     // iOS/iPadOS browsers all carry a Safari/ UA token; the app shell's bare
-    // WKWebView does not (iPads report "Macintosh" for desktop pages).
+    // WKWebView does not. iPads in desktop mode report "Macintosh", so a Mac
+    // UA counts only with touch (MacIntel + maxTouchPoints > 1): a Mac app's
+    // webview is not the iOS app (same rule as js/shared/live-update.js).
     function detectSurface() {
       try {
         const ua = navigator.userAgent || '';
-        const apple = /iPhone|iPad|iPod|Macintosh/.test(ua);
+        const ipadDesktop = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+        const apple = /iPhone|iPad|iPod/.test(ua) || ipadDesktop;
         return apple && /AppleWebKit/.test(ua) && !/Safari\//.test(ua) ? 'ios_app' : 'web';
       } catch { return 'web'; }
     }
