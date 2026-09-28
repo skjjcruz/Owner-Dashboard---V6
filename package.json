@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node tests/run.js && node tests/season-odds-engines.js && node tests/faab-engine.js && node tests/chopped.js && node tests/chop-odds.js && node --test js/shared/*.test.js js/utils/*.test.js",
     "test:core": "node tests/run.js",
+    "test:e2e-auth": "node tests/e2e-auth/run.cjs",
     "sync:shared": "node scripts/sync-reconai-shared.cjs",
     "build:preview": "npm run sync:shared && node scripts/build-preview.cjs",
     "build:deploy": "npm run sync:shared && node scripts/build-deploy.cjs",
