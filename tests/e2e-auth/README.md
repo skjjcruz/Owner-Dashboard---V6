@@ -34,9 +34,10 @@ node tests/e2e-auth/summarize.cjs [--md]               # pass/fail matrix of the
 - Other environment variables: `E2E_AUTH_WORKERS` (default 2),
   `E2E_AUTH_BOOT_BUDGET_MS` (default 20000), `E2E_CHROMIUM` (browser path).
 
-**Runtime:** about 9 to 10 minutes wall time for 53 test runs with 2 workers
-on this 4-core container, which was shared with other work. A single test
-takes 3 to 25 s. T18, which reloads the app five times, takes about 40 s.
+**Runtime:** about 5 minutes wall time for 53 test runs with 2 workers on
+this 4-core container, and 9 to 10 minutes while the container was also busy
+with other work. A single test takes 3 to 25 s. T18, which reloads the app
+five times, takes about 40 s.
 
 ## How it works
 
@@ -85,11 +86,33 @@ takes 3 to 25 s. T18, which reloads the app five times, takes about 40 s.
 - **Invariants.**
   - I1, I4 and I5 are checked every time `expectFinal()` settles.
   - I2, I3 and I6 are called explicitly.
+  - I6 follows the final design: sign-out removes credentials only.
+    - **I6a:** after any sign-out, none of `fw_session_v1`, `od_session_v1`,
+      `wr_guest_v1`, `sb-*-auth-token*` or the ESPN/MFL secrets remains, and
+      the next load of `index.html` is signed out.
+    - **I6b:** a different owner who signs in next inherits none of the
+      previous owner's identity keys (this is I2) and sees only their own
+      leagues.
+    - **I6c:** the same owner who signs in again still has their handle and
+      league pointers. T4 and T6 check this with the server's identity
+      unavailable (`platformUsernames: null`, `fw-profile` 500), so no server
+      round trip can help.
   - I2, I3, I4 and I6 are *soft*: the flow keeps going, and the test fails at
     teardown with every violation listed.
   - I1 and I5 are hard. I5 also fails fast when a redirect loop is detected.
 
-## Pass/fail on the current code
+## Pass/fail on the branch HEAD (fix landed)
+
+App at `391a03f` and DHQ-Shared at `e02deec`. Command:
+`--ref=391a03f --shared-ref=e02deec`. Two consecutive full runs gave an
+identical result: **52 of 53 pass**.
+
+| ID | Result |
+|---|---|
+| S1, S2, T1–T10, T12–T33, T34 (iPhone and iPad runs of T3, T7, T14, T30, S1) | pass |
+| **T11** | **fail, a real bug.** After an AI call returns 401, `callAI` raises `dhq:session-expired` but, by design, clears nothing. The notice's "Sign in" link opens `landing.html?reauth=1`. The landing head script still sees a locally valid `fw_session_v1` and sends the user straight back to `index.html`, so the sign-in sheet is unreachable. T10 (a `fw-profile` 401, which clears the session) is fine. Fix: landing should honour `?reauth` even when a session is stored, or the notice should drop the dead session first. |
+
+## Pass/fail on the pre-fix code
 
 Baseline: app at `a145e7a` (branch tip before any fix commit) and DHQ-Shared
 at `6e6a6b2`. Command: `--ref=a145e7a --shared-ref=6e6a6b2`. Two runs gave the
@@ -102,9 +125,9 @@ the fix design.
 | T1 | fail (expected) | I3: connect-sleeper never writes the server (B1) |
 | T2 | pass | |
 | T3 (+iPhone, iPad) | fail (expected) | Google sign-in to an existing account on a fresh device goes to the connect page (B1) |
-| T4 | fail (expected) | Flow reaches hub x. I6: Settings sign-out leaves `od_profile_v1.sleeperUsername` and `od_locked_username_v2` (B3) |
+| T4 | pass | Same owner after sign-out: the old code never cleared the cache, so I6c holds |
 | T5 | fail (expected) | Hub connect POST is client-aborted by the reload, so after sign-in the hub has 0 leagues (B2) |
-| T6 | fail (expected) | Flow reaches hub x. I6: `?signout` leaves `od_profile_v1.onboardingComplete` (B3, SF7) |
+| T6 | fail (expected) | `?signout` strips the profile handle; with the server's identity unavailable the hub has 0 leagues (I6c; SF7) |
 | T7 (+iPhone, iPad) | fail (expected) | B sees **A's** leagues (B3) |
 | T8 | fail (expected) | B lands in the hub with A's leagues, not the connect page (B3) |
 | T9 | fail (expected) | Gate goes to `landing.html` without `?reauth` and wipes `od_auth_v1` (B6) |
@@ -122,7 +145,7 @@ the fix design.
 | T21 | fail (expected) | `fw-profile` POST client-aborted by `location.reload()` (B2) |
 | T22 | fail (expected) | No retry of the unsynced handle |
 | T23, T24 | fail (expected) | No reconnect affordance for a private ESPN/MFL league after relaunch (SF2) |
-| T25 | fail (expected) | Device 2's leftover Google session recreates the deleted account on a plain landing visit (SF3) |
+| T25 | pass | The old client still re-syncs the leftover Google session; only the stub's server-side `410 account_deleted` (app repo db778f9) stops the account being recreated |
 | T26 | pass | |
 | T27a/b/c | pass | Reload-invariant today: with and without the reload end the same (wrong for a/b) way |
 | T28 | fail (expected) | Hung `fw-profile` leaves "Loading more leagues…" forever, with no retry (SF9) |
@@ -130,77 +153,72 @@ the fix design.
 | T30 (+iPhone, iPad) | fail (expected) | After sign-out, B's hub shows Scout's `dynastyhq_username` leagues (B3) |
 | T31 | fail (expected) | Demo League makes the user `commissioner` (SF8) |
 | T32 | fail (expected) | `{sleeperUsername}`-shaped `od_auth_v1` is not recognised, so the user goes to the connect page (SF5) |
-| T33-T3/T4/T7/T8/T14/T15 | fail (expected) | Inherit the scenario failures above |
+| T33-T3/T7/T8/T14/T15 | fail (expected) | Inherit the scenario failures above (T33-T4 passes) |
 | T33-signed-in | pass | Baseline relaunch from every entry page |
 
-Totals: 12 of 53 test runs pass.
+Totals: 15 of 53 test runs pass.
 
 ## Guessed assertions
 
-These encode my reading of fix-design details that are ambiguous. Adjust them
-when the implementation lands.
+These were written before the implementation existed. Most were then pinned
+to what landed; the rest still encode my reading of the design.
 
-1. **T9.** An expired account token redirects to exactly
-   `landing.html?reauth=1`. The test does not require the sheet to be open.
-2. **T10, T11.** The notice text matches `/session (has )?ended|sign in again/i`.
-   It has a button or link named `/sign in/i`, and clicking it leads to
-   landing.
-3. **T12.** The server keeps `espn: [{leagueId, year, teamId}]` and
-   `mfl: [{leagueId, year, franchiseId}]` in `platformUsernames`. The stub
-   returns `platformUsernames` from `fw-profile` GET and also from
-   `fw-signin`, `fw-oauth-sync` and `fw-refresh-session`.
-4. **I3.**
-   - The server Sleeper handle may be a string or `{username}`.
-   - The stub POST merges keys, and `null` deletes a key.
-5. **T13.** A guest who taps Billing ends on landing with the sheet open in
-   sign-in mode ("Welcome back").
-6. **T14.**
-   - A guest who signs up ends in the hub with the guest's leagues, not on the
-     connect page.
-   - The guest's entry to the sign-up sheet is `landing.html?home` (the hub
-     logo). The design may add `?signin`.
-7. **T17.**
-   - The owner stamp survives sign-out.
-   - The one-box then opens the sign-in sheet and does not set `wr_guest_v1`.
-8. **T20.** An expired legacy session goes to `login.html?for=<handle>`.
-9. **T22.** "Retry queued" means the next app launch re-sends the handle
+**Pinned to the landed behaviour:**
+
+- **T10, T11.** The notice is `#dhq-session-ended` with the text "Your session
+  ended." and a "Sign in" link to `landing.html?reauth=1`. That link must open
+  the sign-in sheet. After a 401, `callAI` rejects with "…session ended… sign
+  in again…".
+- **T9.** An expired account token goes to `landing.html?reauth=1` with the
+  sheet open in sign-in mode.
+- **T13.** Billing → `upgrade.html` → `landing.html?signin` with the sheet
+  open.
+- **T23, T24.** The hub shows the links "Reconnect ESPN" and "Reconnect MFL",
+  pointing to `connect-sleeper.html?reconnect=espn|mfl`. Each lands on that
+  platform's input.
+- **T28.** The hub shows a "Try again" button within 8 s, and it then loads x.
+- **Stub: `platformUsernames`.** It mirrors the app repo's
+  `_shared/platforms.ts`:
+  - merge semantics;
+  - `sleeper` as a string or `{username, userId}`;
+  - `espn: [{leagueId, year, teamId}]` and
+    `mfl: [{leagueId, year, franchiseId}]`, where `[]` clears the list;
+  - returned by `fw-signin`, `fw-oauth-sync` and `fw-refresh-session`.
+- **Stub: deleted accounts.** `fw-oauth-sync` answers
+  `410 {code: 'account_deleted'}` to a leftover session of a deleted account.
+  T25 asserts that no successful re-sync happens and no account is recreated.
+- **I6.** Rewritten as I6a, I6b and I6c (see "How it works"), per the final
+  "sign-out removes credentials only" design.
+
+**Still interpretation, to revisit if the product decides otherwise:**
+
+1. **T14, T15.** A guest who signs up keeps their leagues and ends in the hub.
+   The guest reaches the sign-up sheet through `landing.html?home`, which is
+   what the hub logo opens.
+2. **T17.** On a device with a stamped owner, the one-box opens the sign-in
+   sheet and does not set `wr_guest_v1`.
+3. **T20.** An expired legacy session goes to `login.html?for=<handle>`.
+4. **T22.** "Retry queued" means the next app launch re-sends the handle
    within 8 s. No flag name is asserted.
-10. **T23, T24.**
-    - The reconnect affordance is `a[href*="reconnect=espn|mfl"]` or a
-      "Reconnect" button.
-    - It lands on `connect-sleeper.html?reconnect=…` with that platform's
-      input visible.
-11. **T25.**
-    - A plain landing visit (no fresh OAuth return) makes zero
-      `fw-oauth-sync` calls.
-    - The stub keeps today's server bug: the auth user is not deleted.
-12. **T28.** The hub shows `/retry|try again/i` text and a button with that
-    name within 8 s, and the button then loads x.
-13. **T29.** At least one `/auth/v1/logout` call is made, and every such call
-    uses `scope=local`.
-14. **T31.**
-    - The tier is read from `window.getUserTier()`.
-    - The local handle is not `bigloco`.
-    - `dhq_internal_v1` is unset after visiting landing. For this test only,
-      `navigator.webdriver` is forced to `false`, because landing skips the
-      owner tag for automated browsers.
-15. **I2 and I6 key lists** (`IDENTITY_KEYS` in `lib/invariants.cjs`). The
-    design never spells out `DEVICE_KEEP_KEYS`. I6 therefore allows every key
-    except identity, session, secret and `sb-*` keys, with two exceptions:
-    - `od_profile_v1` is allowed only if it has no handle and no
-      `onboardingComplete`.
-    - `dhq_owner_club_v1` is allowed only if it has no personal fields.
-16. **T33.** "Same page" means the same page kind and the same leagues. T13 is
-    left out because a guest relaunching into the guest hub is arguably
-    correct.
-17. **T27.** Checked as reload-invariance against a control device, not as an
-    absolute outcome. T1 and T3 cover the absolute outcome.
-18. **Settings actions.**
+5. **T29.** At least one `/auth/v1/logout` call is made, and every such call
+   uses `scope=local`.
+6. **T31.**
+   - The tier is read from `window.getUserTier()`.
+   - The local handle is not `bigloco`.
+   - `dhq_internal_v1` is unset after visiting landing. `navigator.webdriver`
+     is forced to `false` in this test only.
+7. **I2 key list** (`IDENTITY_KEYS` in `lib/invariants.cjs`). An exact
+   `DEVICE_KEEP_KEYS` list was never specified.
+8. **T33.** "Same page" means the same page kind and the same leagues. T13 is
+   left out.
+9. **T27.** Checked as reload-invariance against a control device, not as an
+   absolute outcome. The reload is forced; it does not wait for
+   `window.__dhqBusy`, so it models the worst case, such as an app kill.
+10. **Settings actions.**
     - Settings sign-out is `window.dhqSignOut()`.
-    - T26 calls `OD.changePassword`, then `OD.clearSignedInState`, then
-      navigates to `landing.html?password=changed`, which is what Settings
-      does on success.
-    - T25 calls `window.dhqDeleteAccountFlow()` with the dialogs accepted.
+    - Delete is `window.dhqDeleteAccountFlow()`.
+    - T26 runs the Settings success path in code: `OD.changePassword`, then
+      `OD.clearSignedInState`, then `landing.html?password=changed`.
     - None of these click through the Settings UI.
 
 ## Harness caveats
