@@ -313,11 +313,32 @@
     }
     // A player's shown number is his typical week; every choice (lineups,
     // sorts, swaps, THE CALL) and every total uses his average week.
+    // No Sleeper line this week (truth law) reads "—", like Sleeper's own
+    // column beside it; 0.0 is DHQ saying a projected player won't score.
     function fmt(pid) {
         const r = get(pid);
-        if (r) return Number(r.median) > 0 ? Number(r.median).toFixed(1) : '0.0';
+        if (r) return r.noSleeper ? '—' : Number(r.median) > 0 ? Number(r.median).toFixed(1) : '0.0';
         return String(pid || '') in st.results ? '—' : '…';
     }
+    // ── The two weekly projection columns ────────────────────────────
+    // Owner ruling 2026-09-29: every table shows Sleeper's weekly number and
+    // DHQ's as two separate, sortable columns, drawn the way the My Team
+    // Roster Board draws them (white Sleeper number, gold DHQ number, "—"
+    // when either has none). Tables read their headers, tooltips and cell
+    // styles from here so they cannot drift apart.
+    const COLS = {
+        sleeperHead: () => provLabel() + ' Proj',
+        dhqHead: 'DHQ Proj',
+        sleeperTip: () => provLabel() + "'s projected points this week, your league's scoring",
+        dhqTip: "DHQ's projected points this week (his typical week; totals, sorts and lineup calls use his average week)",
+        sleeperStyle: { color: 'var(--white)', fontWeight: 600, fontFamily: 'var(--font-body)', fontVariantNumeric: 'tabular-nums' },
+        dhqStyle: { color: 'var(--gold, #d4af37)', fontWeight: 600, fontFamily: 'var(--font-body)', fontVariantNumeric: 'tabular-nums' },
+        dashStyle: { color: 'var(--silver)', opacity: 0.45 },
+        // Sleeper's number as the column prints it: one decimal, "—" for none.
+        sleeperText: (v) => (Number(v) > 0 ? Number(v).toFixed(1) : '—'),
+        // Sort value for the DHQ column: his average week; -1 (last) when DHQ has none.
+        sortVal: (pid) => { const v = avgOf(pid); return v == null ? -1 : v; },
+    };
     // His average week: a number, or null while working / when DHQ has none.
     function avgOf(pid) { const r = get(pid); return r ? avg(r) : null; }
     // ── The league platform's own projections (MFL) ──────────────────
@@ -648,7 +669,7 @@
         root.addEventListener && root.addEventListener('wr:proj-updated', (e) => { if (!(e && e.detail && e.detail.source === 'dhq')) { loadPlatform(); setTimeout(warmLeague, 500); } });
     }
 
-    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, avgOf, dataStatus, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
+    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, avgOf, dataStatus, cols: COLS, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
     if (typeof document !== 'undefined') boot();
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.DhqProj;

@@ -1197,19 +1197,30 @@ test('all players default view matches the owner ruling (2026-08-24)',
     // 2026-08-24), not as standalone columns. The default is the owner's
     // own board set from his live Customize panel (2026-08-24 3:09 PM):
     // the full scouting ledger minus Dur / SOS / Lg # / NFL # / Starts.
-    const want = ['name', 'yoe', 'age', 'points', 'gp', 'ppg', 'proj', 'hi', 'lo', 'prev', 'dhq', 'adp', 'trend', 'peakPhase', 'peak', 'peakYrs', 'height', 'weight', 'college', 'depthChart', 'rkSlot', 'rkTeam', 'tier', 'owner', 'acq'];
+    // Owner ruling 2026-09-29: Proj splits into Sleeper Proj + DHQ Proj,
+    // side by side, both in the default board.
+    const want = ['name', 'yoe', 'age', 'points', 'gp', 'ppg', 'proj', 'dhqProj', 'hi', 'lo', 'prev', 'dhq', 'adp', 'trend', 'peakPhase', 'peak', 'peakYrs', 'height', 'weight', 'college', 'depthChart', 'rkSlot', 'rkTeam', 'tier', 'owner', 'acq'];
     ok(JSON.stringify(keys) === JSON.stringify(want), 'default view must be the owner-ruled set, got: ' + keys.join(','));
     const registryBlock = src.match(/ALL_PLAYERS_COLUMNS = \[[\s\S]*?\n\];/)[0];
     ok(!registryBlock.includes("key: 'pos'") && !registryBlock.includes("key: 'nflTeam'"), 'pos/team must be folded into the player cell, not standalone columns');
     ok(src.includes('leagueMapPosLabel(x.pos)') && src.includes("x.p.team || 'FA'"), 'the pinned player cell must carry position and NFL team');
     ok(src.includes('ALL_PLAYERS_PREV_DEFAULT'), 'untouched old-default prefs must migrate to the new default');
-    for (const c of ["case 'points'", "case 'gp'", "case 'proj'", "case 'adp'"]) {
+    for (const c of ["case 'points'", "case 'gp'", "case 'proj'", "case 'dhqProj'", "case 'adp'"]) {
         ok(src.includes(c), 'renderCell must handle ' + c);
     }
-    for (const s of ["key === 'points'", "key === 'gp'", "key === 'proj'", "key === 'adp'"]) {
+    for (const s of ["key === 'points'", "key === 'gp'", "key === 'proj'", "key === 'dhqProj'", "key === 'adp'"]) {
         ok(src.includes(s), 'sort comparator must handle ' + s);
     }
     ok(src.includes('_allPlayersProjMemo'), 'weekly projections must be memoized — the ledger renders 1,000+ rows');
+    // A set saved while Proj was one column gains DHQ Proj beside it; the
+    // previous default migrates to the new one.
+    const mig = src.match(/function apWithDhqProj\(cols\) \{[\s\S]*?\n\}/);
+    ok(mig, 'saved column sets must migrate to the two projection columns');
+    const apWithDhqProj = new Function(mig[0] + '; return apWithDhqProj;')();
+    ok(JSON.stringify(apWithDhqProj(['name', 'ppg', 'proj', 'dhq'])) === JSON.stringify(['name', 'ppg', 'proj', 'dhqProj', 'dhq']), 'DHQ Proj lands right after Proj');
+    ok(JSON.stringify(apWithDhqProj(['name', 'dhq'])) === JSON.stringify(['name', 'dhq']), 'a set without Proj is left alone');
+    ok(/b21–b148 \(one Proj column\)/.test(src), 'the one-Proj-column default must be listed as a previous default');
+    ok(!/'DHQ ' \+ window\.App\.DhqProj\.fmt/.test(src), 'no stacked "DHQ x.x" under Sleeper\'s number');
     ok(src.includes("addEventListener('wr:adp-loaded'"), 'ADP column must re-render when the market map lands');
     // Roster-tab customize model (owner ruling 2026-08-24): the stored array
     // is the display order, with move/hide/add helpers and the grouped panel.

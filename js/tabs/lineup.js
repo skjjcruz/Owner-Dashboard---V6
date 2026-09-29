@@ -740,7 +740,7 @@ function LineupTab({
             <span title="Roster slot">Slot</span>
             <span title="Player · position · NFL team · this week's opponent">Player</span>
             <span title={projTip} style={{ textAlign: 'right' }}>{(window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper') + ' Proj'}</span>
-            <span title="DHQ projection: his typical week (median). Totals, Optimal and THE CALL add his average week." style={{ textAlign: 'right', color: 'var(--gold, #d4af37)' }}>DHQ typ</span>
+            <span title="DHQ's projected points this week: his typical week (median). Totals, Optimal and THE CALL add his average week." style={{ textAlign: 'right', color: 'var(--gold, #d4af37)' }}>DHQ Proj</span>
             {pro ? <span title="Matchup grade A (great) → F (tough), from the opponent's Vegas implied total" style={{ textAlign: 'center' }}>Mtch</span> : null}
             {!isPhone ? (<React.Fragment>
                 <span title={'Rolling average over the last ' + (formWindow === 'season' ? 'full season' : formWindow + ' weeks') + ' (actual points)'} style={{ textAlign: 'right' }}>{formWinLabel}</span>
@@ -1144,7 +1144,7 @@ function LineupTab({
             const shade = starterShade(pid);
             const row = <AssetRow key={sl.idx} pos={meta.pos || '?'} name={meta.name}
                 tag={wrapTag([slotLabel, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, injShort(status) || null])}
-                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ TYP', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—' }]}
+                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ PROJ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—', tone: 'gold' }]}
                 verdict={pro ? gradeChip((proj && proj.matchupGrade) || '—') : null}
                 accent={open ? 'gold' : atRisk ? 'risk' : undefined}
                 style={shade ? { background: 'transparent' } : undefined}
@@ -1175,7 +1175,7 @@ function LineupTab({
             const fs = formOf(pid);
             return <AssetRow key={label + pid} pos={meta.pos || '?'} name={meta.name}
                 tag={wrapTag([label, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, injShort(status) || null])}
-                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ TYP', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]} />;
+                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ PROJ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—', tone: 'gold' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]} />;
         };
 
         // Eligible-player picker (openSlot) — a WR.Sheet instead of the
@@ -1216,7 +1216,7 @@ function LineupTab({
             // The green-outlined row already marks it as DHQ's pick.
             return <AssetRow key={epid} pos={meta.pos || '?'} name={meta.name}
                 tag={wrapTag([isCur ? 'IN' : isRec ? 'Best swap' : null, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, injShort(status) || null])}
-                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ TYP', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(epid) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]}
+                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ PROJ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(epid) : '—', tone: 'gold' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]}
                 verdict={pro ? gradeChip((proj && proj.matchupGrade) || '—') : null}
                 accent={isCur ? 'gold' : undefined}
                 style={isRec ? { background: 'color-mix(in srgb, ' + GREEN + ' 9%, transparent)', border: '1px solid color-mix(in srgb, ' + GREEN + ' 45%, transparent)', borderRadius: '9px', overflow: 'hidden' } : undefined}

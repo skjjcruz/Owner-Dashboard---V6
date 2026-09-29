@@ -693,7 +693,11 @@ const ALL_PLAYERS_COLUMNS = [
     { key: 'points',     label: 'Pts',      width: '48px', sortable: true, sortKey: 'points', group: 'stats' },
     { key: 'gp',         label: 'GP',       width: '36px', sortable: true, sortKey: 'gp', group: 'stats' },
     { key: 'ppg',        label: 'PPG',      width: '42px', sortable: true, sortKey: 'ppg', group: 'stats' },
-    { key: 'proj',       label: 'Proj',     width: '52px', sortable: true, sortKey: 'proj', group: 'stats' },
+    // Weekly projections, two columns side by side (owner ruling 2026-09-29,
+    // the My Team Roster Board is the reference): Sleeper's number, then
+    // DHQ's. Header text, tooltip and cell style come from App.DhqProj.cols.
+    { key: 'proj',       label: 'Sleeper Proj', width: '96px', sortable: true, sortKey: 'proj', group: 'stats', center: true },
+    { key: 'dhqProj',    label: 'DHQ Proj', width: '80px', sortable: true, sortKey: 'dhqProj', group: 'stats', center: true },
     { key: 'hi',         label: 'Hi',       width: '40px', sortable: true, sortKey: 'hi', group: 'stats' },
     { key: 'lo',         label: 'Lo',       width: '40px', sortable: true, sortKey: 'lo', group: 'stats' },
     { key: 'prev',       label: 'Last',     width: '44px', sortable: true, sortKey: 'prev', group: 'stats' },
@@ -731,7 +735,7 @@ const ALL_PLAYERS_GROUP_LABELS = { core: 'Core', stats: 'Stats', dynasty: 'Dynas
 // Scout / Deep Data, with Custom auto-detected when no preset matches).
 const ALL_PLAYERS_PRESETS = {
     default: null, // filled below — the owner-ruled default view
-    stats:   ['name', 'points', 'gp', 'ppg', 'proj', 'hi', 'lo', 'prev', 'trend', 'durability', 'sos'],
+    stats:   ['name', 'points', 'gp', 'ppg', 'proj', 'dhqProj', 'hi', 'lo', 'prev', 'trend', 'durability', 'sos'],
     dynasty: ['name', 'age', 'yoe', 'dhq', 'trend', 'adp', 'peakPhase', 'peakYrs', 'posRankLg', 'posRankNfl', 'starterSzn'],
     scout:   ['name', 'age', 'yoe', 'college', 'height', 'weight', 'depthChart', 'rkSlot', 'rkTeam'],
     deep:    ALL_PLAYERS_COLUMNS.map(c => c.key),
@@ -741,7 +745,7 @@ const ALL_PLAYERS_PRESET_LABELS = { default: 'Default', stats: 'Stats', dynasty:
 // PPG · Weekly Proj · DHQ · ADP. Everything else stays in the picker.
 // Owner-set board (2026-08-24, from his live Customize panel): the full
 // scouting ledger minus Dur / SOS / Lg # / NFL # / Starts, in his order.
-const ALL_PLAYERS_DEFAULT_VISIBLE = ['name', 'yoe', 'age', 'points', 'gp', 'ppg', 'proj', 'hi', 'lo', 'prev', 'dhq', 'adp', 'trend', 'peakPhase', 'peak', 'peakYrs', 'height', 'weight', 'college', 'depthChart', 'rkSlot', 'rkTeam', 'tier', 'owner', 'acq'];
+const ALL_PLAYERS_DEFAULT_VISIBLE = ['name', 'yoe', 'age', 'points', 'gp', 'ppg', 'proj', 'dhqProj', 'hi', 'lo', 'prev', 'dhq', 'adp', 'trend', 'peakPhase', 'peak', 'peakYrs', 'height', 'weight', 'college', 'depthChart', 'rkSlot', 'rkTeam', 'tier', 'owner', 'acq'];
 ALL_PLAYERS_PRESETS.default = ALL_PLAYERS_DEFAULT_VISIBLE;
 // Every PREVIOUS default — used ONLY to migrate untouched saved prefs (the
 // persistence effect writes the default on first visit, so nearly every
@@ -751,7 +755,20 @@ ALL_PLAYERS_PRESETS.default = ALL_PLAYERS_DEFAULT_VISIBLE;
 const ALL_PLAYERS_PREV_DEFAULTS = [
     ['name', 'pos', 'nflTeam', 'age', 'dhq', 'ppg', 'peakYrs', 'tier', 'owner', 'acq'], // pre-b11
     ['name', 'yoe', 'points', 'gp', 'ppg', 'proj', 'dhq', 'adp'],                        // b11–b20
+    ['name', 'yoe', 'age', 'points', 'gp', 'ppg', 'proj', 'hi', 'lo', 'prev', 'dhq', 'adp', 'trend', 'peakPhase', 'peak', 'peakYrs', 'height', 'weight', 'college', 'depthChart', 'rkSlot', 'rkTeam', 'tier', 'owner', 'acq'], // b21–b148 (one Proj column)
 ];
+// A column set saved while Proj was one column (Sleeper's number with DHQ's
+// stacked under it) gains DHQ Proj right after Proj, so nobody loses the DHQ
+// number when it moved into its own column. Stored sets are migrated once
+// (marker key); saved views carry a stamp (filters.projCols) once saved on
+// this build, so a view saved later without DHQ Proj keeps its choice.
+const AP_PROJ_COLS_STAMP = 2;
+function apWithDhqProj(cols) {
+    if (!Array.isArray(cols) || cols.includes('dhqProj') || !cols.includes('proj')) return cols;
+    const out = cols.slice();
+    out.splice(out.indexOf('proj') + 1, 0, 'dhqProj');
+    return out;
+}
 // Weekly-projection memo — projectPlayer is pure math but the ledger renders
 // 1,000+ rows with no virtualization, so each (league|season|week|pid) is
 // computed once per page load and reused across re-renders and sorts.
@@ -1108,11 +1125,29 @@ function LeagueMapTab({
                   const pc = prev.filter(k => registryKeys.has(k));
                   return clean.length === pc.length && pc.every(k => clean.includes(k));
               });
-              if (clean.length && !isOldDefault) return clean;
+              if (clean.length && !isOldDefault) {
+                  const MIG = ALL_PLAYERS_COL_KEY + '_projcols';
+                  if (localStorage.getItem(MIG) === String(AP_PROJ_COLS_STAMP)) return clean;
+                  localStorage.setItem(MIG, String(AP_PROJ_COLS_STAMP));
+                  return apWithDhqProj(clean);
+              }
           }
       } catch (_) {}
       return ALL_PLAYERS_DEFAULT_VISIBLE.slice();
   });
+  // Saved views: one apply path for the desktop and phone bars. A view
+  // saved before DHQ Proj had its own column gains it beside Proj.
+  const apApplySavedView = (v) => {
+      if (Array.isArray(v.columns) && v.columns.length) {
+          const stamped = v.filters && v.filters.projCols === AP_PROJ_COLS_STAMP;
+          setAllPlayersCols(stamped ? v.columns : apWithDhqProj(v.columns));
+      }
+      if (v.sort && v.sort.key) setLpSort({ key: v.sort.key, dir: v.sort.dir || -1 });
+      if (v.filters) {
+          if (typeof v.filters.lpFilter === 'string') setLpFilter(v.filters.lpFilter);
+          if (typeof v.filters.lpSearch === 'string' && setLpSearch) setLpSearch(v.filters.lpSearch);
+      }
+  };
   const [allPlayersColPickerOpen, setAllPlayersColPickerOpen] = React.useState(false);
   // Roster-tab customize model (owner ruling 2026-08-24): the stored array IS
   // the display order. Move/hide/add mirror my-team.js's helpers; the Player
@@ -1232,7 +1267,7 @@ function LeagueMapTab({
       { key: 'team', label: 'NFL Team' },
       { key: 'dhq', label: 'DHQ' },
       { key: 'ppg', label: 'PPG' },
-      { key: 'projWk', label: 'Proj (Wk)' },
+      { key: 'projWk', label: 'Sleeper Proj (Wk)' },
       { key: 'dhqWk', label: 'DHQ Proj (Wk)' },
       { key: 'rosValue', label: 'ROS Value' },
       { key: 'peakYrs', label: 'Peak Yrs' },
@@ -1351,7 +1386,8 @@ function LeagueMapTab({
             name: p.full_name || ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),
             pos, age: p.age || null, team: p.team || 'FA', dhq, ppg, projWk,
             // DHQ's projection beside Sleeper's (null until the engine has it).
-            dhqWk: (window.App && window.App.DhqProj) ? ((window.App.DhqProj.get(pid) || {}).median ?? null) : null,
+            // No Sleeper line this week (truth law) → none, as the tables show "—".
+            dhqWk: (window.App && window.App.DhqProj) ? (() => { const d = window.App.DhqProj.get(pid); return d && !d.noSleeper ? (d.median ?? null) : null; })() : null,
             rosValue,
             peakYrs, owner: ownerName, tier: assess?.tier || 'N/A',
             contend: contendByRoster[String(r.roster_id)] || 'N/A',
@@ -1877,15 +1913,8 @@ function LeagueMapTab({
                     React.createElement(window.WR.SavedViews.SavedViewBar, {
                         surface: 'all_players',
                         leagueId: currentLeague?.id || currentLeague?.league_id,
-                        currentState: { columns: allPlayersCols, sort: lpSort, filters: { lpFilter, lpSearch: lpSearch || '' } },
-                        onApply: v => {
-                            if (Array.isArray(v.columns) && v.columns.length) setAllPlayersCols(v.columns);
-                            if (v.sort && v.sort.key) setLpSort({ key: v.sort.key, dir: v.sort.dir || -1 });
-                            if (v.filters) {
-                                if (typeof v.filters.lpFilter === 'string') setLpFilter(v.filters.lpFilter);
-                                if (typeof v.filters.lpSearch === 'string' && setLpSearch) setLpSearch(v.filters.lpSearch);
-                            }
-                        },
+                        currentState: { columns: allPlayersCols, sort: lpSort, filters: { lpFilter, lpSearch: lpSearch || '', projCols: AP_PROJ_COLS_STAMP } },
+                        onApply: apApplySavedView,
                     })
                 )}
             </div>
@@ -2158,6 +2187,11 @@ function LeagueMapTab({
             _allPlayersProjMemo[k] = v;
             return v;
         };
+        const _dhqCols = window.App && window.App.DhqProj && window.App.DhqProj.cols;
+        const _dhqSortVal = (x) => (_dhqCols ? _dhqCols.sortVal(x.pid) : -1);
+        // Header text + tooltip for the two weekly projection columns.
+        const apColLabel = (c) => (_dhqCols && c.key === 'proj' ? _dhqCols.sleeperHead() : _dhqCols && c.key === 'dhqProj' ? _dhqCols.dhqHead : c.label);
+        const apColTip = (c) => (!_dhqCols ? undefined : c.key === 'proj' ? _dhqCols.sleeperTip() : c.key === 'dhqProj' ? _dhqCols.dhqTip : undefined);
         filtered.sort((a, b) => {
             const { key, dir } = lpSort;
             if (key === 'dhq') return (a.dhq - b.dhq) * dir;
@@ -2166,6 +2200,8 @@ function LeagueMapTab({
             if (key === 'points') return (ptsOf(a) - ptsOf(b)) * dir;
             if (key === 'gp') return (gpOf(a) - gpOf(b)) * dir;
             if (key === 'proj') return ((projOf(a) || 0) - (projOf(b) || 0)) * dir;
+            // DHQ Proj sorts on his average week (App.DhqProj.cols.sortVal).
+            if (key === 'dhqProj') return (_dhqSortVal(a) - _dhqSortVal(b)) * dir;
             // Missing ADP sorts to the bottom in BOTH directions — a player the
             // market isn't drafting must not "win" an ascending sort.
             if (key === 'adp') {
@@ -2242,15 +2278,8 @@ function LeagueMapTab({
                             React.createElement(window.WR.SavedViews.SavedViewBar, {
                                 surface: 'all_players',
                                 leagueId: currentLeague?.id || currentLeague?.league_id,
-                                currentState: { columns: allPlayersCols, sort: lpSort, filters: { lpFilter, lpSearch: lpSearch || '' } },
-                                onApply: v => {
-                                    if (Array.isArray(v.columns) && v.columns.length) setAllPlayersCols(v.columns);
-                                    if (v.sort && v.sort.key) setLpSort({ key: v.sort.key, dir: v.sort.dir || -1 });
-                                    if (v.filters) {
-                                        if (typeof v.filters.lpFilter === 'string') setLpFilter(v.filters.lpFilter);
-                                        if (typeof v.filters.lpSearch === 'string' && setLpSearch) setLpSearch(v.filters.lpSearch);
-                                    }
-                                },
+                                currentState: { columns: allPlayersCols, sort: lpSort, filters: { lpFilter, lpSearch: lpSearch || '', projCols: AP_PROJ_COLS_STAMP } },
+                                onApply: apApplySavedView,
                             })
                         )}
                     </div>
@@ -2304,7 +2333,10 @@ function LeagueMapTab({
                     storage — the stored array is now the display order. */}
                 {allPlayersColPickerOpen && (() => {
                     const orderKeys = allPlayersCols.filter(k => k !== 'name' && ALL_PLAYERS_COL_BY_KEY[k] && (isPro || k !== 'tier'));
-                    const groups = ['core', 'stats', 'value', 'league']
+                    // Every registry group gets its checkbox card (the list read
+                    // 'value', a group no column has, so Dynasty and Scout fields
+                    // could not be switched back on here).
+                    const groups = Object.keys(ALL_PLAYERS_GROUP_LABELS)
                         .map(g => ({ g, cols: ALL_PLAYERS_COLUMNS.filter(c => c.group === g && c.toggleable !== false && (isPro || c.key !== 'tier')) }))
                         .filter(e => e.cols.length);
                     const smallBtn = (on) => ({ padding: '6px 12px', minHeight: '32px', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'pointer', borderRadius: 'var(--card-radius-xs, 5px)', fontFamily: 'var(--font-body)', border: '1px solid ' + (on ? 'var(--acc-line2, rgba(212,175,55,0.4))' : 'var(--ov-6, rgba(255,255,255,0.12))'), background: on ? 'rgba(212,175,55,0.12)' : 'transparent', color: on ? 'var(--gold)' : 'var(--silver)' });
@@ -2313,7 +2345,7 @@ function LeagueMapTab({
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
                                 <div style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: 'var(--text-title, 1.125rem)', color: 'var(--white)', fontWeight: 700, letterSpacing: '0.04em' }}>Customize Columns</div>
                                 <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.58 }}>{orderKeys.length + 1} of {ALL_PLAYERS_COLUMNS.filter(c => isPro || c.key !== 'tier').length} active</div>
-                                {_phone && <div style={{ flexBasis: '100%', order: 3, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.7, lineHeight: 1.4 }}>Phone rows show the first 3 columns of your order (default board: DHQ · PPG · DHQ Wk).</div>}
+                                {_phone && <div style={{ flexBasis: '100%', order: 3, fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.7, lineHeight: 1.4 }}>Phone rows show the first 3 columns of your order (default board: DHQ · Sleeper Proj · DHQ Proj).</div>}
                                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                                     <button onClick={() => setAllPlayersCols(ALL_PLAYERS_COLUMNS.filter(c => isPro || c.key !== 'tier').map(c => c.key))} style={smallBtn(false)}>All Fields</button>
                                     <button onClick={() => setAllPlayersCols(ALL_PLAYERS_DEFAULT_VISIBLE.slice())} style={smallBtn(true)}>Reset Default</button>
@@ -2377,15 +2409,17 @@ function LeagueMapTab({
                     // the desktop/tablet ledger below is untouched.
                     if (_phone) {
                         // Phone slots follow Customize / saved views: the untouched
-                        // default board shows DHQ · PPG · weekly DHQ Proj (age already
-                        // rides the tag line); a customized order shows its first 3
-                        // columns, valued from the SAME helpers renderCell uses.
+                        // default board shows DHQ · Sleeper Proj · DHQ Proj, the My
+                        // Team phone board's trio (age already rides the tag line;
+                        // a row holds three slots); a customized order shows its
+                        // first 3 columns, valued from the SAME helpers renderCell uses.
                         const _dhqProj = window.App && window.App.DhqProj;
-                        const _phDefault = ['dhq', 'ppg', 'proj'];
+                        const _phDefault = ['dhq', 'proj', 'dhqProj'];
                         const _phActive = allPlayersCols.filter(k => k !== 'name' && ALL_PLAYERS_COL_BY_KEY[k] && (isPro || k !== 'tier'));
                         const _isStockBoard = [ALL_PLAYERS_DEFAULT_VISIBLE].concat(ALL_PLAYERS_PREV_DEFAULTS).some(d => d.filter(k => k !== 'name').join(',') === _phActive.join(','));
                         const phoneSlotKeys = (_isStockBoard || !_phActive.length) ? _phDefault : _phActive.slice(0, 3);
                         const dash = '—';
+                        const _phProvShort = () => { const pv = String(_dhqProj ? _dhqProj.provLabel() : 'Sleeper'); return /^sleeper$/i.test(pv) ? 'SLPR' : pv.slice(0, 4); };
                         // Free-text values (school, owner…) cap at 64px so a custom
                         // slot can't shove the name off a 375 row.
                         const clip = (v) => (v && v !== dash) ? <span title={String(v)} style={{ display: 'inline-block', maxWidth: '64px', overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'bottom' }}>{v}</span> : dash;
@@ -2393,11 +2427,9 @@ function LeagueMapTab({
                             switch (key) {
                                 case 'dhq': return { label: 'DHQ', value: x.dhq > 0 ? x.dhq.toLocaleString() : dash, tone: x.dhq >= 7000 ? 'good' : x.dhq >= 2000 ? undefined : 'mute' };
                                 case 'ppg': return { label: ppgLbl, value: ppgShown > 0 ? ppgShown : dash };
-                                case 'proj': {
-                                    // Same weekly figure the desktop Proj cell prints in gold.
-                                    if (_dhqProj) { const f = _dhqProj.fmt(x.pid); return { label: 'DHQ Wk', value: f || dash, tone: 'gold' }; }
-                                    const v = projOf(x); return { label: 'Proj', value: v != null && v > 0 ? v : dash };
-                                }
+                                // The two weekly projections, labelled like the My Team phone board.
+                                case 'proj': { const v = projOf(x); return { label: _phProvShort(), value: v != null && v > 0 ? v.toFixed(1) : dash, tone: v != null && v > 0 ? undefined : 'mute', w: '34px' }; }
+                                case 'dhqProj': return { label: 'DHQ Proj', value: _dhqProj ? _dhqProj.fmt(x.pid) : dash, tone: 'gold', w: '34px' };
                                 case 'age': return { label: 'Age', value: x.age || dash, tone: 'mute' };
                                 case 'yoe': return { label: 'Yrs', value: x.p.years_exp != null ? x.p.years_exp : dash, tone: 'mute' };
                                 case 'points': { const v = ptsOf(x); return { label: 'Pts', value: v > 0 ? v : dash }; }
@@ -2498,8 +2530,8 @@ function LeagueMapTab({
                             if (c.sortable && c.sortKey) {
                                 const isActive = lpSort.key === c.sortKey;
                                 return (
-                                    <span key={c.key} style={{ cursor: 'pointer', whiteSpace: 'nowrap', textAlign: c.center ? 'center' : undefined }} onClick={() => setLpSort(prev => prev.key === c.sortKey ? { ...prev, dir: prev.dir * -1 } : { key: c.sortKey, dir: (c.sortKey === 'team' || c.sortKey === 'adp') ? 1 : -1 })}>
-                                        {c.label}{isActive ? (lpSort.dir === -1 ? ' \u25BC' : ' \u25B2') : ''}
+                                    <span key={c.key} title={apColTip(c)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', textAlign: c.center ? 'center' : undefined }} onClick={() => setLpSort(prev => prev.key === c.sortKey ? { ...prev, dir: prev.dir * -1 } : { key: c.sortKey, dir: (c.sortKey === 'team' || c.sortKey === 'adp') ? 1 : -1 })}>
+                                        {apColLabel(c)}{isActive ? (lpSort.dir === -1 ? ' \u25BC' : ' \u25B2') : ''}
                                     </span>
                                 );
                             }
@@ -2554,10 +2586,14 @@ function LeagueMapTab({
                                         const v = gpOf(x);
                                         return <span key={c.key} style={{ color: 'var(--silver)' }}>{v > 0 ? v : '\u2014'}</span>;
                                     }
+                                    // Two columns, drawn like the My Team Roster Board.
                                     case 'proj': {
                                         const v = projOf(x);
-                                        return <span key={c.key} style={{ color: v != null && v > 0 ? 'var(--white)' : 'var(--silver)', fontFamily: 'var(--font-body)' }}>{v != null && v > 0 ? v : '\u2014'}{window.App && window.App.DhqProj ? <span title="DHQ projection (Sleeper first)" style={{ display: 'block', fontSize: '0.6rem', fontWeight: 700, color: 'var(--gold, #d4af37)' }}>{'DHQ ' + window.App.DhqProj.fmt(x.pid)}</span> : null}</span>;
+                                        const has = v != null && v > 0;
+                                        return <span key={c.key} style={{ textAlign: 'center', ...(has ? (_dhqCols ? _dhqCols.sleeperStyle : { color: 'var(--white)', fontWeight: 600 }) : (_dhqCols ? _dhqCols.dashStyle : { color: 'var(--silver)' })) }}>{has ? v.toFixed(1) : '\u2014'}</span>;
                                     }
+                                    case 'dhqProj':
+                                        return <span key={c.key} style={{ textAlign: 'center', ...(_dhqCols ? _dhqCols.dhqStyle : { color: 'var(--silver)' }) }}>{window.App && window.App.DhqProj ? window.App.DhqProj.fmt(x.pid) : '\u2014'}</span>;
                                     case 'adp': {
                                         const a = adpOf(x);
                                         return <span key={c.key} style={{ color: 'var(--silver)' }}>{a != null ? a.toFixed(1) : '\u2014'}</span>;

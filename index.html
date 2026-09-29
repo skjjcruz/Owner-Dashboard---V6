@@ -3165,7 +3165,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- One FAAB rule for every surface (budget AND, on Sleeper, waiver_type 2) — boot-loaded; before dashboard-digest.js. -->
 <script src="js/shared/faab-league.js?v=20260927faab1"></script>
 <script src="js/shared/sleeper-proj.js?v=20260917truth3"></script>
-<script src="js/shared/dhq-proj.js?v=20260929proj2"></script>
+<script src="js/shared/dhq-proj.js?v=20260929proj3"></script>
 <script src="js/shared/nfl-context.js?v=20260929proj1"></script>
 <script src="js/shared/matchup.js?v=20260927live2"></script>
 <!-- League live scores + standings engines (C2 port 2026-09-27): one shared Sleeper
@@ -3237,14 +3237,14 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="fa" src="js/shared/league-stats.js?v=20260927waivers1"></script>
 <script type="text/babel" data-wr-defer="fa" src="js/shared/fa-market-data.js?v=20260927waivers1"></script>
 <script type="text/babel" data-wr-defer="fa" src="js/shared/waiver-tools.js?v=20260927waivers2"></script>
-<script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260929proj2"></script>
+<script type="text/babel" data-wr-defer="fa" src="js/free-agency.js?v=20260929proj3"></script>
 <!-- Season Odds panel loads with Game Day (owner ruling 2026-07-30) — must
      precede lineup.js in the group so window.WrSeasonOdds exists on first render. -->
 <script type="text/babel" data-wr-defer="lineup" src="js/components/season-odds-panel.js?v=20260927b135"></script>
 <script type="text/babel" src="js/components/chop-block-panel.js?v=20260926b134"></script>
 <!-- Around the league (live scoreboard + standings) — must precede lineup.js in the group. -->
 <script type="text/babel" data-wr-defer="lineup" src="js/components/league-live-scoreboard.js?v=20260927live2"></script>
-<script type="text/babel" data-wr-defer="lineup" src="js/tabs/lineup.js?v=20260929proj2"></script>
+<script type="text/babel" data-wr-defer="lineup" src="js/tabs/lineup.js?v=20260929proj3"></script>
 <!-- The Wire — league newspaper (C2 port 2026-09-27). ONE deferred group
      'wire', injected when the league "The Wire" tab first opens (LeagueWireTabLazy
      in league-detail.js). Plain-JS engines ride as text/babel so every pipeline
@@ -3321,8 +3321,8 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/tabs/flash-brief.js?v=20260928bidfix2"></script>
 <!-- Group "analysis": analytics.js embeds LeagueMapTab, so both defer together
      (league-map.js first — DOM order is execution order within a group). -->
-<script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20260926qa1"></script>
-<script type="text/babel" data-wr-defer="myteam" src="js/tabs/my-team.js?v=20260929proj2"></script>
+<script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20260929proj3"></script>
+<script type="text/babel" data-wr-defer="myteam" src="js/tabs/my-team.js?v=20260929proj3"></script>
 <!-- Compare: extracted from My Roster's former sub-view, now a top-level ROSTER-group tab. -->
 <script type="text/babel" data-wr-defer="compare" src="js/tabs/compare.js?v=20260929proj2"></script>
 <script type="text/babel" data-wr-defer="analysis" src="js/tabs/analytics.js?v=20260927faab1"></script>
@@ -3339,7 +3339,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      "alex" lazy group — inert at boot, loaded on first GM's Office / Strategy open. -->
 <script type="text/babel" data-wr-defer="alex" src="js/tabs/strategy-editor.js?v=20260926qa1"></script>
 <!-- 7. League detail: coordinator shell, depends on all above -->
-    <script type="text/babel" src="js/league-detail.js?v=20260927wire2"></script>
+    <script type="text/babel" src="js/league-detail.js?v=20260929proj3"></script>
 <!-- 8. App: OwnerDashboard + ReactDOM.render (loads last) -->
 <script type="text/babel" src="js/app.js?v=20260928auth4"></script>
 

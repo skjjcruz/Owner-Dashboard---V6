@@ -3368,7 +3368,9 @@
                     .wr-hamburger{display:block !important}
                     .wr-sidebar{left:-220px !important;top:var(--wr-dev-banner-height,0px) !important;transform:none !important}
                     .wr-sidebar.open{left:0 !important}
-                    .wr-main-content{margin-left:0 !important;width:100% !important;max-width:100vw;overflow-x:clip;overflow-y:visible;box-sizing:border-box;padding-top:var(--wr-dev-banner-height,0px)}
+                    /* max-width must beat the inline calc(100vw - sidebar) cap too, or the
+                       column stops 176px short of an iPad portrait screen (820px → 644px). */
+                    .wr-main-content{margin-left:0 !important;width:100% !important;max-width:100vw !important;overflow-x:clip;overflow-y:visible;box-sizing:border-box;padding-top:var(--wr-dev-banner-height,0px)}
                 }
                 @media(max-width:767px){
                     /* Closed drawer: phone widens it to 232px (index.html), so the
@@ -3879,7 +3881,12 @@
                     bar and its inline season selector. */}
                 <div className="wr-time-bar" style={{
                     display: phoneHdrKit ? 'none' : 'flex', alignItems: 'center', gap: '8px', padding: '8px clamp(12px, 4vw, 24px)', flexWrap: 'wrap',
-                    background: 'rgba(0,0,0,0.4)', borderBottom: '1px solid var(--acc-fill2, rgba(212,175,55,0.12))',
+                    // Opaque: the same 40% black tint over the page colour it
+                    // sits on, so the bar looks unchanged at rest but hides what
+                    // scrolls under it (owner iPad screenshot 2026-09-29: the
+                    // All Players toolbar showed through, "ALL PLAYERS" over
+                    // "Past seasons", "VIEW: DEFAULT" over "CURRENT SEASON").
+                    background: 'linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), var(--page-bg, #08080B)', borderBottom: '1px solid var(--acc-fill2, rgba(212,175,55,0.12))',
                     position: 'sticky', top: 'var(--sat, 0px)', zIndex: 50
                 }}>
                     {/* Year pills — grouped as a timeline: past · current · projected */}

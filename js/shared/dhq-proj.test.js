@@ -195,7 +195,7 @@ test('once Sleeper\'s week is in, a player it does not project shows 0, typical 
     D.get('x');
     Object.assign(D._st.results, { qb1: { median: 18, mean: 18 }, kOff: { median: 8.2, mean: 8.2 }, adp: { median: 5.8, mean: 5.8 }, ptsOnly: { median: 1.1, mean: 1.3 } });
     assert.equal(D.fmt('qb1'), '18.0', 'Sleeper projects him: DHQ\'s number stands');
-    assert.equal(D.fmt('kOff'), '0.0', 'no Sleeper line at all');
+    assert.equal(D.fmt('kOff'), '—', 'no Sleeper line at all: a dash, like Sleeper\'s own column');
     assert.equal(D.get('adp').mean, 0, 'an ADP placeholder is not a projection');
     assert.equal(D.get('ptsOnly').mean, 0, 'a line with nothing this league scores');
     assert.equal(D.get('kOff').noSleeper, true);
@@ -222,4 +222,23 @@ test('choices run on the average week: availability and start-instead points', (
     const best = D.optimalFor({ players: ['lb1', 'lb2'], starters: ['0'] }, ['LB', 'BN']);
     assert.equal(best.starters[0].pid, 'lb1', 'a player with an average above 0 can be started');
     globalThis.S = saved.S; App.WeeklyProj = saved.WP; App.StartSit = saved.SS;
+});
+
+// ── The two weekly projection columns (owner ruling 2026-09-29) ──
+test('projection columns: headers, Sleeper text, and the DHQ sort value', () => {
+    const saved = { S: globalThis.S, WP: App.WeeklyProj };
+    globalThis.S = { currentLeagueId: 'C', leagues: [{ league_id: 'C', scoring_settings: {} }], players: {} };
+    App.WeeklyProj = { displayWeek: () => 5 };
+    D.get('x');
+    Object.assign(D._st.results, { a: { median: 9, mean: 11 }, none: null });
+    const c = D.cols;
+    assert.equal(c.sleeperHead(), 'Sleeper Proj');
+    assert.equal(c.dhqHead, 'DHQ Proj');
+    assert.match(c.sleeperTip(), /Sleeper's projected points this week, your league's scoring/);
+    assert.match(c.dhqTip, /^DHQ's projected points this week/);
+    assert.equal(c.sleeperText(18.04), '18.0');
+    assert.equal(c.sleeperText(0), '—');
+    assert.equal(c.sortVal('a'), 11, 'sorts on the average week');
+    assert.equal(c.sortVal('none'), -1, 'no DHQ number sorts last');
+    globalThis.S = saved.S; App.WeeklyProj = saved.WP;
 });

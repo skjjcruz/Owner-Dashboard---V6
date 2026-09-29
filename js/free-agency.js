@@ -16,7 +16,11 @@
         age:        { label: 'Age',                     shortLabel: 'Age',    width: '34px', sortKey: 'age',   group: 'dynasty' },
         dhq:        { label: 'DHQ Dynasty Value',       shortLabel: 'DHQ',    width: '58px', sortKey: 'dhq',   group: 'dynasty' },
         ppg:        { label: 'Points Per Game',         shortLabel: 'PPG',    width: '44px', sortKey: 'ppg',   group: 'stats'   },
-        proj:       { label: 'This Week Projection',    shortLabel: 'Proj',   width: '48px', sortKey: 'proj',  group: 'stats'   },
+        // Weekly projections, two columns side by side (owner ruling
+        // 2026-09-29, drawn like the My Team Roster Board; headers, tooltips
+        // and cell styles from App.DhqProj.cols).
+        proj:       { label: "Sleeper's projected points this week, your league's scoring", shortLabel: 'Sleeper Proj', width: '96px', sortKey: 'proj', group: 'stats', center: true },
+        dhqProj:    { label: "DHQ's projected points this week (his typical week; sorts use his average week)", shortLabel: 'DHQ Proj', width: '80px', sortKey: 'dhqProj', group: 'stats', center: true },
         peakYr:     { label: 'Peak Years Left',         shortLabel: 'Peak',   width: '44px', sortKey: 'peak',  group: 'dynasty' },
         yrsExp:     { label: 'NFL Years Experience',    shortLabel: 'Exp',    width: '38px', sortKey: 'exp',   group: 'dynasty' },
         college:    { label: 'College',                 shortLabel: 'College',width: '90px', sortKey: 'college', group: 'scout' },
@@ -57,11 +61,11 @@
         return dp ? (dp.round > 0 ? 'R' + dp.round + ' #' + dp.overall : 'UDFA') : null;
     }
     const FA_COLUMN_PRESETS = {
-        default: ['pos','team','age','dhq','ppg','proj','faab'],
+        default: ['pos','team','age','dhq','ppg','proj','dhqProj','faab'],
         scout:   ['pos','age','college','height','weight','depthChart'],
         bidding: ['pos','team','dhq','ppg','faab','injury'],
         rookie:  ['pos','college','rkSlot','rkTeam','rkRank','rkTier','rkProfile','dhq'],
-        usage:   ['pos','team','age','ppg','sig1','sig2','proj'],
+        usage:   ['pos','team','age','ppg','sig1','sig2','proj','dhqProj'],
         full:    Object.keys(FA_COLUMNS),
     };
     const ROOKIE_DRAFT_LOCK_STATUSES = new Set(['pre_draft', 'drafting']);
@@ -74,6 +78,17 @@
     // team-assess needs) still powers the drawer's Roster Fit panel,
     // decorateFaCandidate, and the action board.
     const FA_PRO_COLS = new Set(['faab']);
+    // A column set saved while Proj was one column (Sleeper's number with
+    // DHQ's stacked under it) gains DHQ Proj right after it. Stored sets are
+    // migrated once (marker key); saved views carry filters.projCols once
+    // saved on this build, so a later choice to hide DHQ Proj stands.
+    const FA_PROJ_COLS_STAMP = 2;
+    function faWithDhqProj(cols) {
+        if (!Array.isArray(cols) || cols.includes('dhqProj') || !cols.includes('proj')) return cols;
+        const out = cols.slice();
+        out.splice(out.indexOf('proj') + 1, 0, 'dhqProj');
+        return out;
+    }
     function faTierCols(cols) {
         const pro = typeof window.wrIsPro === 'function' ? window.wrIsPro() : true;
         return pro ? (cols || []) : (cols || []).filter(k => !FA_PRO_COLS.has(k));
@@ -1260,6 +1275,12 @@
                 const at = valid.indexOf('ppg') >= 0 ? valid.indexOf('ppg') + 1 : valid.indexOf('dhq') >= 0 ? valid.indexOf('dhq') + 1 : valid.length;
                 valid.splice(at, 0, 'proj');
             }
+            try {
+                if (window.App?.WrStorage?.get?.('wr_fa_cols_projcols') !== FA_PROJ_COLS_STAMP) {
+                    window.App?.WrStorage?.set?.('wr_fa_cols_projcols', FA_PROJ_COLS_STAMP);
+                    return faTierCols(faWithDhqProj(valid));
+                }
+            } catch (e) { /* storage blocked: keep the stored set */ }
             return faTierCols(valid);
         });
         const [faColPreset, setFaColPreset] = useState('default');
@@ -1662,6 +1683,8 @@
                 if (k === 'age') return dir * ((a.p.age || 0) - (b.p.age || 0));
                 if (k === 'dhq') return dir * (a.dhq - b.dhq);
                 if (k === 'proj') return dir * ((a.proj || 0) - (b.proj || 0));
+                // DHQ Proj sorts on his average week; none sorts last.
+                if (k === 'dhqProj') { const sv = window.App?.DhqProj?.cols?.sortVal; return sv ? dir * (sv(a.pid) - sv(b.pid)) : 0; }
                 if (k === 'ppg') {
                     const sa = statsData[a.pid] || {}; const sb = statsData[b.pid] || {};
                     const pa = sa.gp > 0 ? calcRawPts(sa) / sa.gp : 0;
@@ -2518,13 +2541,13 @@
             // slot-capable picks of the actual columns ("full = your columns").
             // PEAK left the default path; the this-week projection replaced it.
             const FA_PHONE_SLOT_PRESETS = {
-                default: ['dhq', 'ppg', 'proj'],   // value · production · this-week projection
+                default: ['dhq', 'proj', 'dhqProj'],   // value · Sleeper's week · DHQ's week (the My Team phone trio)
                 usage:   ['sig1', 'sig2', 'ppg'],   // per-game usage (this season) · production
                 scout:   ['age', 'height', 'weight'],
                 bidding: ['dhq', 'faab', 'proj'],  // value · bid · this-week projection
                 rookie:  ['rkSlot', 'rkRank', 'rkTier'],
             };
-            const FA_PHONE_SLOT_KEYS = new Set(['age', 'dhq', 'ppg', 'proj', 'peakYr', 'yrsExp', 'height', 'weight', 'depthChart', 'injury', 'faab', 'sig1', 'sig2', 'rkSlot', 'rkTeam', 'rkRank', 'rkTier']);
+            const FA_PHONE_SLOT_KEYS = new Set(['age', 'dhq', 'ppg', 'proj', 'dhqProj', 'peakYr', 'yrsExp', 'height', 'weight', 'depthChart', 'injury', 'faab', 'sig1', 'sig2', 'rkSlot', 'rkTeam', 'rkRank', 'rkTier']);
             let _faSlotKeys = FA_PHONE_SLOT_PRESETS[faActivePresetKey]
                 || shownFaCols.filter(k => FA_PHONE_SLOT_KEYS.has(k)).slice(0, 3);
             _faSlotKeys = faTierCols(_faSlotKeys);
@@ -2533,7 +2556,7 @@
             // Fixed min widths per slot so the stat columns line up row to
             // row (phone fit pass 2026-09-26) — PPG's width fits the thin-
             // sample "2G PPG" label so it can't shift the row next to it.
-            const _FA_SLOT_W = { dhq: '46px', ppg: '42px', proj: '34px', faab: '46px', sig1: '44px', sig2: '44px' };
+            const _FA_SLOT_W = { dhq: '46px', ppg: '42px', proj: '34px', dhqProj: '34px', faab: '46px', sig1: '44px', sig2: '44px' };
             const _faSlotFor = (k, x) => {
                 const s = _faSlotForRaw(k, x);
                 if (s && !s.w) s.w = _FA_SLOT_W[k] || '34px';
@@ -2576,20 +2599,13 @@
                         }
                         return { label: lbl, value: shown > 0 ? shown : '—' };
                     }
-                    // Sleeper's number, with DHQ's beside it (owner ruling 2026-09-23: side by side).
-                    // Phone fit pass 2026-09-26: the one-line "18.1 · DHQ 16.9"
-                    // read as a run-on with PPG — now two stacked numbers under
-                    // one WK label, Sleeper on top, DHQ below in DHQ gold.
+                    // Sleeper's number and DHQ's, two labelled slots side by side
+                    // (owner ruling 2026-09-29: no stacked, unlabelled gold number).
                     case 'proj': {
-                        const slp = x.proj > 0 ? x.proj.toFixed(1) : '—';
-                        if (!(window.App && window.App.DhqProj)) return { label: 'WK', value: slp };
-                        return { label: 'WK', value: (
-                            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.15 }}>
-                                <span title="Sleeper projection">{slp}</span>
-                                <span title="DHQ projection: typical week" style={{ color: 'var(--gold)', fontSize: '0.72rem', fontWeight: 600 }}>{window.App.DhqProj.fmt(x.pid)}</span>
-                            </span>
-                        ) };
+                        const pv = String(window.App?.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper');
+                        return { label: /^sleeper$/i.test(pv) ? 'SLPR' : pv.slice(0, 4), value: x.proj > 0 ? x.proj.toFixed(1) : '—', tone: x.proj > 0 ? undefined : 'mute' };
                     }
+                    case 'dhqProj': return { label: 'DHQ Proj', value: window.App?.DhqProj ? window.App.DhqProj.fmt(x.pid) : '—', tone: 'gold' };
                     case 'age': return { label: short, value: p.age || '—', tone: 'mute' };
                     case 'peakYr': {
                         const py = peakYearsFor(x.pos, p.age);
@@ -2747,9 +2763,9 @@
                                 {React.createElement(window.WR.SavedViews.SavedViewBar, {
                                     surface: 'free_agency',
                                     leagueId: currentLeague?.id || currentLeague?.league_id,
-                                    currentState: { columns: visibleFaCols, sort: faSort, filters: { faFilter, faSearch } },
+                                    currentState: { columns: visibleFaCols, sort: faSort, filters: { faFilter, faSearch, projCols: FA_PROJ_COLS_STAMP } },
                                     onApply: (v) => {
-                                        if (Array.isArray(v.columns) && v.columns.length) { setVisibleFaCols(faTierCols(v.columns.filter(k => FA_COLUMNS[k]))); setFaColPreset('custom'); }
+                                        if (Array.isArray(v.columns) && v.columns.length) { const vc = v.filters && v.filters.projCols === FA_PROJ_COLS_STAMP ? v.columns : faWithDhqProj(v.columns); setVisibleFaCols(faTierCols(vc.filter(k => FA_COLUMNS[k]))); setFaColPreset('custom'); }
                                         if (v.sort && v.sort.key) setFaSort({ key: v.sort.key, dir: v.sort.dir || 1 });
                                         if (v.filters && typeof v.filters.faFilter === 'string') setFaFilter(v.filters.faFilter);
                                         if (v.filters && typeof v.filters.faSearch === 'string') setFaSearch(v.filters.faSearch);
@@ -2884,10 +2900,7 @@
                 title: 'Open player card',
             })) : [];
             const _faGroups = [];
-            // The stacked WK slot (Sleeper over DHQ) is keyed once here rather
-            // than on every row.
-            const _faWkKey = _faSlotKeys.includes('proj') && window.App && window.App.DhqProj;
-            _faGroups.push({ label: 'Market', sub: _faPhoneMkt.length + ' of ' + availablePlayers.length + (_faWkKey ? ' · wk sleeper/dhq' : ' shown'), rows: _faMktRowNodes });
+            _faGroups.push({ label: 'Market', sub: _faPhoneMkt.length + ' of ' + availablePlayers.length + ' shown', rows: _faMktRowNodes });
             if (_faDropRows.length) _faGroups.push({ label: 'Drop alerts', sub: 'fresh drops worth a claim', rows: _faDropRows });
 
             return (
@@ -3036,9 +3049,9 @@
                             {React.createElement(window.WR.SavedViews.SavedViewBar, {
                                 surface: 'free_agency',
                                 leagueId: currentLeague?.id || currentLeague?.league_id,
-                                currentState: { columns: visibleFaCols, sort: faSort, filters: { faFilter, faSearch } },
+                                currentState: { columns: visibleFaCols, sort: faSort, filters: { faFilter, faSearch, projCols: FA_PROJ_COLS_STAMP } },
                                 onApply: (v) => {
-                                    if (Array.isArray(v.columns) && v.columns.length) { setVisibleFaCols(faTierCols(v.columns.filter(k => FA_COLUMNS[k]))); setFaColPreset('custom'); }
+                                    if (Array.isArray(v.columns) && v.columns.length) { const vc = v.filters && v.filters.projCols === FA_PROJ_COLS_STAMP ? v.columns : faWithDhqProj(v.columns); setVisibleFaCols(faTierCols(vc.filter(k => FA_COLUMNS[k]))); setFaColPreset('custom'); }
                                     if (v.sort && v.sort.key) setFaSort({ key: v.sort.key, dir: v.sort.dir || 1 });
                                     if (v.filters && typeof v.filters.faFilter === 'string') setFaFilter(v.filters.faFilter);
                                     if (v.filters && typeof v.filters.faSearch === 'string') setFaSearch(v.filters.faSearch);
@@ -3110,9 +3123,12 @@
                             {shownFaCols.map(k => {
                                 const col = faColumns[k]; if (!col) return null;
                                 const clickable = !!col.sortKey;
-                                return <span key={k} style={{ ...faHeaderStyle, cursor: clickable ? 'pointer' : 'default' }} title={col.label}
+                                const pc = window.App?.DhqProj?.cols;
+                                const head = pc && k === 'proj' ? pc.sleeperHead() : pc && k === 'dhqProj' ? pc.dhqHead : col.shortLabel;
+                                const tip = pc && k === 'proj' ? pc.sleeperTip() : pc && k === 'dhqProj' ? pc.dhqTip : col.label;
+                                return <span key={k} style={{ ...faHeaderStyle, cursor: clickable ? 'pointer' : 'default', textAlign: col.center ? 'center' : undefined }} title={tip}
                                     onClick={() => clickable && handleFaSort(col.sortKey)}>
-                                    {col.shortLabel}{clickable ? faSortIndicator(col.sortKey) : ''}
+                                    {head}{clickable ? faSortIndicator(col.sortKey) : ''}
                                 </span>;
                             })}
                         </div>
@@ -3159,7 +3175,9 @@
                                         // DHQ reads white here \u2014 no tier colors in the market table (owner ask 2026-07-12)
                                         case 'dhq':        return <span style={{ fontSize: '0.78rem', fontWeight: 700, fontFamily: 'var(--font-body)', color: 'var(--white)' }}>{dhq > 0 ? dhq.toLocaleString() : '\u2014'}</span>;
                                         case 'ppg':        return <span style={{ fontSize: '0.78rem', color: ppg >= 10 ? 'var(--good)' : ppg >= 5 ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))' }}>{ppg > 0 ? ppg : '\u2014'}{ppgMarker}</span>;
-                                        case 'proj':       return <span title="This week's projected points (league-scored)" style={{ fontSize: '0.78rem', fontWeight: 600, color: proj >= 14 ? 'var(--good)' : proj >= 8 ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.3))' }}>{proj > 0 ? proj.toFixed(1) : '\u2014'}{window.App && window.App.DhqProj ? <span title="DHQ projection (Sleeper above)" style={{ display: 'block', fontSize: '0.6rem', fontWeight: 700, color: 'var(--gold, #d4af37)' }}>{'DHQ ' + window.App.DhqProj.fmt(pid)}</span> : null}</span>;
+                                        // Two columns, drawn like the My Team Roster Board.
+                                        case 'proj':       { const pc = window.App?.DhqProj?.cols; return <span style={{ fontSize: '0.78rem', ...(proj > 0 ? (pc ? pc.sleeperStyle : { color: 'var(--white)', fontWeight: 600 }) : (pc ? pc.dashStyle : { color: 'var(--silver)' })) }}>{proj > 0 ? proj.toFixed(1) : '\u2014'}</span>; }
+                                        case 'dhqProj':    { const pc = window.App?.DhqProj?.cols; return <span style={{ fontSize: '0.78rem', ...(pc ? pc.dhqStyle : { color: 'var(--silver)' }) }}>{window.App?.DhqProj ? window.App.DhqProj.fmt(pid) : '\u2014'}</span>; }
                                         case 'peakYr':     return <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: peakCol, fontWeight: 600 }}>{peakLabel}</span>;
                                         case 'yrsExp':     return <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)' }}>{p.years_exp != null ? p.years_exp : '\u2014'}</span>;
                                         case 'college':    return <span style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.college || '\u2014'}</span>;
@@ -3208,7 +3226,7 @@
                                         <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--white)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{playerName(p, pid)}</div>
                                         <div style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', opacity: 0.55 }}>{p.team || 'FA'}{p.injury_status ? ' · ' : ''}{p.injury_status ? <span style={{ color: 'var(--bad)' }}>{p.injury_status}</span> : ''}</div>
                                     </div>
-                                    {shownFaCols.map(k => <span key={k} style={{ display: 'flex', alignItems: 'center' }}>{renderCell(k)}</span>)}
+                                    {shownFaCols.map(k => <span key={k} style={{ display: 'flex', alignItems: 'center', justifyContent: faColumns[k] && faColumns[k].center ? 'center' : undefined }}>{renderCell(k)}</span>)}
                                 </div>;
                             })}
                         </div>
