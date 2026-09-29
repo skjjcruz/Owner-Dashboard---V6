@@ -1042,6 +1042,16 @@
         // were projecting him for 9 points as the Saints' QB2). Next man up
         // still makes him the starter when the man ahead is out.
         if (proj != null && grp === 'QB' && posRank != null && posRank >= 2) { proj = 0; out.backupQb = true; }
+        // A quarterback on no depth chart (ESPN's or Sleeper's) who has not
+        // started a game this season, on a team whose chart names a healthy
+        // starter, is not the starter either: zero. Since QB shares count only
+        // started games, such a QB has no share at all and fell through to
+        // last season's attempts (week 4 2026: Buechele 8.3, Josh Johnson 7.8,
+        // Brosmer 5.8, Milton 4.5, none with a Sleeper projection).
+        if (grp === 'QB' && posRank == null && earned == null && ctx.depth) {
+            const q1 = rankedMates(team, 'QB', ctx, opts).find(m => m.pid !== String(pid) && m.rank === 1 && m.outW < 0.8);
+            if (q1) { proj = 0; out.backupQb = true; }
+        }
         // Snap gate (owner ruling 2026-09-21): a back, receiver or tight end
         // listed third or lower who played under 15% of the snaps in his
         // team's last game is trimmed toward that snap share (never below
