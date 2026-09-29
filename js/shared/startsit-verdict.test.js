@@ -31,7 +31,7 @@ test('several swaps → the biggest named, the rest counted with the bench total
         { slot: 'WR', in: 'B', out: 'C', gain: 1.4 },
         { slot: 'SUPER_FLEX', in: 'D', out: 'E', gain: 6 },
     ] });
-    assert.equal(v.text, 'Start D over E at SUPER FLEX (+6 pts) · 1 more swap, +7.4 in all');
+    assert.equal(v.text, 'Start D over E at SUPER FLEX (+6 pts) · 1 more swap, +7.4 avg in all');
 });
 
 test('the engine cannot separate them → says so (too close to call)', () => {
@@ -54,4 +54,13 @@ test('platform numbers while DHQ loads are labelled with their source', () => {
 test('no facts → null (nothing rendered)', () => {
     assert.equal(V.compute(null), null);
     assert.equal(V.compute(undefined), null);
+});
+
+test('the call names the two numbers it was decided on (DHQ: the average week)', () => {
+    const v = V.compute({ ...base, benchPts: 2.6, swaps: [{ slot: 'WR', in: 'Rashee Rice', out: 'Aaron Jones', gain: 2.6, inPts: 12.7, outPts: 10.1 }] });
+    assert.equal(v.text, 'Start Rashee Rice over Aaron Jones at WR (avg 12.7 vs 10.1, +2.6 pts)');
+    const c = V.compute({ ...base, benchPts: 0.3, swaps: [{ slot: 'RB', in: 'X', out: 'Y', gain: 0.3, inPts: 9.9, outPts: 9.6 }] });
+    assert.match(c.text, /within 0\.3 pts \(avg 9\.9 vs 9\.6\)\. Your call\./);
+    const p = V.compute({ ...base, onDhq: false, benchPts: 1, swaps: [{ slot: 'TE', in: 'A', out: 'B', gain: 1, inPts: 8, outPts: 7 }] });
+    assert.equal(p.text, 'Start A over B at TE (8 vs 7, +1 pts)', 'platform numbers carry no "avg"');
 });

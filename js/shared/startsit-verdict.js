@@ -27,7 +27,11 @@
         return String(slot || '').replace(/_/g, ' ').trim();
     }
 
-    // facts: { onDhq, provLabel, starters, swaps:[{slot, in, out, gain}], benchPts }
+    // facts: { onDhq, provLabel, starters, swaps:[{slot, in, out, gain, inPts?, outPts?}], benchPts }
+    // inPts/outPts are the two players' numbers the swap was decided on: on
+    // DHQ that is each player's average week (the rows show his typical week),
+    // so the call names them ("avg 12.7 vs 10.1") and never contradicts the
+    // screen (review 2026-09-29).
     // → { kind: 'empty'|'swap'|'close'|'optimal', text, source, top } or null
     function compute(facts) {
         if (!facts || typeof facts !== 'object') return null;
@@ -45,13 +49,16 @@
         const gain = Number(top.gain) || 0;
         const slot = slotLabel(top.slot);
         const more = swaps.length - 1;
-        const tail = more > 0 ? ' · ' + more + ' more swap' + (more > 1 ? 's' : '') + ', +' + fmtPts(facts.benchPts) + ' in all' : '';
+        const avgWord = facts.onDhq ? 'avg ' : '';
+        const tail = more > 0 ? ' · ' + more + ' more swap' + (more > 1 ? 's' : '') + ', +' + fmtPts(facts.benchPts) + (facts.onDhq ? ' avg' : '') + ' in all' : '';
+        const both = top.in && top.out && top.inPts != null && top.outPts != null && isFinite(top.inPts) && isFinite(top.outPts);
+        const pair = both ? avgWord + fmtPts(top.inPts) + ' vs ' + fmtPts(top.outPts) : '';
 
         if (top.in && top.out && gain < CLOSE_CALL_PTS) {
             return {
                 kind: 'close', source, top,
                 text: 'Too close to call: ' + top.in + ' vs ' + top.out + (slot ? ' at ' + slot : '')
-                    + ' — the projections are within ' + fmtPts(Math.max(gain, 0)) + ' pts. Your call.' + tail,
+                    + ' — the projections are within ' + fmtPts(Math.max(gain, 0)) + ' pts' + (pair ? ' (' + pair + ')' : '') + '. Your call.' + tail,
             };
         }
         let text;
@@ -59,7 +66,7 @@
         else if (top.in) text = 'Start ' + top.in + (slot ? ' in your empty ' + slot : '');
         else if (top.out) text = 'Sit ' + top.out + (slot ? ' at ' + slot : '');
         else return { kind: 'optimal', source, top: null, text: 'Start who’s in — your lineup is already optimal.' };
-        return { kind: 'swap', source, top, text: text + ' (+' + fmtPts(gain) + ' pts)' + tail };
+        return { kind: 'swap', source, top, text: text + ' (' + (pair ? pair + ', ' : '') + '+' + fmtPts(gain) + ' pts)' + tail };
     }
 
     const StartSitVerdict = { CLOSE_CALL_PTS, compute };

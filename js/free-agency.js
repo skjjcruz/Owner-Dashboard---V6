@@ -2586,7 +2586,7 @@
                         return { label: 'WK', value: (
                             <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.15 }}>
                                 <span title="Sleeper projection">{slp}</span>
-                                <span title="DHQ projection" style={{ color: 'var(--gold)', fontSize: '0.72rem', fontWeight: 600 }}>{window.App.DhqProj.fmt(x.pid)}</span>
+                                <span title="DHQ projection: typical week" style={{ color: 'var(--gold)', fontSize: '0.72rem', fontWeight: 600 }}>{window.App.DhqProj.fmt(x.pid)}</span>
                             </span>
                         ) };
                     }

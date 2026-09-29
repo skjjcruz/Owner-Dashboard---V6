@@ -461,11 +461,15 @@ function LineupTab({
         const pos = normPos((playersData[pid] || {}).position) || (playersData[pid] || {}).position;
         return BENCH_POS_ORDER[pos] != null ? BENCH_POS_ORDER[pos] : 9;
     };
-    const dhqMedian = pid => {
-        const DQ = window.App && window.App.DhqProj, d = DQ && DQ.get(pid);
-        return d ? Number(d.median) || 0 : -1;
+    // DHQ's average week (mean): the number every choice and sort on this
+    // screen runs on. The DHQ column shows the typical week (median) and is
+    // labelled so (review 2026-09-29). -1 while DHQ has no number.
+    const dhqAvg = pid => {
+        const DQ = window.App && window.App.DhqProj;
+        const v = DQ && DQ.avgOf ? DQ.avgOf(pid) : null;
+        return v == null ? -1 : v;
     };
-    const benchSort = (a, b) => benchPosRank(a) - benchPosRank(b) || dhqMedian(b) - dhqMedian(a);
+    const benchSort = (a, b) => benchPosRank(a) - benchPosRank(b) || dhqAvg(b) - dhqAvg(a);
     const benchList = activeIds.filter(pid => !usedPids.has(pid)).sort(benchSort);
     const irList = ((myRoster && myRoster.reserve) || []).map(String).filter(pid => pid && !usedPids.has(pid)).sort(benchSort);
     const taxiList = ((myRoster && myRoster.taxi) || []).map(String).filter(pid => pid && !usedPids.has(pid)).sort(benchSort);
@@ -546,8 +550,7 @@ function LineupTab({
     const diffPts = pid => {
         if (!pid) return 0;
         if (!dhqOk) return objPts(pid);
-        const d = window.App.DhqProj.get(pid);
-        return d ? Number(d.mean != null ? d.mean : d.median) || 0 : 0;
+        return Math.max(0, dhqAvg(pid));
     };
     function lineupDiff(fromAssign, toAssign) {
         const fromSet = new Set(Object.values(fromAssign).filter(Boolean).map(String));
@@ -737,7 +740,7 @@ function LineupTab({
             <span title="Roster slot">Slot</span>
             <span title="Player · position · NFL team · this week's opponent">Player</span>
             <span title={projTip} style={{ textAlign: 'right' }}>{(window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper') + ' Proj'}</span>
-            <span title="DHQ projection (the DHQ matchup engine)" style={{ textAlign: 'right', color: 'var(--gold, #d4af37)' }}>DHQ Proj</span>
+            <span title="DHQ projection: his typical week (median). Totals, Optimal and THE CALL add his average week." style={{ textAlign: 'right', color: 'var(--gold, #d4af37)' }}>DHQ typ</span>
             {pro ? <span title="Matchup grade A (great) → F (tough), from the opponent's Vegas implied total" style={{ textAlign: 'center' }}>Mtch</span> : null}
             {!isPhone ? (<React.Fragment>
                 <span title={'Rolling average over the last ' + (formWindow === 'season' ? 'full season' : formWindow + ' weeks') + ' (actual points)'} style={{ textAlign: 'right' }}>{formWinLabel}</span>
@@ -819,6 +822,7 @@ function LineupTab({
             slot: sw.sl ? sw.sl.slotName : '', outPid: sw.cur || '', inPid: sw.opt || '',
             out: sw.cur ? pmeta(sw.cur).name : null, in: sw.opt ? pmeta(sw.opt).name : null,
             gain: Math.round((Number(sw.gain) || 0) * 10) / 10,
+            inPts: sw.opt ? Math.round(diffPts(sw.opt) * 10) / 10 : null, outPts: sw.cur ? Math.round(diffPts(sw.cur) * 10) / 10 : null,
         }));
         const winPct = matchup && matchup.fc ? (matchup.fc.winPct == null ? null : matchup.fc.winPct) : null;
         const margin = matchup && matchup.fc && matchup.fc.margin != null ? Math.round(matchup.fc.margin * 10) / 10 : null;
@@ -831,7 +835,7 @@ function LineupTab({
         f.ctx = {
             week: result.week, projections: onDhq ? 'DHQ' : provLabel + ' (DHQ still loading)',
             winPct, margin, opponent: oppName, pointsLeftOnBench: benchOut, lineupOptimal: optimalNow,
-            swaps: swaps.map(s => ({ slot: String(s.slot).replace('_', ' '), out: s.out, in: s.in, gain: s.gain })),
+            swaps: swaps.map(s => ({ slot: String(s.slot).replace('_', ' '), out: s.out, in: s.in, gain: s.gain, outPts: s.outPts, inPts: s.inPts })),
             injuries: injuries.map(i => i.name + ' (' + i.status + ')'),
             byeWatch: byeWatch.slice(0, 3).map(b => ({ week: b.week, count: b.count, unfilled: b.unfilled, reason: b.reason, positions: b.positions })),
             mode: result.mode,
@@ -1071,6 +1075,7 @@ function LineupTab({
                 {swaps.slice(0, swaps.length > SWAP_LINES ? SWAP_LINES - 1 : SWAP_LINES).map((sw, i) => (
                     <span key={i} style={{ display: 'block' }}>
                         <span style={{ color: GOLD }}>{sw.sl.slotName.replace('_', ' ')}</span>{' · ' + (sw.cur ? pmeta(sw.cur).name : 'Empty') + ' → '}<span style={{ color: TEXT }}>{sw.opt ? pmeta(sw.opt).name : 'Empty'}</span>
+                        {sw.cur && sw.opt ? <span style={{ opacity: 0.8 }}>{' · ' + (dhqOk ? 'avg ' : '') + diffPts(sw.cur).toFixed(1) + ' → ' + diffPts(sw.opt).toFixed(1)}</span> : null}
                     </span>
                 ))}
                 {swaps.length > SWAP_LINES ? <span style={{ display: 'block', opacity: 0.8 }}>{'+' + (swaps.length - SWAP_LINES + 1) + ' more — shown after Apply'}</span> : null}
@@ -1081,7 +1086,7 @@ function LineupTab({
         // Capture the swaps BEFORE applying (post-apply they recompute to []).
         const applyOptimalWithSummary = () => {
             const moves = swaps.slice();
-            moves.src = dhqOk ? 'DHQ' : (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper');   // whose numbers the gains are on
+            moves.src = dhqOk ? 'DHQ avg week' : (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper');   // whose numbers the gains are on
             applyOptimal();
             if (moves.length) setAppliedMoves(moves);
         };
@@ -1139,7 +1144,7 @@ function LineupTab({
             const shade = starterShade(pid);
             const row = <AssetRow key={sl.idx} pos={meta.pos || '?'} name={meta.name}
                 tag={wrapTag([slotLabel, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, injShort(status) || null])}
-                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—' }]}
+                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ TYP', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—' }]}
                 verdict={pro ? gradeChip((proj && proj.matchupGrade) || '—') : null}
                 accent={open ? 'gold' : atRisk ? 'risk' : undefined}
                 style={shade ? { background: 'transparent' } : undefined}
@@ -1170,7 +1175,7 @@ function LineupTab({
             const fs = formOf(pid);
             return <AssetRow key={label + pid} pos={meta.pos || '?'} name={meta.name}
                 tag={wrapTag([label, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, injShort(status) || null])}
-                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]} />;
+                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ TYP', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]} />;
         };
 
         // Eligible-player picker (openSlot) — a WR.Sheet instead of the
@@ -1185,7 +1190,7 @@ function LineupTab({
         // replacement for the player in the slot goes first.
         const openElig = openSl ? (slot => {
             const DQ = window.App && window.App.DhqProj;
-            const dhqMed = pid => { const d = DQ && DQ.get(pid); return d ? Number(d.median) || 0 : -1; };
+            const dhqMed = dhqAvg;   // choices run on the average week
             const cur = workingAssign[slot.idx];
             const OUT = { Out: 1, IR: 1, PUP: 1, Sus: 1, NA: 1, COV: 1 };
             const list = eligibleFor(slot)
@@ -1211,7 +1216,7 @@ function LineupTab({
             // The green-outlined row already marks it as DHQ's pick.
             return <AssetRow key={epid} pos={meta.pos || '?'} name={meta.name}
                 tag={wrapTag([isCur ? 'IN' : isRec ? 'Best swap' : null, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, injShort(status) || null])}
-                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(epid) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]}
+                slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ TYP', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(epid) : '—' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]}
                 verdict={pro ? gradeChip((proj && proj.matchupGrade) || '—') : null}
                 accent={isCur ? 'gold' : undefined}
                 style={isRec ? { background: 'color-mix(in srgb, ' + GREEN + ' 9%, transparent)', border: '1px solid color-mix(in srgb, ' + GREEN + ' 45%, transparent)', borderRadius: '9px', overflow: 'hidden' } : undefined}
@@ -1337,7 +1342,7 @@ function LineupTab({
                 {heroEl}
                 {/* Starters, then Bench, IR and Taxi as Sleeper lists them. */}
                 <CardList groups={[
-                    { label: 'Starters', sub: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper') + ' ' + sleeperWorkingTotal.toFixed(1) + (window.App && window.App.DhqProj ? ' · DHQ ' + window.App.DhqProj.sum(Object.values(workingAssign).filter(Boolean)) : ''), rows: dispSlots.map(slotRow) },
+                    { label: 'Starters', sub: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper') + ' ' + sleeperWorkingTotal.toFixed(1) + (window.App && window.App.DhqProj ? ' · DHQ avg ' + window.App.DhqProj.sum(Object.values(workingAssign).filter(Boolean)) : ''), rows: dispSlots.map(slotRow) },
                     ...[['Bench', benchList, 'BN'], ['IR', irList, 'IR'], ['Taxi', taxiList, 'TAXI']].filter(g => g[1].length).map(g => ({ label: g[0], rows: g[1].map(pid => benchRow(pid, g[2])) })),
                 ]} />
                 </React.Fragment>) : (<React.Fragment>
@@ -1642,7 +1647,7 @@ function LineupTab({
                     // who cannot play; DHQ's recommended replacement goes first.
                     const elig = open ? (slot => {
                         const DQ = window.App && window.App.DhqProj;
-                        const dhqMed = p => { const d = DQ && DQ.get(p); return d ? Number(d.median) || 0 : -1; };
+                        const dhqMed = dhqAvg;   // choices run on the average week
                         const cur = workingAssign[slot.idx];
                         const OUT = { Out: 1, IR: 1, PUP: 1, Sus: 1, NA: 1, COV: 1 };
                         const list = eligibleFor(slot)

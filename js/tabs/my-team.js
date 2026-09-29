@@ -220,8 +220,9 @@ function MyTeamTab({
         return (bv - av) * dir;
       }
       if (key === 'dhqProj') {
-        // DHQ's median; players without a DHQ number sort last.
-        const pv = r => { const q = (window.App && window.App.DhqProj) ? window.App.DhqProj.get(r.pid) : null; return q ? (Number(q.median) || 0) : -1; };
+        // DHQ sorts on his average week (the number its lineup calls use);
+        // players without a DHQ number sort last.
+        const pv = r => { const v = (window.App && window.App.DhqProj && window.App.DhqProj.avgOf) ? window.App.DhqProj.avgOf(r.pid) : null; return v != null ? v : -1; };
         return (pv(b) - pv(a)) * dir;
       }
       if (key === 'proj') {
@@ -309,7 +310,7 @@ function MyTeamTab({
     pts:        { label: 'Total Points (season)', shortLabel: 'Pts', width: '52px', group: 'stats' },
     proj:       { label: isPro && wkVerdict ? 'This Week — projected pts + start/sit (league-scored)' : 'This Week — projected pts (league-scored)', shortLabel: ((window.App && window.App.DhqProj) ? window.App.DhqProj.provLabel() : 'Sleeper') + ' Proj', width: '96px', group: 'stats' },
     // DHQ's projection in its own column beside the platform's (owner ruling 2026-09-23).
-    dhqProj:    { label: "DHQ projection — the DHQ matchup engine's projected pts (league-scored)", shortLabel: 'DHQ Proj', width: '80px', group: 'stats' },
+    dhqProj:    { label: "DHQ projection — his typical week, league-scored (sorts on his average week)", shortLabel: 'DHQ typ', width: '80px', group: 'stats' },
     hi:         { label: 'Season High — most fantasy pts in a week', shortLabel: 'Hi', width: '40px', group: 'stats' },
     lo:         { label: 'Season Low — fewest fantasy pts in a played week', shortLabel: 'Lo', width: '40px', group: 'stats' },
     prev:       { label: 'Previous Season PPG', shortLabel: 'Last', width: '44px', group: 'stats' },
@@ -1030,7 +1031,7 @@ function MyTeamTab({
 
     switch(colKey) {
       case 'dhqProj':
-        return <div key={colKey} style={{ ...base }}><span title="DHQ projection" style={{ color: 'var(--gold, #d4af37)', fontWeight: 600, fontSize: '0.76rem', fontFamily: 'var(--font-body)', fontVariantNumeric: 'tabular-nums' }}>{(window.App && window.App.DhqProj) ? window.App.DhqProj.fmt(r.pid) : '\u2014'}</span></div>;
+        return <div key={colKey} style={{ ...base }}><span title="DHQ projection: typical week (sorts and lineup calls use his average week)" style={{ color: 'var(--gold, #d4af37)', fontWeight: 600, fontSize: '0.76rem', fontFamily: 'var(--font-body)', fontVariantNumeric: 'tabular-nums' }}>{(window.App && window.App.DhqProj) ? window.App.DhqProj.fmt(r.pid) : '\u2014'}</span></div>;
       case 'proj': {
         const p = projFor(r.pid);
         if (!p) return <div key={colKey} style={{...base}}><span style={{ color: 'var(--silver)', opacity: 0.45 }}>{'—'}</span></div>;
@@ -1420,7 +1421,7 @@ function MyTeamTab({
         return { label: short, value: disp, strong: true };
       }
       case 'dhqProj':
-        return { label: 'DHQ P', value: (window.App && window.App.DhqProj) ? window.App.DhqProj.fmt(r.pid) : '\u2014', tone: 'gold' };
+        return { label: 'DHQ TYP', value: (window.App && window.App.DhqProj) ? window.App.DhqProj.fmt(r.pid) : '\u2014', tone: 'gold' };
       case 'proj': {
         // Labeled for the league's platform (Sleeper / MFL).
         const p = projFor(r.pid);

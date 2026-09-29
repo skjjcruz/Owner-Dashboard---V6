@@ -1779,10 +1779,13 @@ function CompareTab({
                 mk('PPG Trend', 'high', p => p.trend || 0, (p) => trendDisp(p), { countable: true }),
                 // This week's DHQ and Sleeper projections head to head (DHQ counts toward the edge tally).
                 ...(histSeason ? [] : [
-                    mk('Wk ' + projCtxForField.wk + ' DHQ Proj', 'high', p => {
-                        const q = (window.App && window.App.DhqProj) ? window.App.DhqProj.get(p.pid) : null;
-                        return q ? (Number(q.median) || 0) : 0;
-                    }, (p) => (window.App && window.App.DhqProj) ? window.App.DhqProj.fmt(p.pid) : '—', { numeric: true, countable: true, gapFmt: n => n.toFixed(1) }),
+                    // The edge is a choice, so it runs on DHQ's average week and shows
+                    // that number (review 2026-09-29: the typical week here could
+                    // favour the player THE CALL benches).
+                    mk('Wk ' + projCtxForField.wk + ' DHQ Avg', 'high', p => {
+                        const v = (window.App && window.App.DhqProj && window.App.DhqProj.avgOf) ? window.App.DhqProj.avgOf(p.pid) : null;
+                        return v != null ? v : 0;
+                    }, (p) => { const v = (window.App && window.App.DhqProj && window.App.DhqProj.avgOf) ? window.App.DhqProj.avgOf(p.pid) : null; return v != null ? v.toFixed(1) : (window.App && window.App.DhqProj ? window.App.DhqProj.fmt(p.pid) : '—'); }, { numeric: true, countable: true, gapFmt: n => n.toFixed(1) }),
                     mk('Wk ' + projCtxForField.wk + ' ' + ((window.App && window.App.DhqProj && window.App.DhqProj.provLabel) ? window.App.DhqProj.provLabel() : 'Sleeper') + ' Proj', 'high', p => projForField(p.pid) || 0, (p, v) => v > 0 ? v.toFixed(1) : '—', { numeric: true, gapFmt: n => n.toFixed(1) }),
                 ]),
                 mk('Age', isRedraft ? 'none' : 'low', p => p.age || 0, (p, v) => v ? v + 'yo' : '—'),
