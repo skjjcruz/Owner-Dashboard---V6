@@ -95,9 +95,17 @@ function websiteOwns(rel) {
 // website's copy over it on purpose.
 const LAB_ENGINE_WATCH = /^js\/shared\/(matchup-|MATCHUP-|dhq-proj|dhq-baseline|nfl-context)/;
 function gitOut(args) { return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); }
+// Line endings don't make a file different: a CRLF copy of a version this
+// repo committed is still that version.
+function lf(buf) { return Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8'); }
+function blobOf(buf) {
+  return execFileSync('git', ['hash-object', '--stdin'], { cwd: ROOT, input: buf, encoding: 'utf8' }).trim();
+}
 function websiteHadIt(rel) {
-  const labBlob = gitOut(['hash-object', path.join(LAB_DIR, rel)]).trim();
-  const ours = gitOut(['log', '--no-abbrev', '--format=', '--raw', 'HEAD', '--', rel]);
+  const labBlob = blobOf(lf(fs.readFileSync(path.join(LAB_DIR, rel))));
+  // Every branch and tag, not just HEAD: publishing from another branch or
+  // after an amend must not read the last publish as unported Lab work.
+  const ours = gitOut(['log', '--all', '--no-abbrev', '--format=', '--raw', '--', rel]);
   return ours.split('\n').some(l => l.split(/\s+/)[3] === labBlob);
 }
 function walk(dir, base, out) {
@@ -128,9 +136,15 @@ if (!fs.existsSync(LAB_SRC)) fail('lab/ folder missing in this repo');
 for (const f of ['gate.html', 'lab-cutdown.js', 'espn-lab.html']) {
   if (!fs.existsSync(path.join(LAB_SRC, f))) fail('lab/' + f + ' missing');
 }
+// The engine the Lab receives must be a committed version: uncommitted edits
+// would publish a copy no history has, and the next publish would read it
+// as unported Lab work.
+const dirtyEngine = gitOut(['status', '--porcelain', '--', 'js/shared']).split('\n').filter(Boolean)
+  .map(l => l.slice(3).trim()).filter(rel => LAB_ENGINE_WATCH.test(rel));
+if (dirtyEngine.length) fail('commit the engine files first (uncommitted: ' + dirtyEngine.join(', ') + ') — the Lab only gets committed engine versions.');
 const labFiles = walk(LAB_DIR, '', []);
 const unported = labFiles.filter(rel => LAB_ENGINE_WATCH.test(rel) && websiteOwns(rel)
-  && !fs.readFileSync(path.join(LAB_DIR, rel)).equals(fs.readFileSync(path.join(ROOT, rel)))
+  && !lf(fs.readFileSync(path.join(LAB_DIR, rel))).equals(lf(fs.readFileSync(path.join(ROOT, rel))))
   && !websiteHadIt(rel));
 if (unported.length && !/^(1|true|yes)$/i.test(String(process.env.LAB_ENGINE_FROM_WEBSITE || ''))) {
   fail('the Lab has engine changes the website never had: ' + unported.join(', ')

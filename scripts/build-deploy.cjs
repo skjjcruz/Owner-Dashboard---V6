@@ -221,6 +221,33 @@ function servedHash(pathname) {
 // its <script src> tags (incl. inert data-wr-defer ones the module loader
 // injects later) and, when it loads the shared-loader, the vendored engine
 // under reconai-shared/ at the loader's stamp.
+// The DHQ projection engine is loaded on demand by js/shared/dhq-proj.js
+// (its DEPS list), not by <script> tags, so step 4 never fingerprinted it: a
+// hand-set VERSION was its only cache-buster. Every build now stamps a
+// content hash of those engine files into index.html as
+// <meta name="dhq-engine-v">, which dhq-proj.js uses as their ?v=, and lists
+// them in version.json so verify-deploy and live-update check them too.
+// (The data snapshots in DEPS come from the Lab origin and are skipped.)
+const DHQ_PROJ_SRC = 'js/shared/dhq-proj.js';
+function engineDeps() {
+  const p = path.join(ROOT, DHQ_PROJ_SRC);
+  if (!fs.existsSync(p)) return [];
+  const m = fs.readFileSync(p, 'utf8').match(/const DEPS = \[([\s\S]*?)\];/);
+  if (!m) throw new Error(DHQ_PROJ_SRC + ': DEPS list not found (the engine stamp reads it)');
+  return [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]).filter(d => !/^data\//.test(d));
+}
+function engineStamp() {
+  const deps = engineDeps();
+  if (!deps.length) return null;
+  const h = crypto.createHash('sha256');
+  for (const d of deps) {
+    const p = path.join(ROOT, d);
+    if (!fs.existsSync(p)) throw new Error(DHQ_PROJ_SRC + ' loads ' + d + ', which is not in the build');
+    h.update(d).update('\0').update(fs.readFileSync(p)).update('\0');
+  }
+  return { deps, v: h.digest('hex').slice(0, 10) };
+}
+
 function pageAssets(html, assets) {
   const urls = [];
   const add = (url, pathname) => {
@@ -236,6 +263,8 @@ function pageAssets(html, assets) {
     if (/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(src)) continue; // external / CDN / data:
     add(src, src.split(/[?#]/)[0].replace(/^\.?\//, ''));
   }
+  const ev = html.match(/<meta\s+name=["']dhq-engine-v["']\s+content=["']([0-9a-f]+)["']/i);
+  if (ev) for (const d of engineDeps()) add(`${d}?v=${ev[1]}`, d);
   const sharedDir = path.join(ROOT, 'reconai-shared');
   if (html.includes(SHARED_LOADER_SRC) && sharedStamp && fs.existsSync(sharedDir)) {
     for (const f of fs.readdirSync(sharedDir).sort()) {
@@ -260,17 +289,19 @@ function computeBuildId() {
 function stampAndWrite() {
   const { tag, build } = computeBuildId();
   const meta = `<meta name="dhq-build" content="${build}">`;
+  const engine = engineStamp();
   const assets = {}, pageLists = {};
   for (const [page, raw] of pages) {
     if (!raw.includes(LIVE_UPDATE_SRC)) throw new Error(`${page}: does not load ${LIVE_UPDATE_SRC} — it would never self-update`);
-    let html = raw.replace(/<meta\s+name=["']dhq-build["'][^>]*>\s*/gi, '');
+    let html = raw.replace(/<meta\s+name=["'](dhq-build|dhq-engine-v)["'][^>]*>\s*/gi, '');
     const charset = html.match(/<meta\s+charset[^>]*>/i);
     const head = html.match(/<head[^>]*>/i);
     const anchor = charset || head;
     if (!anchor) throw new Error(`${page}: no <meta charset> or <head> to stamp the build into`);
     const at = anchor.index + anchor[0].length;
     const indent = charset ? (html.slice(0, anchor.index).match(/[ \t]*$/) || [''])[0] : '  ';
-    html = html.slice(0, at) + '\n' + indent + meta + html.slice(at);
+    const engineMeta = engine && html.includes(DHQ_PROJ_SRC) ? '\n' + indent + `<meta name="dhq-engine-v" content="${engine.v}">` : '';
+    html = html.slice(0, at) + '\n' + indent + meta + engineMeta + html.slice(at);
     ensureDir(OUT_DIR);
     fs.writeFileSync(path.join(OUT_DIR, page), html, 'utf8');
     pageLists[page] = pageAssets(html, assets);
