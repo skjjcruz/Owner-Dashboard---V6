@@ -135,3 +135,51 @@ test('a starter DHQ can\'t project keeps its slot', () => {
     assert.ok(!best2.starters.some(s => s.pid === 'min'));
     globalThis.S = saved.S; App.WeeklyProj = saved.WP; App.StartSit = saved.SS;
 });
+
+// ── Snapshot data from another origin (website port 2026-09-29) ─────────
+test('a snapshot that fails to load is set aside; the engine still loads', async () => {
+    const saved = { doc: globalThis.document, ME: App.MatchupEngine, DB: App.DhqBaseline, MI: App.MatchupInputs, pff: globalThis.DhqPffMatchup, use: globalThis.DhqUsage };
+    delete App.MatchupEngine; delete App.DhqBaseline; delete App.MatchupInputs;
+    delete globalThis.DhqPffMatchup; delete globalThis.DhqUsage;
+    const asked = [];
+    globalThis.document = {
+        createElement: () => ({}),
+        head: { appendChild: (s) => {
+            asked.push(s.src);
+            setTimeout(() => {
+                if (/pff-matchup-snapshot/.test(s.src)) return s.onerror();   // blocked or down
+                if (/matchup-engine/.test(s.src)) App.MatchupEngine = {};
+                if (/dhq-baseline/.test(s.src)) App.DhqBaseline = {};
+                if (/matchup-inputs\.js/.test(s.src)) App.MatchupInputs = {};
+                if (/usage-snapshot/.test(s.src)) globalThis.DhqUsage = { season: 2026, built: '2026-09-29T10:54:44Z' };
+                s.onload();
+            }, 0);
+        } },
+    };
+    D._st.deps = null; D._st.error = null; D._st.data = {};
+    await D._loadDeps();
+    assert.equal(D._st.error, null, 'the load did not fail');
+    assert.ok(asked.some(u => /^https:\/\/skjjcruz\.github\.io\/DHQ-Web-Page\/data\/usage-snapshot\.js\?v=/.test(u)), 'data comes from the Lab origin off the Lab: ' + asked.join(' '));
+    assert.ok(asked.some(u => /^js\/shared\/matchup-engine\.js\?v=/.test(u)), 'engine files come from this origin');
+    const s = D._checkData(2026);
+    assert.equal(s['data/pff-matchup-snapshot.js'].ok, false);
+    assert.match(s['data/pff-matchup-snapshot.js'].why, /could not load/);
+    assert.equal(s['data/usage-snapshot.js'].ok, true);
+    assert.deepEqual(D.dataStatus(), s);
+    globalThis.document = saved.doc; App.MatchupEngine = saved.ME; App.DhqBaseline = saved.DB; App.MatchupInputs = saved.MI;
+    globalThis.DhqPffMatchup = saved.pff; globalThis.DhqUsage = saved.use;
+    D._st.deps = null; D._st.data = {};
+});
+
+test('a snapshot built for another season is dropped, not used', () => {
+    const saved = { pff: globalThis.DhqPffMatchup, use: globalThis.DhqUsage };
+    globalThis.DhqPffMatchup = { season: 2026, built: '2026-12-30T00:00:00Z', teams: {} };
+    globalThis.DhqUsage = { season: 2027, built: '2027-08-01T00:00:00Z', teams: {} };
+    D._st.data = {};
+    const s = D._checkData(2027);
+    assert.equal(s['data/pff-matchup-snapshot.js'].ok, false);
+    assert.match(s['data/pff-matchup-snapshot.js'].why, /built for 2026/);
+    assert.equal(globalThis.DhqPffMatchup, null, 'the engine now reads PFF as missing');
+    assert.equal(s['data/usage-snapshot.js'].ok, true);
+    globalThis.DhqPffMatchup = saved.pff; globalThis.DhqUsage = saved.use; D._st.data = {};
+});

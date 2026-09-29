@@ -51,6 +51,7 @@
         running: false,
         ctx: null, ctxKey: null,
         error: null,
+        data: {},            // snapshot src → { ok, built?, why? } (see checkData)
     };
 
     // ── plumbing ──────────────────────────────────────────────────────
@@ -64,16 +65,42 @@
             document.head.appendChild(s);
         });
     }
+    // The two snapshots are optional; the engine files are not. The data is
+    // served from another origin (the Lab), so it can be missing: a blocked
+    // or failed snapshot used to reject the whole load, and every DHQ number
+    // sat on "…" until some other player was asked for. Now a snapshot that
+    // does not load, or one built for another season, is set aside and the
+    // engine runs without it: that input reads as missing (neutral grade,
+    // league norm) in each player's factors, never a made-up number.
+    const DATA_GLOBAL = { 'data/pff-matchup-snapshot.js': 'DhqPffMatchup', 'data/usage-snapshot.js': 'DhqUsage' };
     function loadDeps() {
         if (st.deps) return st.deps;
         st.deps = (async () => {
             if (!App.MatchupEngine || !App.DhqBaseline || !App.MatchupInputs) {
-                for (const src of DEPS) await loadScript(src);
+                for (const src of DEPS) {
+                    if (DATA_GLOBAL[src]) await loadScript(src).catch(e => { st.data[src] = { ok: false, why: e.message }; });
+                    else await loadScript(src);
+                }
             }
             if (!App.MatchupInputs || !App.MatchupEngine) throw new Error('engine did not load');
         })();
         st.deps.catch(e => { st.deps = null; st.error = e; });
         return st.deps;
+    }
+    // Snapshot status for this season; a snapshot built for another season
+    // is dropped (a 2026 snapshot must not feed 2027's first weeks).
+    function checkData(yr) {
+        for (const src of Object.keys(DATA_GLOBAL)) {
+            const g = DATA_GLOBAL[src], snap = root[g];
+            if (!snap) { if (!st.data[src]) st.data[src] = { ok: false, why: 'not loaded' }; continue; }
+            if (snap.season != null && Number(snap.season) !== Number(yr)) {
+                st.data[src] = { ok: false, why: 'built for ' + snap.season + ', not ' + yr, built: snap.built || null };
+                root[g] = null;
+                continue;
+            }
+            st.data[src] = { ok: true, built: snap.built || null };
+        }
+        return st.data;
     }
     const getJson = (url) => fetch(url).then(r => { if (!r.ok) throw new Error(r.status + ' ' + url); return r.json(); });
     const S = () => root.S || {};
@@ -175,6 +202,7 @@
                 }
                 const opts = { playersData: shared.players, statsData: shared.statsCur, priorData: shared.statsPrior, scoring: at.lg.scoring, season: yr, baselineMode: 'dhq', weeklyPoints: shared.wpp[at.lg.id] || null };
                 if (st.ctxKey !== at.key) {
+                    checkData(yr);
                     const teams = [...new Set(Object.values(shared.players).map(p => p && p.team).filter(Boolean))];
                     st.ctx = await MI.prepare(teams, at.wk, opts);
                     st.ctxKey = at.key;
@@ -569,7 +597,7 @@
         root.addEventListener && root.addEventListener('wr:proj-updated', (e) => { if (!(e && e.detail && e.detail.source === 'dhq')) { loadPlatform(); setTimeout(warmLeague, 500); } });
     }
 
-    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, _st: st, VERSION };
+    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, dataStatus: () => st.data, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
     if (typeof document !== 'undefined') boot();
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.DhqProj;
