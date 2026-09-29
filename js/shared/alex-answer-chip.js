@@ -39,7 +39,8 @@
     el.className = 'wr-alex-answer-chip';
     el.style.cssText = [
       'position:fixed', 'left:50%', 'transform:translateX(-50%)',
-      'bottom:calc(14px + var(--wr-bottom-inset, 0px))', 'z-index:160',
+      // Top, under the header: tabs keep their own trays above the dock.
+      'top:calc(var(--sat, 0px) + 80px)', 'z-index:160',
       'display:flex', 'align-items:center', 'gap:6px', 'max-width:calc(100vw - 32px)',
       'padding:6px 6px 6px 12px', 'background:var(--off-black, #1B1B22)',
       'border:1px solid rgba(212,175,55,0.45)', 'border-radius:var(--card-radius-sm, 8px)',
