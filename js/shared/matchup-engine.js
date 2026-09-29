@@ -473,7 +473,9 @@
         return 'sit';
     }
 
-    // input.baseline: { median, floor, ceiling } league-scored points.
+    // input.baseline: { median, floor, ceiling, mean? } league-scored points.
+    // median is the typical week (what a projection is graded on); mean is
+    // the average week, kept for totals and lineup choices (it adds up).
     function project(input) {
         input = input || {};
         const factors = factorScores(input);
@@ -484,6 +486,7 @@
 
         const base = input.baseline || {};
         const bMed = num(base.median) || 0;
+        const bMean = num(base.mean) != null ? num(base.mean) : bMed;
         const bFloor = num(base.floor) != null ? num(base.floor) : bMed * 0.75;
         const bCeil = num(base.ceiling) != null ? num(base.ceiling) : bMed * 1.25;
         // Available means healthy enough to play; a baseline of zero is a
@@ -502,9 +505,10 @@
         const availMult = (st === 'Q' || st === 'QUESTIONABLE') ? 0.92 : 1;
         const points = available ? {
             median: +(bMed * mult * availMult).toFixed(2),
+            mean: +(bMean * mult * availMult).toFixed(2),
             floor: +(bFloor * mult * availMult * (1 - floorPenalty)).toFixed(2),
             ceiling: +(bCeil * mult * availMult).toFixed(2),
-        } : { median: 0, floor: 0, ceiling: 0 };
+        } : { median: 0, mean: 0, floor: 0, ceiling: 0 };
 
         const grade = available ? gradeFor(mult) : 'F';
         const verdict = available && points.median <= 0 ? 'sit' : verdictFor(grade, available);
@@ -519,7 +523,7 @@
             week: input.week,
             position: pos(input),
             available,
-            baseline: { median: bMed, floor: +bFloor.toFixed(2), ceiling: +bCeil.toFixed(2), source: input.baselineSource || 'estimate', why: input.baselineWhy || '' },
+            baseline: { median: bMed, mean: bMean, floor: +bFloor.toFixed(2), ceiling: +bCeil.toFixed(2), source: input.baselineSource || 'estimate', why: input.baselineWhy || '' },
             weights: weightsFor(input),
             mult,
             points,

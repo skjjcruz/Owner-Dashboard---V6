@@ -59,6 +59,23 @@
     // A team's projected shares at a position are scaled down to this cap,
     // so four backs can never add up to more than a backfield.
     const ROOM_SHARE = { QB: 1.0, RB: 0.46, WR: 0.60, TE: 0.24, DL: 0.25, LB: 0.32, DB: 0.43 };
+    // The audit of weeks 1-3 2026 (every locked projection graded against
+    // Sleeper's; owner ask 2026-09-29) set these. Each one is explained
+    // where it is used. root.__DHQ_TUNE lets the offline test bed try
+    // other values without editing this file.
+    const TUNE = Object.assign({
+        // Typical week vs average week: a player's shown projection is the
+        // typical (median) week; totals and lineup calls keep the average.
+        medTdWrTe: 0.75,        // WR/TE: take this share of expected TD points off
+        medTdRb: 0.5,           // RB2 and lower: TD-skew term (see median below)
+        medSplashDl: 0.6,       // DL: tackles + this share of splash points
+        medShiftLb: 0.4, medShiftDb: 0.35,   // LB/DB: points off the average
+        // Defenders' tackle norm by role (2025 regulars, tackles a game:
+        // S 4.90, NB 4.65, CB 3.55, ILB 6.53, OLB 3.87)
+        roleNorm: { FS: 1.145, SS: 1.145, NB: 1.09, LCB: 0.83, RCB: 0.83, CB: 0.83, LILB: 1.23, RILB: 1.23, MLB: 1.23, ILB: 1.23, LOLB: 0.73, ROLB: 0.73, OLB: 0.73 },
+        // Kickers early in the season sit near the league-average kicker
+        kAlpha: 0.25, kShrinkWeeks: 6,
+    }, root.__DHQ_TUNE || {});
     const SLEEPER_DEPTH_POS = { QB: 'QB', RB: 'RB', FB: 'RB', WR: 'WR', LWR: 'WR', SWR: 'WR', RWR: 'WR', TE: 'TE', K: 'K',
         LDE: 'DL', RDE: 'DL', DE: 'DL', DT: 'DL', NT: 'DL', LDT: 'DL', RDT: 'DL', DL: 'DL',
         LILB: 'LB', RILB: 'LB', LOLB: 'LB', ROLB: 'LB', MLB: 'LB', ILB: 'LB', OLB: 'LB', LB: 'LB', WLB: 'LB', SLB: 'LB',
@@ -456,18 +473,32 @@
     // { "TEAM|name": { pos, rank } } for every team, rebuilt server-side
     // every six hours. Cached here for four.
     let _depth = { roles: null, promise: null };
+    // The relay keys teams by ESPN code; the app keys them by Sleeper's.
+    // Washington is WSH there and WAS here, so every Washington lookup
+    // missed (audit of weeks 1-3 2026: no ESPN ranks for the whole team,
+    // and ten Washington defenders left off the week 1 score sheet).
+    const ESPN_TEAM_TO_SLEEPER = { WSH: 'WAS', LA: 'LAR', JAC: 'JAX' };
+    function sleeperKeyed(roles) {
+        if (!roles) return roles;
+        const out = {};
+        for (const k of Object.keys(roles)) {
+            const i = k.indexOf('|'), t = i > 0 ? k.slice(0, i) : '';
+            out[ESPN_TEAM_TO_SLEEPER[t] ? ESPN_TEAM_TO_SLEEPER[t] + k.slice(i) : k] = roles[k];
+        }
+        return out;
+    }
     async function depthCharts() {
         if (_depth.roles) return _depth.roles;
         try {
             const raw = root.sessionStorage && root.sessionStorage.getItem('dhq_mi_depth');
-            if (raw) { const rec = JSON.parse(raw); if (Date.now() - rec.ts < TTL_MS && rec.data) { _depth.roles = rec.data; return rec.data; } }
+            if (raw) { const rec = JSON.parse(raw); if (Date.now() - rec.ts < TTL_MS && rec.data) { _depth.roles = sleeperKeyed(rec.data); return _depth.roles; } }
         } catch (e) { /* no storage */ }
         if (_depth.promise) return _depth.promise;
         _depth.promise = (async () => {
             try {
                 const r = await fetch(functionsBase() + '/nfl-depth-charts');
                 const d = r.ok ? await r.json() : null;
-                const roles = d && d.roles && Object.keys(d.roles).length > 100 ? d.roles : null;
+                const roles = d && d.roles && Object.keys(d.roles).length > 100 ? sleeperKeyed(d.roles) : null;
                 if (roles) { _depth.roles = roles; try { root.sessionStorage && root.sessionStorage.setItem('dhq_mi_depth', JSON.stringify({ ts: Date.now(), data: roles })); } catch (e) { /* ignore */ } }
                 return roles;
             } catch (e) { return null; } finally { _depth.promise = null; }
@@ -502,6 +533,7 @@
             const isFb = String(player.position || '').toUpperCase() === 'FB';
             if (isFb || (lr.rank <= 1 && sleeperRb && so != null && so >= 3)) {
                 out.rank = Math.max(4, so || 4);
+                out.listed = out.rank;   // the ESPN "RB1" was the FB slot, not his slot
                 out.fullback = true;
             }
         }
@@ -532,7 +564,32 @@
     function posRankFor(player, grp, roles, ctx, opts) {
         const br = baseRank(player, grp, roles);
         if (!br) return null;
-        if (!ctx || !opts || !opts.playersData || br.rank <= 1 || BALL_BASIS[grp] === 'tackles') return br;
+        return qbStarterCheck(nextManUp(br, player, grp, ctx, opts), player, grp, ctx, opts);
+    }
+    // Starter check, QBs only (audit of weeks 1-3 2026): the depth chart
+    // lags a midweek change. Week 3, Chicago: Williams out, ESPN still had
+    // Bagent QB2 and Keenum QB3, so Bagent was promoted (14.8, did not play)
+    // and Keenum zeroed as the backup (started, scored 24.5). Sleeper's line
+    // knows who is throwing: a chart starter with under 5 projected attempts
+    // yields to a healthy teammate projected for 15 or more, and a listed
+    // backup projected for 15+ (more than any healthy teammate) starts.
+    // Sleeper only names the starter here; it is not in the math. Picked the
+    // real starter in all 9 stale-chart QB weeks of 2026, with no false fires.
+    function sleeperAttempts(pid, week) { const l = App.WeeklyProj && App.WeeklyProj.projLine && App.WeeklyProj.projLine(pid, week); return l ? (num(l.pass_att) || 0) : 0; }
+    function qbStarterCheck(br, player, grp, ctx, opts) {
+        if (grp !== 'QB' || !br || !ctx || !opts || !opts.playersData) return br;
+        const team = String(player.team || '').toUpperCase(), me = String(player.player_id || ''), myName = fullName(player);
+        const mine = sleeperAttempts(me, ctx.week);
+        let best = 0;
+        for (const m of rankedMates(team, 'QB', ctx, opts)) if (m.pid !== me && m.name !== myName && m.outW < 0.8) best = Math.max(best, sleeperAttempts(m.pid, ctx.week));
+        if (br.rank >= 2 && mine >= 15 && mine > best) return Object.assign({}, br, { listed: br.listed != null ? br.listed : br.rank, rank: 1, sleeperStarter: true });
+        if (br.rank <= 1 && mine < 5 && best >= 15) return Object.assign({}, br, { listed: br.listed != null ? br.listed : br.rank, rank: 2, sleeperBenched: true });
+        return br;
+    }
+    function nextManUp(br, player, grp, ctx, opts) {
+        // A fullback never moves up the backfield (Luepke 2026: promoted past
+        // an injured back three weeks running, projected 5-7, scored 0-0.7).
+        if (!ctx || !opts || !opts.playersData || br.rank <= 1 || br.fullback || BALL_BASIS[grp] === 'tackles') return br;
         const team = String(player.team || '').toUpperCase();
         const me = String(player.player_id || '');
         const myName = fullName(player);
@@ -595,6 +652,25 @@
     }
     // Earned share: season share leaning on the last three weeks.
     function earnedShare(pid, player, grp, team, opts, ctx) {
+        // A quarterback's share counts only games he started and finished
+        // (half the team's snaps or more). A game he left hurt, or a week he
+        // missed, is not a vote on how much he throws (week 3 2026: Darnold
+        // had 5 snaps in week 1 and missed week 2, so he read as a 6% passer,
+        // was projected for 17 attempts, and threw 45).
+        if (grp === 'QB') {
+            let m = 0, t = 0;
+            for (const wk of ctx.recentWeeks || []) {
+                if (!wk || !wk.stats) continue;
+                const st = wk.stats[pid];
+                if (!st || !(num(st.gp) >= 1)) continue;
+                const tos = num(st.tm_off_snp), os = num(st.off_snp);
+                if (tos > 0 && (os || 0) / tos < 0.5) continue;
+                const tb = teamBall(ctx, wk.stats, 'wk' + wk.week, team, grp, opts.playersData);
+                if (tb <= 0) continue;
+                m += ballOf(grp, st); t += tb;
+            }
+            return t > 0 ? clamp(m / t, 0, 1) : null;
+        }
         const seasonShare = perGameShare(opts.statsData, 'season', pid, team, grp, ctx, opts);
         let mine = 0, theirs = 0;
         for (const wk of ctx.recentWeeks || []) {
@@ -918,6 +994,12 @@
         const track = promoted || deepBench || BALL_BASIS[grp] === 'tackles' ? null : trackRecordShare(pid, grp, team, ctx, opts);
         let base = slotNorm;
         if (track != null) base = slotNorm != null ? 0.7 * track + 0.3 * slotNorm : track;
+        // One tackle norm served every DB and every LB, so corners ran high
+        // and safeties and inside linebackers low. Each role takes its own.
+        if (BALL_BASIS[grp] === 'tackles' && base != null && grp !== 'DL') {
+            const m = TUNE.roleNorm[String(player.depth_chart_position || '').toUpperCase()];
+            if (m) base *= m;
+        }
         if (track != null) out.trackShare = +track.toFixed(3);
         if (earned != null) out.earnedShare = +earned.toFixed(3);
         if (slotNorm != null) out.slotNorm = slotNorm;
@@ -942,7 +1024,18 @@
         if (proj != null && BALL_BASIS[grp] === 'tackles') {
             let sn = lastGameSnap(pid, team, ctx, opts, 'def');
             if (sn == null) { const st0 = opts.statsData && opts.statsData[pid]; const pr0 = opts.priorData && opts.priorData[pid]; const src = st0 && num(st0.tm_def_snp) > 0 ? st0 : (pr0 && num(pr0.tm_def_snp) > 0 ? pr0 : null); if (src) sn = clamp((num(src.def_snp) || 0) / num(src.tm_def_snp), 0, 1); }
-            if (sn != null) { const f = clamp(sn / 0.6, 0.15, 1.15); proj *= f; out.snapScale = { snap: +sn.toFixed(3), factor: +f.toFixed(2) }; }
+            if (sn != null) {
+                const f = clamp(sn / 0.6, 0.15, 1.15);
+                // Linebackers and DBs: his earned share of the team's tackles
+                // already carries the snaps he played, so the snap factor
+                // applies to the depth-chart part only (audit of weeks 1-3:
+                // part-timers were projected 4.3 tackles per full game of
+                // snaps and made 6.5). Linemen keep the old scaling; for them
+                // this tested worse.
+                if (grp !== 'DL' && earned != null && base != null) proj = wEarned * earned + (1 - wEarned) * base * f;
+                else proj *= f;
+                out.snapScale = { snap: +sn.toFixed(3), factor: +f.toFixed(2) };
+            }
         }
         // Backup quarterbacks (owner ruling 2026-09-21): a QB who is not the
         // starter gets zero, whatever he did last year (Rattler's 2025 starts
@@ -993,10 +1086,16 @@
             if (src) volume = ballOf(grp, src) / num(src.gp);
         }
         if (volume == null && grp !== 'K') return null;
-        if (grp === 'K' && !samples.length) return null;
-        if (role && role.backupQb) return { median: 0, floor: 0, ceiling: 0, why: 'backup quarterback, projected zero unless the starter is out', line: {} };
+        // A kicker with no games on record (a rookie, or a veteran who sat
+        // out 2025) used to get no line at all and project zero. Week 1 2026:
+        // Sanders 14, Bass 13, Smack 12 all projected 0. He now starts from
+        // the league-average kicker, scaled by his team like anyone else.
+        if (role && role.backupQb) return { median: 0, mean: 0, floor: 0, ceiling: 0, why: 'backup quarterback, projected zero unless the starter is out', line: {} };
+        if (grp === 'K' && backupKicker(pid, player, opts, ctx)) return { median: 0, mean: 0, floor: 0, ceiling: 0, why: 'backup kicker; the starter is healthy', line: {} };
         const pf = pffPlayer(player) || {};
-        const built = DB.buildLine({ position: grp, volume, samples, rank: role && num(role.posRank) != null ? role.posRank : null, grades: { route: pf.route, run: pf.run, pass: pf.pass, off: pf.off, prush: pf.prush, cov: pf.cov, tkl: pf.tkl, fg: pf.fg } });
+        // Defenders' big-play norms follow their snaps (see dhq-baseline.js).
+        const snapFactor = (grp === 'DL' || grp === 'LB' || grp === 'DB') && role && role.snapScale && num(role.snapScale.snap) != null ? role.snapScale.snap / 0.6 : null;
+        const built = DB.buildLine({ position: grp, volume, samples, snapFactor, rank: role && num(role.posRank) != null ? role.posRank : null, grades: { route: pf.route, run: pf.run, pass: pf.pass, off: pf.off, prush: pf.prush, cov: pf.cov, tkl: pf.tkl, fg: pf.fg } });
         if (!built) return null;   // no DHQ line for this position (team defense): the caller falls back
         if (grp === 'K') {
             // A kicker's attempts follow his team's scoring (owner ruling
@@ -1038,11 +1137,65 @@
                 if (Number(opts.scoring.kr_yd) || Number(opts.scoring.pr_yd)) built.why = (built.why ? built.why + ' · ' : '') + 'returns: ' + ret.why;
             }
         }
-        const pts = DB.scoreLine(built.line, opts.scoring, grp);
+        let pts = DB.scoreLine(built.line, opts.scoring, grp);
         if (pts == null) return null;
         // zero is a projection (a TE4 with no snaps), not a missing baseline
-        if (pts <= 0) return { median: 0, floor: 0, ceiling: 0, why: built.why || 'no projected volume', line: built.line };
-        return { median: +pts.toFixed(2), floor: +(pts * 0.7).toFixed(2), ceiling: +(pts * 1.35).toFixed(2), why: built.why, line: built.line };
+        if (pts <= 0) return { median: 0, mean: 0, floor: 0, ceiling: 0, why: built.why || 'no projected volume', line: built.line };
+        // Kickers: before week 7 no pre-game number has told kickers apart
+        // (2026 weeks 1-3 and 2025 weeks 1-6), so the line sits three
+        // quarters of the way to the league-average kicker. From week 7 his
+        // own rates carry information and stand as built.
+        if (grp === 'K' && (ctx.week || 1) <= TUNE.kShrinkWeeks) {
+            const normK = DB.buildLine({ position: 'K', volume: null, samples: [], rank: null, grades: {} });
+            const m = normK ? DB.scoreLine(normK.line, opts.scoring, 'K') : null;
+            if (m != null && m > 0) pts = m + TUNE.kAlpha * (pts - m);
+        }
+        const med = typicalWeek(pts, grp, built.line, role, opts.scoring);
+        return { median: +med.toFixed(2), mean: +pts.toFixed(2), floor: +Math.min(pts * 0.7, med).toFixed(2), ceiling: +(pts * 1.35).toFixed(2), why: built.why, line: built.line };
+    }
+    // The typical week (the median) from the average line. Fantasy points
+    // are lopsided: most weeks come in under the average and a few big
+    // ones (two touchdowns, three sacks) pull it up. Graded on closeness,
+    // the typical week wins; totals and start/sit choices keep the average
+    // (it is what adds up across a lineup). Audit of weeks 1-3 2026: we came
+    // in over the actual 58-66% of the time at RB/WR/TE/DL.
+    //   WR/TE: three quarters of the expected TD points come off.
+    //   RB2 and lower: backups are zero-heavy; the TD-skew term
+    //     0.5 x TD value x λe^-λ (λ = expected TDs) comes off. RB1s keep
+    //     the average (they are under-projected on touches already).
+    //   DL: tackles plus 60% of the splash points (sacks, hits, TFL, PD).
+    //   LB/DB: a flat shade. QB and K: the average stands.
+    function typicalWeek(pts, grp, L, role, scoring) {
+        const sc = scoring || {};
+        let med = pts;
+        if (grp === 'WR' || grp === 'TE') med = pts - TUNE.medTdWrTe * (num(sc.rec_td) || 0) * (num(L.rec_td) || 0);
+        else if (grp === 'RB' && !(role && num(role.posRank) === 1)) {
+            const rt = num(L.rush_td) || 0, ct = num(L.rec_td) || 0, lam = rt + ct;
+            const tdv = lam > 0 ? (rt * (num(sc.rush_td) || 0) + ct * (num(sc.rec_td) || 0)) / lam : 0;
+            med = pts - TUNE.medTdRb * tdv * lam * Math.exp(-lam);
+        } else if (grp === 'DL') {
+            const splash = {};
+            for (const k of ['idp_sack', 'idp_qb_hit', 'idp_tkl_loss', 'idp_pass_def', 'idp_ff', 'idp_fum_rec', 'idp_int']) if (L[k] != null) splash[k] = L[k];
+            const sp = App.DhqBaseline ? num(App.DhqBaseline.scoreLine(splash, sc, grp)) || 0 : 0;
+            med = pts - (1 - TUNE.medSplashDl) * sp;
+        } else if (grp === 'LB') med = pts - TUNE.medShiftLb;
+        else if (grp === 'DB') med = pts - TUNE.medShiftDb;
+        return Math.max(0, Math.min(pts, med));
+    }
+    // A kicker listed behind a healthy starter who kicked in the team's
+    // last game is the backup: zero (Grupe, week 3 2026: projected 7.5
+    // while Sanders kicked). Before any game, the depth chart decides.
+    function backupKicker(pid, player, opts, ctx) {
+        if (!ctx || !opts || !opts.playersData) return false;
+        const br = baseRank(player, 'K', ctx.depth);
+        if (!br || br.rank < 2) return false;
+        const team = String(player.team || '').toUpperCase();
+        const k1 = rankedMates(team, 'K', ctx, opts).find(m => m.pid !== String(pid) && m.rank === 1 && m.outW < 0.8);
+        if (!k1) return false;
+        const weeks = (ctx.recentWeeks || []).filter(w => w && w.stats && w.stats['TEAM_' + team]).sort((a, b) => b.week - a.week);
+        if (!weeks.length) return true;
+        const r = weeks[0].stats[k1.pid];
+        return !!(r && ((num(r.fga) || 0) + (num(r.xpa) || 0)) > 0);
     }
 
     // Same rule as WeeklyProj.recentPPG, over a table the caller supplies:
@@ -1346,7 +1499,7 @@
         if (opts.baselineMode === 'dhq') {
             const own = dhqBaselineFor(pid, player, grp, input.role, opts, ctx);
             if (own) {
-                input.baseline = { median: own.median, floor: own.floor, ceiling: own.ceiling };
+                input.baseline = { median: own.median, mean: own.mean != null ? own.mean : own.median, floor: own.floor, ceiling: own.ceiling };
                 input.baselineSource = 'dhq';
                 input.baselineWhy = own.why;
                 input.baselineLine = own.line;

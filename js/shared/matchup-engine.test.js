@@ -16,7 +16,7 @@ test('weights sum to 100 and match the owner ruling', () => {
 test('no factor data at all → projection equals the baseline, grade C, every factor listed as missing', () => {
     const p = projectWith({});
     assert.equal(p.mult, 1);
-    assert.deepEqual(p.points, { median: 15, floor: 11, ceiling: 21 });
+    assert.deepEqual(p.points, { median: 15, mean: 15, floor: 11, ceiling: 21 });
     assert.equal(p.grade, 'C');
     assert.equal(p.verdict, 'flex');
     assert.equal(p.baseline.source, 'sleeper');
@@ -28,7 +28,7 @@ test('a ruled-out or bye player projects zero and is unavailable', () => {
     for (const status of ['OUT', 'IR', 'BYE', 'SUS']) {
         const p = projectWith({ health: { status } });
         assert.equal(p.available, false, status);
-        assert.deepEqual(p.points, { median: 0, floor: 0, ceiling: 0 });
+        assert.deepEqual(p.points, { median: 0, mean: 0, floor: 0, ceiling: 0 });
         assert.equal(p.verdict, 'out');
     }
 });
@@ -44,7 +44,7 @@ test('doubtful is treated as out for the lineup call', () => {
     const p = projectWith({ health: { status: 'Doubtful' } });
     assert.equal(p.available, false);
     assert.equal(p.verdict, 'out');
-    assert.deepEqual(p.points, { median: 0, floor: 0, ceiling: 0 });
+    assert.deepEqual(p.points, { median: 0, mean: 0, floor: 0, ceiling: 0 });
     assert.match(p.factors.find(f => f.key === 'health').note, /Doubtful, treated as out/);
 });
 

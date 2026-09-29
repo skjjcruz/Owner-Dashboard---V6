@@ -79,3 +79,43 @@ test('recent points from a supplied table: last three weeks he scored, before th
     assert.equal(I.recentPPGFrom(wpp, 'a', 4, 3), 15);   // weeks 3, 2, 1; the zero is skipped; week 4 is not yet played
     assert.equal(I.recentPPGFrom(wpp, 'b', 4, 3), null);
 });
+
+// ── Audit of weeks 1-3 2026: typical week, kickers, defenders ──────────
+require('./dhq-baseline.js');
+const HALF = { pass_yd: 0.04, pass_td: 4, pass_int: -1, rush_yd: 0.1, rush_td: 6, rec: 0.5, rec_yd: 0.1, rec_td: 6, fum_lost: -2,
+    fgm_0_19: 3, fgm_20_29: 3, fgm_30_39: 3, fgm_40_49: 4, fgm_50p: 5, fgmiss: -1, xpm: 1, xpmiss: -1,
+    idp_tkl_solo: 1, idp_tkl_ast: 0.5, idp_tkl_loss: 1, idp_sack: 2, idp_qb_hit: 1, idp_int: 3, idp_pass_def: 1, idp_ff: 2, idp_fum_rec: 2 };
+const base = (pid, player, grp, role, week) => I.dhqBaselineFor(pid, player, grp, role, { scoring: HALF, statsData: {}, priorData: {}, playersData: { [pid]: player } }, { week: week || 3, recentWeeks: [] });
+
+test('a kicker with no games on record starts from the league-average kicker, not zero', () => {
+    const b = base('k1', { team: 'NYJ', position: 'K' }, 'K', null, 1);
+    assert.ok(b, 'has a line (used to be null, which projected 0)');
+    assert.ok(b.mean > 6.5 && b.mean < 10, 'about a league-average kicker: ' + b.mean);
+    assert.equal(b.median, b.mean, 'kickers show the average');
+});
+
+test('receivers show the typical week: three quarters of the expected TD points come off', () => {
+    const b = base('w1', { team: 'KC', position: 'WR' }, 'WR', { projTargets: 8, posRank: 1 });
+    const td = b.line.rec_td * 6;
+    assert.ok(Math.abs(b.median - (b.mean - 0.75 * td)) < 0.02, 'median ' + b.median + ' mean ' + b.mean + ' td pts ' + td);
+    assert.ok(b.median < b.mean);
+});
+
+test('a lead back keeps his average; a backup is shaded for his zero-heavy weeks', () => {
+    const rb1 = base('r1', { team: 'KC', position: 'RB' }, 'RB', { projTargets: 18, posRank: 1 });
+    const rb2 = base('r2', { team: 'KC', position: 'RB' }, 'RB', { projTargets: 8, posRank: 2 });
+    assert.equal(rb1.median, rb1.mean);
+    assert.ok(rb2.median < rb2.mean);
+});
+
+test('a lineman\'s big plays follow his snaps, and his typical week keeps 60% of them', () => {
+    const part = base('d1', { team: 'KC', position: 'DE' }, 'DL', { projTargets: 1, posRank: 3, snapScale: { snap: 0.12 } });
+    const full = base('d2', { team: 'KC', position: 'DE' }, 'DL', { projTargets: 1, posRank: 1, snapScale: { snap: 0.8 } });
+    assert.ok(part.line.idp_sack < full.line.idp_sack / 3, 'a 12%-snap backup is not charged a starter\'s sacks: ' + part.line.idp_sack + ' vs ' + full.line.idp_sack);
+    assert.ok(full.median < full.mean, 'typical week under the average for a lineman');
+});
+
+test('a backup quarterback projects zero, average and typical week alike', () => {
+    const b = base('q2', { team: 'KC', position: 'QB' }, 'QB', { projTargets: 30, posRank: 2, backupQb: true });
+    assert.deepEqual([b.median, b.mean], [0, 0]);
+});

@@ -14,7 +14,9 @@
 // stays responsive. When a batch lands it fires `wr:proj-updated`, the
 // event every projection surface already re-renders on.
 //
-//   App.DhqProj.get(pid)   → { median, why, grade } | null (and queues pid)
+//   App.DhqProj.get(pid)   → { median, mean, why, grade } | null (and queues pid)
+//     median = the typical week, the number each player shows; mean = the
+//     average week, used for every total and lineup call (it adds up).
 //   App.DhqProj.fmt(pid)   → '12.3' | '…' (working) | '—' (no projection)
 //   App.DhqProj.request(pids)
 // ══════════════════════════════════════════════════════════════════
@@ -22,7 +24,7 @@
     'use strict';
     const App = root.App = root.App || {};
     const SL = 'https://api.sleeper.app/v1';
-    const VERSION = 'LAB126';
+    const VERSION = 'LAB141';
     const DEPS = [
         'js/shared/matchup-engine.js', 'js/shared/dhq-baseline.js', 'js/shared/matchup-feeds-espn.js',
         'js/shared/matchup-inputs.js', 'data/pff-matchup-snapshot.js', 'data/usage-snapshot.js',
@@ -44,7 +46,7 @@
         deps: null,          // promise: engine files loaded
         shared: {},          // `${season}|${week}` → promise of { statsCur, statsPrior, players }
         key: null,           // `${leagueId}|${week}` the results belong to
-        results: {},         // pid → { median, why, grade } | null (projected, nothing to show)
+        results: {},         // pid → { median, mean, why, grade } | null (projected, nothing to show)
         queue: new Set(),
         running: false,
         ctx: null, ctxKey: null,
@@ -186,7 +188,7 @@
                     try {
                         const p = MI.project(pid, at.wk, opts, st.ctx);
                         if (p && p.points && Number.isFinite(Number(p.points.median))) {
-                            res = { median: p.available === false ? 0 : +Number(p.points.median).toFixed(1), floor: p.available === false ? 0 : +Number(p.points.floor || 0).toFixed(1), ceiling: p.available === false ? 0 : +Number(p.points.ceiling || 0).toFixed(1), grade: p.grade, verdict: p.verdict, why: whyText(p.why) };
+                            res = { median: p.available === false ? 0 : +Number(p.points.median).toFixed(1), mean: p.available === false ? 0 : +Number(p.points.mean != null ? p.points.mean : p.points.median).toFixed(1), floor: p.available === false ? 0 : +Number(p.points.floor || 0).toFixed(1), ceiling: p.available === false ? 0 : +Number(p.points.ceiling || 0).toFixed(1), grade: p.grade, verdict: p.verdict, why: whyText(p.why) };
                         }
                     } catch (e) { res = null; }
                     st.results[pid] = res;
@@ -336,7 +338,7 @@
         const list = (roster.players || []).map(String).filter(pid => pid && !skip.has(pid) && !heldPid.has(pid)).map(pid => {
             const r = get(pid), p = players[pid] || {};
             const pos = String((App.normPos && App.normPos(p.position)) || p.position || '').toUpperCase();
-            return { pid, pos, positions: (p.fantasy_positions || []).concat([pos]), available: !!(r && Number(r.median) > 0), pts: r ? Number(r.median) || 0 : 0 };
+            return { pid, pos, positions: (p.fantasy_positions || []).concat([pos]), available: !!(r && Number(r.median) > 0), pts: avg(r) };
         });
         const out = SS.optimalLineupWeekly(list, rest);
         held.forEach(x => {
@@ -348,9 +350,11 @@
         return out;
     }
     // Numeric total of several players, or null while any is still working.
+    // A player's average week, for totals and lineup choices.
+    function avg(r) { return r ? (Number(r.mean != null ? r.mean : r.median) || 0) : 0; }
     function totalNum(pids) {
         let t = 0;
-        for (const pid of (pids || [])) { const r = get(pid); if (r) t += Number(r.median) || 0; else if (!(String(pid) in st.results)) return null; }
+        for (const pid of (pids || [])) { const r = get(pid); if (r) t += avg(r); else if (!(String(pid) in st.results)) return null; }
         return +t.toFixed(1);
     }
     // The week's matchup on DHQ's numbers: the lineup you have set against
@@ -372,7 +376,7 @@
         const map = {};
         mine.concat(oppIds, cur).forEach(pid => {
             const r = get(pid); if (!r) return;
-            const med = Number(r.median) || 0;
+            const med = avg(r);
             map[pid] = { available: med > 0, points: { median: med, floor: r.floor != null ? Number(r.floor) : med * 0.7, ceiling: r.ceiling != null ? Number(r.ceiling) : med * 1.35 } };
         });
         const fc = M.forecast(M.dist(mine, map, 'median'), M.dist(cur, map, 'median'));
@@ -388,7 +392,7 @@
         const map = {};
         ids.forEach(pid => {
             const r = get(pid); if (!r) return;
-            const med = Number(r.median) || 0;
+            const med = avg(r);
             map[pid] = { available: med > 0, points: { median: med, floor: r.floor != null ? Number(r.floor) : med * 0.7, ceiling: r.ceiling != null ? Number(r.ceiling) : med * 1.35 } };
         });
         const d = M.dist(ids, map, 'median');
@@ -531,7 +535,7 @@
     function stamp() { return (st.key || '') + ':' + Object.keys(st.results).length; }
     function sum(pids) {
         let t = 0, waiting = false;
-        (pids || []).forEach(pid => { const r = get(pid); if (r) t += Number(r.median) || 0; else if (!(String(pid) in st.results)) waiting = true; });
+        (pids || []).forEach(pid => { const r = get(pid); if (r) t += avg(r); else if (!(String(pid) in st.results)) waiting = true; });
         return waiting ? '\u2026' : t.toFixed(1);
     }
     // Every rostered player in the league, so rosters, Start/Sit and the

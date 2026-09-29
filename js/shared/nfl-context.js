@@ -66,7 +66,7 @@
                 const det = odds.details ? String(odds.details) : '';
                 if (/\beven\b|\bpk\b|pick/i.test(det)) line = 0;
                 const m = det.match(/([A-Z]{2,4})\s*(-?\d+(?:\.\d+)?)/);
-                if (m) { favAbbr = m[1]; line = Math.abs(Number(m[2])); }
+                if (m) { favAbbr = normTeam(m[1]); line = Math.abs(Number(m[2])); }   // "WSH -3" names Washington as WAS here
                 if (line == null && odds.spread != null) { line = Math.abs(Number(odds.spread)); favAbbr = Number(odds.spread) < 0 ? hAbbr : aAbbr; }
             }
 

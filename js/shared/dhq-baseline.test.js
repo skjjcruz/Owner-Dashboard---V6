@@ -121,3 +121,13 @@ test('a receiver with no history is pulled toward his rank, not one league norm'
     assert.ok(Math.abs(pts(none) / 8 - 1.39) < 0.03, 'no rank keeps the old league norm: ' + pts(none) / 8);
     assert.ok(Math.abs(wr7.line.rec_yd / 8 - 6.82) < 1e-6, 'rank past the table takes the last row');
 });
+
+test('a defender\'s own big plays count in full; only the norm part follows his snaps', () => {
+    const own = [{ line: { gp: 2, idp_tkl: 4, idp_tkl_solo: 3, idp_sack: 2 }, weight: 1 }];
+    const low = B.buildLine({ position: 'DL', volume: 1, samples: own, snapFactor: 0.1 });
+    const hi = B.buildLine({ position: 'DL', volume: 1, samples: own, snapFactor: 1 });
+    const none = B.buildLine({ position: 'DL', volume: 1, samples: [], snapFactor: 0.1 });
+    assert.ok(low.line.idp_sack < hi.line.idp_sack, 'fewer snaps, less norm');
+    assert.ok(low.line.idp_sack > none.line.idp_sack, 'his two sacks still count');
+    assert.ok(none.line.idp_sack < 0.05, 'no history and 6% snaps: next to no sacks (' + none.line.idp_sack + ')');
+});

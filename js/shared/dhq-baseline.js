@@ -131,16 +131,24 @@
             why.push(vol.toFixed(1) + ' attempts · ' + ypa.toFixed(1) + ' yds/att · ' + (tdpa * 100).toFixed(1) + '% TD · ' + rushAtt.toFixed(1) + ' rushes');
         } else if (P === 'DL' || P === 'LB' || P === 'DB') {
             if (vol == null) return null;
+            // Big plays (sacks, INT, PD, FF, TFL, QB hits, recoveries) pull
+            // toward a starter's per-game norm, and that norm is charged
+            // only as far as his snaps go (input.snapFactor, his snap share
+            // over a 60% full-time norm). Audit of weeks 1-3 2026: a lineman
+            // under 20% of the snaps was carrying 1.5 points of norm big
+            // plays and scoring 0.4; 25 week-3 linemen who never played
+            // carried 43 projected points. His own plays count in full.
+            const gS = input.snapFactor != null && isFinite(input.snapFactor) ? Math.max(0.1, Math.min(1.15, input.snapFactor)) : 1;
             const solo = rate(c.idp_tkl_solo, c.idp_tkl, n.soloShare, 20);
-            const sacks = perGame(c.idp_sack, c.gp, n.sackPg, n.K) * gradeTilt(g.prush);
-            const ints = perGame(c.idp_int, c.gp, n.intPg, n.K * 2);
-            const pds = perGame(c.idp_pass_def, c.gp, n.pdPg, n.K) * gradeTilt(g.cov);
-            const ffs = perGame(c.idp_ff, c.gp, n.ffPg, n.K * 2);
-            const tfl = perGame(c.idp_tkl_loss, c.gp, P === 'DB' ? 0.15 : 0.45, n.K);
-            const qbh = perGame(c.idp_qb_hit, c.gp, P === 'DL' ? 0.6 : P === 'LB' ? 0.25 : 0.05, n.K);
+            const sacks = perGame(c.idp_sack, c.gp, n.sackPg * gS, n.K) * gradeTilt(g.prush);
+            const ints = perGame(c.idp_int, c.gp, n.intPg * gS, n.K * 2);
+            const pds = perGame(c.idp_pass_def, c.gp, n.pdPg * gS, n.K) * gradeTilt(g.cov);
+            const ffs = perGame(c.idp_ff, c.gp, n.ffPg * gS, n.K * 2);
+            const tfl = perGame(c.idp_tkl_loss, c.gp, (P === 'DB' ? 0.15 : 0.45) * gS, n.K);
+            const qbh = perGame(c.idp_qb_hit, c.gp, (P === 'DL' ? 0.6 : P === 'LB' ? 0.25 : 0.05) * gS, n.K);
             line.idp_tkl = vol; line.idp_tkl_solo = vol * solo; line.idp_tkl_ast = vol * (1 - solo);
             line.idp_sack = sacks; line.idp_int = ints; line.idp_pass_def = pds; line.idp_ff = ffs; line.idp_tkl_loss = tfl; line.idp_qb_hit = qbh;
-            line.idp_fum_rec = perGame(c.idp_fum_rec, c.gp, 0.03, n.K * 2);
+            line.idp_fum_rec = perGame(c.idp_fum_rec, c.gp, 0.03 * gS, n.K * 2);
             why.push(vol.toFixed(1) + ' tackles (' + Math.round(solo * 100) + '% solo) · ' + sacks.toFixed(2) + ' sacks · ' + pds.toFixed(2) + ' PD · ' + ints.toFixed(2) + ' INT');
         } else if (P === 'K') {
             // Field goals by distance (owner ruling 2026-09-21): attempts per

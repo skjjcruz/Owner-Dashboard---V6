@@ -82,6 +82,18 @@ test('rosterDists prices every living team for a chopped week', () => {
     globalThis.S = saved.S; App.WeeklyProj = saved.WP;
 });
 
+test('totals add the average week; each player still shows his typical week', () => {
+    const saved = { S: globalThis.S, WP: App.WeeklyProj };
+    globalThis.S = { currentLeagueId: 'L', leagues: [{ league_id: 'L', scoring_settings: {} }], players: {} };
+    App.WeeklyProj = { displayWeek: () => 3 };
+    D.get('x');
+    Object.assign(D._st.results, { m1: { median: 9, mean: 11, floor: 6, ceiling: 15 }, m2: { median: 4, mean: 5, floor: 2, ceiling: 7 } });
+    assert.equal(D.fmt('m1'), '9.0', 'shown: typical week');
+    assert.equal(D.totalNum(['m1', 'm2']), 16, 'total: 11 + 5, the averages');
+    assert.equal(D.teamDist(['m1', 'm2']).mean, 16);
+    globalThis.S = saved.S; App.WeeklyProj = saved.WP;
+});
+
 test('a starter DHQ can\'t project keeps its slot', () => {
     // CTB The One, 2026-09-26: Apply Optimal moved "Minnesota Vikings → Empty".
     // A team defense has no DHQ projection; that is not the same as "won't play".
