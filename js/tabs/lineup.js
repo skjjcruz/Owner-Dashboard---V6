@@ -539,12 +539,15 @@ function LineupTab({
     // player who leaves the lineup is "out"; only one who enters is "in".
     // Gains are on the numbers the lineup was chosen by: DHQ's once its
     // check is in (so the moves add up to the "+X" the top box shows), the
-    // platform's while DHQ loads.
+    // platform's while DHQ loads. DHQ picks the lineup on each player's
+    // average week (mean) and shows his typical week (median), so the gains
+    // read the average: the swaps, THE CALL and Apply Optimal's "+X" then
+    // add up to the top box's number.
     const diffPts = pid => {
         if (!pid) return 0;
         if (!dhqOk) return objPts(pid);
         const d = window.App.DhqProj.get(pid);
-        return d ? Number(d.median) || 0 : 0;
+        return d ? Number(d.mean != null ? d.mean : d.median) || 0 : 0;
     };
     function lineupDiff(fromAssign, toAssign) {
         const fromSet = new Set(Object.values(fromAssign).filter(Boolean).map(String));
