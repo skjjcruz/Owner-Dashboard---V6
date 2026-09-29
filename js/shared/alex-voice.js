@@ -157,6 +157,10 @@
    *    maxTok:    optional token cap (ignored by dhqAI's per-type default)
    *    transform: optional fn(rawText) → parsed value (e.g. split into a map);
    *               if it throws or returns falsy, fallback is used.
+   *    onPartial: optional fn(textSoFar) — called as the answer streams in
+   *               (sanitized, growing). Only the caller that started the
+   *               request streams; callers joining an in-flight answer get
+   *               the finished value.
    *  }
    *  Returns a Promise resolving to the enhanced value (or fallback).
    *  Never rejects.
@@ -184,9 +188,18 @@
     // Resolves to the real value, or undefined meaning "no value" — never to a
     // fallback. Callers sharing this promise each substitute their OWN
     // fallback below, so one caller's template can never be handed to another.
+    var aiOptions = opts.options;
+    if (typeof opts.onPartial === 'function') {
+      var onPartial = opts.onPartial;
+      aiOptions = Object.assign({}, opts.options || {}, {
+        onDelta: function (chunk, soFar) {
+          try { var t = sanitize(soFar); if (t) onPartial(t); } catch (e) { /* UI hook */ }
+        },
+      });
+    }
     var run = Promise.resolve()
       .then(function () {
-        return ai(opts.type || 'strategy-analysis', opts.message || '', opts.context || '', opts.options);
+        return ai(opts.type || 'strategy-analysis', opts.message || '', opts.context || '', aiOptions);
       })
       .then(function (reply) {
         var raw = (typeof reply === 'string')

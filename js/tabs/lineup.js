@@ -277,31 +277,57 @@ function LineupTab({
     // Runs after every render and rewrites the note only when its facts
     // changed (the facts are computed after the early returns below, so they
     // cannot sit in a deps array).
+    //
+    // Speed (2026-09-29: a note took 26.5s and landed after the owner had
+    // left for Trades): the deterministic verdict and the seeded note render
+    // at once; an answer already in hand (asked earlier this session) shows
+    // at once too; otherwise Alex's note streams in word by word over the
+    // seeded one. If the owner leaves first, the answer is kept (AlexVoice's
+    // cache) and the "Alex answered" chip offers the way back.
+    const [noteStreaming, setNoteStreaming] = React.useState(false);
+    const mountedRef = React.useRef(true);
+    React.useEffect(() => {
+        mountedRef.current = true;
+        try { window.dispatchEvent(new CustomEvent('wr:alex-answer-seen', { detail: { tab: 'lineup' } })); } catch (e) { /* headless */ }
+        return () => { mountedRef.current = false; };
+    }, []);
     React.useEffect(() => {
         const f = noteFactsRef.current;
         const sig = f ? f.sig : '';
         if (sig === noteSigRef.current) return;
         noteSigRef.current = sig;
         clearTimeout(noteTimerRef.current);
+        setNoteStreaming(false);
         if (!f) { setNote(''); return; }
         const seeded = seededNote(f);
-        setNote(seeded);
         // AI upgrade only on DHQ's numbers (never cache prose written off the
         // loading fallback), behind the ambient-AI policy seam, and after the
         // facts sit still for a moment — edits and DHQ batches re-render often.
         const AV = window.AlexVoice;
-        if (!f.onDhq || !AV || !AV.enhance || (typeof AV.hasAmbientAI === 'function' && !AV.hasAmbientAI())) return;
+        const aiOk = !!(f.onDhq && AV && AV.enhance && !(typeof AV.hasAmbientAI === 'function' && !AV.hasAmbientAI()));
+        // v4: the lean fast-lane prompt; keyed on the exact facts, so a note
+        // is never reused across a different win %, bench total or swap list.
+        const cacheKey = 'gd-note-v4-' + (AV && AV.hashStr ? AV.hashStr(sig) : sig);
+        const inHand = aiOk && typeof AV.getCached === 'function' ? AV.getCached(cacheKey) : null;
+        setNote(typeof inHand === 'string' && inHand ? inHand : seeded);
+        if (!aiOk || inHand) return;
+        const live = () => mountedRef.current && noteSigRef.current === sig;
         noteTimerRef.current = setTimeout(() => {
             AV.enhance({
                 type: 'start-sit',
-                message: 'Give me a punchy 1-2 sentence game-day coaching note for my fantasy team this week. Are we favored? Any must-start upgrade sitting on the bench? Any injuries to watch, or an upcoming bye-week hole to plan for? Use only the players and numbers in the context, exactly as given — winPct and pointsLeftOnBench are what the screen shows. Recommend only a swap listed in swaps; if swaps is empty the lineup is already optimal. Natural prose, no lists, no sign-off.',
+                message: 'Write my game-day note for Week ' + f.week + ' from these facts.',
                 context: JSON.stringify(f.ctx),
                 fallback: seeded,
-                // v3: keyed on the exact facts, so a note is never reused
-                // across a different win %, bench total or swap list.
-                cacheKey: 'gd-note-v3-' + (AV.hashStr ? AV.hashStr(sig) : sig),
-            }).then(txt => { if (noteSigRef.current === sig && txt && typeof txt === 'string') setNote(txt); }).catch(() => {});
-        }, 1500);
+                cacheKey,
+                onPartial: txt => { if (live()) { setNote(txt); setNoteStreaming(true); } },
+            }).then(txt => {
+                const answered = !!(txt && typeof txt === 'string' && txt !== seeded);
+                if (live()) { if (answered) setNote(txt); else setNote(seeded); setNoteStreaming(false); }
+                else if (answered && !mountedRef.current) {
+                    try { window.dispatchEvent(new CustomEvent('wr:alex-answered', { detail: { tab: 'lineup', label: 'Alex answered your start/sit question' } })); } catch (e) { /* headless */ }
+                }
+            }).catch(() => { if (live()) { setNote(seeded); setNoteStreaming(false); } });
+        }, 900);
     });
     React.useEffect(() => () => clearTimeout(noteTimerRef.current), []);
 
@@ -779,6 +805,7 @@ function LineupTab({
     // check and matchup are in, the platform's numbers until then (onDhq
     // false → the note carries the same "DHQ loading" label as the screen).
     // Phone only — the note renders nowhere else (desktop dropped it, #229).
+    let verdict = null; // the instant engine call above Alex's note (js/shared/startsit-verdict.js)
     if (pro && isPhone && (_projReady || dhqOk)) {
         const ids = Object.values(workingAssign).filter(Boolean).map(String);
         const DQ = window.App && window.App.DhqProj;
@@ -809,6 +836,8 @@ function LineupTab({
         f.sig = JSON.stringify([currentLeague && (currentLeague.league_id || currentLeague.id), result.week, onDhq ? 'dhq' : provLabel, ids.slice().sort(), winPct, benchOut,
             swaps.map(s => s.slot + ':' + s.outPid + '>' + s.inPid), f.ctx.injuries, topBye ? [topBye.week, topBye.count, !!topBye.unfilled, topBye.reason || '', topBye.positions || []] : null, result.mode]);
         noteFactsRef.current = f;
+        const SV = window.App && window.App.StartSitVerdict;
+        try { verdict = SV ? SV.compute(f) : null; } catch (e) { verdict = null; }
     }
 
     // ── Around the league (C2 port, 2026-09-27) ──
@@ -1270,16 +1299,34 @@ function LineupTab({
                     Its own component: its 30s poll re-renders only itself. */}
                 {aroundTheLeague}
 
-                {/* Alex game-day note as a card (note state is Pro-gated upstream: free = '') */}
-                {note ? (
-                    <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderLeft: `3px solid ${GOLD}`, borderRadius: '6px', padding: '12px 14px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                        <span style={{ fontSize: fz('0.6rem'), fontWeight: 800, letterSpacing: '0.08em', color: GOLD, marginTop: '3px', whiteSpace: 'nowrap' }}>ALEX ·</span>
-                        <span style={{ fontSize: '0.86rem', color: TEXT, lineHeight: 1.5 }}>{note}</span>
-                        {/* Ask Alex follow-up: opens recon chat pre-loaded with the game-plan ask (crossover, owner ask 2026-07-13) */}
-                        {window.WR_ALEX_CHAT !== false && <button onClick={() => {
-                            const msg = 'Walk me through my Week ' + result.week + ' game plan' + (matchup && matchup.oppName ? ' against ' + matchup.oppName : '') + ' — the start/sit calls worth a second look, where I can attack this matchup, and what would change your read before kickoff.';
-                            try { window.dispatchEvent(new CustomEvent('wr:ask-alex', { detail: { message: msg } })); } catch (e) { /* chat seam unavailable */ }
-                        }} style={{ flexShrink: 0, alignSelf: 'flex-start', background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.35)', borderRadius: '5px', color: GOLD, fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.05em', padding: '4px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}>💬 ASK</button>}
+                {/* Game-day card (Pro, phone): the engine's start/sit call — on screen
+                    the moment the lineup is — with Alex's note under it, streaming
+                    in over its seeded template (note state is Pro-gated upstream). */}
+                {(note || verdict) ? (
+                    <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderLeft: `3px solid ${GOLD}`, borderRadius: 'var(--card-radius-sm, 8px)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {verdict ? (
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                <span style={{ fontSize: fz('0.6rem'), fontWeight: 800, letterSpacing: '0.08em', color: verdict.kind === 'close' ? SILVER : GOLD, marginTop: '3px', whiteSpace: 'nowrap' }}>{verdict.kind === 'close' ? 'TOSS-UP ·' : 'THE CALL ·'}</span>
+                                <span style={{ fontSize: '0.86rem', color: TEXT, fontWeight: 700, lineHeight: 1.45 }}>
+                                    {verdict.text}
+                                    {verdict.source !== 'DHQ' ? <span style={{ fontWeight: 400, color: SILVER }}>{' · ' + verdict.source + ' numbers while DHQ loads'}</span> : null}
+                                </span>
+                            </div>
+                        ) : null}
+                        {note ? (
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                <span style={{ fontSize: fz('0.6rem'), fontWeight: 800, letterSpacing: '0.08em', color: GOLD, marginTop: '3px', whiteSpace: 'nowrap' }}>ALEX ·</span>
+                                <span style={{ fontSize: '0.86rem', color: TEXT, lineHeight: 1.5 }} aria-busy={noteStreaming ? 'true' : undefined}>
+                                    {note}
+                                    {noteStreaming ? <span aria-hidden="true" style={{ display: 'inline-block', width: '0.45em', marginLeft: '2px', color: GOLD, opacity: 0.8 }}>▍</span> : null}
+                                </span>
+                                {/* Ask Alex follow-up: opens recon chat pre-loaded with the game-plan ask (crossover, owner ask 2026-07-13) */}
+                                {window.WR_ALEX_CHAT !== false && <button onClick={() => {
+                                    const msg = 'Walk me through my Week ' + result.week + ' game plan' + (matchup && matchup.oppName ? ' against ' + matchup.oppName : '') + ' — the start/sit calls worth a second look, where I can attack this matchup, and what would change your read before kickoff.';
+                                    try { window.dispatchEvent(new CustomEvent('wr:ask-alex', { detail: { message: msg } })); } catch (e) { /* chat seam unavailable */ }
+                                }} style={{ flexShrink: 0, alignSelf: 'flex-start', background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.35)', borderRadius: 'var(--card-radius-xs, 5px)', color: GOLD, fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.05em', padding: '4px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}>💬 ASK</button>}
+                            </div>
+                        ) : null}
                     </div>
                 ) : null}
 

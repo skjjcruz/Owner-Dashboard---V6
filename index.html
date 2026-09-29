@@ -3132,7 +3132,8 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- 0. Theme engine — must load before any widget/component (plain JS, no Babel needed) -->
 <script src="js/theme.js?v=20260526lightgate1"></script>
 <!-- 0b. Alex voice helper — seeded phrase variation + template-first AI upgrade (plain JS) -->
-<script src="js/shared/alex-voice.js?v=20260916burst1"></script>
+<script src="js/shared/alex-voice.js?v=20260929alex1"></script>
+<script src="js/shared/alex-answer-chip.js?v=20260929alex1"></script>
 <!-- (removed unused 'Press Start 2P' web font — it was a render-blocking request but referenced by no font-family) -->
 
 <!-- War Room modules — loaded in dependency order by Babel standalone -->
@@ -3159,6 +3160,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- 2d. GM Mode helper (Phase 1) — window.WR.GmMode — canonical mode/preset source of truth -->
 <script type="text/babel" src="js/shared/gm-mode.js?v=20260927fix1"></script>
 <script src="js/shared/startsit-engine.js?v=20260926b133"></script>
+<script src="js/shared/startsit-verdict.js?v=20260929alex1"></script>
 <script src="js/shared/weekly-proj.js?v=20260926b133"></script>
 <!-- One FAAB rule for every surface (budget AND, on Sleeper, waiver_type 2) — boot-loaded; before dashboard-digest.js. -->
 <script src="js/shared/faab-league.js?v=20260927faab1"></script>
@@ -3242,7 +3244,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" src="js/components/chop-block-panel.js?v=20260926b134"></script>
 <!-- Around the league (live scoreboard + standings) — must precede lineup.js in the group. -->
 <script type="text/babel" data-wr-defer="lineup" src="js/components/league-live-scoreboard.js?v=20260927live2"></script>
-<script type="text/babel" data-wr-defer="lineup" src="js/tabs/lineup.js?v=20260927live1"></script>
+<script type="text/babel" data-wr-defer="lineup" src="js/tabs/lineup.js?v=20260929alex1"></script>
 <!-- The Wire — league newspaper (C2 port 2026-09-27). ONE deferred group
      'wire', injected when the league "The Wire" tab first opens (LeagueWireTabLazy
      in league-detail.js). Plain-JS engines ride as text/babel so every pipeline
