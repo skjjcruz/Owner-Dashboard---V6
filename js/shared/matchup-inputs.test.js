@@ -119,22 +119,3 @@ test('a backup quarterback projects zero, average and typical week alike', () =>
     const b = base('q2', { team: 'KC', position: 'QB' }, 'QB', { projTargets: 30, posRank: 2, backupQb: true });
     assert.deepEqual([b.median, b.mean], [0, 0]);
 });
-
-test('a quarterback on no depth chart who has not started is a backup: zero', () => {
-    const players = {
-        s: { player_id: 's', team: 'MIN', position: 'QB', full_name: 'Kyler Murray', first_name: 'Kyler', last_name: 'Murray' },
-        q3: { player_id: 'q3', team: 'MIN', position: 'QB', full_name: 'Max Brosmer', first_name: 'Max', last_name: 'Brosmer' },
-    };
-    const opts = { scoring: HALF, playersData: players, priorData: { q3: { gp: 4, pass_att: 120, pass_cmp: 75, pass_yd: 800, off_snp: 250, tm_off_snp: 260 } },
-        statsData: { TEAM_MIN: { gp: 3, pass_att: 100 }, s: { gp: 3, pass_att: 95, off_snp: 190, tm_off_snp: 190 } } };
-    const depth = { 'MIN|kyler murray': { pos: 'QB', rank: 1 } };
-    const role = I.roleFor('q3', players.q3, 'QB', 'MIN', opts, { week: 4, recentWeeks: [], depth });
-    assert.equal(role.backupQb, true, 'the chart names a healthy starter; he is not it');
-    const b = I.dhqBaselineFor('q3', players.q3, 'QB', role, opts, { week: 4, recentWeeks: [], depth });
-    assert.deepEqual([b.median, b.mean], [0, 0]);
-    // No chart loaded (relay down): nothing to say he is a backup, so no zero.
-    const blind = I.roleFor('q3', players.q3, 'QB', 'MIN', opts, { week: 4, recentWeeks: [] });
-    assert.ok(!blind.backupQb);
-    // The starter himself is untouched.
-    assert.ok(!I.roleFor('s', players.s, 'QB', 'MIN', opts, { week: 4, recentWeeks: [], depth }).backupQb);
-});

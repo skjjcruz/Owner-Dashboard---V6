@@ -165,7 +165,7 @@ test('a snapshot that fails to load is set aside; the engine still loads', async
     assert.equal(s['data/pff-matchup-snapshot.js'].ok, false);
     assert.match(s['data/pff-matchup-snapshot.js'].why, /could not load/);
     assert.equal(s['data/usage-snapshot.js'].ok, true);
-    assert.deepEqual(D.dataStatus(), s);
+    assert.deepEqual(D.dataStatus()['data/pff-matchup-snapshot.js'], s['data/pff-matchup-snapshot.js']);
     globalThis.document = saved.doc; App.MatchupEngine = saved.ME; App.DhqBaseline = saved.DB; App.MatchupInputs = saved.MI;
     globalThis.DhqPffMatchup = saved.pff; globalThis.DhqUsage = saved.use;
     D._st.deps = null; D._st.data = {};
@@ -182,4 +182,44 @@ test('a snapshot built for another season is dropped, not used', () => {
     assert.equal(globalThis.DhqPffMatchup, null, 'the engine now reads PFF as missing');
     assert.equal(s['data/usage-snapshot.js'].ok, true);
     globalThis.DhqPffMatchup = saved.pff; globalThis.DhqUsage = saved.use; D._st.data = {};
+});
+
+// ── Truth law (review 2026-09-29): no Sleeper line this week, no DHQ number ──
+test('once Sleeper\'s week is in, a player it does not project shows 0, typical and average alike', () => {
+    const saved = { S: globalThis.S, WP: App.WeeklyProj };
+    const sc = { pass_yd: 0.04, pass_td: 4, rush_yd: 0.1, rec: 0.5, rec_yd: 0.1, fgm: 3, xpm: 1, idp_tkl: 1 };
+    globalThis.S = { currentLeagueId: 'T', leagues: [{ league_id: 'T', scoring_settings: sc }], players: {} };
+    const lines = { qb1: { pass_yd: 240, pass_att: 33 }, kOff: null, adp: { adp_dd_ppr: 1000 }, ptsOnly: { pts_ppr: 0.2, fum_rec_td: 0.01 } };
+    let ready = true;
+    App.WeeklyProj = { displayWeek: () => 4, hasProjWeek: () => ready, projLine: (pid) => lines[pid] || null };
+    D.get('x');
+    Object.assign(D._st.results, { qb1: { median: 18, mean: 18 }, kOff: { median: 8.2, mean: 8.2 }, adp: { median: 5.8, mean: 5.8 }, ptsOnly: { median: 1.1, mean: 1.3 } });
+    assert.equal(D.fmt('qb1'), '18.0', 'Sleeper projects him: DHQ\'s number stands');
+    assert.equal(D.fmt('kOff'), '0.0', 'no Sleeper line at all');
+    assert.equal(D.get('adp').mean, 0, 'an ADP placeholder is not a projection');
+    assert.equal(D.get('ptsOnly').mean, 0, 'a line with nothing this league scores');
+    assert.equal(D.get('kOff').noSleeper, true);
+    assert.equal(D.totalNum(['qb1', 'kOff', 'adp']), 18, 'totals add nothing for them');
+    assert.equal(D.dataStatus().sleeper.ok, true);
+    // Sleeper's week did not load: nobody is zeroed, and the status says so.
+    ready = false;
+    assert.equal(D.fmt('kOff'), '8.2');
+    assert.equal(D.totalNum(['qb1', 'kOff']), 26.2);
+    assert.equal(D.dataStatus().sleeper.ok, false);
+    globalThis.S = saved.S; App.WeeklyProj = saved.WP;
+});
+
+test('choices run on the average week: availability and start-instead points', () => {
+    const saved = { S: globalThis.S, WP: App.WeeklyProj, SS: App.StartSit };
+    globalThis.S = { currentLeagueId: 'U', leagues: [{ league_id: 'U', scoring_settings: {} }], players: {
+        lb1: { position: 'LB', team: 'KC', fantasy_positions: ['LB'] }, lb2: { position: 'LB', team: 'KC', fantasy_positions: ['LB'] } } };
+    App.WeeklyProj = { displayWeek: () => 4 };
+    App.StartSit = { normSlot: s => s, FLEX_ALLOWED: {}, BASE_POSITIONS: new Set(['LB']),
+        optimalLineupWeekly: (list) => { const best = list.filter(x => x.available).sort((a, b) => b.pts - a.pts)[0]; return best ? { starters: [{ pid: best.pid, slot: 'LB' }], total: best.pts } : { starters: [], total: 0 }; } };
+    D.get('x');
+    // a part-timer whose typical week rounds to 0 but whose average is 0.4
+    Object.assign(D._st.results, { lb1: { median: 0, mean: 0.4 }, lb2: null });
+    const best = D.optimalFor({ players: ['lb1', 'lb2'], starters: ['0'] }, ['LB', 'BN']);
+    assert.equal(best.starters[0].pid, 'lb1', 'a player with an average above 0 can be started');
+    globalThis.S = saved.S; App.WeeklyProj = saved.WP; App.StartSit = saved.SS;
 });
