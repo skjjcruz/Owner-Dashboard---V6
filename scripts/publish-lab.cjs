@@ -78,6 +78,28 @@ const LAB_PRESERVE = [
   /^scripts\//,
   /^js\/shared\/(matchup-|MATCHUP-)/,
 ];
+// ...except a file this repo now ships itself. The projection engine was
+// ported to the website (Sep 2026: matchup-engine, matchup-inputs,
+// matchup-feeds-espn, MATCHUP-FORMULA.md and their tests), so the Lab serves
+// the website's copy: one engine on both, and a website fix reaches the Lab.
+// The Lab keeps preserving what only it has (its page, data, jobs, scripts,
+// any new matchup-* file).
+function websiteOwns(rel) {
+  return rel.startsWith('js/') && fs.existsSync(path.join(ROOT, rel));
+}
+// Engine files the Lab session also edits in place. The Lab's copy of one the
+// website ships is fine to replace when it is some version this repo has
+// committed (the website is simply ahead). A copy this repo never had is Lab
+// work that was not ported: publishing would overwrite it, so stop and say
+// which. Port it first, or set LAB_ENGINE_FROM_WEBSITE=1 to publish the
+// website's copy over it on purpose.
+const LAB_ENGINE_WATCH = /^js\/shared\/(matchup-|MATCHUP-|dhq-proj|dhq-baseline|nfl-context)/;
+function gitOut(args) { return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); }
+function websiteHadIt(rel) {
+  const labBlob = gitOut(['hash-object', path.join(LAB_DIR, rel)]).trim();
+  const ours = gitOut(['log', '--no-abbrev', '--format=', '--raw', 'HEAD', '--', rel]);
+  return ours.split('\n').some(l => l.split(/\s+/)[3] === labBlob);
+}
 function walk(dir, base, out) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === '.git') continue;
@@ -106,6 +128,15 @@ if (!fs.existsSync(LAB_SRC)) fail('lab/ folder missing in this repo');
 for (const f of ['gate.html', 'lab-cutdown.js', 'espn-lab.html']) {
   if (!fs.existsSync(path.join(LAB_SRC, f))) fail('lab/' + f + ' missing');
 }
+const labFiles = walk(LAB_DIR, '', []);
+const unported = labFiles.filter(rel => LAB_ENGINE_WATCH.test(rel) && websiteOwns(rel)
+  && !fs.readFileSync(path.join(LAB_DIR, rel)).equals(fs.readFileSync(path.join(ROOT, rel)))
+  && !websiteHadIt(rel));
+if (unported.length && !/^(1|true|yes)$/i.test(String(process.env.LAB_ENGINE_FROM_WEBSITE || ''))) {
+  fail('the Lab has engine changes the website never had: ' + unported.join(', ')
+    + ' — port them to the website first, or set LAB_ENGINE_FROM_WEBSITE=1 to publish the website\'s copy over them.');
+}
+if (unported.length) log('LAB_ENGINE_FROM_WEBSITE=1: the website\'s copy replaces the Lab\'s ' + unported.join(', '));
 
 // ── 1-2. build exactly like the deploy ─────────────────────────────────────
 const loaderPath = path.join(ROOT, 'js', 'shared', 'shared-loader.js');
@@ -121,7 +152,8 @@ const loaderStamped = read(loaderPath);
 fs.writeFileSync(loaderPath, loaderBefore, 'utf8');
 
 // ── 3. wipe the Lab, keep its plumbing ─────────────────────────────────────
-const preserved = walk(LAB_DIR, '', []).filter(rel => LAB_PRESERVE.some(re => re.test(rel)));
+// (labFiles and the unported-engine check: see preflight)
+const preserved = labFiles.filter(rel => LAB_PRESERVE.some(re => re.test(rel)) && !websiteOwns(rel));
 const stash = fs.mkdtempSync(path.join(os.tmpdir(), 'lab-preserve-'));
 for (const rel of preserved) {
   fs.mkdirSync(path.dirname(path.join(stash, rel)), { recursive: true });

@@ -1079,6 +1079,11 @@ test('live update: silent self-update — build id + version.json, every page po
     if (fs.existsSync(labPath)) {
       const lab = fs.readFileSync(labPath, 'utf8');
       ok(lab.includes('fs.cpSync(DIST, LAB_DIR') && lab.includes("'version.json'"), 'Lab ships version.json');
+      // Lab-only work (its Matchup Grades page, snapshot data, data jobs'
+      // scripts) survives every publish; engine files the website ships come
+      // from the website, and unported Lab edits to them stop the publish.
+      for (const re of ['/^matchup-lab\\.html$/', '/^data\\//', '/^scripts\\//']) ok(lab.includes(re), 'Lab keeps preserving ' + re);
+      ok(lab.includes('!websiteOwns(rel)') && lab.includes('websiteHadIt(rel)'), 'Lab publish: website-owned engine files are not preserved, unported Lab edits stop it');
     }
   });
 
