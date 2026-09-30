@@ -846,7 +846,8 @@
                         : lockedInsightCount + ' insight' + (lockedInsightCount === 1 ? '' : 's'))),
                 // Spacer pushes the AI controls to the right
                 h('div', { className: 'gm-office-spacer' }),
-                isPro && h('button', {
+                // Hidden while Alex is retired (core.js WR_ALEX_CHAT), like every other Ask Alex entry point.
+                isPro && window.WR_ALEX_CHAT !== false && h('button', {
                     onClick: doGenerate,
                     disabled: aiLoading,
                     style: {

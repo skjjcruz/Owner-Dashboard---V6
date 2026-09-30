@@ -4987,7 +4987,7 @@
                 .replace(/\n/g, '<br>') : '';
             return (
                 <div style={{ marginTop: '10px' }}>
-                    {!current && (
+                    {!current && window.WR_ALEX_CHAT !== false && (
                         <button type="button" onClick={() => requestAlexVerdict(v, dealKey)}
                             style={{ width:'100%', background:'var(--acc-fill2, rgba(212,175,55,0.08))', border:'1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius:'6px', color:'var(--gold)', cursor:'pointer', fontFamily:'var(--font-body)', fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.05em', padding:'9px 12px', minHeight:'44px' }}>
                             ✨ Ask Alex for a second opinion
