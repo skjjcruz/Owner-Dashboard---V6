@@ -67,7 +67,9 @@
         // Typical week vs average week: a player's shown projection is the
         // typical (median) week; totals and lineup calls keep the average.
         medTdWrTe: 0.75,        // WR/TE: take this share of expected TD points off
-        medTdRb: 0.5,           // RB2 and lower: TD-skew term (see median below)
+        medTdWrTeHi: 0.25,      //   ... sliding to this share from medTdLoTgt to medTdHiTgt targets
+        medTdLoTgt: 7, medTdHiTgt: 9,
+        medTdRb: 0.5,           // RB: TD-skew term (see median below)
         medSplashDl: 0.6,       // DL: tackles + this share of splash points
         medShiftLb: 0.4, medShiftDb: 0.35,   // LB/DB: points off the average
         // Defenders' tackle norm by role (2025 regulars, tackles a game:
@@ -1159,17 +1161,23 @@
     // the typical week wins; totals and start/sit choices keep the average
     // (it is what adds up across a lineup). Audit of weeks 1-3 2026: we came
     // in over the actual 58-66% of the time at RB/WR/TE/DL.
-    //   WR/TE: three quarters of the expected TD points come off.
-    //   RB2 and lower: backups are zero-heavy; the TD-skew term
-    //     0.5 x TD value x λe^-λ (λ = expected TDs) comes off. RB1s keep
-    //     the average (they are under-projected on touches already).
+    //   WR/TE: three quarters of the expected TD points come off up to 7
+    //     projected targets, sliding to a quarter at 9+: heavy-volume
+    //     receivers score more steadily (weeks 1-3: WR 254-192 either
+    //     way, the slide avoids a cliff at one target count).
+    //   RB: the TD-skew term 0.5 x TD value x λe^-λ (λ = expected TDs)
+    //     comes off. It applies to RB1s too (weeks 1-3: RB 179-101 vs
+    //     174-106; Gibbs week 4 30.4 → 29.4).
     //   DL: tackles plus 60% of the splash points (sacks, hits, TFL, PD).
     //   LB/DB: a flat shade. QB and K: the average stands.
     function typicalWeek(pts, grp, L, role, scoring) {
         const sc = scoring || {};
         let med = pts;
-        if (grp === 'WR' || grp === 'TE') med = pts - TUNE.medTdWrTe * (num(sc.rec_td) || 0) * (num(L.rec_td) || 0);
-        else if (grp === 'RB' && !(role && num(role.posRank) === 1)) {
+        if (grp === 'WR' || grp === 'TE') {
+            const t = Math.max(0, Math.min(1, ((num(L.rec_tgt) || 0) - TUNE.medTdLoTgt) / (TUNE.medTdHiTgt - TUNE.medTdLoTgt)));
+            const k = TUNE.medTdWrTe + t * (TUNE.medTdWrTeHi - TUNE.medTdWrTe);
+            med = pts - k * (num(sc.rec_td) || 0) * (num(L.rec_td) || 0);
+        } else if (grp === 'RB') {
             const rt = num(L.rush_td) || 0, ct = num(L.rec_td) || 0, lam = rt + ct;
             const tdv = lam > 0 ? (rt * (num(sc.rush_td) || 0) + ct * (num(sc.rec_td) || 0)) / lam : 0;
             med = pts - TUNE.medTdRb * tdv * lam * Math.exp(-lam);

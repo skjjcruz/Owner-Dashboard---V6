@@ -94,18 +94,23 @@ test('a kicker with no games on record starts from the league-average kicker, no
     assert.equal(b.median, b.mean, 'kickers show the average');
 });
 
-test('receivers show the typical week: three quarters of the expected TD points come off', () => {
-    const b = base('w1', { team: 'KC', position: 'WR' }, 'WR', { projTargets: 8, posRank: 1 });
-    const td = b.line.rec_td * 6;
-    assert.ok(Math.abs(b.median - (b.mean - 0.75 * td)) < 0.02, 'median ' + b.median + ' mean ' + b.mean + ' td pts ' + td);
-    assert.ok(b.median < b.mean);
+test('receivers show the typical week: three quarters of the expected TD points come off, sliding to a quarter at 9+ targets', () => {
+    const low = base('w1', { team: 'KC', position: 'WR' }, 'WR', { projTargets: 5, posRank: 2 });
+    const high = base('w2', { team: 'KC', position: 'WR' }, 'WR', { projTargets: 10, posRank: 1 });
+    assert.ok(low.line.rec_tgt <= 7 && high.line.rec_tgt >= 9, 'targets ' + low.line.rec_tgt + ' / ' + high.line.rec_tgt);
+    const cut = (b) => b.mean - b.median, td = (b) => b.line.rec_td * 6;
+    assert.ok(Math.abs(cut(low) - 0.75 * td(low)) < 0.02, 'low cut ' + cut(low) + ' td pts ' + td(low));
+    assert.ok(Math.abs(cut(high) - 0.25 * td(high)) < 0.02, 'high cut ' + cut(high) + ' td pts ' + td(high));
 });
 
-test('a lead back keeps his average; a backup is shaded for his zero-heavy weeks', () => {
+test('every back is shaded for his touchdown-skewed weeks, the lead back included', () => {
     const rb1 = base('r1', { team: 'KC', position: 'RB' }, 'RB', { projTargets: 18, posRank: 1 });
     const rb2 = base('r2', { team: 'KC', position: 'RB' }, 'RB', { projTargets: 8, posRank: 2 });
-    assert.equal(rb1.median, rb1.mean);
-    assert.ok(rb2.median < rb2.mean);
+    for (const b of [rb1, rb2]) {
+        const lam = (b.line.rush_td || 0) + (b.line.rec_td || 0);
+        assert.ok(Math.abs((b.mean - b.median) - 0.5 * 6 * lam * Math.exp(-lam)) < 0.02, 'cut ' + (b.mean - b.median) + ' λ ' + lam);
+        assert.ok(b.median < b.mean);
+    }
 });
 
 test('a lineman\'s big plays follow his snaps, and his typical week keeps 60% of them', () => {
