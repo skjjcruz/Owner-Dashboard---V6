@@ -566,7 +566,7 @@
                     React.createElement(StatTile, {
                         compact: true,
                         inline: true,
-                        label: 'Your Rank',
+                        label: 'Your Power Rank',
                         value: myRank ? React.createElement('span', null, '#' + myRank, rankArrow('0.6em')) : '\u2014',
                         sub: myTeam ? (inSeason ? mySub : cur.fmtFn(myVal) + ' ' + tallUnit) : 'not found',
                         // Owner wants the personal rank called out in red.
@@ -762,7 +762,7 @@
                 }
             },
                 React.createElement('div', { style: { background: TONE.panel, borderRadius: '8px', padding: '8px 10px' } },
-                    React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.66, textTransform: 'uppercase' } }, 'Your Rank'),
+                    React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.66, textTransform: 'uppercase' } }, 'Your Power Rank'),
                     React.createElement('div', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '1.25rem', fontWeight: 900, color: myRank ? rankTone(myRank) : TONE.middle } }, myRank ? '#' + myRank : '\u2014', myRank ? rankArrow('0.55em') : null)
                 ),
                 React.createElement('div', { style: { background: TONE.panel, borderRadius: '8px', padding: '8px 10px' } },

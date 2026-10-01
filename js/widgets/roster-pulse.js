@@ -375,14 +375,19 @@
                 <div style={{ ...cardStyle, padding: 'var(--card-pad, 14px 16px)', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
                     {eliteOverlay}
                     {/* Header */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexShrink: 0 }}>
+                    {/* Wraps on narrow cards: the tier + Power badges drop to a second
+                        row instead of squeezing the title onto two lines. */}
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px 8px', marginBottom: '10px', flexShrink: 0 }}>
                         <span style={{ fontSize: '1.1rem' }}>💊</span>
-                        <span style={{ fontFamily: fonts.display, fontSize: fs(1.0), fontWeight: 700, color: colors.accent, letterSpacing: '0.07em', textTransform: 'uppercase', flex: 1 }}>Roster Pulse</span>
+                        <span style={{ fontFamily: fonts.display, fontSize: fs(1.0), fontWeight: 700, color: colors.accent, letterSpacing: '0.07em', textTransform: 'uppercase', flex: 1, whiteSpace: 'nowrap' }}>Roster Pulse</span>
                         {/* free keeps the raw rank; the tier verdict word is Pro.
                             Tier + its own rank ("CONTENDER #7 of 16"), then the
                             power rank, labelled so the two can't be confused. */}
-                        {pro && <Badge label={tierLabel} color={tierCol} theme={theme} />}
-                        <Badge label={'Power #' + (powerRank || '—')} color={colors.accent} theme={theme} />
+                        {/* Phone: the badges take their own row under the title. */}
+                        <span style={_rpPhone ? { order: 10, flexBasis: '100%', display: 'flex', gap: '6px', flexWrap: 'wrap' } : { display: 'contents' }}>
+                            {pro && <Badge label={tierLabel} color={tierCol} theme={theme} />}
+                            <Badge label={'Power #' + (powerRank || '—')} color={colors.accent} theme={theme} />
+                        </span>
                         <button onClick={openMyRoster} title="Open My Roster" style={{ padding: '3px 8px', minHeight: _rpMouse ? '26px' : '44px', marginTop: _rpMouse ? 0 : '-12px', marginBottom: _rpPhone || _rpMouse ? 0 : '-12px', marginRight: _rpPhone ? '20px' : _rpMouse ? '52px' : undefined, display: 'flex', alignItems: 'center', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.22))', borderRadius: '5px', cursor: 'pointer', fontSize: fs(0.58), fontFamily: fonts.ui, fontWeight: 700, whiteSpace: 'nowrap' }}>Roster</button>
                     </div>
 

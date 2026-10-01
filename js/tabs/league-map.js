@@ -547,6 +547,7 @@ function ReportSubView({
       if (val == null) return '\u2014';
       if (col.key === 'dhq' || col.key === 'totalDHQ') return typeof val === 'number' ? val.toLocaleString() : val;
       if (col.key === 'healthScore') return typeof val === 'number' ? val : val;
+      if (col.key === 'tierRank') return '#' + val + (row.tierOf ? ' of ' + row.tierOf : '');
       if (col.key === 'peakYrs') return val > 0 ? val : (val === 0 ? 'At peak' : 'Past');
       if (col.key === 'pos') return leagueMapPosLabel(val);
       return String(val);
@@ -1251,9 +1252,10 @@ function LeagueMapTab({
       id: 'default_team_comparison',
       name: 'Team Comparison',
       dataSource: 'teams',
-      columns: ['teamName', 'record', 'healthScore', 'tier', 'totalDHQ', 'avgAge', 'eliteCount'],
+      columns: ['teamName', 'record', 'healthScore', 'tier', 'tierRank', 'totalDHQ', 'avgAge', 'eliteCount'],
       filters: [],
-      sort: { field: 'healthScore', dir: 'desc' },
+      // League-relative tier rank (Roster Health + results), best first.
+      sort: { field: 'tierRank', dir: 'asc' },
       groupBy: null,
       limit: null,
     },
@@ -1282,8 +1284,9 @@ function LeagueMapTab({
     return [
       { key: 'teamName', label: 'Team' },
       { key: 'record', label: 'Record' },
-      { key: 'healthScore', label: 'Health' },
+      { key: 'healthScore', label: 'Roster Health' },
       { key: 'tier', label: 'Tier' },
+      { key: 'tierRank', label: 'Tier Rank' },
       { key: 'totalDHQ', label: 'Total DHQ' },
       { key: 'avgAge', label: 'Avg Age' },
       { key: 'eliteCount', label: 'Elite Players' },
@@ -1416,6 +1419,9 @@ function LeagueMapTab({
           record: (st?.wins ?? r.settings?.wins ?? 0) + '-' + (st?.losses ?? r.settings?.losses ?? 0),
           healthScore: assess?.healthScore || 0,
           tier: assess?.tier || 'N/A',
+          // Rank on the tier's own list ("#5 of 16"); null for chopped teams.
+          tierRank: assess?.tierRank || null,
+          tierOf: assess?.tierOf || null,
           totalDHQ, avgAge, eliteCount, rosterId: r.roster_id,
         });
       });
