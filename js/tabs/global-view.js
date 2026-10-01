@@ -135,6 +135,10 @@ function buildEmpirePortfolioModel(input) {
             avgDHQ: rosterPlayers.length ? Math.round(totalDHQ / rosterPlayers.length) : 0,
             healthScore,
             tier,
+            // League-relative tier rank ("#7 of 16") — Roster Health + results.
+            tierRank: assessment?.tierRank || null,
+            tierOf: assessment?.tierOf || null,
+            tierLabel: tier + (assessment?.tierRank && assessment?.tierOf ? ' #' + assessment.tierRank + ' of ' + assessment.tierOf : ''),
             tierColor: tierColor(tier),
             status,
             needs: (assessment?.needs || []).slice(0, 3).map(n => typeof n === 'string' ? n : n.pos || n.label).filter(Boolean),
@@ -778,7 +782,7 @@ function buildWarTable(input) {
             teams,
             format: teams ? teams + '-team' : 'format unknown',
             powerRank: rank,
-            rankLabel: (rank && teams) ? ('#' + rank + ' of ' + teams) : 'rank pending',
+            rankLabel: (rank && teams) ? ('Power #' + rank + ' of ' + teams) : 'rank pending',
             rankPct: rankPct(p),
             wins: Number(p.wins) || 0,
             losses: Number(p.losses) || 0,
@@ -1773,7 +1777,7 @@ function EmpireDashboard({ allLeagues, playersData, sleeperUserId, onEnterLeague
                                     <button key={asset.leagueId} className="empire-league-card" style={{ '--tone': province?.tierColor || 'var(--k-d4af37, #d4af37)' }} type="button" onClick={() => setDetail({ type: 'league', leagueId: asset.leagueId })}>
                                         <div>
                                             <strong>{asset.leagueName}</strong>
-                                            <span>{province?.tier || 'UNKNOWN'} - {province?.wins || 0}-{province?.losses || 0} - HP {province?.healthScore ?? 'No read'}</span>
+                                            <span>{province?.tierLabel || province?.tier || 'UNKNOWN'} - {province?.wins || 0}-{province?.losses || 0} - Roster Health {province?.healthScore ?? 'No read'}</span>
                                             <em>{province?.needs?.length ? 'Needs: ' + province.needs.join(', ') : 'No critical need flagged'}</em>
                                         </div>
                                         <b>{asset.dhq > 0 ? empireCompact(asset.dhq) : 'No DHQ'}</b>
@@ -1806,7 +1810,7 @@ function EmpireDashboard({ allLeagues, playersData, sleeperUserId, onEnterLeague
                     <section className="empire-detail-hero">
                         <div>
                             <h1>{province.name}</h1>
-                            <p>{province.tier} - {province.wins}-{province.losses} - rank {province.powerRank || '-'} of {province.teams || '-'}</p>
+                            <p>{province.tierLabel || province.tier} - {province.wins}-{province.losses} - Power #{province.powerRank || '-'} of {province.teams || '-'}</p>
                         </div>
                     </section>
                     <div className="empire-detail-metrics">
@@ -2534,7 +2538,7 @@ const renderScoutDetail = () => {
                                             <button key={province.id} className="empire-league-card" style={{ '--tone': province.tierColor }} type="button" onClick={() => setDetail({ type: 'league', leagueId: province.id })}>
                                                 <div>
                                                     <strong>{province.name}</strong>
-                                                    <span>{province.tier} - {province.wins}-{province.losses} - HP {province.healthScore ?? 'No read'}</span>
+                                                    <span>{province.tierLabel || province.tier} - {province.wins}-{province.losses} - Roster Health {province.healthScore ?? 'No read'}</span>
                                                     <em>{province.pickCount} picks - {province.premiumPickCount} premium - #{province.powerRank || '-'}/{province.teams || '-'}</em>
                                                 </div>
                                                 <b>{province.totalDHQ > 0 ? empireCompact(province.totalDHQ) : 'No DHQ'}</b>

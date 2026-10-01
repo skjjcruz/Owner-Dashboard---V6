@@ -74,7 +74,7 @@
         if (!curr) return;
         saveSnapshot(leagueId, {
             fingerprint: curr.fingerprint, players: curr.players, record: curr.record,
-            tier: curr.tier, draftPhase: curr.draftPhase, rank: curr.rank,
+            tier: curr.tier, tierRev: curr.tierRev, draftPhase: curr.draftPhase, rank: curr.rank,
             lastLine: (change && change.line) || null,
             lastLineTs: (change && change.line) ? Date.now() : null,
             lastEyes: !!(change && change.eyes),
@@ -89,6 +89,21 @@
         return { line: snap.lastLine, eyes: !!snap.lastEyes };
     }
 
+    // Re-stamp a baseline written by an older tier engine with today's tier
+    // + rev (everything else kept): the recalibration is never announced and
+    // the NEXT real tier move is. Idempotent; writes once per league.
+    function rebaselineTier(leagueId, curr) {
+        if (!leagueId || !curr || !curr.tier) return false;
+        var base = loadSnapshot(leagueId);
+        if (!base || (base.tierRev || 0) === (curr.tierRev || 0)) return false;
+        saveSnapshot(leagueId, Object.assign({}, base, { tier: curr.tier, tierRev: curr.tierRev }));
+        return true;
+    }
+
+    function _tierRev() {
+        try { var r = window.App && window.App.TeamTiers && window.App.TeamTiers.rev; return r != null ? r : 0; } catch (_) { return 0; }
+    }
+
     // The minimal snapshot we diff on, distilled from a Situation Room state.
     function snapshotFromState(state) {
         if (!state) return null;
@@ -97,6 +112,9 @@
             players: (state.players || []).slice(),
             record: state.record || '',
             tier: state.tier || '',
+            // What a tier MEANS (App.TeamTiers.rev). A stored tier from an
+            // older engine is not comparable — see the tier diff below.
+            tierRev: _tierRev(),
             draftPhase: (state.draft && state.draft.phase) || '',
             rank: (state.rank != null ? state.rank : null),
         };
@@ -354,7 +372,12 @@
                 changes.push({ type: 'record', text: (verb ? verb + ' — now ' : "you're now ") + curr.record });
             }
 
-            if (prev.tier && curr.tier && prev.tier !== curr.tier) {
+            // Only a REAL move counts. When the tier's meaning changed (the
+            // 2026-10-01 switch to league-relative tiers), the stored tier is
+            // from the old scale: a one-time recalibration, not a "shift" —
+            // so it is never announced; the baseline is re-stamped instead
+            // (see the rebaseline effect in the widget).
+            if (prev.tier && curr.tier && prev.tier !== curr.tier && (prev.tierRev || 0) === (curr.tierRev || 0)) {
                 changes.push({ type: 'tier', text: 'your team shifted from ' + prev.tier + ' to ' + curr.tier });
             }
 
@@ -474,11 +497,22 @@
         // Adopt the shared cloud baseline once per league view — a newer
         // baseline from the other surface replaces this device's copy and the
         // bump re-renders so the diff above re-reads it.
-        var setCloudTick = React.useState(0)[1];
+        var cloudTickState = React.useState(0);
+        var cloudTick = cloudTickState[0], setCloudTick = cloudTickState[1];
         React.useEffect(function () {
             if (!leagueId) return;
             adoptCloudSnapshot(leagueId, function () { setCloudTick(function (t) { return t + 1; }); });
         }, [leagueId]);
+
+        // Tier recalibration: a baseline stamped by an older tier engine is
+        // silently re-stamped with today's tier + rev (everything else kept),
+        // so the recalibration is never announced and the NEXT real tier
+        // move is.
+        var _currTier = curr && curr.tier, _currTierRev = curr && curr.tierRev;
+        React.useEffect(function () {
+            if (!active) return;
+            rebaselineTier(leagueId, { tier: _currTier, tierRev: _currTierRev });
+        }, [active, leagueId, _currTier, _currTierRev, cloudTick]);
 
         // Hooks are always called (stable order): line text starts at the
         // deterministic floor, then an effect may upgrade it via AI.
@@ -571,6 +605,7 @@
             curr._mover = biggestMover(leagueId, roster);
             if (got && got.state) curr._needs = got.state.needs;
             var change = computeChange(loadSnapshot(leagueId), curr, playersData);
+            rebaselineTier(leagueId, curr);
             out.material = change.material; out.line = change.line; out.eyes = !!change.eyes;
             out.curr = curr; out.leagueId = leagueId;
             // Nothing NEW — but an already-acknowledged change under 24h old
@@ -590,6 +625,7 @@
         heldLine: heldLine,
         snapshotFromState: snapshotFromState,
         computeChange: computeChange,
+        rebaselineTier: rebaselineTier,
         recentLeagueTrade: recentLeagueTrade,
         readNow: readNow,
         Line: Line,

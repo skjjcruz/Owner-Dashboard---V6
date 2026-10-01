@@ -2,6 +2,10 @@
 // js/widgets/competitive-tiers.js — Competitive Tiers widget (v2)
 //
 // Groups every team into ELITE / CONTENDER / CROSSROADS / REBUILDING.
+// Since 2026-10-01 the tier is LEAGUE-RELATIVE (team-assess
+// assignLeagueTiers): a rank on 50% Roster Health + 50% results, banded
+// top 1/6 / 45% / 75%. Teams sort by that rank (tierRank), not by Health,
+// and the Health histogram is no longer coloured as if Health set the tier.
 //
 // sm: my tier + count (kept)
 // md: tier-count bar with my position arrow under my tier
@@ -23,7 +27,8 @@
     function groupByTier(assessments) {
         const buckets = { ELITE: [], CONTENDER: [], CROSSROADS: [], REBUILDING: [] };
         (assessments || []).forEach(a => { if (buckets[a.tier]) buckets[a.tier].push(a); });
-        TIER_ORDER.forEach(t => buckets[t].sort((a, b) => (b.healthScore || 0) - (a.healthScore || 0)));
+        // Tier rank first (chopped teams have none and sort last), Health breaks ties.
+        TIER_ORDER.forEach(t => buckets[t].sort((a, b) => ((a.tierRank || 999) - (b.tierRank || 999)) || ((b.healthScore || 0) - (a.healthScore || 0))));
         return buckets;
     }
 
@@ -67,6 +72,9 @@
         const isMine = a => (myRid != null ? String(a?.rosterId) === myRid : a?.ownerId === sleeperUserId);
         const mine = assessments.find(isMine);
         const myTier = mine?.tier || null;
+        // "#7 of 16" — my place on the tier's own list.
+        const myTierRank = mine?.tierRank && mine?.tierOf ? '#' + mine.tierRank + ' of ' + mine.tierOf : '';
+        const myTierLabel = myTier ? myTier + (myTierRank ? ' ' + myTierRank : '') : null;
 
         // Primary YOUR-team framing = GM Strategy posture; tier is secondary.
         const posture = React.useMemo(() => (gm?.hasStrategy ? gmPosture(gm) : null), [gm?.mode, gm?.timeline, gm?.hasStrategy]);
@@ -118,7 +126,7 @@
             return React.createElement('div', { style: { ...base, cursor: 'pointer', textAlign: 'center', justifyContent: 'center' }, onClick: jumpToLeague },
                 React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', textTransform: 'uppercase', letterSpacing: '0.06em', opacity: 0.65 } }, posture ? 'My Stance' : 'My Tier'),
                 React.createElement('div', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: col } }, posture ? posture.label : (mine?.tier || '—')),
-                React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.55 } }, posture ? (myTier ? myTier.charAt(0) + myTier.slice(1).toLowerCase() + ' · ' + posture.sub : posture.sub) : (assessments.length + ' team' + (assessments.length === 1 ? '' : 's') + ' tracked'))
+                React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.55 } }, posture ? (myTier ? myTier.charAt(0) + myTier.slice(1).toLowerCase() + ' · ' + posture.sub : posture.sub) : ((myTierRank ? myTierRank + ' · ' : '') + assessments.length + ' team' + (assessments.length === 1 ? '' : 's') + ' tracked'))
             );
         }
 
@@ -149,7 +157,7 @@
                         }, 'YOU · ' + posture.label + (myTier ? ' · ' + myTier.slice(0, 4) : ''))
                         : React.createElement('div', {
                             style: { marginLeft: 'auto', fontSize: 'var(--text-micro, 0.6875rem)', color: myCol, fontWeight: 700, padding: '2px 6px', borderRadius: '3px', background: wrAlpha(myCol, '22'), border: '1px solid ' + wrAlpha(myCol, '55') }
-                        }, myTier ? 'YOU · ' + myTier : 'YOU · —'),
+                        }, myTier ? 'YOU · ' + myTierLabel : 'YOU · —'),
                 ),
                 // Tier bar with my position arrow
                 React.createElement('div', { style: { position: 'relative', marginTop: '4px' } },
@@ -210,7 +218,7 @@
                     React.createElement('span', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '0.78rem', fontWeight: 700, color: col, letterSpacing: '0.05em' } }, t),
                     React.createElement('span', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.55 } }, teams.length + ' team' + (teams.length === 1 ? '' : 's')),
                     teams.length > 0 && React.createElement('span', { style: { marginLeft: 'auto', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', fontFamily: 'JetBrains Mono, monospace', opacity: 0.7 } },
-                        'avg ' + Math.round(teams.reduce((s, t) => s + (t.healthScore || 0), 0) / teams.length)
+                        'avg health ' + Math.round(teams.reduce((s, t) => s + (t.healthScore || 0), 0) / teams.length)
                     ),
                 ),
                 teams.length === 0
@@ -237,7 +245,8 @@
                                     ? React.createElement('img', { src: av, style: { width: 14, height: 14, borderRadius: '50%' }, alt: '' })
                                     : React.createElement('div', { style: { width: 14, height: 14, borderRadius: '50%', background: wrAlpha(col, '33'), flexShrink: 0 } }),
                                 React.createElement('span', null, (team.ownerName || '').slice(0, 12) + (isMe ? ' ★' : '')),
-                                React.createElement('span', { style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-micro, 0.6875rem)', color: isMe ? col : 'var(--silver)', opacity: 0.8 } }, team.healthScore || 0),
+                                // Tier rank (the order inside the band); Roster Health on hover.
+                                React.createElement('span', { title: 'Roster Health ' + (team.healthScore || 0), style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-micro, 0.6875rem)', color: isMe ? col : 'var(--silver)', opacity: 0.8 } }, team.tierRank ? '#' + team.tierRank : (team.healthScore || 0)),
                             );
                         }),
                         teams.length > limit ? React.createElement('span', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.5, padding: '2px 4px' } }, '+' + (teams.length - limit)) : null,
@@ -253,7 +262,7 @@
                     React.createElement('div', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '0.88rem', fontWeight: 700, color: 'var(--white)', letterSpacing: '0.04em' } }, 'Competitive Tiers'),
                     posture
                         ? React.createElement('span', { title: 'GM Strategy: ' + (gm.modeLabel || gm.mode) + ' · ' + posture.sub, style: { marginLeft: 'auto', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: posture.col, padding: '2px 6px', borderRadius: '3px', background: wrAlpha(posture.col, '22'), border: '1px solid ' + wrAlpha(posture.col, '55') } }, '★ YOU · ' + posture.label + (myTier ? ' · ' + myTier.slice(0, 4) : ''))
-                        : (myTier && React.createElement('span', { style: { marginLeft: 'auto', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: TIER_COLORS[myTier], padding: '2px 6px', borderRadius: '3px', background: wrAlpha(TIER_COLORS[myTier], '22') } }, '★ ' + myTier)),
+                        : (myTier && React.createElement('span', { style: { marginLeft: 'auto', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: TIER_COLORS[myTier], padding: '2px 6px', borderRadius: '3px', background: wrAlpha(TIER_COLORS[myTier], '22') } }, '★ ' + myTierLabel)),
                     analyticsButton(),
                 ),
                 React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '5px', flex: 1, minHeight: 0, overflow: 'hidden' } },
@@ -321,7 +330,7 @@
                     React.createElement('div', { style: { fontFamily: 'Rajdhani, sans-serif', fontSize: '0.95rem', fontWeight: 700, color: 'var(--white)', letterSpacing: '0.04em' } }, 'Competitive Tiers'),
                     posture
                         ? React.createElement('span', { title: 'GM Strategy: ' + (gm.modeLabel || gm.mode) + ' · ' + posture.sub, style: { marginLeft: 'auto', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: posture.col, padding: '2px 6px', borderRadius: '3px', background: wrAlpha(posture.col, '22'), border: '1px solid ' + wrAlpha(posture.col, '55') } }, '★ YOU · ' + posture.label + (myTier ? ' · ' + myTier.slice(0, 4) : ''))
-                        : (myTier && React.createElement('span', { style: { marginLeft: 'auto', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: TIER_COLORS[myTier], padding: '2px 6px', borderRadius: '3px', background: wrAlpha(TIER_COLORS[myTier], '22') } }, '★ ' + myTier)),
+                        : (myTier && React.createElement('span', { style: { marginLeft: 'auto', fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: TIER_COLORS[myTier], padding: '2px 6px', borderRadius: '3px', background: wrAlpha(TIER_COLORS[myTier], '22') } }, '★ ' + myTierLabel)),
                     analyticsButton(),
                 ),
                 // Tier rows
@@ -330,11 +339,11 @@
                 ),
                 // Health histogram
                 React.createElement('div', { style: { padding: '8px 10px', background: 'var(--ov-1, rgba(255,255,255,0.02))', borderRadius: '6px', flexShrink: 0 } },
-                    React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' } }, 'Health Distribution'),
+                    React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' } }, 'Roster Health Distribution'),
                     React.createElement('div', { style: { display: 'flex', alignItems: 'flex-end', gap: '4px', height: 50 } },
                         ...hist.map((n, i) => {
                             const h = (n / maxBucket) * 40;
-                            const col = i === 4 ? TIER_COLORS.ELITE : i === 3 ? TIER_COLORS.CONTENDER : i === 2 ? TIER_COLORS.CROSSROADS : TIER_COLORS.REBUILDING;
+                            const col = 'var(--gold)'; // Health buckets are not tiers — one neutral colour
                             const isMine = i === myBucket;
                             return React.createElement('div', { key: i, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' } },
                                 React.createElement('div', { style: { fontSize: 'var(--text-micro)', color: 'var(--silver)', fontFamily: 'JetBrains Mono, monospace' } }, n),
@@ -497,14 +506,14 @@
                             const avg = Math.round(sortedHealth.reduce((s, v) => s + v, 0) / totalAssess);
                             return React.createElement('div', { style: { padding: '10px 12px', background: 'var(--ov-1, rgba(255,255,255,0.02))', border: '1px solid var(--ov-4, rgba(255,255,255,0.06))', borderRadius: '6px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '6px' } },
                                 React.createElement('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexShrink: 0 } },
-                                    React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 } }, 'Health Distribution'),
+                                    React.createElement('div', { style: { fontSize: 'var(--text-micro, 0.6875rem)', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 } }, 'Roster Health Distribution'),
                                     React.createElement('span', { style: { fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', fontFamily: 'JetBrains Mono, monospace' } }, 'avg ' + avg + ' · median ' + median),
                                 ),
                                 // Bars with value-on-bar
                                 React.createElement('div', { style: { display: 'flex', alignItems: 'flex-end', gap: '8px', flex: 1, minHeight: 60 } },
                                     ...xxlHist.map((n, i) => {
                                         const h = (n / xxlMaxBucket) * 100;
-                                        const col = i === 4 ? TIER_COLORS.ELITE : i === 3 ? TIER_COLORS.CONTENDER : i === 2 ? TIER_COLORS.CROSSROADS : TIER_COLORS.REBUILDING;
+                                        const col = 'var(--gold)'; // Health buckets are not tiers — one neutral colour
                                         const isMine = i === xxlMyBucket;
                                         return React.createElement('div', { key: i, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', minHeight: 0, justifyContent: 'flex-end', position: 'relative' } },
                                             // Value label above bar
@@ -528,13 +537,9 @@
                                         );
                                     }),
                                 ),
-                                // Tier color legend strip
-                                React.createElement('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.7, paddingTop: '4px', borderTop: '1px solid var(--ov-3, rgba(255,255,255,0.04))', flexShrink: 0 } },
-                                    React.createElement('span', null, React.createElement('span', { style: { color: TIER_COLORS.REBUILDING } }, '■ '), 'Rebuilding'),
-                                    React.createElement('span', null, React.createElement('span', { style: { color: TIER_COLORS.CROSSROADS } }, '■ '), 'Crossroads'),
-                                    React.createElement('span', null, React.createElement('span', { style: { color: TIER_COLORS.CONTENDER } }, '■ '), 'Contender'),
-                                    React.createElement('span', null, React.createElement('span', { style: { color: TIER_COLORS.ELITE } }, '■ '), 'Elite'),
-                                ),
+                                // What the tier is (it is not a Health bucket any more)
+                                React.createElement('div', { style: { fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.7, paddingTop: '4px', borderTop: '1px solid var(--ov-3, rgba(255,255,255,0.04))', flexShrink: 0 } },
+                                    'Tiers rank the league on Roster Health + results: top 1/6 Elite, to 45% Contender, to 75% Crossroads.'),
                             );
                         })(),
                     ),

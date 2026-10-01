@@ -3564,7 +3564,7 @@
                             </div>
                             <div style={{ fontSize: '0.8rem', color: 'var(--silver)', opacity: 0.75 }}>{a.teamName}</div>
                             <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
-                                <span className="tc-tier-badge" style={{ color: a.tierColor, borderColor: a.tierColor, background: a.tierBg }}>{a.tier}</span>
+                                <span className="tc-tier-badge" style={{ color: a.tierColor, borderColor: a.tierColor, background: a.tierBg }} title="League-relative tier: rank on Roster Health + results">{a.tier}{a.tierRank && a.tierOf ? ' #' + a.tierRank + ' of ' + a.tierOf : ''}</span>
                                 <span className="tc-posture-badge" style={{ color: posture.color, borderColor: posture.color, background: wrAlpha(posture.color, '18') }}>{posture.label}</span>
                                 {tradeCount > 0 && <span style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.6 }}>{tradeCount} trades on file</span>}
                             </div>

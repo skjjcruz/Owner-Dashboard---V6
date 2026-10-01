@@ -324,7 +324,7 @@ function StrategyEditorTab({ currentLeague, myRoster, playersData, gmStrategy, s
     const currentAggression = AGGRESSION.find(a => a.value === draft.aggression);
 
     // ── Recommended mode — derived from the user's own team assessment ─────────
-    // Maps the roster's competitive tier (health-score based) to a franchise mode
+    // Maps the roster's competitive tier (league-relative: Roster Health + results rank) to a franchise mode
     // so the picker can flag the on-paper-right call. Advisory only — never auto-applies.
     // Pro-only (gate-map row 17): the "★ Recommended for your roster" hint is a
     // derived recommendation (tier read); the rest of the editor is build/set
@@ -338,8 +338,15 @@ function StrategyEditorTab({ currentLeague, myRoster, playersData, gmStrategy, s
             const tier = String(a.tier || '').toLowerCase();
             const health = Number(a.healthScore) || 0;
             let mode;
-            if (tier.includes('rebuild') || (health && health < 70)) mode = 'rebuild';
-            else if (tier.includes('elite') || tier.includes('contend') || health >= 82) mode = 'win_now';
+            // The recommendation follows the league-relative tier (owner
+            // ruling 2026-10-01) — raw Health cuts (<70 / >=82) put nearly
+            // every team in win-now. Health is only a fallback with no tier.
+            if (tier) {
+                if (tier.includes('rebuild')) mode = 'rebuild';
+                else if (tier.includes('elite') || tier.includes('contend')) mode = 'win_now';
+                else mode = 'compete';
+            } else if (health && health < 70) mode = 'rebuild';
+            else if (health >= 82) mode = 'win_now';
             else mode = 'compete';
             return { mode, tierLabel: a.tier ? String(a.tier) : null, health };
         } catch (_) { return null; }

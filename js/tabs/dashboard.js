@@ -59,7 +59,7 @@ const WIDGET_MODULES = {
         description: 'Your roster vital signs — health, elites, aging, window',
         accent: () => T().color?.('positive') || 'var(--k-2ecc71, #2ecc71)',
         metrics: [
-            { key: 'health-score', label: 'Health Score' },
+            { key: 'health-score', label: 'Roster Health' },
             { key: 'elite-count', label: 'Elite Players' },
             { key: 'contender-rank', label: 'Contender Rank' },
         ],

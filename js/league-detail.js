@@ -813,7 +813,8 @@
             const windowTerm = skinShowsAgeCurve ? 'Compete Window' : 'Season Window';
             const quickItems = [
                 { term: valueTerm, def: skinShowsDynastyValue ? 'Dynasty value score (0-10,000). Production + age + situation + market.' : 'Format-adjusted value score (0-10,000). Production, role, scarcity, and market context.' },
-                { term: 'Health Score', def: 'Team grade (0-100). 90+ Elite, 80+ Contender, 70+ Crossroads.' },
+                { term: 'Roster Health', def: 'Roster grade (0-100): lineup strength + position coverage. Not the tier.' },
+                { term: 'Team Tier', def: 'Your rank in this league on 50% Roster Health + 50% results (record, then points for). Top 1/6 Elite, to 45% Contender, to 75% Crossroads, rest Rebuilding.' },
                 { term: 'Elite Player', def: '7000+ ' + skinValueShort + ' or top 5 at their position across all league rosters.' },
                 { term: windowTerm, def: skinShowsAgeCurve ? 'Years until your weakest position group ages out.' : 'Current-season readiness for this league format.' },
                 { term: 'Player Tags', def: 'Tag players as Trade Block, Cut, Untouchable, or Watch. Syncs between apps.' },
@@ -844,7 +845,9 @@
                     { term: 'Not A Blind Sort', def: 'Use DHQ to build a shortlist, then check position need, tier breaks, lineup rules, health, and roster construction. The best move is often the best tier fit, not just the highest number.' },
                 ]},
                 { cat: 'Team Assessment', items: [
-                    { term: 'Health Score', def: 'Your team\u2019s competitive readiness on a 0-100 scale. 60% is based on your optimal starting lineup strength, 40% on positional depth and coverage. 90+ = Elite tier, 80+ = Contender, 70+ = Crossroads.' },
+                    { term: 'Roster Health', def: 'Your roster\u2019s competitive readiness on a 0-100 scale. 60% is based on your optimal starting lineup strength, 40% on positional depth and coverage. It feeds the tier but is not the tier.' },
+                    { term: 'Team Tier', def: 'League-relative: every team is ranked on 50% Roster Health percentile + 50% standings percentile (record, then points for; Roster Health only before games are played). The top 1/6 are Elite, through 45% Contender, through 75% Crossroads, the rest Rebuilding. Shown as e.g. \u201cContender #7 of 16\u201d. Dynasty value is not in the tier.' },
+                    { term: 'Power Rank', def: 'The blended Power Score rank: 60% Roster Health + 40% dynasty asset value. Shown as \u201cPower #13\u201d.' },
                     { term: 'Contender Rank', def: 'How you stack up for winning THIS season. Based on your best possible starting lineup PPG compared to every other team in the league.' },
                     { term: rankTerm, def: skinShowsDynastyValue ? 'Your long-term foundation strength. Based on total ' + skinValueShort + ' value across your entire roster - starters, bench, taxi, and picks.' : 'Your format-adjusted roster strength. Based on total ' + skinValueShort + ' value across your active roster context.' },
                     { term: windowTerm, def: skinShowsAgeCurve ? 'How many more years your roster can realistically compete before age-related decline forces a rebuild. Based on the age curves of your weakest position group.' : 'How ready your roster is for the current season format, without forcing a multi-year age-curve read.' },
@@ -1115,7 +1118,7 @@
 
         // Core KPI metadata — used by computeKpiValue and module widgets
         const KPI_OPTIONS = {
-            'health-score':   { label: 'Health Score',    icon: '', category: 'Roster',   tip: 'Blended score: 60% scoring power (contender) + 40% position coverage. 90+=Elite, 80+=Contender, 70+=Crossroads' },
+            'health-score':   { label: 'Roster Health',   icon: '', category: 'Roster',   tip: 'Roster Health: 60% scoring power (optimal lineup) + 40% position coverage. The team tier is league-relative: 50% Roster Health rank + 50% results rank (Elite = top 1/6, Contender to 45%, Crossroads to 75%).' },
             'avg-age':        { label: skinValueShort + '-Wtd Age', icon: '', category: 'Roster', tip: skinValueShort + '-weighted average age. ' + (skinShowsAgeCurve ? 'Lower = longer roster window' : 'Useful context for short-term roster balance') },
             'elite-count':    { label: 'Elite Players',   icon: '', category: 'Roster',   tip: 'Players with 7000+ ' + skinValueShort + ' or a top-5 rank at their position league-wide. These are your cornerstone assets.' },
             'aging-cliff':    { label: 'Aging Cliff %',   icon: '', category: 'Roster',   tip: '% of ' + skinValueShort + ' held by players past their value window' },
@@ -1290,7 +1293,9 @@
                     const ranked = myRoster?.roster_id != null ? rankedTeams.find(t => String(t.rosterId) === String(myRoster.roster_id)) : null;
                     const hs = ranked?.healthScore || 0;
                     const allHS = rankedTeams.map(t => t.healthScore || 0).sort((a,b) => a-b);
-                    return { value: hs || '\u2014', sub: 'Score', color: hs >= 90 ? 'var(--k-d4af37, #d4af37)' : hs >= 80 ? 'var(--k-2ecc71, #2ecc71)' : hs >= 70 ? 'var(--gold)' : 'var(--k-e74c3c, #e74c3c)', sparkData: allHS };
+                    // Colour follows the league-relative TIER (no absolute
+                    // 90/80/70 Health cut any more — owner ruling 2026-10-01).
+                    return { value: hs || '\u2014', sub: 'Roster Health', color: ranked?.tierColor || 'var(--silver)', sparkData: allHS };
                 }
                 case 'starter-gap': {
                     const analytics = analyticsData || (typeof runLeagueAnalytics === 'function' ? runLeagueAnalytics() : null);
@@ -1849,14 +1854,17 @@
                         ? assessment.totalDHQ
                         : (r?.players?.reduce((s, pid) => s + (window.App?.LI?.playerScores?.[pid] || 0), 0) || 0);
                     let powerRank = 0;
+                    let tier = '', tierRank = 0, tierOf = 0;
                     if (assessment) {
                         healthScore = assessment.healthScore || 0;
                         powerScore = assessment.powerScore || 0;
                         powerRank = assessment.powerRank || 0;
-                        const tier = (assessment.tier || '').toUpperCase();
+                        tier = (assessment.tier || '').toUpperCase();
+                        tierRank = assessment.tierRank || 0;
+                        tierOf = assessment.tierOf || 0;
                         tierColor = tier === 'ELITE' ? 'var(--k-d4af37, #d4af37)' : tier === 'CONTENDER' ? 'var(--k-2ecc71, #2ecc71)' : tier === 'CROSSROADS' ? 'var(--k-f0a500, #f0a500)' : tier === 'REBUILDING' ? 'var(--k-e74c3c, #e74c3c)' : 'var(--silver)';
                     }
-                    return { ...t, rosterId: r?.roster_id, totalDHQ, healthScore, powerScore, powerRank, tierColor };
+                    return { ...t, rosterId: r?.roster_id, totalDHQ, healthScore, powerScore, powerRank, tier, tierRank, tierOf, tierColor };
                 }).sort((a,b) => {
                     // Order by the engine's powerRank DIRECTLY (not a re-sort of
                     // powerScore) so the brief's "you're Nth" is byte-identical to

@@ -550,11 +550,11 @@ function AnalyticsPanel({
             // ── Rankings: all teams sorted by health ──
             const teamRankings = [];
             allRosters.forEach(ros => {
-                let hs = 0, tier = '';
+                let hs = 0, tier = '', tierRank = 0;
                 try {
                     if (window.assessTeamFromGlobal) {
                         const a = window.assessTeamFromGlobal(ros.roster_id);
-                        if (a) { hs = a.healthScore || 0; tier = a.tier || ''; }
+                        if (a) { hs = a.healthScore || 0; tier = a.tier || ''; tierRank = a.tierRank || 0; }
                     }
                 } catch(e) { window.wrLog('rankings.assessTeam', e); }
                 const totalDhq = (ros.players || []).reduce((s, pid) => s + (playerScores[pid] || 0), 0);
@@ -570,11 +570,14 @@ function AnalyticsPanel({
                     healthScore: hs,
                     totalDhq,
                     tier,
+                    tierRank,
                     isMe: ros.roster_id === myRid,
                 });
             });
-            teamRankings.sort((a, b) => b.healthScore - a.healthScore);
-            // Health rank: convert an un-actionable absolute score into a buy/sell-relative-to-field signal.
+            // League-relative tier rank (Roster Health + results, 2026-10-01);
+            // Roster Health only breaks ties for teams without a rank (chopped).
+            teamRankings.sort((a, b) => ((a.tierRank || 999) - (b.tierRank || 999)) || (b.healthScore - a.healthScore));
+            // Tier rank: a buy/sell-relative-to-field signal instead of an absolute score.
             const myRankIdx = teamRankings.findIndex(t => t.isMe);
             const myRank = myRankIdx >= 0 ? myRankIdx + 1 : null;
             const rankPct = (myRank && teamRankings.length > 1) ? Math.round((teamRankings.length - myRank) / (teamRankings.length - 1) * 100) : null;

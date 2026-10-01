@@ -558,9 +558,9 @@ function ReportSubView({
         if (typeof val === 'number') return val >= 7000 ? 'var(--good)' : val >= 4000 ? 'var(--k-3498db, #3498db)' : val >= 2000 ? 'var(--silver)' : 'var(--ov-8, rgba(255,255,255,0.35))';
       }
       if (col.key === 'tier') return tierColors[val] || 'var(--silver)';
-      if (col.key === 'healthScore') {
-        if (typeof val === 'number') return val >= 90 ? 'var(--gold)' : val >= 80 ? 'var(--good)' : val >= 70 ? 'var(--warn)' : 'var(--bad)';
-      }
+      // Roster Health is coloured by the team's league-relative tier — there
+      // is no absolute 90/80/70 Health cut any more (2026-10-01).
+      if (col.key === 'healthScore') return tierColors[row.tier] || 'var(--silver)';
       if (col.key === 'peakYrs') {
         if (typeof val === 'number') return val >= 3 ? 'var(--good)' : val >= 1 ? 'var(--warn)' : 'var(--bad)';
       }
@@ -1744,8 +1744,9 @@ function LeagueMapTab({
         const tiers = { ELITE: [], CONTENDER: [], CROSSROADS: [], REBUILDING: [] };
         allAssessments.forEach(a => { if (tiers[a.tier]) tiers[a.tier].push(a); });
 
-        // Sort by health within each tier
-        Object.values(tiers).forEach(arr => arr.sort((a, b) => b.healthScore - a.healthScore));
+        // Order inside each tier = the league-relative tier rank (Roster Health
+        // + results); chopped teams have no rank and sort last.
+        Object.values(tiers).forEach(arr => arr.sort((a, b) => ((a.tierRank || 999) - (b.tierRank || 999)) || (b.healthScore - a.healthScore)));
 
         // Power order (2026-09-02: blended powerScore, one rank everywhere —
         // this feeds the 'Power balance' radar so it must match the rankings)
@@ -1773,11 +1774,11 @@ function LeagueMapTab({
                     </div>
                     {teams.length === 0 ? <div style={{ fontSize: '0.78rem', color: 'var(--silver)', opacity: 0.5 }}>None</div> : teams.map(t => (
                       <div key={t.rosterId} className={t.ownerId === sleeperUserId ? 'wr-my-row' : undefined} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--ov-3, rgba(255,255,255,0.04))', borderRadius: '4px' }}>
-                        <span style={{ fontSize: '0.82rem', color: 'var(--white)', fontWeight: t.ownerId === sleeperUserId ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{t.ownerName}{t.ownerId === sleeperUserId ? ' (You)' : ''}</span>
+                        <span style={{ fontSize: '0.82rem', color: 'var(--white)', fontWeight: t.ownerId === sleeperUserId ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{t.tierRank ? <span style={{ color: 'var(--silver)', fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', marginRight: '5px' }} title={'#' + t.tierRank + ' of ' + t.tierOf + ' on Roster Health + results'}>#{t.tierRank}</span> : null}{t.ownerName}{t.ownerId === sleeperUserId ? ' (You)' : ''}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ fontSize: '0.74rem', color: 'var(--silver)' }}>{t.wins}-{t.losses}</span>
                           {typeof MiniDonut !== 'undefined' && React.createElement(MiniDonut, { value: t.healthScore, size: 28, thickness: 3 })}
-                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: tierColors[tierName] }}>{t.healthScore}</span>
+                          <span title="Roster Health" style={{ fontSize: '0.78rem', fontWeight: 700, color: tierColors[tierName] }}>{t.healthScore}</span>
                         </div>
                       </div>
                     ))}
@@ -1810,15 +1811,17 @@ function LeagueMapTab({
                 if ((b.totalDHQ || 0) !== (a.totalDHQ || 0)) return (b.totalDHQ || 0) - (a.totalDHQ || 0);
                 return String(a.rosterId).localeCompare(String(b.rosterId));
               });
-              // In season the power score is a sort key (wins × 10,000 + points
-              // for), so the Blended column prints the record and scales its bar
-              // on points for — same read as the Power Rankings widget.
+              // Sorted by the blended Power Score (60% Roster Health + 40%
+              // dynasty value). In season the column PRINTS the record and
+              // scales its bar on points for — shown, not sorted on. The sub
+              // line names the league-relative tier and its own rank.
               const prInSeason = allAssessments.some(a => ((a.wins || 0) + (a.losses || 0) + (a.ties || 0)) > 0);
               const prRecord = t => (t.wins || 0) + '-' + (t.losses || 0) + ((t.ties || 0) ? '-' + t.ties : '');
+              const prTierSub = t => (t.tier || '') + (t.tierRank && t.tierOf ? ' #' + t.tierRank + ' of ' + t.tierOf : '');
               const views = [
                 prInSeason
-                  ? { key: 'blended', label: 'Blended', data: blendedRanked, valFn: t => Number(t.pf || 0), fmtFn: (v, i, t) => t ? prRecord(t) : '', colFn: (v, i) => i < 3 ? 'var(--gold)' : i < 8 ? 'var(--good)' : 'var(--bad)', subFn: t => t.tier }
-                  : { key: 'blended', label: 'Blended', data: blendedRanked, valFn: t => t.powerScore, fmtFn: v => v, colFn: v => v >= 90 ? 'var(--gold)' : v >= 80 ? 'var(--good)' : v >= 70 ? 'var(--warn)' : 'var(--bad)', subFn: t => t.tier },
+                  ? { key: 'blended', label: 'Blended', data: blendedRanked, valFn: t => Number(t.pf || 0), fmtFn: (v, i, t) => t ? prRecord(t) : '', colFn: (v, i) => i < 3 ? 'var(--gold)' : i < 8 ? 'var(--good)' : 'var(--bad)', subFn: prTierSub }
+                  : { key: 'blended', label: 'Blended', data: blendedRanked, valFn: t => t.powerScore, fmtFn: v => v, colFn: (v, i) => i < 3 ? 'var(--gold)' : i < 8 ? 'var(--good)' : 'var(--bad)', subFn: prTierSub },
                 { key: 'contender', label: 'Contender', data: contenderRanked, valFn: t => t.ppg, fmtFn: v => v > 0 ? v.toFixed(1) : '\u2014', colFn: (v, i) => i < 3 ? 'var(--good)' : i < 8 ? 'var(--silver)' : 'var(--bad)', subFn: t => (t.ppg > 0 ? t.ppg.toFixed(1) + ' PPG' : '') },
                 { key: 'dynasty', label: 'Dynasty', data: dynastyRanked, valFn: t => t.totalDhq, fmtFn: v => v > 0 ? (v/1000).toFixed(1)+'K' : '\u2014', colFn: (v, i) => i < 3 ? 'var(--good)' : i < 8 ? 'var(--silver)' : 'var(--bad)', subFn: t => (t.totalDhq > 0 ? t.totalDhq.toLocaleString() + ' DHQ' : '') },
               ];
@@ -1926,7 +1929,7 @@ function LeagueMapTab({
         <div className="wr-module-nav">
         <button className={leagueSort === 'wins' ? 'is-active' : ''} onClick={() => setLeagueSort('wins')}>Wins</button>
         <button className={leagueSort === 'dhq' ? 'is-active' : ''} onClick={() => setLeagueSort('dhq')}>DHQ Value</button>
-        <button className={leagueSort === 'health' ? 'is-active' : ''} onClick={() => setLeagueSort('health')}>Health Score</button>
+        <button className={leagueSort === 'health' ? 'is-active' : ''} onClick={() => setLeagueSort('health')}>Roster Health</button>
         <button className={leagueSort === 'champs' ? 'is-active' : ''} onClick={() => setLeagueSort('champs')}>Championships</button>
         </div>
       </div>
@@ -2015,8 +2018,8 @@ function LeagueMapTab({
                     {/* Status tag + health — tier badge is a competitive-tier
                         read (Q7) → Pro; the raw health number stays free. */}
                     <div style={{ display: 'flex', gap: '6px', marginBottom: '6px', alignItems: 'center' }}>
-                      {isPro && tier2 && <span style={{ fontSize: '0.7rem', fontWeight: 700, color: tierCol2, background: wrAlpha(tierCol2, '15'), padding: '1px 8px', borderRadius: '4px', textTransform: 'uppercase', fontFamily: 'var(--font-body)' }}>{tier2}</span>}
-                      {hs2 > 0 && <span style={{ fontSize: '0.72rem', color: hs2 >= 75 ? 'var(--good)' : hs2 >= 55 ? 'var(--warn)' : 'var(--bad)', fontWeight: 600 }}>{hs2} health</span>}
+                      {isPro && tier2 && <span style={{ fontSize: '0.7rem', fontWeight: 700, color: tierCol2, background: wrAlpha(tierCol2, '15'), padding: '1px 8px', borderRadius: 'var(--card-radius-xs, 5px)', textTransform: 'uppercase', fontFamily: 'var(--font-body)' }}>{tier2}{teamAssess?.tierRank && teamAssess?.tierOf ? ' #' + teamAssess.tierRank + ' of ' + teamAssess.tierOf : ''}</span>}
+                      {hs2 > 0 && <span style={{ fontSize: '0.72rem', color: hs2 >= 75 ? 'var(--good)' : hs2 >= 55 ? 'var(--warn)' : 'var(--bad)', fontWeight: 600 }}>{hs2} roster health</span>}
                     </div>
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '4px', opacity: 0.7 }}>
                       <span>{rPlayers.length} players</span>

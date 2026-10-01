@@ -96,11 +96,13 @@
             roster_positions: league?.roster_positions || [],
             scoringSettings: league?.scoring_settings || {},
             scoring_settings: league?.scoring_settings || {},
-            teamTier: assessment?.tier || '',
+            teamTier: assessment?.tier || '',   // league-relative tier (Health + standings rank)
             teamWindow: assessment?.window || assessment?.tradeWindow || '',
-            healthScore: assessment?.healthScore || 0,
+            healthScore: assessment?.healthScore || 0,   // Roster Health — not the tier
             gmStrategy,
-            stateHash: stateHashFor(league, roster, gmStrategy),
+            // The tier (league-relative since 2026-10-01) joins the hash so a
+            // cached diagnosis that quoted the old tier is not served again.
+            stateHash: stateHashFor(league, roster, gmStrategy + '|tier:' + (assessment?.tier || '') + (assessment?.tierRank ? '#' + assessment.tierRank + '/' + (assessment.tierOf || '') : '')),
         };
     }
 

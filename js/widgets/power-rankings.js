@@ -2,7 +2,7 @@
 // js/widgets/power-rankings.js — Power Rankings Home widget
 //
 // Views:
-//   - Blended:   sorted by healthScore   (0-100)
+//   - Blended:   sorted by powerScore (60% Roster Health + 40% dynasty value)
 //   - Contender: sorted by optimal PPG   (current starting lineup)
 //   - Dynasty:   sorted by total roster DHQ
 //
@@ -114,7 +114,9 @@
             // 2026-09-17: "223 score, −4987 vs avg"). Once games have been
             // played every surface prints the record and points for, bars
             // scale on points for, and a gap reads as games or points. The
-            // ORDER is untouched: still the ruled record-then-points rank.
+            // ORDER is the blended Power Score (sort above), NOT record —
+            // the caption says so (2026-10-01: it used to read "by record ·
+            // points for" while 3-0 teams sat below 2-1 teams).
             const inSeason = assessments.some(a => ((a.wins || 0) + (a.losses || 0) + (a.ties || 0)) > 0);
             const pfOf = t => Number((t && t.pf) || 0);
             const recordOf = t => (t.wins || 0) + '-' + (t.losses || 0) + ((t.ties || 0) ? '-' + t.ties : '');
@@ -132,7 +134,8 @@
                     barFn: t => inSeason ? pfOf(t) : (t.powerScore || 0),
                     fmtFn: v => String(Math.round(v || 0)),
                     gapFmt: v => inSeason ? gapInSeason(v) : String(Math.round(v || 0)),
-                    caption: inSeason ? 'by record · points for' : 'by Power Score',
+                    caption: 'by Power Score',
+                    captionTitle: 'Sorted by Power Score: 60% Roster Health + 40% dynasty value. Record and points for are shown, not sorted on.',
                 },
             };
         }, [assessments]);
@@ -258,6 +261,7 @@
                 }, 'Power Rankings'),
                 // One lens only — a quiet caption instead of the old view tabs.
                 React.createElement('div', {
+                    title: cur.captionTitle || undefined,
                     // Phone: marginRight clears the shell's ⋯ 44px hit area (same as the Ticker).
                     style: { marginLeft: 'auto', marginRight: (window.matchMedia && window.matchMedia('(max-width: 767px)').matches) ? '20px' : undefined, flex: '0 0 auto', fontFamily: 'var(--font-body)', fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.66, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' } }, cur.caption));
         }

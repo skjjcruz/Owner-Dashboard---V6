@@ -17,7 +17,6 @@
     'use strict';
 
     // Proper ordinal suffix — '92nd', '33rd', not '92th'.
-    const ordinalSuffix = (n) => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; return s[(v - 20) % 10] || s[v] || s[0]; };
 
     // Seasonal (one-year) formats: redraft (Sleeper settings.type 0), Chopped/
     // guillotine (3), best ball, DFS. Dynasty/keeper/unknown fail open (keep
@@ -78,6 +77,11 @@
 
         const health = assess?.healthScore || 0;
         const tier = assess?.tier || '—';
+        // League-relative tier rank (owner ruling 2026-10-01): "#7 of 16" on
+        // the tier's own list (Roster Health + results). The power rank is a
+        // different list and is always labelled "Power #N".
+        const tierRankTxt = assess?.tierRank && assess?.tierOf ? '#' + assess.tierRank + ' of ' + assess.tierOf : '';
+        const tierLabel = tierRankTxt ? tier + ' ' + tierRankTxt : tier;
         const needs = assess?.needs || [];
         const strengths = assess?.strengths || [];
         const window_ = assess?.window || '—';
@@ -187,7 +191,7 @@
             if (key === 'contender-rank') return { label: 'CONTENDER', value: contenderKv.value, color: contenderKv.color || colors.accent, sub: contenderKv.sub || 'rank' };
             // default: health-score
             const healthCol = health >= 80 ? colors.positive : health >= 60 ? colors.accent : health >= 40 ? colors.warn : colors.negative;
-            return { label: 'HEALTH', value: health, color: healthCol, sub: pro ? tier : 'health score' };
+            return { label: 'ROSTER HEALTH', value: health, color: healthCol, sub: pro ? tierLabel : 'roster health' };
         })();
 
         // Sparkline data: all teams' health scores sorted for the mini chart
@@ -280,7 +284,7 @@
                             background: wrAlpha(tierCol, '18'), color: tierCol,
                             border: '1px solid ' + wrAlpha(tierCol, '44'),
                             fontFamily: fonts.ui,
-                        }}>{tier}</div>
+                        }}>{tierLabel}</div>
                     )}
                 </div>
             );
@@ -308,7 +312,7 @@
                             {isSeasonal
                                 ? <Badge label={recordVital.value + (recordVital.label === 'POINTS' ? ' PF' : '')} color={recordVital.color || colors.textMuted} theme={theme} />
                                 : <Badge label={windowKv.value + ' window'} color={windowKv.color || colors.textMuted} theme={theme} />}
-                            {pro && <Badge label={tier} color={tierCol} theme={theme} />}
+                            {pro && <Badge label={tierLabel} color={tierCol} theme={theme} />}
                         </div>
                     </div>
                 </div>
@@ -350,7 +354,7 @@
 
             // Compact 4-vital grid for lg (no scroll); 6 for tall/xxl
             const vitals4 = [
-                { label: 'HEALTH', value: healthKv.value, color: healthKv.color || healthCol, sub: (pro ? tier + ' · ' : '') + '#' + (powerRank || '—') },
+                { label: 'ROSTER HEALTH', value: healthKv.value, color: healthKv.color || healthCol, sub: 'lineup + depth' },
                 { label: 'ELITES', value: eliteKv.value, color: eliteKv.color || colors.positive, sub: 'top-tier' },
                 { label: 'CONTEND.', value: contenderKv.value, color: contenderKv.color || colors.accent, sub: contenderKv.sub || 'this season' },
                 isSeasonal ? recordVital : { label: 'WINDOW', value: windowKv.value, color: windowCol, sub: windowSub },
@@ -374,8 +378,11 @@
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexShrink: 0 }}>
                         <span style={{ fontSize: '1.1rem' }}>💊</span>
                         <span style={{ fontFamily: fonts.display, fontSize: fs(1.0), fontWeight: 700, color: colors.accent, letterSpacing: '0.07em', textTransform: 'uppercase', flex: 1 }}>Roster Pulse</span>
-                        {/* free keeps the raw rank; the tier verdict word is Pro */}
-                        <Badge label={(pro ? tier + ' · ' : '') + '#' + (powerRank || '—')} color={pro ? tierCol : colors.accent} theme={theme} />
+                        {/* free keeps the raw rank; the tier verdict word is Pro.
+                            Tier + its own rank ("CONTENDER #7 of 16"), then the
+                            power rank, labelled so the two can't be confused. */}
+                        {pro && <Badge label={tierLabel} color={tierCol} theme={theme} />}
+                        <Badge label={'Power #' + (powerRank || '—')} color={colors.accent} theme={theme} />
                         <button onClick={openMyRoster} title="Open My Roster" style={{ padding: '3px 8px', minHeight: _rpMouse ? '26px' : '44px', marginTop: _rpMouse ? 0 : '-12px', marginBottom: _rpPhone || _rpMouse ? 0 : '-12px', marginRight: _rpPhone ? '20px' : _rpMouse ? '52px' : undefined, display: 'flex', alignItems: 'center', background: 'var(--acc-fill2, rgba(212,175,55,0.08))', color: 'var(--gold)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.22))', borderRadius: '5px', cursor: 'pointer', fontSize: fs(0.58), fontFamily: fonts.ui, fontWeight: 700, whiteSpace: 'nowrap' }}>Roster</button>
                     </div>
 
@@ -461,8 +468,8 @@
                             {/* Percentile + sparkline */}
                             <div style={{ marginBottom: '8px', flexShrink: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: fs(0.6), color: colors.textMuted, fontFamily: fonts.ui, marginBottom: '2px' }}>
-                                    <span style={{ fontWeight: 700, color: colors.accent, textTransform: 'uppercase', letterSpacing: '0.08em' }}>League Health</span>
-                                    <span>You: {powerRank > 0 ? percentile + ordinalSuffix(percentile) + ' percentile · ' : ''}#{powerRank || '—'} of {totalTeams}</span>
+                                    <span style={{ fontWeight: 700, color: colors.accent, textTransform: 'uppercase', letterSpacing: '0.08em' }}>League Roster Health</span>
+                                    <span>You: {health || '—'}{tierRankTxt ? ' · tier ' + tierRankTxt : ''} · Power #{powerRank || '—'} of {totalTeams}</span>
                                 </div>
                                 <MiniBarChart data={healthSparkData} highlight={health} colors={colors} fonts={fonts} fs={fs} height={36} />
                             </div>

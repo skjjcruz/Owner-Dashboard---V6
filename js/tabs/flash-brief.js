@@ -43,20 +43,23 @@ const BRIEF_VOICE = {
         (rank, hs) => "This roster is the class of the league — the target's on your back now.",
         (rank, hs) => "Elite territory. Everyone else is chasing you.",
     ],
+    // `rk` is the TIER rank ("7th of 16") — the team's place on the tier's
+    // own list (Roster Health + results), not the Power rank. `hs` is Roster
+    // Health. Since 2026-10-01 the tier is league-relative.
     contender: [
-        (rank, hs) => "Your roster's sitting in solid shape — " + ordinal(rank) + " in the league with a health score of " + hs + ". You're right in the mix.",
-        (rank, hs) => "You're a legit contender — " + ordinal(rank) + " with a health score of " + hs + ", well within striking distance.",
-        (rank, hs) => "Sitting " + ordinal(rank) + " with a health score of " + hs + " — one sharp move could tip this your way.",
+        (rk, hs) => "Your roster's sitting in solid shape — " + rk + " in the league on results and Roster Health (" + hs + "). You're right in the mix.",
+        (rk, hs) => "You're a legit contender — " + rk + " on results and Roster Health, well within striking distance.",
+        (rk, hs) => "Sitting " + rk + " on results and Roster Health — one sharp move could tip this your way.",
     ],
     crossroads: [
-        (rank, hs) => "You're at a crossroads — ranked " + ordinal(rank) + " with a health score of " + hs + ". Some decisions coming up that'll define your direction.",
-        (rank, hs) => "Ranked " + ordinal(rank) + ", health score " + hs + " — you could push in or pull back, and I'd rather we choose than drift.",
-        (rank, hs) => "This is a fork-in-the-road roster — " + ordinal(rank) + ", health score " + hs + ". The next move sets your direction.",
+        (rk, hs) => "You're at a crossroads — " + rk + " in the league on results and Roster Health. Some decisions coming up that'll define your direction.",
+        (rk, hs) => rk.charAt(0).toUpperCase() + rk.slice(1) + " on results and Roster Health (" + hs + ") — you could push in or pull back, and I'd rather we choose than drift.",
+        (rk, hs) => "This is a fork-in-the-road roster — " + rk + " on results and Roster Health. The next move sets your direction.",
     ],
     rebuilding: [
-        (rank, hs) => "Rebuilding mode — ranked " + ordinal(rank) + ". Health score is " + hs + ". But that's where the opportunity is.",
-        (rank, hs) => "You're rebuilding from " + ordinal(rank) + " with a health score of " + hs + " — the goal right now is assets, not wins.",
-        (rank, hs) => "Ranked " + ordinal(rank) + ", health score " + hs + ". Rebuilds reward patience — stack picks and youth.",
+        (rk, hs) => "Rebuilding mode — " + rk + " in the league on results and Roster Health. But that's where the opportunity is.",
+        (rk, hs) => "You're rebuilding from " + rk + " on results and Roster Health — the goal right now is assets, not wins.",
+        (rk, hs) => rk.charAt(0).toUpperCase() + rk.slice(1) + " on results and Roster Health (" + hs + "). Rebuilds reward patience — stack picks and youth.",
     ],
     waiver: (name, pos, dhq) => "I've been watching the wire — " + name + " is sitting out there unclaimed.",
     trade: (count) => "I've mapped out the owners in your league. A few look ripe for a deal.",
@@ -70,7 +73,9 @@ const BRIEF_VOICE = {
             const ts = window.App?.powerPinTs?.();
             if (ts) asOf = ' (as of ' + new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ')';
         } catch (e) { /* stamp is decoration only */ }
-        return "You're #" + rank + " in the league pecking order right now" + asOf + ".";
+        // `rank` is the POWER rank (Health + dynasty value) — labelled so it
+        // can't be read as the tier rank beside it.
+        return "You're Power #" + rank + " in the league pecking order right now" + asOf + ".";
     },
 };
 
@@ -103,6 +108,11 @@ function IntelligenceBriefWidget({
     const myAssess = typeof window.assessTeamFromGlobal === 'function' ? window.assessTeamFromGlobal(myRoster?.roster_id) : null;
     const tier = (myAssess?.tier || 'UNKNOWN').toUpperCase();
     const hs = myAssess?.healthScore || 0;
+    // League-relative tier rank ("#7 of 16") — the tier's own list. Distinct
+    // from myRank below, which is the POWER rank.
+    const tierRank = rosterState.isUsable ? (myAssess?.tierRank || 0) : 0;
+    const tierOf = myAssess?.tierOf || 0;
+    const tierRankTxt = tierRank > 0 && tierOf > 0 ? '#' + tierRank + ' of ' + tierOf : '';
     const needs = rosterState.isUsable ? (myAssess?.needs || []) : [];
     const elites = rosterState.isUsable && typeof window.App?.countElitePlayers === 'function' ? window.App.countElitePlayers(myRoster?.players || []) : 0;
     // Read powerRank DIRECTLY from the one engine — the same value the elites
@@ -326,15 +336,15 @@ function IntelligenceBriefWidget({
     const pickTier = (pool) => {
         const arr = Array.isArray(pool) ? pool : [pool];
         const fn = (window.AlexVoice && typeof window.AlexVoice.pick === 'function') ? window.AlexVoice.pick(tierSeed, arr) : arr[0];
-        return typeof fn === 'function' ? fn(myRank, hs) : String(fn || '');
+        return typeof fn === 'function' ? fn(ordinal(tierRank) + ' of ' + tierOf, hs) : String(fn || '');
     };
     // UNKNOWN tier = assessment hasn't loaded — never let it fall through to
     // the rebuilding copy ('ranked 0th, health score 0' as fact). Same for a
     // known tier with no rank yet: don't interpolate ordinal(0).
     const tierMsg = !rosterState.isUsable ? (rosterState.brief || 'Roster sync incomplete. I paused roster, trade, waiver, and league-rank recommendations until player IDs finish loading.')
-        : (!myAssess || tier === 'UNKNOWN') ? 'Still syncing your league read — I’ll have your tier, rank, and health score once the data lands.'
+        : (!myAssess || tier === 'UNKNOWN') ? 'Still syncing your league read — I’ll have your tier, rank, and Roster Health once the data lands.'
         : tier === 'ELITE' ? pickTier(p.elite)
-        : myRank <= 0 ? ('Your roster reads ' + tier + ' with a health score of ' + hs + ' — league rank is still syncing.')
+        : (tierRank <= 0 || tierOf <= 0) ? ('Your roster reads ' + tier + ' with a Roster Health of ' + hs + ' — league rank is still syncing.')
         : tier === 'CONTENDER' ? pickTier(p.contender)
         : tier === 'CROSSROADS' ? pickTier(p.crossroads)
         : pickTier(p.rebuilding);
@@ -362,7 +372,7 @@ function IntelligenceBriefWidget({
         if (waiverTarget && alexFocus.waivers !== false) parts.push(`${waiverTarget.name} (${waiverTarget.pos}) sitting on the wire.`);
         else if (draftCountdown) parts.push(draftCountdown.days === 0 ? 'Draft is today.' : `Draft in ${draftCountdown.days} day${draftCountdown.days !== 1 ? 's' : ''}.`);
         else if (activeTrades > 0 && alexFocus.trades !== false) parts.push(`${activeTrades} recent trade${activeTrades > 1 ? 's' : ''} in your league.`);
-        else if (myRank > 0) parts.push(`Ranked ${ordinal(myRank)} in the league.`);
+        else if (myRank > 0) parts.push(`Power #${myRank} in the league.`);
         else parts.push('League rank still syncing.');
         return parts.slice(0, 3).join(' ');
     })();
@@ -481,7 +491,7 @@ function IntelligenceBriefWidget({
         icon: '🏆', tab: 'analytics',
         // No rank/tier claims until the assessment has actually landed.
         title: (myRank > 0 && tier !== 'UNKNOWN') ? p.rank(myRank, tier) : 'League standings still syncing — see how the field stacks up.',
-        detail: (tier !== 'UNKNOWN' ? `${tier} tier · ` : '') + 'See where everyone else stands.',
+        detail: (tier !== 'UNKNOWN' ? `${tier} tier${tierRankTxt ? ' ' + tierRankTxt : ''} · ` : '') + 'See where everyone else stands.',
     });
     }
 
@@ -610,7 +620,7 @@ function IntelligenceBriefWidget({
         // Line 2 — rank + health → Analytics tab.
         if (myRank > 0 && tier !== 'UNKNOWN') {
             lines.push({ key: 'rank', icon: '🎯', target: 'analytics', src: 'Analytics',
-                body: ["You're ranked ", val(ordinal(myRank), 'var(--bad, #e86a5a)'), ' with an overall Health score of ', val(String(hs), 'var(--white)'), ' — ', React.createElement('strong', { key: 't', style: { color: 'var(--white)' } }, tier), ' tier.'] });
+                body: ["You're ", val('Power #' + myRank, 'var(--bad, #e86a5a)'), ' with a Roster Health of ', val(String(hs), 'var(--white)'), ' — ', React.createElement('strong', { key: 't', style: { color: 'var(--white)' } }, tier), ' tier', ...(tierRankTxt ? [' ', val(tierRankTxt, 'var(--white)')] : []), '.'] });
         }
         // Line 3 — roster count → My Roster.
         if (activeCap > 0) {
@@ -787,9 +797,9 @@ function IntelligenceBriefWidget({
 
         const myDHQ = (myRoster?.players || []).reduce((s, pid) => s + (window.App?.LI?.playerScores?.[pid] || 0), 0);
         const kpis = [
-            { label: 'HEALTH', value: hs, col: hs >= 80 ? 'var(--good)' : hs >= 60 ? 'var(--gold)' : hs >= 40 ? 'var(--warn)' : 'var(--bad)' },
-            { label: 'RANK', value: '#' + (myRank || '—'), col: 'var(--gold)' },
-            { label: 'TIER', value: tier, col: tier === 'ELITE' ? 'var(--good)' : tier === 'CONTENDER' ? 'var(--gold)' : tier === 'CROSSROADS' ? 'var(--warn)' : 'var(--bad)' },
+            { label: 'ROSTER HEALTH', value: hs, col: hs >= 80 ? 'var(--good)' : hs >= 60 ? 'var(--gold)' : hs >= 40 ? 'var(--warn)' : 'var(--bad)' },
+            { label: 'POWER', value: '#' + (myRank || '—'), col: 'var(--gold)' },
+            { label: tierRankTxt ? 'TIER ' + tierRankTxt : 'TIER', value: tier, col: tier === 'ELITE' ? 'var(--good)' : tier === 'CONTENDER' ? 'var(--gold)' : tier === 'CROSSROADS' ? 'var(--warn)' : 'var(--bad)' },
             { label: 'ELITES', value: elites, col: 'var(--good)' },
             { label: 'DHQ', value: myDHQ >= 1000 ? Math.round(myDHQ / 1000) + 'k' : myDHQ, col: 'var(--gold)' },
             { label: 'FAAB', value: budget > 0 ? '$' + faabRemaining : '—', col: 'var(--k-7c6bf8, #7c6bf8)' },
