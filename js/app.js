@@ -60,6 +60,23 @@
     const DHQ_HOME_URL = 'landing.html?home';
     window.App.DHQ_HOME_URL = DHQ_HOME_URL;
 
+    // ── Hub v2 — the C2 "Welcome back" home, LAB ONLY (2026-10-02) ──
+    // ONE switch. On only where window.DHQ_LAB === true, which lab/gate.html
+    // sets and only scripts/publish-lab.cjs injects (the Lab), or with ?hub=v2
+    // on localhost for local testing. The website and the app never set it, so
+    // they render the hub below exactly as before and never request the
+    // hub-v2 files. ?hub=v1 shows the old hub in the Lab for comparison.
+    // Component + styles: js/hub-v2.js, js/hub-v2.css (deferred group 'hubv2').
+    const HUB_V2 = (function () {
+        try {
+            const want = new URLSearchParams(window.location.search || '').get('hub');
+            if (want === 'v1') return false;
+            if (window.DHQ_LAB === true) return true;
+            return want === 'v2' && ['localhost', '127.0.0.1'].includes(WR_HOST);
+        } catch (e) { return false; }
+    })();
+    window.App.HUB_V2 = HUB_V2;
+
     // ── Owner default: bigloco's locked-in MFL franchise in the "MLS Dynasty
     // League" (id 41969). Used to auto-select the team on rehydrate when no
     // mfl_franchise_id is persisted yet. Matched by NAME in loadMflData so the
@@ -1342,6 +1359,21 @@
         // Hook must be above the early return to maintain consistent hook order
         const [reconLeagueId, setReconLeagueId] = useState(null);
 
+        // Hub v2 (Lab only — see HUB_V2): load the deferred 'hubv2' group and
+        // its stylesheet once. 'off' everywhere the flag is off (no request);
+        // 'error' falls back to the old hub rather than a blank page.
+        const [hubV2Phase, setHubV2Phase] = useState(HUB_V2 ? 'loading' : 'off');
+        useEffect(() => {
+            if (!HUB_V2) return undefined;
+            let alive = true;
+            const loader = window.wrLoadModuleGroup ? window.wrLoadModuleGroup('hubv2') : Promise.resolve();
+            loader
+                .then(() => (typeof window.DhqHubV2 === 'function' ? window.DhqHubV2.loadStyles() : Promise.reject(new Error('DhqHubV2 missing'))))
+                .then(() => { if (alive) setHubV2Phase('ready'); })
+                .catch(e => { window.wrLog?.('app.hubV2', e); if (alive) setHubV2Phase('error'); });
+            return () => { alive = false; };
+        }, []);
+
         // ── Championship titles for the masthead banner row ──
         // Authoritative source: DhqTitleSweep, which walks the ACCOUNT season
         // by season (/user/<id>/leagues/nfl/<year>) — catching titles from
@@ -2192,6 +2224,47 @@
         const hubSyncing = loading && !!sleeperUsername;
         const hubCtrlStyle = { fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 600, letterSpacing: '.12em', color: 'var(--silver)', background: 'transparent', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', padding: '7px 11px', cursor: 'pointer', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', lineHeight: 1 };
 
+        // ── Hub v2 (Lab only — HUB_V2). Same data and the same destinations
+        // as the hub below: leagues, Add a league (the connect sheet), Owner
+        // Settings, upgrade.html, ai-setup.html, Empire (only where enabled),
+        // the all-leagues Wire, and the same stall / reconnect notices. ──
+        const hubV2On = HUB_V2 && hubV2Phase !== 'error';
+        let hubV2 = null;
+        if (hubV2On) {
+            const notices = [];
+            if (hubStall) notices.push({ key: 'stall', text: hubStall === 'sleeper' ? 'Sleeper is taking too long to answer.' : 'We couldn’t reach your account to load your leagues.',
+                action: { label: 'Try again', onClick: () => { if (hubStall === 'sleeper' && sleeperUsername) loadSleeperData(); else { setHubStall(null); setLoading(true); setReconcileNonce(n => n + 1); } } } });
+            else if (error && sleeperUsername && !sleeperLeagues.length && !loading) notices.push({ key: 'sleeper', text: error, action: { label: 'Manage connection', onClick: () => setShowConnect(true) } });
+            if (espnError && localStorage.getItem('espn_league_id')) notices.push({ key: 'espn', text: espnError, action: { label: 'Reconnect ESPN', href: 'connect-sleeper.html?reconnect=espn' } });
+            if (mflError && !mflFranchises && localStorage.getItem('mfl_league_id')) notices.push({ key: 'mfl', text: mflError, action: { label: 'Reconnect MFL', href: 'connect-sleeper.html?reconnect=mfl' } });
+            // Raw read: WrStorage JSON-parses a bare 19-digit Sleeper id into a
+            // rounded Number, which then never matches the league's string id.
+            let lastRaw = null;
+            try { lastRaw = localStorage.getItem(APP_WR_KEYS.LAST_LEAGUE_ID); } catch (e) { lastRaw = null; }
+            const HubV2 = window.DhqHubV2;
+            hubV2 = hubV2Phase !== 'ready' ? <div style={{ minHeight: '100dvh' }} aria-busy="true" /> : (
+                <HubV2
+                    leagues={allLeagues}
+                    sleeperLeagues={sleeperLeagues}
+                    sleeperUserId={sleeperUser?.user_id || null}
+                    lastLeagueId={lastRaw}
+                    displayName={String(displayName)}
+                    syncing={hubSyncing}
+                    notices={notices}
+                    onSelect={handleSelectLeague}
+                    onAddLeague={() => setShowConnect(true)}
+                    onOpenSettings={() => setShowOwnerSettings(true)}
+                    links={{ home: DHQ_HOME_URL, billing: 'upgrade.html', ai: 'ai-setup.html', discord: WR_DISCORD_URL }}
+                    iconSrc={iconSrc}
+                    empire={EMPIRE_ENABLED ? {
+                        freePrelive: EMPIRE_FREE_PRELIVE,
+                        onOpen: () => setProMode(true),
+                        onExplore: () => { if (typeof window.showProLaunchPage === 'function') window.showProLaunchPage(); else window.location.href = 'landing.html'; },
+                    } : null}
+                />
+            );
+        }
+
         return (
             <div className="app-container">
                 {/* ── PHONE TIER (≤767), hub view only — iPhone plan Phase 2 item 14.
@@ -2249,6 +2322,7 @@
                         .app-container { padding-bottom: calc(78px + var(--sab, 0px)) !important; }
                     }
                 `}</style>
+                {hubV2On ? hubV2 : <>
                 {/* ── Header ── */}
                 <header className="header">
                     <div className="header-brand" role="link" aria-label="Dynasty HQ home"
@@ -2361,6 +2435,8 @@
                         </div>
                     </div>
                 )}
+
+                </>}
 
                 {/* ── Add-a-league / connect — pops up over the franchise picker.
                      This is the only entry to the platform connectors now; the

@@ -7,6 +7,10 @@
          a signed-in owner gets the real server features, AI included. -->
     <meta name="robots" content="noindex,nofollow">
     <script>
+    // The Lab-only switch (2026-10-02). This file reaches only the Lab, so app
+    // code can key Lab-only work off window.DHQ_LAB; today: the hub v2 home
+    // (HUB_V2 in js/app.js). The website and the app never set it.
+    window.DHQ_LAB = true;
     (function () {
       var KEY = 'dhq_lab_key_v2';
       var HASH = 'd017d4b5086e39a4f4b065301f1e6eefac302734df8b82fa196a6d588637b6bd';

@@ -17,7 +17,9 @@
 //   4. copy the same artifact list deploy.yml ships — minus CNAME (the Lab
 //      must never claim dhqfootball.com) and .nojekyll (the Lab has its own)
 //   5. overlay dist-deploy/ on top, exactly like the Pages artifact
-//   6. inject lab/gate.html (access code + noindex) into every root page
+//   6. inject lab/gate.html (access code + noindex) into every root page;
+//      it also sets window.DHQ_LAB = true, the one Lab-only switch app code
+//      reads (today: the hub v2 home, HUB_V2 in js/app.js)
 //   7. add the Lab-only extras kept under lab/: the Cutdown Desk script
 //      (wired into the app page) and the ESPN test harness page
 //   8. write trade-lab.html as a copy of index.html (the owner's bookmark)
@@ -247,6 +249,13 @@ for (const entry of fs.readdirSync(LAB_DIR)) {
   gated++;
 }
 fs.copyFileSync(path.join(LAB_DIR, 'index.html'), path.join(LAB_DIR, 'trade-lab.html'));
+// The Lab-only switch must precede every app script on the app page.
+{
+  const appPage = read(path.join(LAB_DIR, 'index.html'));
+  const flagAt = appPage.indexOf('window.DHQ_LAB = true');
+  const appAt = appPage.indexOf('src="js/app.js');
+  if (flagAt < 0 || appAt < 0 || flagAt > appAt) fail('index.html: window.DHQ_LAB is not set before js/app.js — the Lab would show the website hub');
+}
 
 // ── 6. put the other sessions' Lab-only work back, byte for byte ───────────
 for (const rel of preserved) {

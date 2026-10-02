@@ -1,0 +1,189 @@
+/* ══════════════════════════════════════════════════════════════════
+   js/hub-v2.css — the Lab's "Welcome back" home (js/hub-v2.js).
+   Ported from C2 experience-hub.css (WarRoom-sandbox main 4a85267), with
+   C2's layered overrides folded into one pass, every class renamed hub- →
+   hv2- (so nothing here can touch the website hub), and every corner on our
+   radius tokens: var(--card-radius-xs/-sm/-/-lg). Pills (30px) and circles
+   (50%) stay literal, as the radius contract allows.
+   Loaded only when the hub asks for it (inert <template> in index.html).
+   Bump its ?v= there after an edit.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Page */
+.hv2-shell { min-height: 100dvh; background: radial-gradient(ellipse at 12% 0, rgba(212,175,55,.055), transparent 48%), var(--page-bg, #08080b); }
+body:has(.hv2-shell)::before { opacity: 0; }
+.hv2-shell button:focus-visible, .hv2-shell a:focus-visible, .hv2-shell input:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
+
+/* Header (C2 app.js 1755-1768 + experience-hub.css) */
+.hv2-header { display: flex; align-items: center; gap: 18px; padding: calc(12px + var(--sat, 0px)) max(24px, calc((100vw - 1256px) / 2)) 12px; background: var(--page-bg, #08080b); border-bottom: 1px solid var(--ov-6, #ffffff18); }
+.hv2-brand { display: flex; align-items: center; gap: 12px; min-width: 0; text-decoration: none; }
+.hv2-brand img { width: 44px; height: 44px; flex: none; border-radius: var(--card-radius, 10px); box-shadow: 0 2px 12px var(--acc-line2, rgba(212,175,55,.3)); }
+.hv2-brand-text { display: flex; flex-direction: column; min-width: 0; }
+.hv2-wordmark { font-size: 1.1rem; letter-spacing: .06em; font-weight: 700; }
+.hv2-subtitle { font: 500 .8rem var(--font-body, 'DM Sans', sans-serif); color: var(--silver); opacity: .7; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hv2-account-controls { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+.hv2-account-controls a, .hv2-footer a, .hv2-footer button { color: var(--silver); font: 500 13px var(--font-body, 'DM Sans', sans-serif); text-decoration: none; }
+.hv2-account-controls a:hover, .hv2-footer a:hover, .hv2-footer button:hover { color: var(--white); }
+.hv2-account-controls button { display: flex; align-items: center; gap: 9px; min-height: 44px; border: 1px solid var(--ov-6, #ffffff18); border-radius: 30px; padding: 5px 15px 5px 6px; background: var(--ov-2, #ffffff08); color: var(--white); font: 500 13px var(--font-body); cursor: pointer; }
+.hv2-account-avatar { width: 30px; height: 30px; display: grid; place-items: center; background: var(--gold); color: #18160f; border-radius: 50%; font-size: 11px; font-weight: 700; }
+
+/* Body grid: welcome left, resume right (≥900px), everything else full width */
+.hv2-page { max-width: 1200px; margin: auto; padding: 44px 32px 24px; }
+.hv2-page section { min-width: 0; scroll-margin-top: 20px; }
+.hv2-welcome { margin-bottom: 26px; }
+.hv2-welcome h1 { color: var(--white); font: 500 clamp(30px, 3.6vw, 46px)/1.1 var(--font-body, 'DM Sans', sans-serif); letter-spacing: -.045em; margin: 10px 0 12px; }
+.hv2-sync-status { color: var(--silver); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.hv2-sync-status::before { content: ''; width: 6px; height: 6px; flex: none; background: var(--gold); border-radius: 50%; }
+
+/* Resume card */
+.hv2-resume { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 5px 16px; text-align: left; margin: 0 0 20px; padding: 15px 18px; border: 1px solid #4b4432; border-radius: var(--card-radius-lg, 14px); background: linear-gradient(110deg, #27251d, #181817); color: var(--white); font-family: var(--font-body); cursor: pointer; }
+.hv2-resume .hv2-eyebrow, .hv2-resume strong, .hv2-resume > span { grid-column: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.hv2-resume .hv2-eyebrow { font: 500 13px var(--font-body); color: #c5bda9; }
+.hv2-resume strong { font-size: 16px; font-weight: 600; }
+.hv2-resume > span:last-of-type { font-size: 12px; color: var(--silver); }
+.hv2-resume b { grid-column: 2; grid-row: 1 / 4; align-self: center; color: var(--gold); font-size: 22px; }
+.hv2-focus-record { white-space: nowrap; }
+
+/* Notices (stalled load, private ESPN / MFL reconnect) */
+.hv2-notice { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 18px; margin: 0 0 20px; border: 1px solid var(--acc-line2, #d4af3755); border-radius: var(--card-radius, 10px); background: var(--ov-1, #ffffff04); }
+.hv2-notice p { margin: 0; color: var(--silver); font-size: 14px; line-height: 1.5; flex: 1; min-width: 200px; }
+
+/* Jump tabs */
+.hv2-jump-nav { display: flex; gap: 8px; width: fit-content; min-width: min(100%, 420px); padding: 6px; margin-bottom: 32px; background: var(--ov-3, #ffffff08); border-radius: var(--card-radius, 10px); }
+.hv2-jump-nav button { flex: 1; min-height: 44px; padding: 0 20px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--card-radius-sm, 8px); background: none; color: var(--silver); font: 600 13px var(--font-body); cursor: pointer; }
+.hv2-jump-nav button:hover { background: var(--ov-4, #ffffff0c); color: var(--white); }
+
+/* Section headings */
+.hv2-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 17px; }
+.hv2-section-heading h2 { color: var(--white); font: 600 21px/1.25 var(--font-body); letter-spacing: -.025em; margin: 6px 0 0; }
+.hv2-count { color: var(--silver); background: var(--ov-4, #ffffff0c); padding: 2px 7px; border-radius: var(--card-radius-xs, 5px); font: 12px var(--font-body); vertical-align: middle; }
+.hv2-add-button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--ov-6, #ffffff18); border-radius: var(--card-radius-sm, 8px); padding: 10px 15px; min-height: 44px; color: var(--gold); background: var(--ov-1, #ffffff04); font: 600 12px var(--font-body); text-decoration: none; cursor: pointer; }
+.hv2-add-button:hover { border-color: var(--acc-line2, #d4af3755); }
+
+/* Your leagues */
+.hv2-leagues { margin: 0 0 32px; padding-top: 27px; border-top: 1px solid var(--ov-6, #ffffff18); }
+.hv2-league-tools { display: flex; align-items: center; gap: 12px; margin: 19px 0; color: var(--silver); font-size: 12px; }
+.hv2-league-tools label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.hv2-league-tools input { width: min(390px, 80%); min-height: 44px; border: 1px solid var(--ov-6, #ffffff18); border-radius: var(--card-radius-sm, 8px); background: var(--ov-1, #ffffff04); color: var(--white); padding: 11px 14px; font: 13px var(--font-body); }
+.hv2-league-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.hv2-league-card { min-width: 0; padding: 17px; border-radius: var(--card-radius, 10px); text-align: left; border: 1px solid var(--ov-6, #ffffff18); background: var(--ov-1, #ffffff04); color: var(--white); cursor: pointer; transition: transform .18s, box-shadow .18s; font-family: var(--font-body); }
+.hv2-league-card.is-last { border-color: var(--acc-line2, #d4af3755); background: linear-gradient(120deg, #d4af3709, transparent); }
+.hv2-league-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px #00000020; }
+.hv2-league-card-top { display: flex; align-items: center; gap: 10px; min-height: 44px; flex-wrap: wrap; }
+.hv2-team-avatar { width: 38px; height: 38px; flex: none; border-radius: var(--card-radius-sm, 8px); display: grid; place-items: center; background: var(--ov-4, #ffffff0c); color: var(--gold); font-weight: 600; }
+.hv2-league-identity { min-width: 0; flex: 1; }
+.hv2-league-identity strong, .hv2-league-identity > span { display: block; overflow-wrap: anywhere; }
+.hv2-league-identity strong { font-size: 15px; line-height: 1.4; }
+.hv2-league-identity > span { font-size: 13px; color: var(--silver); margin-top: 4px; }
+.hv2-last-badge { font-size: 9px; color: var(--gold); }
+.hv2-league-card-bottom { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--ov-6, #ffffff18); margin-top: 15px; padding-top: 12px; color: var(--silver); font-size: 12px; line-height: 1.5; }
+.hv2-league-card-bottom > span:last-child { white-space: nowrap; }
+.hv2-more-leagues { display: none; }
+.hv2-empty { padding: 30px 20px; border: 1px dashed var(--ov-6, #ffffff18); border-radius: var(--card-radius, 10px); text-align: center; color: var(--white); }
+.hv2-empty p { color: var(--silver); font-size: 13px; line-height: 1.6; margin: 5px 0 0; }
+.hv2-empty .hv2-add-button { margin-top: 16px; }
+
+/* The Wire row */
+.hv2-wire-entry { width: 100%; display: flex; align-items: center; gap: 14px; margin-top: 16px; padding: 16px; min-height: 76px; text-align: left; background: var(--ov-1, #ffffff04); color: var(--white); border: 1px solid var(--ov-6, #ffffff18); border-radius: var(--card-radius, 10px); font-family: var(--font-body); cursor: pointer; }
+.hv2-wire-entry:disabled { cursor: progress; }
+.hv2-wire-icon { display: grid; place-items: center; width: 40px; height: 40px; flex: none; background: #e9e3d4; color: #27231b; font: 700 24px Georgia, serif; border-radius: var(--card-radius-sm, 8px); }
+.hv2-wire-entry > span:nth-child(2) { display: grid; gap: 4px; min-width: 0; }
+.hv2-wire-entry strong { font-size: 16px; }
+.hv2-wire-entry > span:nth-child(2) > span { font-size: 14px; line-height: 1.4; color: var(--silver); }
+.hv2-wire-entry b { margin-left: auto; color: var(--gold); font-size: 20px; }
+
+/* Across your leagues (Empire) */
+.hv2-management-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.hv2-experience-card { width: 100%; min-width: 0; min-height: 190px; padding: 24px; display: grid; grid-template-columns: 38px minmax(0, 1fr); column-gap: 18px; row-gap: 6px; align-content: start; text-align: left; border: 1px solid; border-radius: var(--card-radius-lg, 14px); cursor: pointer; font-family: var(--font-body); transition: transform .18s, box-shadow .18s; }
+.hv2-experience-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px #00000020; }
+.hv2-card-top { display: contents; }
+.hv2-card-top > svg { grid-column: 1; grid-row: 1 / 5; }
+.hv2-product-tag { grid-column: 2; font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.hv2-experience-card strong { grid-column: 2; display: block; font: 600 22px/1.2 var(--font-body); letter-spacing: -.025em; }
+.hv2-card-description { grid-column: 2; display: block; font-size: 14px; line-height: 1.5; margin: 0 0 10px; }
+.hv2-card-action { grid-column: 2; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: auto; font-size: 12px; font-weight: 700; }
+.hv2-card-action > span { font-size: 18px; }
+.hv2-experience-card.hv2-empire { background: linear-gradient(145deg, #252219, #161616); border-color: #3b382e; color: #ead5a2; }
+.hv2-empire .hv2-card-description { color: #cec3a6; }
+
+/* Footer */
+.hv2-footer { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-top: 30px; padding: 20px 0; border-top: 1px solid var(--ov-6, #ffffff18); }
+.hv2-footer > span { margin-right: auto; color: var(--silver); font-size: 12px; }
+.hv2-footer button { border: 0; background: none; padding: 0; cursor: pointer; min-height: 44px; }
+
+/* ≥900px: welcome and resume share the top row */
+@media (min-width: 900px) {
+  .hv2-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 40px; }
+  .hv2-page > :not(.hv2-welcome):not(.hv2-resume) { grid-column: 1 / -1; }
+  .hv2-welcome { align-self: center; margin-bottom: 30px; }
+  .hv2-welcome h1 { margin: 0 0 14px; }
+  .hv2-resume { grid-column: 2; grid-row: 1; align-self: center; margin-bottom: 30px; padding: 22px; gap: 7px 16px; }
+  .hv2-resume strong { font-size: 21px; line-height: 1.3; white-space: normal; }
+  .hv2-resume > span:last-of-type { font-size: 14px; }
+}
+@media (max-width: 1050px) { .hv2-league-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Phone (≤767): one return action, readable rows, compact entries */
+@media (max-width: 767px) {
+  /* app.js's hub <style> reserves 78px for the old hub's phone bottom bar, which this hub doesn't have. */
+  .app-container:has(> .hv2-shell) { padding-bottom: 0 !important; }
+  .hv2-header { min-height: 68px; gap: 12px; padding: calc(10px + var(--sat, 0px)) calc(16px + var(--sar, 0px)) 10px calc(16px + var(--sal, 0px)); }
+  .hv2-brand { gap: 9px; }
+  .hv2-brand img { width: 34px; height: 34px; }
+  .hv2-wordmark { font-size: 16px; letter-spacing: .025em; white-space: nowrap; }
+  .hv2-subtitle, .hv2-account-controls > a, .hv2-account-label { display: none; }
+  .hv2-account-controls { flex: none; }
+  .hv2-account-controls button { width: 44px; height: 44px; min-width: 44px; padding: 5px; justify-content: center; }
+  .hv2-account-avatar { width: 32px; height: 32px; font-size: 14px; }
+  .hv2-page { padding: 20px calc(16px + var(--sar, 0px)) calc(16px + var(--sab, 0px)) calc(16px + var(--sal, 0px)); }
+  .hv2-welcome { margin-bottom: 20px; }
+  .hv2-welcome h1 { font-size: 29px; line-height: 1.12; margin: 0 0 8px; letter-spacing: -.035em; }
+  .hv2-sync-status { font-size: 14px; line-height: 1.4; }
+  .hv2-resume { padding: 18px; gap: 10px 12px; background: linear-gradient(125deg, var(--acc-fill2, #d4af3714), var(--acc-fill1, #d4af3708)); border-color: var(--acc-line2, #d4af3740); }
+  .hv2-resume .hv2-eyebrow { font-size: 14px; line-height: 1.4; }
+  .hv2-resume strong { font-size: 21px; line-height: 1.25; overflow-wrap: anywhere; }
+  .hv2-resume > span:last-of-type { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+  .hv2-resume b { font-size: 24px; }
+  .hv2-jump-nav { width: 100%; min-width: 0; gap: 0; margin-bottom: 22px; padding: 3px; }
+  .hv2-jump-nav button { font-size: 14px; padding: 0 6px; min-width: 0; }
+  .hv2-leagues { padding-top: 0; border-top: 0; margin-bottom: 28px; }
+  .hv2-section-heading { gap: 10px; margin-bottom: 10px; }
+  .hv2-section-heading h2 { font-size: 21px; margin-top: 0; }
+  .hv2-count { padding: 2px 5px; font-size: 14px; }
+  .hv2-add-button { font-size: 14px; padding: 9px 10px; flex: none; }
+  .hv2-league-tools { margin: 10px 0; gap: 8px; font-size: 14px; }
+  .hv2-league-tools input { flex: 1; width: 100%; min-width: 0; font-size: 16px; padding: 11px 12px; }
+  .hv2-league-tools > span:empty { display: none; }
+  .hv2-league-tools > span { flex: none; }
+  .hv2-league-grid { grid-template-columns: 1fr; gap: 0; border: 1px solid var(--ov-6, #ffffff18); border-radius: var(--card-radius, 10px); overflow: hidden; }
+  .hv2-league-grid:empty { display: none; }
+  .hv2-league-card { padding: 14px 12px; border: 0; border-bottom: 1px solid var(--ov-6, #ffffff18); border-radius: 0; background: var(--ov-1, #ffffff04); }
+  .hv2-league-card:last-child { border-bottom: 0; }
+  .hv2-shell .hv2-league-card:focus-visible { outline-offset: -3px; }
+  .hv2-league-card-top { gap: 11px; flex-wrap: nowrap; }
+  .hv2-team-avatar { font-size: 16px; }
+  .hv2-league-identity strong { font-size: 16px; line-height: 1.3; }
+  .hv2-league-identity > span { font-size: 14px; line-height: 1.35; }
+  .hv2-last-badge { display: none; }
+  .hv2-league-card-bottom { border: 0; padding-top: 0; margin: 7px 0 0 49px; gap: 12px; font-size: 14px; line-height: 1.4; flex-direction: column; }
+  .hv2-league-card-bottom > span:first-child { font-size: 13px; }
+  .hv2-league-card-bottom > span:last-child > span { color: var(--gold); }
+  .hv2-league-overflow:not(.is-expanded) { display: none; }
+  .hv2-league-card:nth-child(3):has(+ .hv2-league-overflow:not(.is-expanded)) { border-bottom: 0; }
+  .hv2-more-leagues { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; margin-top: 4px; padding: 12px 2px; border: 0; background: none; color: var(--gold); font: 600 14px var(--font-body); cursor: pointer; }
+  .hv2-empty { padding: 22px 16px; }
+  .hv2-empty strong { font-size: 18px; line-height: 1.4; }
+  .hv2-empty p { font-size: 14px; }
+  .hv2-management-cards { grid-template-columns: 1fr; gap: 10px; }
+  .hv2-experience-card { grid-template-columns: 32px minmax(0, 1fr); gap: 5px 12px; min-height: 108px; padding: 16px; border-radius: var(--card-radius, 10px); }
+  .hv2-card-top > svg { width: 30px; height: 30px; align-self: start; }
+  .hv2-product-tag, .hv2-card-description { display: none; }
+  .hv2-experience-card strong { font: 700 18px/1.25 var(--font-body); }
+  .hv2-card-action { font-size: 14px; line-height: 1.4; margin-top: 3px; gap: 8px; }
+  .hv2-notice { padding: 16px; }
+  .hv2-footer { gap: 6px 18px; margin-top: 28px; padding: 12px 0; }
+  .hv2-footer > span { display: none; }
+  .hv2-footer button, .hv2-footer a { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; }
+  .hv2-experience-card:hover, .hv2-league-card:hover { transform: none; box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) { .hv2-experience-card, .hv2-league-card { transition: none; } .hv2-experience-card:hover, .hv2-league-card:hover { transform: none; } }
