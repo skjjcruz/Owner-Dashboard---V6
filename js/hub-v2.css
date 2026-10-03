@@ -12,6 +12,12 @@
 /* Page */
 .hv2-shell { min-height: 100dvh; background: radial-gradient(ellipse at 12% 0, rgba(212,175,55,.055), transparent 48%), var(--page-bg, #08080b); }
 body:has(.hv2-shell)::before { opacity: 0; }
+/* Subdued skull & crossbones behind the page (owner ask 2026-10-03), cut from
+   img/logo.png. Fixed, so it stays put while the leagues scroll over it. It
+   replaces the full-logo watermark above, which the opaque shell covered. */
+.hv2-shell { position: relative; }
+.hv2-shell::before { content: ''; position: fixed; left: 50%; top: 56%; width: min(82vw, 560px); aspect-ratio: 1; transform: translate(-50%, -50%); background: url('../img/dhq-skull.webp') center / contain no-repeat; opacity: .07; pointer-events: none; z-index: 0; }
+.hv2-header, .hv2-page { position: relative; z-index: 1; }
 .hv2-shell button:focus-visible, .hv2-shell a:focus-visible, .hv2-shell input:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
 
 /* Header (C2 app.js 1755-1768 + experience-hub.css) */
