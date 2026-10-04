@@ -32,11 +32,12 @@ body:has(.hv2-shell)::before { opacity: 0; }
 .hv2-brand-text { display: flex; flex-direction: column; min-width: 0; }
 .hv2-wordmark { font-size: 1.1rem; letter-spacing: .06em; font-weight: 700; }
 .hv2-subtitle { font: 500 .8rem var(--font-body, 'DM Sans', sans-serif); color: var(--silver); opacity: .7; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hv2-account-controls { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+.hv2-account-controls { margin-left: auto; display: flex; align-items: center; gap: 18px; flex: none; }
+.hv2-account-controls button { white-space: nowrap; }
 .hv2-account-controls a, .hv2-footer a, .hv2-footer button { color: var(--silver); font: 500 13px var(--font-body, 'DM Sans', sans-serif); text-decoration: none; }
 .hv2-account-controls a:hover, .hv2-footer a:hover, .hv2-footer button:hover { color: var(--white); }
 .hv2-account-controls button { display: flex; align-items: center; gap: 9px; min-height: 44px; border: 1px solid var(--ov-6, #ffffff18); border-radius: 30px; padding: 5px 15px 5px 6px; background: var(--ov-2, #ffffff08); color: var(--white); font: 500 13px var(--font-body); cursor: pointer; }
-.hv2-account-avatar { width: 30px; height: 30px; display: grid; place-items: center; background: var(--gold); color: #18160f; border-radius: 50%; font-size: 11px; font-weight: 700; }
+.hv2-account-avatar { flex: none; width: 30px; height: 30px; display: grid; place-items: center; background: var(--gold); color: #18160f; border-radius: 50%; font-size: 11px; font-weight: 700; }
 
 /* Body grid: welcome left, resume right (≥900px), everything else full width */
 .hv2-page { max-width: 1200px; margin: auto; padding: 44px 32px 24px; }
@@ -142,9 +143,9 @@ body:has(.hv2-shell)::before { opacity: 0; }
   .hv2-brand { gap: 9px; }
   .hv2-brand img { width: 34px; height: 34px; }
   .hv2-wordmark { font-size: 16px; letter-spacing: .025em; white-space: nowrap; }
-  .hv2-subtitle, .hv2-account-controls > a, .hv2-account-label { display: none; }
+  .hv2-subtitle, .hv2-account-controls > a { display: none; }
   .hv2-account-controls { flex: none; }
-  .hv2-account-controls button { width: 44px; height: 44px; min-width: 44px; padding: 5px; justify-content: center; }
+  .hv2-account-controls button { min-height: 44px; padding: 5px 13px 5px 6px; gap: 8px; }
   .hv2-account-avatar { width: 32px; height: 32px; font-size: 14px; }
   .hv2-page { padding: 20px calc(16px + var(--sar, 0px)) calc(16px + var(--sab, 0px)) calc(16px + var(--sal, 0px)); }
   .hv2-welcome { margin-bottom: 20px; }

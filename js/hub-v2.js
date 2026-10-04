@@ -145,7 +145,7 @@
     //   leagues, sleeperLeagues, sleeperUserId, lastLeagueId, displayName,
     //   syncing, notices [{ key, text, action: { label, onClick | href } }],
     //   onSelect(league), onAddLeague(), onOpenSettings(),
-    //   links { home, billing, ai, discord }, iconSrc,
+    //   links { home, discord }, iconSrc,
     //   empire: null | { onOpen(), onExplore(), freePrelive }
     function DhqHubV2(props) {
         const { leagues = [], sleeperLeagues = [], sleeperUserId = null, lastLeagueId = null, displayName = '',
@@ -211,12 +211,12 @@
                         <span className="hv2-subtitle">{displayName}</span>
                     </span>
                 </a>
+                {/* One button (owner ask 2026-10-03): plans/billing and AI
+                    settings no longer apply — everything is free. */}
                 <div className="hv2-account-controls">
-                    <a href={links.billing}>Plans &amp; billing</a>
-                    <a href={links.ai}>AI settings</a>
-                    <button type="button" aria-label="Account & settings" onClick={onOpenSettings}>
+                    <button type="button" aria-label="My Profile" onClick={onOpenSettings}>
                         <span className="hv2-account-avatar" aria-hidden="true">{initialsFor(displayName).slice(0, 1) || '★'}</span>
-                        <span className="hv2-account-label">Account &amp; settings</span>
+                        <span className="hv2-account-label">My Profile</span>
                     </button>
                 </div>
             </header>
@@ -283,9 +283,7 @@
 
                 <footer className="hv2-footer">
                     <span>Dynasty HQ</span>
-                    <button type="button" onClick={onOpenSettings}>Account &amp; settings</button>
-                    <a href={links.billing}>Plans &amp; billing</a>
-                    <a href={links.ai}>AI settings</a>
+                    <button type="button" onClick={onOpenSettings}>My Profile</button>
                     {links.discord && <a href={links.discord} target="_blank" rel="noopener">Discord</a>}
                 </footer>
             </main>

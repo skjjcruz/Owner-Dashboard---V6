@@ -656,6 +656,170 @@
         const avCellBase = { aspectRatio: '1', borderRadius: '12px', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', overflow: 'hidden', padding: 0, transition: 'all .13s', background: 'var(--black)', cursor: 'pointer' };
         const selRing = { borderColor: 'var(--gold)', boxShadow: '0 0 0 1px var(--gold), 0 0 12px rgba(212,175,55,0.35)' };
 
+        // Share + community, and the owner avatar: the same cards in both views.
+        const shareCard = (
+            <div style={card}>
+                <div style={cardH}>Share With Friends</div>
+                <div style={{ ...hint, margin: '0 0 8px' }}>Bring your leaguemates in — the trash talk is better when everyone can see the numbers.</div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <input style={{ ...tin, flex: 1, fontFamily: 'var(--font-mono)', fontSize: '0.76rem', color: 'var(--silver)' }} readOnly value={inviteUrl} onFocus={e => e.target.select()} />
+                    <button onClick={copyInvite}
+                        style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', letterSpacing: '0.1em', color: 'var(--gold)', border: '1px solid var(--gold)', borderRadius: '9px', padding: '0 16px', transition: 'all .14s', flexShrink: 0, background: 'none', cursor: 'pointer' }}>
+                        {copied ? 'COPIED!' : 'COPY'}
+                    </button>
+                </div>
+
+                <div style={{ ...cardH, marginTop: '22px' }}>Community</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <a style={commBtn} href={WR_DISCORD_URL} target="_blank" rel="noopener">
+                        <svg viewBox="0 0 24 24" width="19" height="19" fill="var(--black)"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4c1.8.5 2.6 1.1 3.5 1.9a16.2 16.2 0 0 0-13.4 0c.9-.8 1.9-1.5 3.5-1.9L8.6 3a19.8 19.8 0 0 0-4.9 1.4A20.3 20.3 0 0 0 .4 18.1a19.9 19.9 0 0 0 6 3l.5-.7a12.3 12.3 0 0 1-2.4-1.2l.6-.4a14.2 14.2 0 0 0 12.2 0l.6.4c-.8.5-1.6.9-2.4 1.2l.5.7a19.9 19.9 0 0 0 6-3A20.3 20.3 0 0 0 20.3 4.4zM8.7 15.3c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>
+                        Join the Discord
+                    </a>
+                    <a style={xBtn} href={DHQ_X_URL} target="_blank" rel="noopener">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.9 2H22l-6.8 7.8L23.3 22h-6.3l-4.9-6.4L6.5 22H3.4l7.3-8.3L1 2h6.5l4.5 5.9zM17.8 20.1h1.7L7.6 3.8H5.7z"/></svg>
+                        Follow @DHQfootball
+                    </a>
+                </div>
+            </div>
+        );
+        const avatarCard = (
+            <div style={{ ...card, gridColumn: '1 / -1' }}>
+                <div style={cardH}>Owner Avatar</div>
+                <div style={fLabelFirst}>Football set</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))', gap: '8px' }}>
+                    {OWNER_GLYPHS.map((g, i) => {
+                        const isSel = club.avatarId === 'g:' + g;
+                        return (
+                            <button key={g} aria-label={g + ' avatar'}
+                                onClick={() => setClub({ avatarId: isSel ? null : 'g:' + g })}
+                                style={isSel ? { ...avCellBase, ...selRing } : avCellBase}
+                                dangerouslySetInnerHTML={{ __html: ownerGlyphSvg(OWNER_GLYPH_HUES[i], g) }} />
+                        );
+                    })}
+                </div>
+                <div style={{ ...fLabel, marginTop: '16px' }}>Rep your NFL team</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(62px, 1fr))', gap: '8px' }}>
+                    {NFL_HELMETS.map(([ab, p, s]) => {
+                        const isSel = club.avatarId === 'h:' + ab;
+                        return (
+                            <button key={ab} aria-label={ab + ' helmet'}
+                                onClick={() => setClub({ avatarId: isSel ? null : 'h:' + ab })}
+                                style={{ borderRadius: '12px', border: '1px solid ' + (isSel ? 'var(--gold)' : 'var(--acc-line1, rgba(212,175,55,0.18))'), boxShadow: isSel ? '0 0 0 1px var(--gold)' : 'none', padding: '6px 3px 4px', transition: 'all .13s', background: 'var(--black)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', cursor: 'pointer' }}>
+                                <span style={{ display: 'block', width: '38px', height: '30px' }} dangerouslySetInnerHTML={{ __html: nflHelmetSvg(p, s) }} />
+                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', letterSpacing: '0.06em', color: 'var(--silver)' }}>{ab}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+                <div style={{ ...fLabel, marginTop: '16px' }}>…or create your own</div>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: '13px', padding: '14px', background: 'var(--black)', flexWrap: 'wrap' }}>
+                    <div style={{ width: '64px', height: '64px', borderRadius: '14px', border: '1.5px solid ' + bColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: '1.4rem', flexShrink: 0, color: bColor, background: bColor + '22', boxShadow: (club.avatarId || '').indexOf('b:') === 0 ? '0 0 0 1px ' + bColor : 'none' }}>
+                        {(bInit || 'DH').toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: '180px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                        <input value={bInit} maxLength={3} aria-label="Initials"
+                            onChange={e => { const v = e.target.value; setBInit(v); applyBuilder(v, bColor); }}
+                            style={{ width: '100px', background: 'var(--charcoal, #17171d)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: '8px', color: 'var(--white)', fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.14em', padding: '6px 10px', outline: 'none', textTransform: 'uppercase', textAlign: 'center' }} />
+                        <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
+                            {BUILDER_COLORS.map(c => (
+                                <button key={c} aria-label={'color ' + c}
+                                    onClick={() => { setBColor(c); applyBuilder(bInit, c); }}
+                                    style={{ width: '24px', height: '24px', borderRadius: '50%', border: '2px solid ' + (bColor === c && (club.avatarId || '').indexOf('b:') === 0 ? 'var(--white)' : 'transparent'), transition: 'all .12s', padding: 0, background: c, cursor: 'pointer', transform: bColor === c && (club.avatarId || '').indexOf('b:') === 0 ? 'scale(1.12)' : 'none' }} />
+                            ))}
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', letterSpacing: '0.08em', color: club.avatarId === 'u' ? 'var(--gold)' : 'var(--silver)', border: '1px dashed ' + (club.avatarId === 'u' ? 'var(--gold)' : 'var(--acc-line2, rgba(212,175,55,0.3))'), borderRadius: '9px', padding: '8px 13px', transition: 'all .14s', width: 'fit-content', cursor: 'pointer' }}>
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                            {club.avatarId === 'u' && club.avatarData ? 'Uploaded — pick a new image' : 'Upload your own image'}
+                            <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
+                        </label>
+                        {club.avatarId === 'u' && club.avatarData && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <img src={club.avatarData} alt="Your avatar" style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover', border: '1px solid var(--gold)' }} />
+                                <button onClick={() => setClub({ avatarId: null, avatarData: null })}
+                                    style={{ background: 'none', border: 'none', color: 'var(--silver)', fontSize: '0.72rem', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontFamily: 'var(--font-body)' }}>Remove</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                <div style={hint}>Your avatar shows next to your club name on the masthead. Helmets are drawn in team colors only — no NFL marks.</div>
+            </div>
+        );
+
+        // ── Lab (hub v2): "My Profile" (owner ask 2026-10-03) ──
+        // Everything is free and Alex is retired, so the Lab drops the
+        // membership/billing box, and the notification and trade-psychology
+        // switches (nothing reads them). Guests get the founding-member offer
+        // instead of a password they don't have. Delete account stays for
+        // members (Apple requires it in the app), tucked into the small print.
+        if (HUB_V2) {
+            const owner = (function () { try { return window.OD?.identity?.currentOwner?.() || null; } catch (e) { return null; } })();
+            const isGuest = owner === 'guest';
+            const isMember = !!owner && !isGuest;
+            const small = { color: 'var(--silver)', textDecoration: 'underline', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' };
+            return (
+                <div style={{ padding: '0 0 40px', maxWidth: '1100px', margin: '0 auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '22px 16px 16px', borderBottom: '1px solid var(--acc-line2, rgba(212,175,55,0.3))' }}>
+                        <button onClick={onBack}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', letterSpacing: '0.12em', color: 'var(--silver)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: 'var(--card-radius-sm, 8px)', padding: '8px 14px', minHeight: '40px', transition: 'all .14s', textTransform: 'uppercase', background: 'none', cursor: 'pointer' }}>
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="15 18 9 12 15 6"/></svg>
+                            Back
+                        </button>
+                        <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: '1.6rem', letterSpacing: '0.12em', color: 'var(--gold)', textTransform: 'uppercase' }}>My Profile</span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '18px', padding: '22px 16px 10px', alignItems: 'start' }}>
+                        {/* ── Your club ── */}
+                        <div style={card}>
+                            <div style={cardH}>Your Club</div>
+                            <div style={fLabelFirst}>Club name — shows on your masthead</div>
+                            <input style={{ ...tin, fontFamily: 'var(--font-title)', fontWeight: 600, fontSize: '1.02rem', letterSpacing: '0.05em', textTransform: 'uppercase' }} maxLength={34}
+                                placeholder={(username ? username + ' Football Club' : 'Your Football Club').toUpperCase()}
+                                value={club.clubName} onChange={e => setClub({ clubName: e.target.value })} />
+                            <div style={fLabel}>Your name</div>
+                            <input style={tin} maxLength={40} value={club.ownerName} placeholder="Your name"
+                                onChange={e => setClub({ ownerName: e.target.value })} />
+                            <div style={fLabel}>Your motto</div>
+                            <input style={{ ...tin, fontFamily: 'Georgia, serif', fontStyle: 'italic' }} maxLength={60}
+                                value={club.mottoText} onChange={e => setClub({ mottoText: e.target.value })} />
+                            <div style={fLabel}>Attributed to</div>
+                            <input style={tin} maxLength={20} value={club.mottoAttr}
+                                onChange={e => setClub({ mottoAttr: e.target.value })} />
+                            <div style={{ ...toggleRow, borderBottom: 'none', marginTop: '8px' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.86rem', color: 'var(--white)' }}>Championship titles</div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.7, marginTop: '2px' }}>Banner row of your league titles on the masthead</div>
+                                </div>
+                                <Toggle on={!!club.showTitles} label="Championship titles" onFlip={() => setClub({ showTitles: !club.showTitles })} />
+                            </div>
+                            <div style={hint}>Club name and motto update your league room masthead live.</div>
+                        </div>
+
+                        {shareCard}
+
+                        {/* ── Account ── */}
+                        <div style={card}>
+                            <div style={cardH}>{isMember ? 'Your Account' : 'Save Your Spot'}</div>
+                            {isMember && accountEmail && <div style={{ ...hint, marginTop: 0, marginBottom: '12px', opacity: 0.85 }}>Signed in as <span style={{ color: 'var(--white)' }}>{accountEmail}</span></div>}
+                            {!isMember && <>
+                                <div style={{ fontSize: '0.86rem', color: 'var(--white)', lineHeight: 1.55, marginBottom: '12px' }}>
+                                    <strong style={{ color: 'var(--gold)' }}>Become a founding member.</strong> Everything in DHQ is free this season. Create a free account before March 1, 2027 and your first year of full DHQ is free when paid plans start. Your leagues come with you.
+                                </div>
+                                <button type="button" style={{ ...commBtn, border: 'none', cursor: 'pointer' }} onClick={() => { window.location.href = 'landing.html?signin=new'; }}>Create free account</button>
+                            </>}
+                            {(isMember || isGuest) && <div style={{ marginTop: isMember ? 0 : '10px' }}><button style={btnLine} onClick={signOut}>Sign out</button></div>}
+                            <div style={{ ...hint, display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '14px' }}>
+                                <a href="legal/terms-of-service.html" target="_blank" rel="noopener" style={{ color: 'var(--silver)', textDecoration: 'underline' }}>Terms of Service</a>
+                                <a href="legal/privacy-policy.html" target="_blank" rel="noopener" style={{ color: 'var(--silver)', textDecoration: 'underline' }}>Privacy Policy</a>
+                                {isMember && <button type="button" style={small} onClick={deleteAccount} disabled={deleteBusy}>{deleteBusy ? 'Deleting…' : 'Delete account'}</button>}
+                            </div>
+                        </div>
+
+                        {avatarCard}
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div style={{ padding: '0 0 40px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '22px 16px 16px', borderBottom: '1px solid var(--acc-line2, rgba(212,175,55,0.3))' }}>
@@ -750,91 +914,10 @@
                     </div>
 
                     {/* ── Share + community ── */}
-                    <div style={card}>
-                        <div style={cardH}>Share With Friends</div>
-                        <div style={{ ...hint, margin: '0 0 8px' }}>Bring your leaguemates in — the trash talk is better when everyone can see the numbers.</div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <input style={{ ...tin, flex: 1, fontFamily: 'var(--font-mono)', fontSize: '0.76rem', color: 'var(--silver)' }} readOnly value={inviteUrl} onFocus={e => e.target.select()} />
-                            <button onClick={copyInvite}
-                                style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', letterSpacing: '0.1em', color: 'var(--gold)', border: '1px solid var(--gold)', borderRadius: '9px', padding: '0 16px', transition: 'all .14s', flexShrink: 0, background: 'none', cursor: 'pointer' }}>
-                                {copied ? 'COPIED!' : 'COPY'}
-                            </button>
-                        </div>
-
-                        <div style={{ ...cardH, marginTop: '22px' }}>Community</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <a style={commBtn} href={WR_DISCORD_URL} target="_blank" rel="noopener">
-                                <svg viewBox="0 0 24 24" width="19" height="19" fill="var(--black)"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4c1.8.5 2.6 1.1 3.5 1.9a16.2 16.2 0 0 0-13.4 0c.9-.8 1.9-1.5 3.5-1.9L8.6 3a19.8 19.8 0 0 0-4.9 1.4A20.3 20.3 0 0 0 .4 18.1a19.9 19.9 0 0 0 6 3l.5-.7a12.3 12.3 0 0 1-2.4-1.2l.6-.4a14.2 14.2 0 0 0 12.2 0l.6.4c-.8.5-1.6.9-2.4 1.2l.5.7a19.9 19.9 0 0 0 6-3A20.3 20.3 0 0 0 20.3 4.4zM8.7 15.3c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>
-                                Join the Discord
-                            </a>
-                            <a style={xBtn} href={DHQ_X_URL} target="_blank" rel="noopener">
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.9 2H22l-6.8 7.8L23.3 22h-6.3l-4.9-6.4L6.5 22H3.4l7.3-8.3L1 2h6.5l4.5 5.9zM17.8 20.1h1.7L7.6 3.8H5.7z"/></svg>
-                                Follow @DHQfootball
-                            </a>
-                        </div>
-                    </div>
+                    {shareCard}
 
                     {/* ── Owner avatar ── */}
-                    <div style={{ ...card, gridColumn: '1 / -1' }}>
-                        <div style={cardH}>Owner Avatar</div>
-                        <div style={fLabelFirst}>Football set</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))', gap: '8px' }}>
-                            {OWNER_GLYPHS.map((g, i) => {
-                                const isSel = club.avatarId === 'g:' + g;
-                                return (
-                                    <button key={g} aria-label={g + ' avatar'}
-                                        onClick={() => setClub({ avatarId: isSel ? null : 'g:' + g })}
-                                        style={isSel ? { ...avCellBase, ...selRing } : avCellBase}
-                                        dangerouslySetInnerHTML={{ __html: ownerGlyphSvg(OWNER_GLYPH_HUES[i], g) }} />
-                                );
-                            })}
-                        </div>
-                        <div style={{ ...fLabel, marginTop: '16px' }}>Rep your NFL team</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(62px, 1fr))', gap: '8px' }}>
-                            {NFL_HELMETS.map(([ab, p, s]) => {
-                                const isSel = club.avatarId === 'h:' + ab;
-                                return (
-                                    <button key={ab} aria-label={ab + ' helmet'}
-                                        onClick={() => setClub({ avatarId: isSel ? null : 'h:' + ab })}
-                                        style={{ borderRadius: '12px', border: '1px solid ' + (isSel ? 'var(--gold)' : 'var(--acc-line1, rgba(212,175,55,0.18))'), boxShadow: isSel ? '0 0 0 1px var(--gold)' : 'none', padding: '6px 3px 4px', transition: 'all .13s', background: 'var(--black)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', cursor: 'pointer' }}>
-                                        <span style={{ display: 'block', width: '38px', height: '30px' }} dangerouslySetInnerHTML={{ __html: nflHelmetSvg(p, s) }} />
-                                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', letterSpacing: '0.06em', color: 'var(--silver)' }}>{ab}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        <div style={{ ...fLabel, marginTop: '16px' }}>…or create your own</div>
-                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: '13px', padding: '14px', background: 'var(--black)', flexWrap: 'wrap' }}>
-                            <div style={{ width: '64px', height: '64px', borderRadius: '14px', border: '1.5px solid ' + bColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: '1.4rem', flexShrink: 0, color: bColor, background: bColor + '22', boxShadow: (club.avatarId || '').indexOf('b:') === 0 ? '0 0 0 1px ' + bColor : 'none' }}>
-                                {(bInit || 'DH').toUpperCase()}
-                            </div>
-                            <div style={{ flex: 1, minWidth: '180px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
-                                <input value={bInit} maxLength={3} aria-label="Initials"
-                                    onChange={e => { const v = e.target.value; setBInit(v); applyBuilder(v, bColor); }}
-                                    style={{ width: '100px', background: 'var(--charcoal, #17171d)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: '8px', color: 'var(--white)', fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.14em', padding: '6px 10px', outline: 'none', textTransform: 'uppercase', textAlign: 'center' }} />
-                                <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
-                                    {BUILDER_COLORS.map(c => (
-                                        <button key={c} aria-label={'color ' + c}
-                                            onClick={() => { setBColor(c); applyBuilder(bInit, c); }}
-                                            style={{ width: '24px', height: '24px', borderRadius: '50%', border: '2px solid ' + (bColor === c && (club.avatarId || '').indexOf('b:') === 0 ? 'var(--white)' : 'transparent'), transition: 'all .12s', padding: 0, background: c, cursor: 'pointer', transform: bColor === c && (club.avatarId || '').indexOf('b:') === 0 ? 'scale(1.12)' : 'none' }} />
-                                    ))}
-                                </div>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', letterSpacing: '0.08em', color: club.avatarId === 'u' ? 'var(--gold)' : 'var(--silver)', border: '1px dashed ' + (club.avatarId === 'u' ? 'var(--gold)' : 'var(--acc-line2, rgba(212,175,55,0.3))'), borderRadius: '9px', padding: '8px 13px', transition: 'all .14s', width: 'fit-content', cursor: 'pointer' }}>
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                                    {club.avatarId === 'u' && club.avatarData ? 'Uploaded — pick a new image' : 'Upload your own image'}
-                                    <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
-                                </label>
-                                {club.avatarId === 'u' && club.avatarData && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <img src={club.avatarData} alt="Your avatar" style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover', border: '1px solid var(--gold)' }} />
-                                        <button onClick={() => setClub({ avatarId: null, avatarData: null })}
-                                            style={{ background: 'none', border: 'none', color: 'var(--silver)', fontSize: '0.72rem', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontFamily: 'var(--font-body)' }}>Remove</button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div style={hint}>Your avatar shows next to your club name on the masthead. Helmets are drawn in team colors only — no NFL marks.</div>
-                    </div>
+                    {avatarCard}
                 </div>
             </div>
         );
@@ -2254,7 +2337,7 @@
                     onSelect={handleSelectLeague}
                     onAddLeague={() => setShowConnect(true)}
                     onOpenSettings={() => setShowOwnerSettings(true)}
-                    links={{ home: DHQ_HOME_URL, billing: 'upgrade.html', ai: 'ai-setup.html', discord: WR_DISCORD_URL }}
+                    links={{ home: DHQ_HOME_URL, discord: WR_DISCORD_URL }}
                     iconSrc={iconSrc}
                     empire={EMPIRE_ENABLED ? {
                         freePrelive: EMPIRE_FREE_PRELIVE,
