@@ -403,7 +403,9 @@
     function nflHelmetImgSrc(ab) { return dhqAssetPath('img/nfl-helmets/' + String(ab).toLowerCase() + '.webp'); }
     // Lab (hub v2): no pick yet = your initials in gold (owner ruling
     // 2026-10-04: initials are the default avatar).
-    function defaultOwnerInitials(name) { return String(name || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || 'DH'; }
+    // A guest (no account) defaults to "G" (owner ruling 2026-10-04).
+    function isGuestOwner() { try { return window.OD?.identity?.currentOwner?.() === 'guest'; } catch (e) { return false; } }
+    function defaultOwnerInitials(name) { return isGuestOwner() ? 'G' : (String(name || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || 'DH'); }
     function withDefaultAvatar(club, name) {
         return club && club.avatarId ? club : Object.assign({}, club, { avatarId: 'b:' + defaultOwnerInitials(name) + ':#D4AF37' });
     }
@@ -632,7 +634,7 @@
 
         // Builder (initials + color) state, seeded from a saved builder avatar.
         const savedBuilder = (club.avatarId || '').indexOf('b:') === 0 ? club.avatarId.split(':') : null;
-        const [bInit, setBInit] = React.useState(savedBuilder ? (savedBuilder[1] || '') : (String(username || 'DH').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase()));
+        const [bInit, setBInit] = React.useState(savedBuilder ? (savedBuilder[1] || '') : (HUB_V2 ? defaultOwnerInitials(username) : String(username || 'DH').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase()));
         const [bColor, setBColor] = React.useState(savedBuilder ? (savedBuilder[2] || '#D4AF37') : '#D4AF37');
         const BUILDER_COLORS = ['#D4AF37', '#E74C3C', '#2ECC71', '#3B82F6', '#A855F7', '#F97316', '#14B8A6', '#EC4899'];
         function applyBuilder(ini, col) {
@@ -2375,7 +2377,7 @@
                     onSelect={handleSelectLeague}
                     onAddLeague={() => setShowConnect(true)}
                     onOpenSettings={() => setShowOwnerSettings(true)}
-                    avatar={<OwnerAvatarBadge club={withDefaultAvatar(getOwnerClub(), displayName)} size={30} round />}
+                    avatar={<OwnerAvatarBadge club={withDefaultAvatar(getOwnerClub(), sleeperUsername || displayName)} size={30} round />}
                     links={{ home: DHQ_HOME_URL, discord: WR_DISCORD_URL }}
                     iconSrc={iconSrc}
                     empire={EMPIRE_ENABLED ? {
