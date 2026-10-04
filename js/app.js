@@ -405,7 +405,23 @@
     // 2026-10-04: initials are the default avatar).
     // A guest (no account) defaults to "G" (owner ruling 2026-10-04).
     function isGuestOwner() { try { return window.OD?.identity?.currentOwner?.() === 'guest'; } catch (e) { return false; } }
-    function defaultOwnerInitials(name) { return isGuestOwner() ? 'G' : (String(name || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || 'DH'); }
+    // Members: first + last initial of the account's real name (display name,
+    // else the email, e.g. steven.crusinberry -> SC); one-word names take two
+    // letters; no account -> the Sleeper name (owner ask 2026-10-04).
+    function initialsFromName(raw) {
+        const parts = String(raw || '').split(/[\s._-]+/).map(w => w.replace(/[^A-Za-z0-9]/g, '')).filter(Boolean);
+        if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        return parts.length ? parts[0].slice(0, 2).toUpperCase() : '';
+    }
+    function defaultOwnerInitials(name) {
+        if (isGuestOwner()) return 'G';
+        let acct = '';
+        try {
+            const u = (JSON.parse(localStorage.getItem('fw_session_v1') || 'null') || {}).user || {};
+            acct = initialsFromName(u.displayName) || initialsFromName(String(u.email || '').split('@')[0]);
+        } catch (e) { acct = ''; }
+        return acct || initialsFromName(name) || 'DH';
+    }
     function withDefaultAvatar(club, name) {
         return club && club.avatarId ? club : Object.assign({}, club, { avatarId: 'b:' + defaultOwnerInitials(name) + ':#D4AF37' });
     }
