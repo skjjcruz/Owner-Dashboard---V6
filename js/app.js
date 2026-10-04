@@ -401,6 +401,12 @@
     // Lab (hub v2): real NFL helmets — the team's own logo on a helmet in its
     // colors (owner ruling 2026-10-04: use the real marks). img/nfl-helmets/.
     function nflHelmetImgSrc(ab) { return dhqAssetPath('img/nfl-helmets/' + String(ab).toLowerCase() + '.webp'); }
+    // Lab (hub v2): no pick yet = your initials in gold (owner ruling
+    // 2026-10-04: initials are the default avatar).
+    function defaultOwnerInitials(name) { return String(name || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || 'DH'; }
+    function withDefaultAvatar(club, name) {
+        return club && club.avatarId ? club : Object.assign({}, club, { avatarId: 'b:' + defaultOwnerInitials(name) + ':#D4AF37' });
+    }
     // Small badge rendering the selected owner avatar (masthead meta row).
     // round: a circle (the hub v2 My Profile button).
     function OwnerAvatarBadge({ club, size, round }) {
@@ -764,6 +770,7 @@
             const owner = (function () { try { return window.OD?.identity?.currentOwner?.() || null; } catch (e) { return null; } })();
             const isGuest = owner === 'guest';
             const isMember = !!owner && !isGuest;
+            const initialsOn = !club.avatarId || club.avatarId.indexOf('b:') === 0;
             const small = { color: 'var(--silver)', textDecoration: 'underline', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' };
             return (
                 <div style={{ padding: '0 0 40px', maxWidth: '900px', margin: '0 auto' }}>
@@ -797,16 +804,32 @@
                             </div>
                         </div>
 
-                        {/* ── Your avatar: real NFL helmets, or upload your own ── */}
+                        {/* ── Your avatar: initials (default), a real NFL helmet, or upload your own ── */}
                         <div style={{ ...card, gridColumn: '1 / -1' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
                                 <div style={cardH}>Your Avatar</div>
-                                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    {club.avatarId && <OwnerAvatarBadge club={club} size={40} round />}
-                                    {club.avatarId && <button type="button" style={small} onClick={() => setClub({ avatarId: null, avatarData: null })}>Clear</button>}
+                                <div style={{ marginLeft: 'auto' }}><OwnerAvatarBadge club={withDefaultAvatar(club, username)} size={40} round /></div>
+                            </div>
+                            <div style={fLabelFirst}>Your initials (the default)</div>
+                            <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '6px' }}>
+                                <button type="button" aria-label="Use your initials" aria-pressed={initialsOn ? 'true' : 'false'} onClick={() => applyBuilder(bInit, bColor)}
+                                    style={{ width: '64px', height: '64px', borderRadius: '50%', border: '1.5px solid ' + bColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: '1.35rem', letterSpacing: '0.04em', flexShrink: 0, color: bColor, background: 'rgba(0,0,0,0.4)', boxShadow: initialsOn ? '0 0 0 2px var(--black), 0 0 0 3px var(--gold)' : 'none', cursor: 'pointer', padding: 0 }}>
+                                    {(bInit || defaultOwnerInitials(username)).toUpperCase()}
+                                </button>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                                    <input value={bInit} maxLength={3} aria-label="Initials"
+                                        onChange={e => { const v = e.target.value; setBInit(v); applyBuilder(v, bColor); }}
+                                        style={{ width: '100px', background: 'var(--black)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: 'var(--card-radius-sm, 8px)', color: 'var(--white)', fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.14em', padding: '8px 10px', outline: 'none', textTransform: 'uppercase', textAlign: 'center' }} />
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {BUILDER_COLORS.map(c => (
+                                            <button key={c} type="button" aria-label={'initials color ' + c}
+                                                onClick={() => { setBColor(c); applyBuilder(bInit, c); }}
+                                                style={{ width: '26px', height: '26px', borderRadius: '50%', border: '2px solid ' + (bColor === c && initialsOn ? 'var(--white)' : 'transparent'), padding: 0, background: c, cursor: 'pointer' }} />
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
-                            <div style={fLabelFirst}>Rep your NFL team</div>
+                            <div style={{ ...fLabel, marginTop: '16px' }}>…or rep your NFL team</div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: '8px' }}>
                                 {NFL_HELMETS.map(([ab]) => {
                                     const isSel = club.avatarId === 'h:' + ab;
@@ -828,7 +851,7 @@
                                     <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
                                 </label>
                             </div>
-                            <div style={hint}>Your avatar shows on your My Profile button.</div>
+                            <div style={hint}>Your avatar shows on your My Profile button. Tap your initials to switch back any time.</div>
                         </div>
                     </div>
                 </div>
@@ -2352,7 +2375,7 @@
                     onSelect={handleSelectLeague}
                     onAddLeague={() => setShowConnect(true)}
                     onOpenSettings={() => setShowOwnerSettings(true)}
-                    avatar={<OwnerAvatarBadge club={getOwnerClub()} size={30} round />}
+                    avatar={<OwnerAvatarBadge club={withDefaultAvatar(getOwnerClub(), displayName)} size={30} round />}
                     links={{ home: DHQ_HOME_URL, discord: WR_DISCORD_URL }}
                     iconSrc={iconSrc}
                     empire={EMPIRE_ENABLED ? {
