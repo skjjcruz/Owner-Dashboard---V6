@@ -748,7 +748,8 @@
         // ── Lab (hub v2): "My Profile" (owner ask 2026-10-03) ──
         // Everything is free and Alex is retired, so the Lab drops the
         // membership/billing box, and the notification and trade-psychology
-        // switches (nothing reads them). Guests get the founding-member offer
+        // switches (nothing reads them). Club name/motto and the owner avatar
+        // are out too (owner ruling 2026-10-04: they don't show anywhere). Guests get the founding-member offer
         // instead of a password they don't have. Delete account stays for
         // members (Apple requires it in the app), tucked into the small print.
         if (HUB_V2) {
@@ -757,7 +758,7 @@
             const isMember = !!owner && !isGuest;
             const small = { color: 'var(--silver)', textDecoration: 'underline', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' };
             return (
-                <div style={{ padding: '0 0 40px', maxWidth: '1100px', margin: '0 auto' }}>
+                <div style={{ padding: '0 0 40px', maxWidth: '900px', margin: '0 auto' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '22px 16px 16px', borderBottom: '1px solid var(--acc-line2, rgba(212,175,55,0.3))' }}>
                         <button onClick={onBack}
                             style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', letterSpacing: '0.12em', color: 'var(--silver)', border: '1px solid var(--acc-line1, rgba(212,175,55,0.18))', borderRadius: 'var(--card-radius-sm, 8px)', padding: '8px 14px', minHeight: '40px', transition: 'all .14s', textTransform: 'uppercase', background: 'none', cursor: 'pointer' }}>
@@ -768,32 +769,6 @@
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '18px', padding: '22px 16px 10px', alignItems: 'start' }}>
-                        {/* ── Your club ── */}
-                        <div style={card}>
-                            <div style={cardH}>Your Club</div>
-                            <div style={fLabelFirst}>Club name — shows on your masthead</div>
-                            <input style={{ ...tin, fontFamily: 'var(--font-title)', fontWeight: 600, fontSize: '1.02rem', letterSpacing: '0.05em', textTransform: 'uppercase' }} maxLength={34}
-                                placeholder={(username ? username + ' Football Club' : 'Your Football Club').toUpperCase()}
-                                value={club.clubName} onChange={e => setClub({ clubName: e.target.value })} />
-                            <div style={fLabel}>Your name</div>
-                            <input style={tin} maxLength={40} value={club.ownerName} placeholder="Your name"
-                                onChange={e => setClub({ ownerName: e.target.value })} />
-                            <div style={fLabel}>Your motto</div>
-                            <input style={{ ...tin, fontFamily: 'Georgia, serif', fontStyle: 'italic' }} maxLength={60}
-                                value={club.mottoText} onChange={e => setClub({ mottoText: e.target.value })} />
-                            <div style={fLabel}>Attributed to</div>
-                            <input style={tin} maxLength={20} value={club.mottoAttr}
-                                onChange={e => setClub({ mottoAttr: e.target.value })} />
-                            <div style={{ ...toggleRow, borderBottom: 'none', marginTop: '8px' }}>
-                                <div>
-                                    <div style={{ fontSize: '0.86rem', color: 'var(--white)' }}>Championship titles</div>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.7, marginTop: '2px' }}>Banner row of your league titles on the masthead</div>
-                                </div>
-                                <Toggle on={!!club.showTitles} label="Championship titles" onFlip={() => setClub({ showTitles: !club.showTitles })} />
-                            </div>
-                            <div style={hint}>Club name and motto update your league room masthead live.</div>
-                        </div>
-
                         {shareCard}
 
                         {/* ── Account ── */}
@@ -813,8 +788,6 @@
                                 {isMember && <button type="button" style={small} onClick={deleteAccount} disabled={deleteBusy}>{deleteBusy ? 'Deleting…' : 'Delete account'}</button>}
                             </div>
                         </div>
-
-                        {avatarCard}
                     </div>
                 </div>
             );
