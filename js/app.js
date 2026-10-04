@@ -398,14 +398,22 @@
             + '<circle cx="35" cy="17" r="1.7" fill="' + s + '"/>'
             + '<path d="M42 21h4M40 26h5M37 31h5" stroke="#9aa0a6" stroke-width="1.7" fill="none"/></svg>';
     }
+    // Lab (hub v2): real NFL helmets — the team's own logo on a helmet in its
+    // colors (owner ruling 2026-10-04: use the real marks). img/nfl-helmets/.
+    function nflHelmetImgSrc(ab) { return dhqAssetPath('img/nfl-helmets/' + String(ab).toLowerCase() + '.webp'); }
     // Small badge rendering the selected owner avatar (masthead meta row).
-    function OwnerAvatarBadge({ club, size }) {
+    // round: a circle (the hub v2 My Profile button).
+    function OwnerAvatarBadge({ club, size, round }) {
         const px = size || 22;
         const id = club && club.avatarId;
         if (!id) return null;
         const box = { width: px + 'px', height: px + 'px', borderRadius: Math.round(px * 0.28) + 'px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--acc-line2, rgba(212,175,55,0.3))', background: 'var(--black)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', verticalAlign: 'middle' };
+        if (round) { box.borderRadius = '50%'; }
         if (id === 'u' && club.avatarData) {
             return <img src={club.avatarData} alt="" style={{ ...box, objectFit: 'cover' }} />;
+        }
+        if (HUB_V2 && id.indexOf('h:') === 0 && NFL_HELMETS.some(x => x[0] === id.slice(2))) {
+            return <img src={nflHelmetImgSrc(id.slice(2))} alt="" style={{ ...box, objectFit: 'contain', background: '#16161b', padding: Math.round(px * 0.08) + 'px', boxSizing: 'border-box' }} />;
         }
         if (id.indexOf('b:') === 0) {
             const parts = id.split(':');
@@ -787,6 +795,40 @@
                                 <a href="legal/privacy-policy.html" target="_blank" rel="noopener" style={{ color: 'var(--silver)', textDecoration: 'underline' }}>Privacy Policy</a>
                                 {isMember && <button type="button" style={small} onClick={deleteAccount} disabled={deleteBusy}>{deleteBusy ? 'Deleting…' : 'Delete account'}</button>}
                             </div>
+                        </div>
+
+                        {/* ── Your avatar: real NFL helmets, or upload your own ── */}
+                        <div style={{ ...card, gridColumn: '1 / -1' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+                                <div style={cardH}>Your Avatar</div>
+                                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    {club.avatarId && <OwnerAvatarBadge club={club} size={40} round />}
+                                    {club.avatarId && <button type="button" style={small} onClick={() => setClub({ avatarId: null, avatarData: null })}>Clear</button>}
+                                </div>
+                            </div>
+                            <div style={fLabelFirst}>Rep your NFL team</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: '8px' }}>
+                                {NFL_HELMETS.map(([ab]) => {
+                                    const isSel = club.avatarId === 'h:' + ab;
+                                    return (
+                                        <button key={ab} type="button" aria-label={ab + ' helmet'} aria-pressed={isSel ? 'true' : 'false'}
+                                            onClick={() => setClub({ avatarId: isSel ? null : 'h:' + ab })}
+                                            style={{ borderRadius: 'var(--card-radius-sm, 8px)', border: '1px solid ' + (isSel ? 'var(--gold)' : 'var(--acc-line1, rgba(212,175,55,0.18))'), boxShadow: isSel ? '0 0 0 1px var(--gold), 0 0 12px rgba(212,175,55,0.3)' : 'none', padding: '8px 4px 5px', transition: 'all .13s', background: 'var(--black)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', cursor: 'pointer', minHeight: '64px' }}>
+                                            <img src={nflHelmetImgSrc(ab)} alt="" loading="lazy" style={{ width: '54px', height: '43px', objectFit: 'contain' }} />
+                                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', letterSpacing: '0.06em', color: isSel ? 'var(--gold)' : 'var(--silver)' }}>{ab}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <div style={{ ...fLabel, marginTop: '16px' }}>…or upload your own</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', letterSpacing: '0.08em', color: club.avatarId === 'u' ? 'var(--gold)' : 'var(--silver)', border: '1px dashed ' + (club.avatarId === 'u' ? 'var(--gold)' : 'var(--acc-line2, rgba(212,175,55,0.3))'), borderRadius: 'var(--card-radius-sm, 8px)', padding: '10px 14px', minHeight: '44px', boxSizing: 'border-box', cursor: 'pointer' }}>
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                                    {club.avatarId === 'u' && club.avatarData ? 'Uploaded — pick a new image' : 'Upload a photo'}
+                                    <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
+                                </label>
+                            </div>
+                            <div style={hint}>Your avatar shows on your My Profile button.</div>
                         </div>
                     </div>
                 </div>
@@ -2310,6 +2352,7 @@
                     onSelect={handleSelectLeague}
                     onAddLeague={() => setShowConnect(true)}
                     onOpenSettings={() => setShowOwnerSettings(true)}
+                    avatar={<OwnerAvatarBadge club={getOwnerClub()} size={30} round />}
                     links={{ home: DHQ_HOME_URL, discord: WR_DISCORD_URL }}
                     iconSrc={iconSrc}
                     empire={EMPIRE_ENABLED ? {

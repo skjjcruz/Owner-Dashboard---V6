@@ -144,12 +144,12 @@
     // Props (all supplied by app.js — the hub owns no data of its own):
     //   leagues, sleeperLeagues, sleeperUserId, lastLeagueId, displayName,
     //   syncing, notices [{ key, text, action: { label, onClick | href } }],
-    //   onSelect(league), onAddLeague(), onOpenSettings(),
+    //   onSelect(league), onAddLeague(), onOpenSettings(), avatar (element|null),
     //   links { home, discord }, iconSrc,
     //   empire: null | { onOpen(), onExplore(), freePrelive }
     function DhqHubV2(props) {
         const { leagues = [], sleeperLeagues = [], sleeperUserId = null, lastLeagueId = null, displayName = '',
-            syncing = false, notices = [], onSelect, onAddLeague, onOpenSettings, links = {}, iconSrc = 'icon-192.png', empire = null } = props;
+            syncing = false, notices = [], onSelect, onAddLeague, onOpenSettings, avatar = null, links = {}, iconSrc = 'icon-192.png', empire = null } = props;
         const [query, setQuery] = React.useState('');
         const [showAll, setShowAll] = React.useState(false);
         const [wire, setWire] = React.useState('closed'); // closed | loading | open | error
@@ -215,7 +215,7 @@
                     settings no longer apply — everything is free. */}
                 <div className="hv2-account-controls">
                     <button type="button" aria-label="My Profile" onClick={onOpenSettings}>
-                        <span className="hv2-account-avatar" aria-hidden="true">{initialsFor(displayName).slice(0, 1) || '★'}</span>
+                        <span className="hv2-account-avatar" aria-hidden="true">{avatar || initialsFor(displayName).slice(0, 1) || '★'}</span>
                         <span className="hv2-account-label">My Profile</span>
                     </button>
                 </div>

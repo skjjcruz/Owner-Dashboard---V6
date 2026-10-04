@@ -37,6 +37,8 @@ body:has(.hv2-shell)::before { opacity: 0; }
 .hv2-account-controls a, .hv2-footer a, .hv2-footer button { color: var(--silver); font: 500 13px var(--font-body, 'DM Sans', sans-serif); text-decoration: none; }
 .hv2-account-controls a:hover, .hv2-footer a:hover, .hv2-footer button:hover { color: var(--white); }
 .hv2-account-controls button { display: flex; align-items: center; gap: 9px; min-height: 44px; border: 1px solid var(--ov-6, #ffffff18); border-radius: 30px; padding: 5px 15px 5px 6px; background: var(--ov-2, #ffffff08); color: var(--white); font: 500 13px var(--font-body); cursor: pointer; }
+.hv2-account-avatar:has(img) { background: none; overflow: hidden; }
+.hv2-account-avatar > img { width: 100% !important; height: 100% !important; border: 0 !important; }
 .hv2-account-avatar { flex: none; width: 30px; height: 30px; display: grid; place-items: center; background: var(--gold); color: #18160f; border-radius: 50%; font-size: 11px; font-weight: 700; }
 
 /* Body grid: welcome left, resume right (≥900px), everything else full width */
