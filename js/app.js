@@ -2393,7 +2393,7 @@
                     onSelect={handleSelectLeague}
                     onAddLeague={() => setShowConnect(true)}
                     onOpenSettings={() => setShowOwnerSettings(true)}
-                    avatar={<OwnerAvatarBadge club={withDefaultAvatar(getOwnerClub(), sleeperUsername || displayName)} size={30} round />}
+                    avatar={<OwnerAvatarBadge club={withDefaultAvatar(getOwnerClub(), sleeperUsername || (sleeperUser && sleeperUser.username) || '')} size={30} round />}
                     links={{ home: DHQ_HOME_URL, discord: WR_DISCORD_URL }}
                     iconSrc={iconSrc}
                     empire={EMPIRE_ENABLED ? {
