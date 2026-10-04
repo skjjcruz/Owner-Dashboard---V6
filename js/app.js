@@ -806,15 +806,28 @@
 
                         {/* ── Account ── */}
                         <div style={card}>
-                            <div style={cardH}>{isMember ? 'Your Account' : 'Save Your Spot'}</div>
+                            <div style={cardH}>Your Account</div>
                             {isMember && accountEmail && <div style={{ ...hint, marginTop: 0, marginBottom: '12px', opacity: 0.85 }}>Signed in as <span style={{ color: 'var(--white)' }}>{accountEmail}</span></div>}
                             {!isMember && <>
-                                <div style={{ fontSize: '0.86rem', color: 'var(--white)', lineHeight: 1.55, marginBottom: '12px' }}>
-                                    <strong style={{ color: 'var(--gold)' }}>Become a founding member.</strong> Everything in DHQ is free this season. Create a free account before March 1, 2027 and your first year of full DHQ is free when paid plans start. Your leagues come with you.
+                                <div style={{ ...hint, marginTop: 0, marginBottom: '10px', opacity: 0.85 }}>Signed in as <span style={{ color: 'var(--white)' }}>Guest</span></div>
+                                <div style={{ fontSize: '0.86rem', color: 'var(--white)', lineHeight: 1.55, marginBottom: '14px' }}>
+                                    <strong style={{ color: 'var(--gold)' }}>Make it yours — it’s free.</strong> Save your leagues and picks on every device, and lock in founding-member status: sign up before March 1, 2027 and your first year of full DHQ is free when paid plans start. Your leagues come with you.
                                 </div>
-                                <button type="button" style={{ ...commBtn, border: 'none', cursor: 'pointer' }} onClick={() => { window.location.href = 'landing.html?signin=new'; }}>Create free account</button>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                                    <button type="button" onClick={() => { window.location.href = 'landing.html?signin=new&via=google'; }}
+                                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', width: '100%', minHeight: '46px', border: 'none', borderRadius: 'var(--card-radius-sm, 8px)', background: '#fff', color: '#1f1f1f', font: '600 0.92rem var(--font-body)', cursor: 'pointer' }}>
+                                        <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29.1 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29.1 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35 26.7 36 24 36c-5.3 0-9.7-2.6-11.3-7l-6.6 5.1C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.6l6.2 5.2C39.9 36 44 30.6 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
+                                        Continue with Google
+                                    </button>
+                                    <button type="button" onClick={() => { window.location.href = 'landing.html?signin=new&via=apple'; }}
+                                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', width: '100%', minHeight: '46px', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 'var(--card-radius-sm, 8px)', background: '#000', color: '#fff', font: '600 0.92rem var(--font-body)', cursor: 'pointer' }}>
+                                        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="currentColor"><path d="M17.05 12.04c-.03-2.65 2.16-3.92 2.26-3.98-1.23-1.8-3.15-2.05-3.83-2.08-1.63-.16-3.18.96-4.01.96-.82 0-2.1-.94-3.46-.91-1.78.03-3.42 1.03-4.34 2.62-1.85 3.21-.47 7.95 1.33 10.55.88 1.27 1.93 2.7 3.3 2.65 1.32-.05 1.82-.85 3.42-.85 1.59 0 2.04.85 3.44.82 1.42-.02 2.32-1.3 3.19-2.58 1-1.47 1.42-2.89 1.44-2.97-.03-.01-2.76-1.06-2.79-4.2zM14.6 4.48c.73-.89 1.22-2.12 1.08-3.35-1.05.04-2.32.7-3.07 1.58-.67.78-1.26 2.03-1.1 3.23 1.17.09 2.36-.6 3.09-1.46z"/></svg>
+                                        Continue with Apple
+                                    </button>
+                                    <button type="button" style={{ ...small, alignSelf: 'center', marginTop: '2px', fontSize: '0.78rem' }} onClick={() => { window.location.href = 'landing.html?signin=new'; }}>or sign up with email</button>
+                                </div>
                             </>}
-                            {(isMember || isGuest) && <div style={{ marginTop: isMember ? 0 : '10px' }}><button style={btnLine} onClick={signOut}>Sign out</button></div>}
+                            {(isMember || isGuest) && <div style={{ marginTop: isMember ? 0 : '14px' }}><button style={btnLine} onClick={signOut}>Sign out</button></div>}
                             <div style={{ ...hint, display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '14px' }}>
                                 <a href="legal/terms-of-service.html" target="_blank" rel="noopener" style={{ color: 'var(--silver)', textDecoration: 'underline' }}>Terms of Service</a>
                                 <a href="legal/privacy-policy.html" target="_blank" rel="noopener" style={{ color: 'var(--silver)', textDecoration: 'underline' }}>Privacy Policy</a>

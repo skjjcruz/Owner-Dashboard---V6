@@ -1227,6 +1227,19 @@
       }
       // ?signin=new: a guest's "Create free account" opens on the sign-up side.
       try { openAuthSheet(q.get('signin') === 'new' ? 'signup' : 'signin'); } catch {}
+      // &via=google|apple: the app's My Profile buttons go straight to that
+      // provider, through this page's own handlers (same OAuth return, same
+      // guest-league adoption). The flag is dropped from the URL first so a
+      // back-swipe from the provider can't fire it twice.
+      const via = q.get('via');
+      if (via === 'google' || via === 'apple') {
+        try { q.delete('via'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : '') + location.hash); } catch {}
+        let tries = 0;
+        (function go() {
+          if (getSbClient()) { try { (via === 'google' ? handleGoogle : handleApple)(); } catch {} return; }
+          if (++tries < 40) setTimeout(go, 150);
+        })();
+      }
       if (q.has('reauth')) { try { showAlert('success', 'Your session ended. Sign in to pick up where you left off.'); } catch {} }
     })();
 
