@@ -599,6 +599,14 @@
         const [deleteBusy, setDeleteBusy] = React.useState(false);
         const [copied, setCopied] = React.useState(false);
         const fileRef = React.useRef(null);
+        // Lab: "Member since" from the account record (fw-profile createdAt).
+        const [memberSince, setMemberSince] = React.useState(null);
+        React.useEffect(() => {
+            if (!HUB_V2 || !window.OD || typeof window.OD.loadProfile !== 'function') return undefined;
+            let alive = true;
+            window.OD.loadProfile().then(p => { if (alive && p && p.memberSince) setMemberSince(p.memberSince); }).catch(() => {});
+            return () => { alive = false; };
+        }, []);
 
         const tierLabel = { free: 'Dynasty HQ Scout — Free', trial: 'Dynasty HQ Trial', scout: 'Dynasty HQ Scout', warroom: 'Dynasty HQ Pro', pro: 'Dynasty HQ Pro', commissioner: 'Dynasty HQ Commissioner' };
 
@@ -808,6 +816,24 @@
                         <div style={card}>
                             <div style={cardH}>Your Account</div>
                             {isMember && accountEmail && <div style={{ ...hint, marginTop: 0, marginBottom: '12px', opacity: 0.85 }}>Signed in as <span style={{ color: 'var(--white)' }}>{accountEmail}</span></div>}
+                            {isMember && (() => {
+                                const since = memberSince ? new Date(memberSince) : null;
+                                const sinceOk = since && !isNaN(since.getTime());
+                                const founding = sinceOk && since.getTime() < Date.UTC(2027, 2, 1);
+                                return (
+                                    <div style={{ border: '1px solid var(--gold)', borderRadius: 'var(--card-radius-sm, 8px)', padding: '12px 14px', marginBottom: '12px', background: 'linear-gradient(135deg, rgba(212,175,55,0.14), rgba(212,175,55,0.03))' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.08em', color: isPaid ? 'var(--black)' : 'var(--silver)', background: isPaid ? 'var(--gold)' : 'rgba(192,192,192,0.15)', borderRadius: 'var(--card-radius-xs, 5px)', padding: '2px 7px' }}>{isPaid ? 'PRO' : 'SCOUT'}</span>
+                                            <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.04em', color: 'var(--white)' }}>{(tierLabel[tier] || 'Dynasty HQ').replace(' — Free', '')}</span>
+                                        </div>
+                                        {(founding || sinceOk) && <div style={{ fontSize: '0.78rem', color: 'var(--silver)', marginTop: '7px' }}>
+                                            {founding && <span style={{ color: 'var(--gold)', fontWeight: 600 }}>★ Founding Member</span>}
+                                            {founding && sinceOk && ' · '}
+                                            {sinceOk && 'Member since ' + since.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                        </div>}
+                                    </div>
+                                );
+                            })()}
                             {!isMember && <>
                                 <div style={{ ...hint, marginTop: 0, marginBottom: '10px', opacity: 0.85 }}>Signed in as <span style={{ color: 'var(--white)' }}>Guest</span></div>
                                 <div style={{ fontSize: '0.86rem', color: 'var(--white)', lineHeight: 1.55, marginBottom: '14px' }}>
