@@ -82,7 +82,7 @@
                 const vegas = impliedTotal != null
                     ? { impliedTotal: Math.round(impliedTotal * 10) / 10, spread: spread, opp: oppAbbr }
                     : (oppAbbr ? { opp: oppAbbr } : null);
-                return { opp: oppAbbr, home: isHome, vegas: vegas, weather: weather };
+                return { opp: oppAbbr, home: isHome, vegas: vegas, weather: weather, kickoff: (comp && comp.date) || ev.date || null };
             }
             out[hAbbr + '|' + week] = teamCtx(hAbbr, aAbbr, true);
             out[aAbbr + '|' + week] = teamCtx(aAbbr, hAbbr, false);

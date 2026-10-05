@@ -184,6 +184,7 @@
         let s = 0;
         const notes = [];
         if (status === 'Q' || status === 'QUESTIONABLE') { s -= 0.35; notes.push('Questionable'); }
+        if (h.staleOut) notes.push('Out last week; this week\'s report not out yet, projected as playing');
         const practice = String(h.practice || '').toUpperCase();
         if (practice === 'DNP') { s -= 0.2; notes.push('Did not practice'); }
         else if (practice === 'LP') { s -= 0.1; notes.push('Limited in practice'); }

@@ -124,3 +124,91 @@ test('a backup quarterback projects zero, average and typical week alike', () =>
     const b = base('q2', { team: 'KC', position: 'QB' }, 'QB', { projTargets: 30, posRank: 2, backupQb: true });
     assert.deepEqual([b.median, b.mean], [0, 0]);
 });
+
+// Raiders-style room: a star tight end out for weeks 1-2, back in week 3;
+// the backup filled in. 30 team targets a game.
+const roomFixture = () => {
+    const wk = (w, bow, may) => ({ week: w, stats: Object.assign({ TEAM_LV: { gp: 1, rec_tgt: 30 }, wr1: { gp: 1, rec_tgt: 10 }, may: { gp: 1, rec_tgt: may } }, bow != null ? { bow: { gp: 1, rec_tgt: bow } } : {}) });
+    const playersData = { bow: { team: 'LV', position: 'TE' }, may: { team: 'LV', position: 'TE' }, wr1: { team: 'LV', position: 'WR' } };
+    const opts = {
+        playersData,
+        statsData: { TEAM_LV: { gp: 3, rec_tgt: 90 }, bow: { gp: 1, rec_tgt: 12 }, may: { gp: 3, rec_tgt: 18 }, wr1: { gp: 3, rec_tgt: 30 } },
+        priorData: { TEAM_LV: { gp: 17, rec_tgt: 510 }, bow: { gp: 12, rec_tgt: 90 }, may: { gp: 17, rec_tgt: 34 }, wr1: { gp: 17, rec_tgt: 170 } },
+    };
+    const ctx = { week: 4, depth: null, recentWeeks: [wk(1, null, 8), wk(2, null, 8), wk(3, 12, 2)] };
+    return { opts, ctx, role: (pid) => I.roleFor(pid, playersData[pid], playersData[pid].position, 'LV', opts, ctx) };
+};
+
+test('a week he missed is not a vote on his share: 12 of 30 targets in his one game is 40%', () => {
+    const r = roomFixture().role('bow');
+    assert.ok(Math.abs(r.earnedShare - 0.4) < 0.005, 'earned ' + r.earnedShare + ' (the missed weeks as zeros made it 24%)');
+});
+
+test('the backup who filled in keeps only what he got with the starter back', () => {
+    const r = roomFixture().role('may');
+    assert.ok(Math.abs(r.earnedShare - 2 / 30) < 0.005, 'earned ' + r.earnedShare + ' (his fill-in weeks made it 20%)');
+});
+
+test('a star tight end is not cut by the tight-end room; the backup still is', () => {
+    const f = roomFixture();
+    const bow = f.role('bow'), may = f.role('may');
+    assert.ok(bow.trackShare >= 0.18, 'track ' + bow.trackShare);
+    assert.equal(bow.roomScale, 1);
+    assert.ok(may.roomScale < 1, 'backup room scale ' + may.roomScale);
+});
+
+test('a starter is not reset by a lesser teammate\'s return', () => {
+    // wr1 (a third of the targets last year) played weeks 1-2 and missed
+    // week 3; the tight end came back in week 3. wr1 keeps his own games.
+    const playersData = { bow: { team: 'LV', position: 'TE' }, wr1: { team: 'LV', position: 'WR' } };
+    const wk = (w, bow, wr1) => ({ week: w, stats: Object.assign({ TEAM_LV: { gp: 1, rec_tgt: 30 } }, bow != null ? { bow: { gp: 1, rec_tgt: bow } } : {}, wr1 != null ? { wr1: { gp: 1, rec_tgt: wr1 } } : {}) });
+    const opts = {
+        playersData,
+        statsData: { TEAM_LV: { gp: 3, rec_tgt: 90 }, bow: { gp: 1, rec_tgt: 8 }, wr1: { gp: 2, rec_tgt: 20 } },
+        priorData: { TEAM_LV: { gp: 17, rec_tgt: 510 }, bow: { gp: 12, rec_tgt: 90 }, wr1: { gp: 17, rec_tgt: 170 } },
+    };
+    const ctx = { week: 4, depth: null, recentWeeks: [wk(1, null, 10), wk(2, null, 10), wk(3, 8, null)] };
+    const r = I.roleFor('wr1', playersData.wr1, 'WR', 'LV', opts, ctx);
+    assert.ok(Math.abs(r.earnedShare - 1 / 3) < 0.005, 'earned ' + r.earnedShare);
+});
+
+test('last week\'s Out counts as playing until this week\'s final report; IR and a no-line Out stay out', () => {
+    const now = Date.parse('2026-10-05T14:00:00Z');
+    const lines = { p1: { rec_tgt: 8 }, p3: { rec_tgt: 8 } };
+    const saved = App.WeeklyProj;
+    App.WeeklyProj = { _ctx: { byTeamWeek: { 'MIN|5': { kickoff: '2026-10-11T17:00Z' }, 'WAS|5': { kickoff: '2026-10-06T00:15Z' } } }, projLine: (pid) => lines[pid] || null };
+    try {
+        const ctx = { week: 5, now };
+        assert.equal(I.statusOf({ player_id: 'p1', team: 'MIN', injury_status: 'Out' }, ctx), '', 'Sunday game, Monday morning, Sleeper still has a line: playing');
+        assert.equal(I.statusOf({ player_id: 'p2', team: 'MIN', injury_status: 'Out' }, ctx), 'OUT', 'no Sleeper line: expected to miss it');
+        assert.equal(I.statusOf({ player_id: 'p3', team: 'MIN', injury_status: 'IR' }, ctx), 'IR', 'IR keeps its zero');
+        assert.equal(I.statusOf({ player_id: 'p3', team: 'WAS', injury_status: 'Out' }, ctx), 'OUT', 'inside 44 hours the tag is this week\'s');
+        assert.equal(I.statusOf({ player_id: 'p1', team: 'MIN', injury_status: 'Out' }, { week: 5, now: Date.parse('2026-10-09T23:00:00Z') }), 'OUT', 'Friday night: the final report is out');
+    } finally { App.WeeklyProj = saved; }
+});
+
+// A star receiver hurt early in week 3 (12% of the snaps) and out in week 4.
+const starFixture = () => {
+    const row = (tgt, snp) => ({ gp: 1, rec_tgt: tgt, off_snp: snp, tm_off_snp: 60 });
+    const wk = (w, jj, other) => ({ week: w, stats: Object.assign({ TEAM_MIN: { gp: 1, rec_tgt: 30 }, wr2: row(other, 50) }, jj ? { jj } : {}) });
+    const playersData = { jj: { player_id: 'jj', team: 'MIN', position: 'WR' }, wr2: { player_id: 'wr2', team: 'MIN', position: 'WR' } };
+    const opts = {
+        playersData,
+        statsData: { TEAM_MIN: { gp: 4, rec_tgt: 120 }, jj: { gp: 3, rec_tgt: 20, off_snp: 115, tm_off_snp: 180 }, wr2: { gp: 4, rec_tgt: 30, off_snp: 200, tm_off_snp: 240 } },
+        priorData: { TEAM_MIN: { gp: 17, rec_tgt: 510 }, jj: { gp: 17, rec_tgt: 170, off_snp: 900, tm_off_snp: 1000 }, wr2: { gp: 17, rec_tgt: 51, off_snp: 500, tm_off_snp: 1000 } },
+    };
+    const ctx = { week: 5, depth: null, recentWeeks: [wk(2, row(9, 54), 6), wk(3, row(2, 7), 8), wk(4, null, 16)] };
+    return { role: (pid) => I.roleFor(pid, playersData[pid], 'WR', 'MIN', opts, ctx) };
+};
+
+test('a game he left hurt is not a vote on his share: only his healthy games count', () => {
+    const r = starFixture().role('jj');
+    assert.ok(Math.abs(r.earnedShare - 9 / 30) < 0.005, 'earned ' + r.earnedShare + ' (the 12%-snap game and the missed week made it about 12%)');
+});
+
+test('a returning star takes his whole share; the room cut falls on the others', () => {
+    const f = starFixture();
+    const jj = f.role('jj');
+    assert.equal(jj.returningStar, true);
+    assert.equal(jj.roomScale, 1);
+});
