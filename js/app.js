@@ -60,21 +60,12 @@
     const DHQ_HOME_URL = 'landing.html?home';
     window.App.DHQ_HOME_URL = DHQ_HOME_URL;
 
-    // ── Hub v2 — the C2 "Welcome back" home, LAB ONLY (2026-10-02) ──
-    // ONE switch. On only where window.DHQ_LAB === true, which lab/gate.html
-    // sets and only scripts/publish-lab.cjs injects (the Lab), or with ?hub=v2
-    // on localhost for local testing. The website and the app never set it, so
-    // they render the hub below exactly as before and never request the
-    // hub-v2 files. ?hub=v1 shows the old hub in the Lab for comparison.
+    // ── Hub v2 — the "Welcome back" home (Lab 2026-10-02, live b154) ──
     // Component + styles: js/hub-v2.js, js/hub-v2.css (deferred group 'hubv2').
-    const HUB_V2 = (function () {
-        try {
-            const want = new URLSearchParams(window.location.search || '').get('hub');
-            if (want === 'v1') return false;
-            if (window.DHQ_LAB === true) return true;
-            return want === 'v2' && ['localhost', '127.0.0.1'].includes(WR_HOST);
-        } catch (e) { return false; }
-    })();
+    // b154 (2026-10-05): the new home is live for everyone, website and app
+    // (owner ruling: no switch back). HUB_V2 stays as the one name every
+    // new-home path keys off.
+    const HUB_V2 = true;
     window.App.HUB_V2 = HUB_V2;
     // Lab: a guest's wordmark reads "DYNASTY HQ · GUEST", not "· PRO"
     // (everything is free, so the shared tier gate marks everyone Pro; owner

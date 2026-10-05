@@ -289,12 +289,11 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
     // native bridge has it. The owner-stamped identity cache (Sleeper handle,
     // league pointers) stays: the stamp clears it when someone else signs in,
     // and keeping it means signing back in is never a full reconnect.
-    // Lab: this device remembers the member it signs out (owner ruling
+    // This device remembers the member it signs out (owner ruling
     // 2026-10-05, option 1). Typing the same Sleeper name on the front page
     // later signs them straight back in (landing.html, one use); any other
     // name comes in as a guest. Only a live session is remembered.
     function rememberMemberOnSignOut() {
-        if (window.DHQ_LAB !== true) return;
         try {
             const sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
             const part = sess && sess.token && String(sess.token).split('.')[1];

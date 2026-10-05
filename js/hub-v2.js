@@ -9,10 +9,8 @@
 //                                        1423-1470
 //   experience-hub.css (whole file) → js/hub-v2.css
 //
-// app.js renders this only when HUB_V2 is on: window.DHQ_LAB === true (set by
-// lab/gate.html, which only scripts/publish-lab.cjs injects) or ?hub=v2 on
-// localhost. The website and the app keep the old hub. This file is the
-// deferred module group "hubv2", so the website never requests it at runtime.
+// The league home for everyone since b154 (app.js HUB_V2). This file is the
+// deferred module group "hubv2"; its stylesheet is js/hub-v2.css.
 //
 // TRUTH LAW: every number is our real data and every control goes somewhere
 // real. C2's games (The Vault, The Duat), the Games tab and the Commissioner's
@@ -20,9 +18,6 @@
 // itself is enabled (EMPIRE_ENABLED in app.js); the Wire row only for Sleeper
 // leagues (the all-leagues Wire covers Sleeper only).
 //
-// To remove the experiment: delete this file and js/hub-v2.css, the two
-// hub-v2 lines in index.html, the HUB_V2 block in app.js, and the DHQ_LAB
-// line in lab/gate.html.
 // ══════════════════════════════════════════════════════════════════
 (function () {
     'use strict';

@@ -1362,7 +1362,7 @@
     // member (js/core.js remembers them, Lab only); anyone else comes in
     // as a guest.
     function continueIn(platform, v) {
-      if (platform === 'sleeper' && window.DHQ_LAB === true) {
+      if (platform === 'sleeper') {
         try {
           var rem = JSON.parse(localStorage.getItem('dhq_remembered_member_v1') || 'null');
           var tok = rem && rem.session && rem.session.token;
