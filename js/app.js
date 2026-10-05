@@ -320,17 +320,21 @@
     }
     function saveOwnerClub(patch, opts) {
         const next = { ...getOwnerClub(), ...patch };
-        // Lab: an avatar change is stamped with who and when, kept in the
-        // device's avatar memory and saved on the account (see below).
+        // Lab: an avatar change (set OR removed) is stamped with who and when,
+        // kept in this device's avatar memory and saved on the account.
         const avatarChanged = HUB_V2 && patch && (Object.prototype.hasOwnProperty.call(patch, 'avatarId') || Object.prototype.hasOwnProperty.call(patch, 'avatarData'));
-        if (avatarChanged && !(opts && opts.fromSync)) {
+        const userChange = avatarChanged && !(opts && opts.fromSync);
+        let owner = null;
+        if (userChange) {
+            owner = avatarSyncOwner();
             next.avatarUpdatedAt = Date.now();
-            next.avatarOwner = avatarOwnerKeys()[0] || null;
+            next.avatarOwner = owner;
         }
         AppStorage.set(OWNER_CLUB_KEY, next);
-        if (avatarChanged && !(opts && opts.fromSync)) {
+        if (userChange && owner) {
             const entry = avatarEntryOf(next);
-            if (entry) { writeAvatarVault(avatarOwnerKeys(), entry); pushAvatarToAccount(entry); }
+            writeAvatarVault(owner, entry);
+            if (owner.indexOf('account:') === 0) pushAvatarToAccount(entry);
         }
         try { window.dispatchEvent(new CustomEvent('dhq:owner-club-changed')); } catch (e) { /* non-fatal */ }
         return next;
@@ -339,34 +343,46 @@
     // ── Lab: the avatar belongs to the person, not to the device's state ──
     // (owner ruling 2026-10-05: "anytime a user signs into their account, the
     // avatar is present"). Sign-in / sign-out / guest clean-ups wipe the club
-    // key above, so the avatar is also kept in two places they never touch:
+    // key above, so the avatar is also kept where they never reach:
     //   1. the account (fw-profile ownerClub) — every sign-in, any device;
-    //   2. this device's avatar memory, keyed by account and by Sleeper name
-    //      (dhq_avatar_vault_v1) — instant, and covers a guest's own name.
-    // syncAvatarMemory() runs on every app load and puts the newest one back.
+    //   2. this device's avatar memory (dhq_avatar_vault_v1), one entry per
+    //      owner: 'account:<id>' / 'legacy:<handle>' for members,
+    //      'sleeper:<handle>' for guests only.
+    // A member's avatar comes ONLY from their own account's copies: a Sleeper
+    // name is public, so a name-keyed copy never feeds an account (review
+    // 2026-10-05). Removals are entries too ({ avatarId: null }), newest wins.
     const AVATAR_VAULT_KEY = 'dhq_avatar_vault_v1';
-    function avatarOwnerKeys() {
-        const keys = [];
+    // Whose avatar is on screen right now, or null while the device is not
+    // settled (its identity cache belongs to someone else until the sign-in
+    // reconcile finishes — never read or write then).
+    function avatarSyncOwner() {
         try {
             const idn = window.OD && window.OD.identity;
-            const owner = idn && typeof idn.currentOwner === 'function' ? idn.currentOwner() : null;
-            if (owner && owner !== 'guest') keys.push(owner);
-            const h = idn && typeof idn.localHandle === 'function' ? idn.localHandle() : null;
-            if (h) keys.push('sleeper:' + String(h).toLowerCase());
-        } catch (e) { /* identity not loaded */ }
-        return keys;
+            if (!idn || typeof idn.currentOwner !== 'function') return null;
+            const owner = idn.currentOwner();
+            if (!owner) return null;
+            if (owner === 'guest') {
+                const h = typeof idn.localHandle === 'function' ? idn.localHandle() : null;
+                return h ? 'sleeper:' + String(h).toLowerCase() : null;
+            }
+            const stamp = typeof idn.getStamp === 'function' ? idn.getStamp() : null;
+            return stamp === owner ? owner : null;
+        } catch (e) { return null; }
     }
     function avatarEntryOf(club) {
-        if (!club || !club.avatarId) return null;
-        return { avatarId: club.avatarId, avatarData: club.avatarId === 'u' ? (club.avatarData || null) : null, updatedAt: Number(club.avatarUpdatedAt) || 0 };
+        if (!club) return null;
+        if (club.avatarId) return { avatarId: club.avatarId, avatarData: club.avatarId === 'u' ? (club.avatarData || null) : null, updatedAt: Number(club.avatarUpdatedAt) || 0 };
+        // A recorded removal (back to the default initials).
+        if (Number(club.avatarUpdatedAt) > 0) return { avatarId: null, avatarData: null, updatedAt: Number(club.avatarUpdatedAt) };
+        return null;
     }
     function readAvatarVault() {
         try { const v = JSON.parse(localStorage.getItem(AVATAR_VAULT_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; }
     }
-    function writeAvatarVault(keys, entry) {
-        if (!keys.length || !entry) return;
+    function writeAvatarVault(owner, entry) {
+        if (!owner || !entry) return;
         const v = readAvatarVault();
-        keys.forEach(k => { v[k] = entry; });
+        v[owner] = entry;
         try { localStorage.setItem(AVATAR_VAULT_KEY, JSON.stringify(v)); } catch (e) { /* storage full / blocked */ }
     }
     function accountAppToken() {
@@ -377,59 +393,84 @@
             return (s && s.token) || null;
         } catch (e) { return null; }
     }
+    // Saved on the account shortly after a change. The token is captured now
+    // (a sign-out right after must not lose the change) and the request
+    // survives a page change (keepalive); a pending one is sent on pagehide.
+    let avatarPush = null;
+    function sendAvatarPush() {
+        if (!avatarPush) return;
+        const { token, entry } = avatarPush;
+        avatarPush = null;
+        clearTimeout(avatarPushTimer);
+        const OD = window.OD || {};
+        const url = (OD.BACKEND_ENDPOINTS && OD.BACKEND_ENDPOINTS.fwProfile) || ((OD.SUPABASE_URL || '') + '/functions/v1/fw-profile');
+        try {
+            fetch(url, { method: 'POST', keepalive: true, headers: { 'Authorization': 'Bearer ' + token, 'apikey': OD.SUPABASE_ANON || '', 'Content-Type': 'application/json' }, body: JSON.stringify({ ownerClub: entry }) })
+                .catch(err => window.wrLog && window.wrLog('avatar.push', err));
+        } catch (err) { window.wrLog && window.wrLog('avatar.push', err); }
+    }
     let avatarPushTimer = null;
     function pushAvatarToAccount(entry) {
         if (!HUB_V2 || !entry) return;
+        const token = accountAppToken();
+        if (!token) return;
+        avatarPush = { token, entry };
         clearTimeout(avatarPushTimer);
-        avatarPushTimer = setTimeout(() => {
-            const token = accountAppToken();
-            if (!token) return;
-            const OD = window.OD || {};
-            const url = (OD.BACKEND_ENDPOINTS && OD.BACKEND_ENDPOINTS.fwProfile) || ((OD.SUPABASE_URL || '') + '/functions/v1/fw-profile');
-            try {
-                fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'apikey': OD.SUPABASE_ANON || '', 'Content-Type': 'application/json' }, body: JSON.stringify({ ownerClub: entry }) })
-                    .catch(err => window.wrLog && window.wrLog('avatar.push', err));
-            } catch (err) { window.wrLog && window.wrLog('avatar.push', err); }
-        }, 600);
+        avatarPushTimer = setTimeout(sendAvatarPush, 600);
     }
+    if (HUB_V2) { try { window.addEventListener('pagehide', sendAvatarPush); } catch (e) { /* no window */ } }
+
     let avatarSyncing = false;
+    let avatarSyncAgain = false;
     async function syncAvatarMemory() {
-        if (!HUB_V2 || avatarSyncing) return;
+        if (!HUB_V2) return;
+        if (avatarSyncing) { avatarSyncAgain = true; return; }
         avatarSyncing = true;
         try {
-            const keys = avatarOwnerKeys();
-            if (!keys.length) return;
+            const owner = avatarSyncOwner();
+            if (!owner) return;
+            const isAccount = owner.indexOf('account:') === 0;
+            let server, serverRead = false;
+            if (isAccount && window.OD && typeof window.OD.loadProfile === 'function') {
+                try {
+                    const p = await window.OD.loadProfile();
+                    // A failed read falls back without ownerClub: never treat
+                    // that as "nothing on the account".
+                    if (p && Object.prototype.hasOwnProperty.call(p, 'ownerClub')) { serverRead = true; server = p.ownerClub || null; }
+                } catch (e) { serverRead = false; }
+            }
+            // The device may have changed hands while we waited.
+            if (avatarSyncOwner() !== owner) { avatarSyncAgain = true; return; }
             const club = getOwnerClub();
             const vault = readAvatarVault();
             const candidates = [];
             const local = avatarEntryOf(club);
-            // A signed-in member's avatar comes ONLY from their own account
-            // (server copy + the device memory under that account). A Sleeper
-            // name can be typed by anyone, so name-keyed copies never feed an
-            // account. Guests use their Sleeper name's copy.
-            const member = keys[0].indexOf('account:') === 0 || keys[0].indexOf('legacy:') === 0;
-            const trusted = member ? [keys[0]] : keys;
-            // The device's own copy counts only when it is this person's
-            // (untagged = a club saved before this memory existed).
-            if (local && (!club.avatarOwner || trusted.includes(club.avatarOwner))) candidates.push(local);
-            trusted.forEach(k => { if (vault[k] && vault[k].avatarId) candidates.push(vault[k]); });
-            let server = null;
-            if (keys[0].indexOf('account:') === 0 && window.OD && typeof window.OD.loadProfile === 'function') {
-                try { const p = await window.OD.loadProfile(); server = (p && p.ownerClub) || null; } catch (e) { server = null; }
-                if (server && server.avatarId) candidates.push(server);
+            // The device's own copy: this owner's stamp, or an untagged club
+            // on a device whose identity cache is verified to be theirs.
+            const localMine = !!local && (club.avatarOwner ? club.avatarOwner === owner : true);
+            if (localMine) candidates.push(local);
+            if (vault[owner]) candidates.push(vault[owner]);
+            if (server) candidates.push(server);
+            if (!candidates.length) {
+                // Someone else's avatar is on screen and this person has none:
+                // back to the default initials.
+                if (club.avatarId && club.avatarOwner && club.avatarOwner !== owner) saveOwnerClub({ avatarId: null, avatarData: null, avatarUpdatedAt: 0, avatarOwner: owner }, { fromSync: true });
+                return;
             }
-            if (!candidates.length) return;
             const best = candidates.reduce((a, b) => ((Number(b.updatedAt) || 0) > (Number(a.updatedAt) || 0) ? b : a));
-            if (best.avatarId !== club.avatarId || (best.avatarData || null) !== (club.avatarId === 'u' ? (club.avatarData || null) : null)) {
-                saveOwnerClub({ avatarId: best.avatarId, avatarData: best.avatarData || null, avatarUpdatedAt: Number(best.updatedAt) || 0, avatarOwner: keys[0] }, { fromSync: true });
+            const shownData = club.avatarId === 'u' ? (club.avatarData || null) : null;
+            if ((best.avatarId || null) !== (club.avatarId || null) || (best.avatarData || null) !== shownData || club.avatarOwner !== owner) {
+                saveOwnerClub({ avatarId: best.avatarId || null, avatarData: best.avatarData || null, avatarUpdatedAt: Number(best.updatedAt) || 0, avatarOwner: owner }, { fromSync: true });
             }
-            writeAvatarVault(trusted, best);
-            const serverBehind = !server || !server.avatarId || server.avatarId !== best.avatarId || (Number(server.updatedAt) || 0) < (Number(best.updatedAt) || 0);
-            if (keys[0].indexOf('account:') === 0 && serverBehind) pushAvatarToAccount(best);
+            writeAvatarVault(owner, best);
+            // Only after a successful read: the server keeps whichever is newer.
+            const serverBehind = serverRead && (!server || (server.avatarId || null) !== (best.avatarId || null) || (Number(server.updatedAt) || 0) < (Number(best.updatedAt) || 0));
+            if (isAccount && serverBehind) pushAvatarToAccount(best);
         } catch (e) {
             window.wrLog && window.wrLog('avatar.sync', e);
         } finally {
             avatarSyncing = false;
+            if (avatarSyncAgain) { avatarSyncAgain = false; setTimeout(syncAvatarMemory, 300); }
         }
     }
     // Hook: live view of the club object, synced across every mounted surface.
@@ -785,7 +826,7 @@
         const [bColor, setBColor] = React.useState(savedBuilder ? (savedBuilder[2] || '#D4AF37') : '#D4AF37');
         const BUILDER_COLORS = ['#D4AF37', '#E74C3C', '#2ECC71', '#3B82F6', '#A855F7', '#F97316', '#14B8A6', '#EC4899'];
         function applyBuilder(ini, col) {
-            const cleanIni = String(ini || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3) || 'DH';
+            const cleanIni = HUB_V2 ? (String(ini || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3) || 'DH') : (ini || 'DH').toUpperCase().slice(0, 3);
             setClub({ avatarId: 'b:' + cleanIni + ':' + col });
         }
 
@@ -1223,9 +1264,6 @@
             }
             return window.OD?.getCurrentUsername?.() || readDemoHandle();
         });
-        // Lab: put this person's avatar back (account, then device memory).
-        // After sleeperUsername exists (a hook above it hit the TDZ, LAB176).
-        useEffect(() => { if (HUB_V2) syncAvatarMemory(); }, [sleeperUsername]);
         // 'reconcile' while the account's handle is being fetched and it took
         // too long; 'sleeper' when Sleeper itself did. Drives the retry notice.
         const [hubStall, setHubStall] = useState(null);
@@ -1280,6 +1318,12 @@
             })();
             return () => { alive = false; };
         }, [reconcileNonce]);
+        // Lab: put this person's avatar back (account, then device memory),
+        // after the boot sign-in reconcile, and again when the handle settles.
+        // Below every hook it reads (a hook above sleeperUsername crashed LAB176).
+        useEffect(() => { if (HUB_V2) syncAvatarMemory(); }, [sleeperUsername, reconcileNonce]);
+        // Re-render when the avatar is restored (the hub reads the club store).
+        const [hubClub] = useOwnerClub();
 
         // Display name state
         const [customDisplayName, setCustomDisplayName] = useState(() => {
@@ -2561,9 +2605,9 @@
                     onSelect={handleSelectLeague}
                     onAddLeague={() => setShowConnect(true)}
                     onOpenSettings={() => setShowOwnerSettings(true)}
-                    avatar={<OwnerAvatarBadge club={withDefaultAvatar(getOwnerClub(), sleeperUsername || (sleeperUser && sleeperUser.username) || '')} size={30} round />}
+                    avatar={<OwnerAvatarBadge club={withDefaultAvatar(hubClub, sleeperUsername || (sleeperUser && sleeperUser.username) || '')} size={30} round />}
                     guest={isGuestOwner()}
-                    returning={!!(sleeperUsername || (sleeperUser && sleeperUser.username) || accountAppToken())}
+                    returning={(() => { try { const o = window.OD && window.OD.identity && window.OD.identity.currentOwner(); return !!o && (o.indexOf('account:') === 0 || o.indexOf('legacy:') === 0); } catch (e) { return false; } })()}
                     links={{ home: DHQ_HOME_URL, discord: WR_DISCORD_URL, signup: 'landing.html?signin=new', signin: 'landing.html?signin' }}
                     iconSrc={iconSrc}
                     empire={EMPIRE_ENABLED ? {
