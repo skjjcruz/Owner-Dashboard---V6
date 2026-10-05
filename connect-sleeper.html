@@ -10,6 +10,26 @@
        else (no session, or already onboarded) is redirected without a flash. -->
   <style id="preboot-hide">html{visibility:hidden!important}</style>
   <noscript><style>html{visibility:visible!important}</style></noscript>
+  <!-- Front-door handoff (owner ask 2026-10-05): a Sleeper name typed on the
+       front page connects here behind a plain loading screen and goes straight
+       in, so this step-2 page never flashes. Revealed only if the connect
+       needs the visitor (a typo, a confirm) — see takeFrontDoorHandoff. -->
+  <style>
+    html.dhq-handoff body > * { visibility: hidden !important; }
+    html.dhq-handoff body::before { content: 'Loading your leagues\2026'; position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding-top: 120px; box-sizing: border-box; background: #08080b url('icon-192.png') no-repeat center calc(50% - 30px) / 76px 76px; color: #c9c3b3; font: 500 15px 'DM Sans', system-ui, sans-serif; letter-spacing: .02em; }
+  </style>
+  <script>
+    (function () {
+      try {
+        var h = JSON.parse(sessionStorage.getItem('dhq_connect_prefill') || 'null');
+        if (h && h.platform === 'sleeper' && h.value && !(h.ts && Date.now() - h.ts > 10 * 60 * 1000)) {
+          document.documentElement.classList.add('dhq-handoff');
+          // Never strand anyone on the loading screen.
+          setTimeout(function () { document.documentElement.classList.remove('dhq-handoff'); }, 15000);
+        }
+      } catch (e) { /* no handoff */ }
+    })();
+  </script>
   <!-- Owner-stamped device identity (DHQ-Shared identity.js): server write of the handle + the one sign-out clear. -->
   <script src="reconai-shared/identity.js?v=20260928auth1"></script>
   <script>
@@ -847,19 +867,22 @@
         h = JSON.parse(sessionStorage.getItem('dhq_connect_prefill') || 'null');
         sessionStorage.removeItem('dhq_connect_prefill');
       } catch (e) { h = null; }
-      if (!h || !h.value || !TABS[h.platform]) return;
-      if (h.ts && Date.now() - h.ts > 10 * 60 * 1000) return; // a stale note is ignored
+      const showPage = () => document.documentElement.classList.remove('dhq-handoff');
+      if (!h || !h.value || !TABS[h.platform]) { showPage(); return; }
+      if (h.ts && Date.now() - h.ts > 10 * 60 * 1000) { showPage(); return; } // a stale note is ignored
       const which = h.platform;
       pick(which);
       const input = document.getElementById(TABS[which][4]);
-      if (!input || input.disabled) return;
+      if (!input || input.disabled) { showPage(); return; }
       input.value = String(h.value).slice(0, 64);
       const run = which === 'sleeper' ? connectSleeper : which === 'mfl' ? connectMfl : connectEspn;
       // ESPN and MFL link after the team is picked, so they enter from
       // finishEspn() / finishMfl().
       if (which === 'espn') { espnAutoEnter = true; run(); return; }
       if (which === 'mfl') { mflAutoEnter = true; run(); return; }
-      Promise.resolve(run()).then(() => { if (linked[which]) enterApp(); }).catch(() => {});
+      // Linked: straight in (the loading screen stays up until the app
+      // loads). Not linked (typo, not found, a confirm): show this page.
+      Promise.resolve(run()).then(() => { if (linked[which]) enterApp(); else showPage(); }).catch(showPage);
     })();
   </script>
 </body>
