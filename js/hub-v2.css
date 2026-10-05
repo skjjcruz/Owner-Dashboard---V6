@@ -59,6 +59,18 @@ body:has(.hv2-shell)::before { opacity: 0; }
 .hv2-resume b { grid-column: 2; grid-row: 1 / 4; align-self: center; color: var(--gold); font-size: 22px; }
 .hv2-focus-record { white-space: nowrap; }
 
+/* Guest sign-up strip (guests only) */
+.hv2-signup { display: flex; align-items: center; justify-content: space-between; gap: 14px 22px; flex-wrap: wrap; margin: 0 0 22px; padding: 16px 18px; border: 1px solid var(--gold); border-radius: var(--card-radius-lg, 14px); background: linear-gradient(120deg, rgba(212,175,55,.16), rgba(212,175,55,.04)); }
+.hv2-signup-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 260px; }
+.hv2-signup-copy strong { color: var(--white); font: 700 17px/1.25 var(--font-body); letter-spacing: -.01em; }
+.hv2-signup-copy em { font-style: normal; color: var(--gold); }
+.hv2-signup-copy span { color: var(--silver); font-size: 13px; line-height: 1.45; }
+.hv2-signup-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 0 0 auto; }
+.hv2-signup-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 26px; border-radius: var(--card-radius-sm, 8px); background: var(--gold); color: #18160f; font: 700 15px var(--font-body); text-decoration: none; white-space: nowrap; }
+.hv2-signup-btn:hover { filter: brightness(1.08); }
+.hv2-signup-signin { color: var(--silver); font-size: 12px; text-decoration: underline; }
+.hv2-signup-signin:hover { color: var(--white); }
+
 /* Notices (stalled load, private ESPN / MFL reconnect) */
 .hv2-notice { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 18px; margin: 0 0 20px; border: 1px solid var(--acc-line2, #d4af3755); border-radius: var(--card-radius, 10px); background: var(--ov-1, #ffffff04); }
 .hv2-notice p { margin: 0; color: var(--silver); font-size: 14px; line-height: 1.5; flex: 1; min-width: 200px; }
@@ -140,6 +152,8 @@ body:has(.hv2-shell)::before { opacity: 0; }
 
 /* Phone (≤767): one return action, readable rows, compact entries */
 @media (max-width: 767px) {
+  .hv2-signup-actions { width: 100%; }
+  .hv2-signup-btn { width: 100%; }
   /* app.js's hub <style> reserves 78px for the old hub's phone bottom bar, which this hub doesn't have. */
   .app-container:has(> .hv2-shell) { padding-bottom: 0 !important; }
   .hv2-header { min-height: 68px; gap: 12px; padding: calc(10px + var(--sat, 0px)) calc(16px + var(--sar, 0px)) 10px calc(16px + var(--sal, 0px)); }

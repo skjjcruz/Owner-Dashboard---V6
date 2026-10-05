@@ -145,11 +145,11 @@
     //   leagues, sleeperLeagues, sleeperUserId, lastLeagueId, displayName,
     //   syncing, notices [{ key, text, action: { label, onClick | href } }],
     //   onSelect(league), onAddLeague(), onOpenSettings(), avatar (element|null),
-    //   links { home, discord }, iconSrc,
+    //   guest (bool), links { home, discord, signup, signin }, iconSrc,
     //   empire: null | { onOpen(), onExplore(), freePrelive }
     function DhqHubV2(props) {
         const { leagues = [], sleeperLeagues = [], sleeperUserId = null, lastLeagueId = null, displayName = '',
-            syncing = false, notices = [], onSelect, onAddLeague, onOpenSettings, avatar = null, links = {}, iconSrc = 'icon-192.png', empire = null } = props;
+            syncing = false, notices = [], onSelect, onAddLeague, onOpenSettings, avatar = null, guest = false, links = {}, iconSrc = 'icon-192.png', empire = null } = props;
         const [query, setQuery] = React.useState('');
         const [showAll, setShowAll] = React.useState(false);
         const [wire, setWire] = React.useState('closed'); // closed | loading | open | error
@@ -232,6 +232,17 @@
                     <span>{focus.name}{recordOf(focus, sleeperUserId) && <span className="hv2-focus-record"> · {recordOf(focus, sleeperUserId)}</span>}</span>
                     <b aria-hidden="true">→</b>
                 </button>}
+                {/* Guests only (owner ask 2026-10-05): the free account pitch. */}
+                {guest && <div className="hv2-signup" role="region" aria-label="Sign up">
+                    <div className="hv2-signup-copy">
+                        <strong>Sign up for <em>FREE</em> member services</strong>
+                        <span>Save your leagues on every device and lock in founding-member status.</span>
+                    </div>
+                    <div className="hv2-signup-actions">
+                        <a className="hv2-signup-btn" href={links.signup}>Sign up free</a>
+                        <a className="hv2-signup-signin" href={links.signin}>Already a member? Sign in</a>
+                    </div>
+                </div>}
                 {notices.map(n => <div key={n.key} className="hv2-notice" role="status">
                     <p>{n.text}</p>
                     {n.action && (n.action.href

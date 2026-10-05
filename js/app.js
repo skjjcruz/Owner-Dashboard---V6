@@ -2447,7 +2447,8 @@
                     onAddLeague={() => setShowConnect(true)}
                     onOpenSettings={() => setShowOwnerSettings(true)}
                     avatar={<OwnerAvatarBadge club={withDefaultAvatar(getOwnerClub(), sleeperUsername || (sleeperUser && sleeperUser.username) || '')} size={30} round />}
-                    links={{ home: DHQ_HOME_URL, discord: WR_DISCORD_URL }}
+                    guest={isGuestOwner()}
+                    links={{ home: DHQ_HOME_URL, discord: WR_DISCORD_URL, signup: 'landing.html?signin=new', signin: 'landing.html?signin' }}
                     iconSrc={iconSrc}
                     empire={EMPIRE_ENABLED ? {
                         freePrelive: EMPIRE_FREE_PRELIVE,
