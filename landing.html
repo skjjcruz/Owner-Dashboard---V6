@@ -1317,8 +1317,26 @@
       }
       note.hidden = true;
       // No "Welcome back — sign in" detour, for anyone (owner ruling
-      // 2026-10-05): Go always continues straight in as a guest. An account
-      // holder gets their account back by signing in again.
+      // 2026-10-05): Go continues straight in. A member who signed out on
+      // this device and types their own Sleeper name is signed back in as
+      // that member (js/core.js remembers them, Lab only); anyone else
+      // comes in as a guest.
+      if (platform === 'sleeper' && window.DHQ_LAB === true) {
+        try {
+          var rem = JSON.parse(localStorage.getItem('dhq_remembered_member_v1') || 'null');
+          var tok = rem && rem.session && rem.session.token;
+          var part = tok && String(tok).split('.')[1];
+          var claims = part ? JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) : null;
+          if (claims && Number(claims.exp) * 1000 > Date.now() && rem.handle && String(rem.handle).toLowerCase() === v.toLowerCase()) {
+            localStorage.setItem('fw_session_v1', JSON.stringify(rem.session));
+            localStorage.removeItem('wr_guest_v1');
+            localStorage.removeItem('dhq_remembered_member_v1');
+            window.location.href = 'index.html';
+            return;
+          }
+          if (rem && !(claims && Number(claims.exp) * 1000 > Date.now())) localStorage.removeItem('dhq_remembered_member_v1');
+        } catch (err) { /* fall through to guest */ }
+      }
       var idn = window.OD && window.OD.identity;
       try { sessionStorage.setItem('dhq_connect_prefill', JSON.stringify({ platform: platform, value: v, ts: Date.now() })); } catch (err) {}
       // The Sleeper name goes along: the same person keeps their stuff.

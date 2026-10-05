@@ -289,7 +289,25 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
     // native bridge has it. The owner-stamped identity cache (Sleeper handle,
     // league pointers) stays: the stamp clears it when someone else signs in,
     // and keeping it means signing back in is never a full reconnect.
+    // Lab: this device remembers the member it signs out (owner ruling
+    // 2026-10-05, option 1). Typing the same Sleeper name on the front page
+    // later signs them straight back in (landing.html, one use); any other
+    // name comes in as a guest. Only a live session is remembered.
+    function rememberMemberOnSignOut() {
+        if (window.DHQ_LAB !== true) return;
+        try {
+            const sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
+            const part = sess && sess.token && String(sess.token).split('.')[1];
+            const claims = part ? JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) : null;
+            const idn = window.OD && window.OD.identity;
+            const handle = idn && typeof idn.localHandle === 'function' ? idn.localHandle() : null;
+            if (!claims || !(Number(claims.exp) * 1000 > Date.now()) || !handle) return;
+            localStorage.setItem('dhq_remembered_member_v1', JSON.stringify({ session: sess, handle: String(handle), at: Date.now() }));
+        } catch (e) { window.wrLog?.('signOut.remember', e); }
+    }
+
     function dhqSignOut(destination) {
+        rememberMemberOnSignOut();
         let left = false;
         const go = () => { if (left) return; left = true; window.location.href = destination || 'landing.html'; };
         let pending = null;
