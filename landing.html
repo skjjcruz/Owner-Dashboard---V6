@@ -1326,7 +1326,9 @@
       // Also an unstamped device that remembers a league (a signed-out user
       // of an older build) — becoming a guest would clear it.
       var remembers = !!(idn && !stamp && localStorage.getItem('wr_guest_v1') !== '1' && idn.localOnboarded());
-      if (((stamp && stamp !== 'guest') || remembers) && !form.dataset.guestOk) {
+      // Lab: no detour — Go always continues as a guest (owner ruling
+      // 2026-10-05); signing in again restores an account's leagues.
+      if (((stamp && stamp !== 'guest') || remembers) && !form.dataset.guestOk && window.DHQ_LAB !== true) {
         form.dataset.guestOk = '1';
         try { openAuthSheet('signin'); } catch (err) {}
         try { showAlert('success', 'Welcome back \u2014 sign in to your account. Not you? Close this and tap Go again to look around as a guest.'); } catch (err) {}
