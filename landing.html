@@ -1334,7 +1334,9 @@
             window.location.href = 'index.html';
             return;
           }
-          if (rem && !(claims && Number(claims.exp) * 1000 > Date.now())) localStorage.removeItem('dhq_remembered_member_v1');
+          // Expired, or someone else is using this device: forget the member,
+          // so their account can never pick up this guest's leagues.
+          if (rem) localStorage.removeItem('dhq_remembered_member_v1');
         } catch (err) { /* fall through to guest */ }
       }
       var idn = window.OD && window.OD.identity;
