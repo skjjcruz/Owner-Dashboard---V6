@@ -429,7 +429,11 @@
         let acct = '';
         try {
             const u = (JSON.parse(localStorage.getItem('fw_session_v1') || 'null') || {}).user || {};
-            acct = initialsFromName(u.displayName) || initialsFromName(String(u.email || '').split('@')[0]);
+            // A real first + last name wins: a one-word display name (often
+            // the Sleeper handle) yields to an email like first.last.
+            const emailLocal = String(u.email || '').split('@')[0];
+            const twoPart = (raw) => String(raw || '').split(/[\s._-]+/).filter(w => /[A-Za-z0-9]/.test(w)).length >= 2 ? initialsFromName(raw) : '';
+            acct = twoPart(u.displayName) || twoPart(emailLocal) || initialsFromName(u.displayName) || initialsFromName(emailLocal);
         } catch (e) { acct = ''; }
         return acct || initialsFromName(name) || 'DH';
     }
