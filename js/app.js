@@ -403,9 +403,16 @@
             const vault = readAvatarVault();
             const candidates = [];
             const local = avatarEntryOf(club);
-            // The device's own copy counts only when it is this person's.
-            if (local && (!club.avatarOwner || keys.includes(club.avatarOwner))) candidates.push(local);
-            keys.forEach(k => { if (vault[k] && vault[k].avatarId) candidates.push(vault[k]); });
+            // A signed-in member's avatar comes ONLY from their own account
+            // (server copy + the device memory under that account). A Sleeper
+            // name can be typed by anyone, so name-keyed copies never feed an
+            // account. Guests use their Sleeper name's copy.
+            const member = keys[0].indexOf('account:') === 0 || keys[0].indexOf('legacy:') === 0;
+            const trusted = member ? [keys[0]] : keys;
+            // The device's own copy counts only when it is this person's
+            // (untagged = a club saved before this memory existed).
+            if (local && (!club.avatarOwner || trusted.includes(club.avatarOwner))) candidates.push(local);
+            trusted.forEach(k => { if (vault[k] && vault[k].avatarId) candidates.push(vault[k]); });
             let server = null;
             if (keys[0].indexOf('account:') === 0 && window.OD && typeof window.OD.loadProfile === 'function') {
                 try { const p = await window.OD.loadProfile(); server = (p && p.ownerClub) || null; } catch (e) { server = null; }
@@ -416,7 +423,7 @@
             if (best.avatarId !== club.avatarId || (best.avatarData || null) !== (club.avatarId === 'u' ? (club.avatarData || null) : null)) {
                 saveOwnerClub({ avatarId: best.avatarId, avatarData: best.avatarData || null, avatarUpdatedAt: Number(best.updatedAt) || 0, avatarOwner: keys[0] }, { fromSync: true });
             }
-            writeAvatarVault(keys, best);
+            writeAvatarVault(trusted, best);
             const serverBehind = !server || !server.avatarId || server.avatarId !== best.avatarId || (Number(server.updatedAt) || 0) < (Number(best.updatedAt) || 0);
             if (keys[0].indexOf('account:') === 0 && serverBehind) pushAvatarToAccount(best);
         } catch (e) {
