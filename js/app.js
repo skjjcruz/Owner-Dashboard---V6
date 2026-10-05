@@ -1157,8 +1157,6 @@
         // Lab: guest wordmark (see HUB_V2 above). Every render: identity can
         // settle after boot, and the class is a cheap toggle.
         useEffect(() => { if (HUB_V2) { try { document.body.classList.toggle('is-guest', isGuestOwner()); } catch (e) { /* ignore */ } } });
-        // Lab: put this person's avatar back (account, then device memory).
-        useEffect(() => { if (HUB_V2) syncAvatarMemory(); }, [sleeperUsername]);
         // Hub toolbar (10+ leagues): search + sort. Lives here (not in
         // FranchisePicker) so the controlled inputs survive hub re-renders.
         const [hubQuery, setHubQuery] = useState('');
@@ -1225,6 +1223,9 @@
             }
             return window.OD?.getCurrentUsername?.() || readDemoHandle();
         });
+        // Lab: put this person's avatar back (account, then device memory).
+        // After sleeperUsername exists (a hook above it hit the TDZ, LAB176).
+        useEffect(() => { if (HUB_V2) syncAvatarMemory(); }, [sleeperUsername]);
         // 'reconcile' while the account's handle is being fetched and it took
         // too long; 'sleeper' when Sleeper itself did. Drives the retry notice.
         const [hubStall, setHubStall] = useState(null);
