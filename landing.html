@@ -1335,14 +1335,21 @@
         var liveClaims = null;
         try { liveClaims = liveTok ? JSON.parse(atob(liveTok.replace(/-/g, '+').replace(/_/g, '/'))) : null; } catch (err) { liveClaims = null; }
         var liveOk = !!(liveClaims && (!liveClaims.exp || Number(liveClaims.exp) * 1000 > Date.now()));
-        if (liveOwner && liveOwner !== 'guest' && liveOk) {
-          var myHandle = (idnL.getStamp && idnL.getStamp() === liveOwner && idnL.localHandle) ? idnL.localHandle() : null;
-          if (platform !== 'sleeper') {
+        // Any stored member login — live OR expired — is handled here: an
+        // expired one must be cleared too, or the next app load would adopt
+        // this guest's league onto that account (b154 review).
+        if (liveOwner && liveOwner !== 'guest' && liveSess && liveSess.token) {
+          var meta = (liveClaims && liveClaims.app_metadata) || {};
+          var sessHandle = (typeof meta.sleeper_username === 'string' && meta.sleeper_username) || (liveSess.user && liveSess.user.sleeperUsername) || null;
+          var myHandle = ((idnL.getStamp && idnL.getStamp() === liveOwner && idnL.localHandle) ? idnL.localHandle() : null) || sessHandle;
+          if (liveOk && platform !== 'sleeper') {
+            // A member adding an MFL / ESPN league: connect it to the account
+            // (?reconnect lets a member with leagues through the connect gate).
             try { sessionStorage.setItem('dhq_connect_prefill', JSON.stringify({ platform: platform, value: v, ts: Date.now() })); } catch (err) {}
-            window.location.href = 'connect-sleeper.html';
+            window.location.href = 'connect-sleeper.html?reconnect=' + platform;
             return;
           }
-          if (myHandle && String(myHandle).toLowerCase() === v.toLowerCase()) { window.location.href = 'index.html'; return; }
+          if (liveOk && myHandle && String(myHandle).toLowerCase() === v.toLowerCase()) { window.location.href = 'index.html'; return; }
           try { localStorage.removeItem('dhq_remembered_member_v1'); } catch (err) {}
           var outDone = null;
           try { if (typeof idnL.signOutClear === 'function') outDone = idnL.signOutClear({ supabase: (typeof getSbClient === 'function' ? getSbClient() : null) }); } catch (err) { outDone = null; }
@@ -1359,27 +1366,35 @@
 
     // Signed out (or just signed out): a member who signed out on this
     // device and types their own Sleeper name is signed back in as that
-    // member (js/core.js remembers them, Lab only); anyone else comes in
-    // as a guest.
+    // member (js/core.js remembers them); anyone else comes in as a guest.
     function continueIn(platform, v) {
-      if (platform === 'sleeper') {
-        try {
-          var rem = JSON.parse(localStorage.getItem('dhq_remembered_member_v1') || 'null');
-          var tok = rem && rem.session && rem.session.token;
-          var part = tok && String(tok).split('.')[1];
-          var claims = part ? JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) : null;
-          if (claims && Number(claims.exp) * 1000 > Date.now() && rem.handle && String(rem.handle).toLowerCase() === v.toLowerCase()) {
-            localStorage.setItem('fw_session_v1', JSON.stringify(rem.session));
-            localStorage.removeItem('wr_guest_v1');
-            localStorage.removeItem('dhq_remembered_member_v1');
-            window.location.href = 'index.html';
-            return;
-          }
-          // Expired, or someone else is using this device: forget the member,
-          // so their account can never pick up this guest's leagues.
-          if (rem) localStorage.removeItem('dhq_remembered_member_v1');
-        } catch (err) { /* fall through to guest */ }
-      }
+      var idnC = window.OD && window.OD.identity;
+      try {
+        var rem = JSON.parse(localStorage.getItem('dhq_remembered_member_v1') || 'null');
+        var tok = rem && rem.session && rem.session.token;
+        var part = tok && String(tok).split('.')[1];
+        var claims = part ? JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) : null;
+        var remMeta = (claims && claims.app_metadata) || {};
+        var remOwner = remMeta.user_id ? 'account:' + remMeta.user_id
+          : (typeof remMeta.sleeper_username === 'string' && remMeta.sleeper_username ? 'legacy:' + remMeta.sleeper_username.toLowerCase() : null);
+        // Restore only when the device still belongs to that member (no
+        // other guest has used it since — their leagues must never be
+        // adopted onto this account).
+        var stampNow = idnC && typeof idnC.getStamp === 'function' ? idnC.getStamp() : null;
+        if (platform === 'sleeper' && claims && Number(claims.exp) * 1000 > Date.now() && rem.handle
+            && String(rem.handle).toLowerCase() === v.toLowerCase() && remOwner && stampNow === remOwner) {
+          localStorage.setItem('fw_session_v1', JSON.stringify(rem.session));
+          localStorage.removeItem('wr_guest_v1');
+          localStorage.removeItem('dhq_remembered_member_v1');
+          window.location.href = 'index.html';
+          return;
+        }
+        // Any other entry — expired, another name, an MFL / ESPN guest —
+        // forgets the remembered member.
+        if (rem) localStorage.removeItem('dhq_remembered_member_v1');
+      } catch (err) { /* fall through to guest */ }
+      // The guest lane never runs on top of a stored member login.
+      try { localStorage.removeItem('fw_session_v1'); localStorage.removeItem('od_session_v1'); } catch (err) {}
       var idn = window.OD && window.OD.identity;
       try { sessionStorage.setItem('dhq_connect_prefill', JSON.stringify({ platform: platform, value: v, ts: Date.now() })); } catch (err) {}
       // The Sleeper name goes along: the same person keeps their stuff.
