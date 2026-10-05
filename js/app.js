@@ -76,6 +76,17 @@
         } catch (e) { return false; }
     })();
     window.App.HUB_V2 = HUB_V2;
+    // Lab: a guest's wordmark reads "DYNASTY HQ · GUEST", not "· PRO"
+    // (everything is free, so the shared tier gate marks everyone Pro; owner
+    // ask 2026-10-05). body.is-guest is kept in step by OwnerDashboard.
+    if (HUB_V2) {
+        try {
+            const st = document.createElement('style');
+            st.id = 'hv2-guest-wordmark';
+            st.textContent = 'body.is-guest .wr-wordmark::after, body.is-guest .header .wr-wordmark::after { content: " \\00B7 GUEST" !important; color: var(--silver, #98A1AD) !important; }';
+            (document.head || document.documentElement).appendChild(st);
+        } catch (e) { /* no style, no badge change */ }
+    }
 
     // ── Owner default: bigloco's locked-in MFL franchise in the "MLS Dynasty
     // League" (id 41969). Used to auto-select the team on rehydrate when no
@@ -1031,6 +1042,9 @@
         const [proMode, setProMode] = useState(false); // Empire Dashboard mode
         const [showConnect, setShowConnect] = useState(false); // hub: show platform connect / add-league view
         const [showOwnerSettings, setShowOwnerSettings] = useState(false); // hub: full-page Owner Settings view
+        // Lab: guest wordmark (see HUB_V2 above). Every render: identity can
+        // settle after boot, and the class is a cheap toggle.
+        useEffect(() => { if (HUB_V2) { try { document.body.classList.toggle('is-guest', isGuestOwner()); } catch (e) { /* ignore */ } } });
         // Hub toolbar (10+ leagues): search + sort. Lives here (not in
         // FranchisePicker) so the controlled inputs survive hub re-renders.
         const [hubQuery, setHubQuery] = useState('');
