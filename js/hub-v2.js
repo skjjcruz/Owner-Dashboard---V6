@@ -149,7 +149,7 @@
     //   empire: null | { onOpen(), onExplore(), freePrelive }
     function DhqHubV2(props) {
         const { leagues = [], sleeperLeagues = [], sleeperUserId = null, lastLeagueId = null, displayName = '',
-            syncing = false, notices = [], onSelect, onAddLeague, onOpenSettings, avatar = null, guest = false, links = {}, iconSrc = 'icon-192.png', empire = null } = props;
+            syncing = false, notices = [], onSelect, onAddLeague, onOpenSettings, avatar = null, guest = false, returning = false, links = {}, iconSrc = 'icon-192.png', empire = null } = props;
         const [query, setQuery] = React.useState('');
         const [showAll, setShowAll] = React.useState(false);
         const [wire, setWire] = React.useState('closed'); // closed | loading | open | error
@@ -223,7 +223,7 @@
 
             <main className="hv2-page">
                 <div className="hv2-welcome">
-                    <h1>{leagues.length ? 'Welcome back.' : 'Your home field.'}</h1>
+                    <h1>{(leagues.length || returning) ? 'Welcome back.' : 'Your home field.'}</h1>
                     <span className="hv2-sync-status" role="status">{statusText}</span>
                 </div>
                 {focus && <button type="button" className="hv2-resume" onClick={() => onSelect(focus)}>

@@ -318,11 +318,112 @@
         const raw = AppStorage.get(OWNER_CLUB_KEY);
         return { ...OWNER_CLUB_DEFAULTS, ...(raw && typeof raw === 'object' ? raw : {}) };
     }
-    function saveOwnerClub(patch) {
+    function saveOwnerClub(patch, opts) {
         const next = { ...getOwnerClub(), ...patch };
+        // Lab: an avatar change is stamped with who and when, kept in the
+        // device's avatar memory and saved on the account (see below).
+        const avatarChanged = HUB_V2 && patch && (Object.prototype.hasOwnProperty.call(patch, 'avatarId') || Object.prototype.hasOwnProperty.call(patch, 'avatarData'));
+        if (avatarChanged && !(opts && opts.fromSync)) {
+            next.avatarUpdatedAt = Date.now();
+            next.avatarOwner = avatarOwnerKeys()[0] || null;
+        }
         AppStorage.set(OWNER_CLUB_KEY, next);
+        if (avatarChanged && !(opts && opts.fromSync)) {
+            const entry = avatarEntryOf(next);
+            if (entry) { writeAvatarVault(avatarOwnerKeys(), entry); pushAvatarToAccount(entry); }
+        }
         try { window.dispatchEvent(new CustomEvent('dhq:owner-club-changed')); } catch (e) { /* non-fatal */ }
         return next;
+    }
+
+    // ── Lab: the avatar belongs to the person, not to the device's state ──
+    // (owner ruling 2026-10-05: "anytime a user signs into their account, the
+    // avatar is present"). Sign-in / sign-out / guest clean-ups wipe the club
+    // key above, so the avatar is also kept in two places they never touch:
+    //   1. the account (fw-profile ownerClub) — every sign-in, any device;
+    //   2. this device's avatar memory, keyed by account and by Sleeper name
+    //      (dhq_avatar_vault_v1) — instant, and covers a guest's own name.
+    // syncAvatarMemory() runs on every app load and puts the newest one back.
+    const AVATAR_VAULT_KEY = 'dhq_avatar_vault_v1';
+    function avatarOwnerKeys() {
+        const keys = [];
+        try {
+            const idn = window.OD && window.OD.identity;
+            const owner = idn && typeof idn.currentOwner === 'function' ? idn.currentOwner() : null;
+            if (owner && owner !== 'guest') keys.push(owner);
+            const h = idn && typeof idn.localHandle === 'function' ? idn.localHandle() : null;
+            if (h) keys.push('sleeper:' + String(h).toLowerCase());
+        } catch (e) { /* identity not loaded */ }
+        return keys;
+    }
+    function avatarEntryOf(club) {
+        if (!club || !club.avatarId) return null;
+        return { avatarId: club.avatarId, avatarData: club.avatarId === 'u' ? (club.avatarData || null) : null, updatedAt: Number(club.avatarUpdatedAt) || 0 };
+    }
+    function readAvatarVault() {
+        try { const v = JSON.parse(localStorage.getItem(AVATAR_VAULT_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; }
+    }
+    function writeAvatarVault(keys, entry) {
+        if (!keys.length || !entry) return;
+        const v = readAvatarVault();
+        keys.forEach(k => { v[k] = entry; });
+        try { localStorage.setItem(AVATAR_VAULT_KEY, JSON.stringify(v)); } catch (e) { /* storage full / blocked */ }
+    }
+    function accountAppToken() {
+        try {
+            const owner = window.OD && window.OD.identity && window.OD.identity.currentOwner ? window.OD.identity.currentOwner() : null;
+            if (!owner || owner.indexOf('account:') !== 0) return null;
+            const s = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
+            return (s && s.token) || null;
+        } catch (e) { return null; }
+    }
+    let avatarPushTimer = null;
+    function pushAvatarToAccount(entry) {
+        if (!HUB_V2 || !entry) return;
+        clearTimeout(avatarPushTimer);
+        avatarPushTimer = setTimeout(() => {
+            const token = accountAppToken();
+            if (!token) return;
+            const OD = window.OD || {};
+            const url = (OD.BACKEND_ENDPOINTS && OD.BACKEND_ENDPOINTS.fwProfile) || ((OD.SUPABASE_URL || '') + '/functions/v1/fw-profile');
+            try {
+                fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'apikey': OD.SUPABASE_ANON || '', 'Content-Type': 'application/json' }, body: JSON.stringify({ ownerClub: entry }) })
+                    .catch(err => window.wrLog && window.wrLog('avatar.push', err));
+            } catch (err) { window.wrLog && window.wrLog('avatar.push', err); }
+        }, 600);
+    }
+    let avatarSyncing = false;
+    async function syncAvatarMemory() {
+        if (!HUB_V2 || avatarSyncing) return;
+        avatarSyncing = true;
+        try {
+            const keys = avatarOwnerKeys();
+            if (!keys.length) return;
+            const club = getOwnerClub();
+            const vault = readAvatarVault();
+            const candidates = [];
+            const local = avatarEntryOf(club);
+            // The device's own copy counts only when it is this person's.
+            if (local && (!club.avatarOwner || keys.includes(club.avatarOwner))) candidates.push(local);
+            keys.forEach(k => { if (vault[k] && vault[k].avatarId) candidates.push(vault[k]); });
+            let server = null;
+            if (keys[0].indexOf('account:') === 0 && window.OD && typeof window.OD.loadProfile === 'function') {
+                try { const p = await window.OD.loadProfile(); server = (p && p.ownerClub) || null; } catch (e) { server = null; }
+                if (server && server.avatarId) candidates.push(server);
+            }
+            if (!candidates.length) return;
+            const best = candidates.reduce((a, b) => ((Number(b.updatedAt) || 0) > (Number(a.updatedAt) || 0) ? b : a));
+            if (best.avatarId !== club.avatarId || (best.avatarData || null) !== (club.avatarId === 'u' ? (club.avatarData || null) : null)) {
+                saveOwnerClub({ avatarId: best.avatarId, avatarData: best.avatarData || null, avatarUpdatedAt: Number(best.updatedAt) || 0, avatarOwner: keys[0] }, { fromSync: true });
+            }
+            writeAvatarVault(keys, best);
+            const serverBehind = !server || !server.avatarId || server.avatarId !== best.avatarId || (Number(server.updatedAt) || 0) < (Number(best.updatedAt) || 0);
+            if (keys[0].indexOf('account:') === 0 && serverBehind) pushAvatarToAccount(best);
+        } catch (e) {
+            window.wrLog && window.wrLog('avatar.sync', e);
+        } finally {
+            avatarSyncing = false;
+        }
     }
     // Hook: live view of the club object, synced across every mounted surface.
     function useOwnerClub() {
@@ -677,7 +778,7 @@
         const [bColor, setBColor] = React.useState(savedBuilder ? (savedBuilder[2] || '#D4AF37') : '#D4AF37');
         const BUILDER_COLORS = ['#D4AF37', '#E74C3C', '#2ECC71', '#3B82F6', '#A855F7', '#F97316', '#14B8A6', '#EC4899'];
         function applyBuilder(ini, col) {
-            const cleanIni = (ini || 'DH').toUpperCase().slice(0, 3);
+            const cleanIni = String(ini || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3) || 'DH';
             setClub({ avatarId: 'b:' + cleanIni + ':' + col });
         }
 
@@ -1049,6 +1150,8 @@
         // Lab: guest wordmark (see HUB_V2 above). Every render: identity can
         // settle after boot, and the class is a cheap toggle.
         useEffect(() => { if (HUB_V2) { try { document.body.classList.toggle('is-guest', isGuestOwner()); } catch (e) { /* ignore */ } } });
+        // Lab: put this person's avatar back (account, then device memory).
+        useEffect(() => { if (HUB_V2) syncAvatarMemory(); }, [sleeperUsername]);
         // Hub toolbar (10+ leagues): search + sort. Lives here (not in
         // FranchisePicker) so the controlled inputs survive hub re-renders.
         const [hubQuery, setHubQuery] = useState('');
@@ -2452,6 +2555,7 @@
                     onOpenSettings={() => setShowOwnerSettings(true)}
                     avatar={<OwnerAvatarBadge club={withDefaultAvatar(getOwnerClub(), sleeperUsername || (sleeperUser && sleeperUser.username) || '')} size={30} round />}
                     guest={isGuestOwner()}
+                    returning={!!(sleeperUsername || (sleeperUser && sleeperUser.username) || accountAppToken())}
                     links={{ home: DHQ_HOME_URL, discord: WR_DISCORD_URL, signup: 'landing.html?signin=new', signin: 'landing.html?signin' }}
                     iconSrc={iconSrc}
                     empire={EMPIRE_ENABLED ? {

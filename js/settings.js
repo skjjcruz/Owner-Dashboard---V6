@@ -37,7 +37,7 @@
                 // The account is gone, so is its identity on this device
                 // (handle, league pointers, club) and the owner stamp.
                 if (window.OD?.identity) { window.OD.identity.clearDeviceIdentity(); localStorage.removeItem(window.OD.identity.OWNER_KEY); }
-                ['fw_session_v1', 'od_auth_v1', 'od_display_name', 'od_avatar_emoji', 'dhq_notify_prefs_v1', 'dhq_owner_club_v1', 'dhq_remembered_member_v1'].forEach(k => localStorage.removeItem(k));
+                ['fw_session_v1', 'od_auth_v1', 'od_display_name', 'od_avatar_emoji', 'dhq_notify_prefs_v1', 'dhq_owner_club_v1', 'dhq_remembered_member_v1', 'dhq_avatar_vault_v1'].forEach(k => localStorage.removeItem(k));
             } catch { /* best effort */ }
             // Same sign-out as Settings (core.js dhqSignOut): also drops the
             // legacy token, the guest flag, the Google/Apple session and the
