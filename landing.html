@@ -1316,24 +1316,10 @@
         }
       }
       note.hidden = true;
-      // A device that belongs to an account (owner stamp): a returning
-      // account holder typing here would silently become a guest and lose
-      // their account's leagues. Offer the sign-in sheet first; a second
-      // submit continues as a guest (the guest never sees the account's
-      // leagues — beginGuest clears them).
+      // No "Welcome back — sign in" detour, for anyone (owner ruling
+      // 2026-10-05): Go always continues straight in as a guest. An account
+      // holder gets their account back by signing in again.
       var idn = window.OD && window.OD.identity;
-      var stamp = idn ? idn.getStamp() : null;
-      // Also an unstamped device that remembers a league (a signed-out user
-      // of an older build) — becoming a guest would clear it.
-      var remembers = !!(idn && !stamp && localStorage.getItem('wr_guest_v1') !== '1' && idn.localOnboarded());
-      // Lab: no detour — Go always continues as a guest (owner ruling
-      // 2026-10-05); signing in again restores an account's leagues.
-      if (((stamp && stamp !== 'guest') || remembers) && !form.dataset.guestOk && window.DHQ_LAB !== true) {
-        form.dataset.guestOk = '1';
-        try { openAuthSheet('signin'); } catch (err) {}
-        try { showAlert('success', 'Welcome back \u2014 sign in to your account. Not you? Close this and tap Go again to look around as a guest.'); } catch (err) {}
-        return;
-      }
       try { sessionStorage.setItem('dhq_connect_prefill', JSON.stringify({ platform: platform, value: v, ts: Date.now() })); } catch (err) {}
       try { if (idn) idn.beginGuest(); } catch (err) {}
       try{localStorage.setItem('wr_guest_v1','1')}catch(e){};window.location.href='connect-sleeper.html';
