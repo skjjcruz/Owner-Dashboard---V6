@@ -1321,7 +1321,8 @@
       // holder gets their account back by signing in again.
       var idn = window.OD && window.OD.identity;
       try { sessionStorage.setItem('dhq_connect_prefill', JSON.stringify({ platform: platform, value: v, ts: Date.now() })); } catch (err) {}
-      try { if (idn) idn.beginGuest(); } catch (err) {}
+      // The Sleeper name goes along: the same person keeps their stuff.
+      try { if (idn) idn.beginGuest(platform === 'sleeper' ? v : undefined); } catch (err) {}
       try{localStorage.setItem('wr_guest_v1','1')}catch(e){};window.location.href='connect-sleeper.html';
     });
   })();

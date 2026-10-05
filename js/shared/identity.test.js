@@ -360,6 +360,24 @@ test('beginGuest clears an account-stamped cache; a guest\'s own cache survives'
     assert.equal(guest.id.localHandle(), 'gina');
 });
 
+test('beginGuest(handle): the same Sleeper name keeps the device cache; a different name starts clean', () => {
+    const club = '{"avatarId":"h:KC"}';
+    const same = load({ local: { [STAMP]: 'account:uA', od_auth_v1: { username: 'Alice' }, dhq_owner_club_v1: club, draft_board_x: '[1]' } });
+    same.id.beginGuest('alice');
+    assert.equal(same.ls.getItem('dhq_owner_club_v1'), club, 'avatar kept');
+    assert.equal(same.ls.getItem('draft_board_x'), '[1]', 'boards kept');
+    assert.equal(same.id.localHandle(), 'Alice');
+    assert.equal(same.ls.getItem(STAMP), 'guest');
+    assert.equal(same.ls.getItem('wr_guest_v1'), '1');
+    const other = load({ local: { [STAMP]: 'account:uA', od_auth_v1: { username: 'alice' }, dhq_owner_club_v1: club } });
+    other.id.beginGuest('bob');
+    assert.equal(other.ls.getItem('dhq_owner_club_v1'), null, "someone else's avatar goes");
+    assert.equal(other.ls.getItem('od_auth_v1'), null);
+    const blank = load({ local: { [STAMP]: 'account:uA', od_auth_v1: { username: 'alice' }, dhq_owner_club_v1: club } });
+    blank.id.beginGuest('  ');
+    assert.equal(blank.ls.getItem('dhq_owner_club_v1'), null, 'no name = old rule');
+});
+
 // ── sign-out keep-list ──────────────────────────────────────────────────────
 const SB = 'sb-sxshiqyxhhifvtfqawbq-auth-token';
 test('signOutClear removes exactly the credentials and keeps the owner-stamped identity cache', async () => {
