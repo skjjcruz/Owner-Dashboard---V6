@@ -298,7 +298,7 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
         try {
             const sess = JSON.parse(localStorage.getItem('fw_session_v1') || 'null');
             const part = sess && sess.token && String(sess.token).split('.')[1];
-            const claims = part ? JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) : null;
+            const claims = part ? JSON.parse(window.atob(part.replace(/-/g, '+').replace(/_/g, '/'))) : null;
             const idn = window.OD && window.OD.identity;
             const handle = idn && typeof idn.localHandle === 'function' ? idn.localHandle() : null;
             if (!claims || !(Number(claims.exp) * 1000 > Date.now()) || !handle) return;
