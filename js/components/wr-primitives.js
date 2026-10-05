@@ -422,15 +422,25 @@
             style: {
                 position: 'fixed', inset: 0,
                 zIndex: 'var(--wr-z-sheet, 200)',
-                background: 'rgba(3, 4, 7, 0.6)',
-                animation: 'wrSheetScrim 0.18s ease',
-                // iOS ignores body overflow:hidden for touch — the scrim is a
-                // pure tap target, so killing its touch gestures stops drags
-                // from rubber-banding the page behind the sheet.
-                touchAction: 'none',
             },
-            onClick: (e) => { if (e.target === e.currentTarget && onClose) onClose(); },
         },
+            // The scrim is a SIBLING of the sheet, not its ancestor: iOS
+            // WebKit intersects touch-action up the ancestor chain, so a
+            // touchAction:'none' wrapper around the sheet could swallow pans
+            // inside the sheet body. Here it only covers the dimmed area —
+            // iOS ignores body overflow:hidden for touch, and killing the
+            // scrim's gestures stops drags rubber-banding the page behind.
+            h('div', {
+                className: 'wr-sheet-scrim',
+                'aria-hidden': 'true',
+                style: {
+                    position: 'absolute', inset: 0,
+                    background: 'rgba(3, 4, 7, 0.6)',
+                    animation: 'wrSheetScrim 0.18s ease',
+                    touchAction: 'none',
+                },
+                onClick: () => { if (onClose) onClose(); },
+            }),
             h('div', {
                 ref: sheetRef,
                 className: 'wr-sheet',

@@ -473,7 +473,7 @@
     // One side of the manual builder: owner select, added players/picks with value bars, a roster
     // picker, FAAB input, and a side total. ~29 deps (state, setters, helper closures, value fns)
     // passed via a tradeSideDeps bag. The new persistent-builder layout will refine this contract.
-    function TcTradeSide({ side, color, label, tradeIds, tradePickIds, tradeFaab, getPlayerValue, pickValueForParts, FAAB_RATE, rosterPlayersFor, tradeOwner, picksByOwner, comparePicksByDraftOrder, setTradeOwner, setSearchText, ownerOptions, playersData, MAX_VALUE, removePlayer, posColor, normPos, PICK_COLORS, ownerNameForRosterId, allRosters, removePick, pickLabel, searchText, TC_POS_ORDER, addPlayer, makePickId, addPick, setTradeFaab }) {
+    function TcTradeSide({ side, color, label, tradeIds, tradePickIds, tradeFaab, getPlayerValue, pickValueForParts, FAAB_RATE, rosterPlayersFor, tradeOwner, picksByOwner, comparePicksByDraftOrder, setTradeOwner, setSearchText, ownerOptions, playersData, MAX_VALUE, removePlayer, posColor, normPos, PICK_COLORS, ownerNameForRosterId, allRosters, removePick, pickLabel, searchText, TC_POS_ORDER, addPlayer, makePickId, addPick, setTradeFaab, compact, pickerOpen, setPickerOpen }) {
                 const ids = tradeIds[side];
                 const pickIds = tradePickIds[side];
                 const faab = tradeFaab[side] || 0;
@@ -500,6 +500,15 @@
                 // ("skjjcruz (Dirty Mik", "Filter 53 players & 1"). The native select
                 // stays (same picker, same handler) with its text hidden under a
                 // two-line owner / team label that ellipsizes; placeholder shortens.
+                // Phone builder sheet (compact): the roster list stays folded behind
+                // an "Add player or pick" toggle and opens inline (no nested
+                // 300px scroller) — the sheet body is the only thing that scrolls.
+                // Typing in the search box always shows the matches. The toggle
+                // state lives in TradeCalcTab: this is called as a plain function.
+                const pickerShown = !compact || !!(pickerOpen && pickerOpen[side]) || !!pickQuery;
+                // Compact: picking an asset folds the list again so the deal
+                // (and the updated score bar) is what's on screen.
+                const foldPicker = () => { if (compact && setPickerOpen) setPickerOpen(prev => ({ ...prev, [side]: false })); };
                 let tsPhone = false;
                 try { tsPhone = window.WR?.viewport ? !!window.WR.viewport().isPhone : window.matchMedia('(max-width: 767px)').matches; } catch (_) {}
                 const ownerSelect = (
@@ -578,7 +587,12 @@
                         {tradeOwner[side] && rosterPlayers !== null ? (
                             <div>
                                 <input className="tc-ta-roster-filter" placeholder={tsPhone ? 'Search roster…' : `Filter ${rosterPlayers.length} players${ownerPicksList.length ? ` & ${ownerPicksList.length} picks` : ''}...`} value={searchText[side]} onChange={e => setSearchText(prev => ({ ...prev, [side]: e.target.value }))} />
-                                <div className="tc-ta-roster-list-tall">
+                                {compact && setPickerOpen && !pickQuery && (
+                                    <button type="button" className="tc-ta-picker-toggle" aria-expanded={pickerShown} onClick={() => setPickerOpen(prev => ({ ...prev, [side]: !(prev && prev[side]) }))}>
+                                        {pickerShown ? 'Hide roster ▴' : `+ Add player or pick ▾`}
+                                    </button>
+                                )}
+                                {pickerShown && <div className={compact ? 'tc-ta-roster-list-tall tc-ta-roster-inline' : 'tc-ta-roster-list-tall'}>
                                     {rosterPlayers.length > 0 && (() => {
                                         const grouped = {};
                                         rosterPlayers.forEach(r => { if (!grouped[r.pos]) grouped[r.pos] = []; grouped[r.pos].push(r); });
@@ -588,7 +602,7 @@
                                                 {posPlayers.map(r => {
                                                     const added = ids.includes(r.id);
                                                     return (
-                                                        <div key={r.id} className={`tc-ta-roster-item${added?' tc-added':''}`} onClick={() => !added && addPlayer(side, r.id)}>
+                                                        <div key={r.id} className={`tc-ta-roster-item${added?' tc-added':''}`} onClick={() => { if (!added) { addPlayer(side, r.id); foldPicker(); } }}>
                                                             <span className="tc-ta-pos-dot" style={{ background: posColor(r.pos) }} />
                                                             <span style={{ flex:1, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</span>
                                                             <span className="tc-ta-player-meta">{r.team}</span>
@@ -611,7 +625,7 @@
                                                 const r2 = allRosters.find(x => x.owner_id === ownerId);
                                                 const isOwn2 = r2 && String(r2.roster_id) === String(fromRosterId);
                                                 return (
-                                                    <div key={pkId} className={`tc-ta-roster-item${added?' tc-added':''}`} onClick={() => !added && addPick(side, pkId)}>
+                                                    <div key={pkId} className={`tc-ta-roster-item${added?' tc-added':''}`} onClick={() => { if (!added) { addPick(side, pkId); foldPicker(); } }}>
                                                         <span className="tc-ta-pos-dot" style={{ background: pickColor }} />
                                                         <span className="tc-ta-pick-name" style={{ flex:1, fontWeight:600 }}>{pickLabel(year, round, fromRosterId, slot)}{!isOwn2 && via && <span style={{ fontSize:'0.74rem', color:'var(--silver)', opacity:0.6, marginLeft:'0.3rem' }}>via {via}</span>}</span>
                                                         <span className="tc-ta-player-val" style={{ color: pickColor }}>{val.toLocaleString()}</span>
@@ -623,7 +637,7 @@
                                     {rosterPlayers.length === 0 && filteredPicks.length === 0 && (
                                         <div className="tc-ta-roster-empty">No players or picks match{pickQuery ? ` "${searchText[side]}"` : ''}</div>
                                     )}
-                                </div>
+                                </div>}
                             </div>
                         ) : <div style={{ fontSize:'0.76rem', color:'var(--silver)', opacity:0.6, textAlign:'center', padding:'0.5rem' }}>Select an owner above to view their roster</div>}
 
@@ -1123,6 +1137,7 @@
         // state. Declared unconditionally (hook-order safety); inert off-phone.
         const [phPicksScope, setPhPicksScope] = useState('owned');   // 'owned' | 'league' — phone picks-board scope (Intent=Picks)
         const [phBuilderOpen, setPhBuilderOpen] = useState(false);   // WR.ActionBar → builder + verdict WR.Sheet
+        const [phPickerOpen, setPhPickerOpen] = useState({ A: false, B: false });   // builder sheet: roster list folded per side
         const [phFinderPanel, setPhFinderPanel] = useState(null);    // inline finder-control disclosure: null|'intent'|'partner'|'pos'|'sort'
         const [phLogRowId, setPhLogRowId] = useState(null);          // Trade Log row → deal WR.Sheet
         // Rookie/prospect join — name→prospect index rebuilt when the rookie CSV lands
@@ -5712,21 +5727,36 @@
             // ── Builder sheet — the builder's content plus the FULL TcVerdictPanel
             // (its internal free/Pro split unchanged) and the Alex second opinion
             // (its own trade-quick-check gate, user-initiated).
+            // Opens near full height (was the 85dvh default, which left the
+            // verdict below the fold); a pinned score bar keeps both totals and
+            // the grade in view while the one sheet body scrolls.
+            const _phPickerDeps = { compact: true, pickerOpen: phPickerOpen, setPickerOpen: setPhPickerOpen };
+            const _scoreNum = (n) => (n > 0 ? Math.round(n).toLocaleString() : '--');
             const builderSheetEl = (
-                <Sheet open={phBuilderOpen} onClose={() => setPhBuilderOpen(false)} title={_verdict.hasTrade ? 'Live deal' : 'Trade builder'} desktop={null}>
+                <Sheet open={phBuilderOpen} onClose={() => setPhBuilderOpen(false)} title={_verdict.hasTrade ? 'Live deal' : 'Trade builder'} height="calc(100dvh - var(--sat, 0px) - 8px)" desktop={null}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '8px 14px 4px' }}>
+                        <div className="tc-builder-scorebar" style={{ position: 'sticky', top: 0, zIndex: 9, margin: '-8px -14px 0', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--k-0a0b0d, #0a0b0d)', borderBottom: '1px solid var(--ov-4, rgba(255,255,255,0.07))', fontFamily: MONO, fontSize: MICRO, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                            <span style={{ color: 'var(--silver)', whiteSpace: 'nowrap' }}>Send <b style={{ color: 'var(--k-5dade2, #5dade2)', fontSize: '0.9rem' }}>{_scoreNum(_verdict.totalA)}</b></span>
+                            <span style={{ color: 'var(--silver)', whiteSpace: 'nowrap' }}>Get <b style={{ color: 'var(--k-e74c3c, #e74c3c)', fontSize: '0.9rem' }}>{_scoreNum(_verdict.totalB)}</b></span>
+                            {_verdict.hasTrade
+                                ? <button type="button" onClick={() => { try { document.getElementById('tc-builder-verdict')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {} }}
+                                    style={{ marginLeft: 'auto', minHeight: '36px', padding: '4px 10px', background: 'transparent', border: '1px solid ' + (_verdict.verdictColor || 'var(--gold)'), borderRadius: 'var(--card-radius-sm, 8px)', color: _verdict.verdictColor || 'var(--gold)', fontFamily: MONO, fontSize: MICRO, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                                    {(_verdict.grade?.grade || '--') + ' ' + (_verdict.diffDisplay || '') + ' ▾'}
+                                </button>
+                                : <span style={{ marginLeft: 'auto', color: 'var(--text-muted, #8B8B96)', whiteSpace: 'nowrap' }}>No deal yet</span>}
+                        </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--silver)', opacity: 0.6, lineHeight: 1.5 }}>
                             Values sourced from <strong style={{ color: 'var(--gold)' }}>{skinVocabulary.valueShortLabel || 'DHQ'} Engine</strong> ({valueSourceLabel}).
                         </div>
                         <div className="tc-builder-sides" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'start' }}>
-                            {TcTradeSide({ side: 'A', color: 'var(--k-5dade2, #5dade2)', label: 'YOU SEND', ..._tsDeps })}
-                            {TcTradeSide({ side: 'B', color: 'var(--k-e74c3c, #e74c3c)', label: 'YOU GET', ..._tsDeps })}
+                            {TcTradeSide({ side: 'A', color: 'var(--k-5dade2, #5dade2)', label: 'YOU SEND', ..._tsDeps, ..._phPickerDeps })}
+                            {TcTradeSide({ side: 'B', color: 'var(--k-e74c3c, #e74c3c)', label: 'YOU GET', ..._tsDeps, ..._phPickerDeps })}
                         </div>
                         {_verdict.hasTrade
-                            ? <React.Fragment>
+                            ? <div id="tc-builder-verdict" style={{ display: 'flex', flexDirection: 'column', gap: '12px', scrollMarginTop: '60px' }}>
                                 {React.createElement(TcVerdictPanel, { ..._verdict, FAAB_RATE, leagueHasPicks, valueLabel: valueColLabel })}
                                 {renderAlexVerdict()}
-                            </React.Fragment>
+                            </div>
                             : <div className="tc-dhq-empty">Add assets to either side — the verdict updates live.</div>}
                     </div>
                 </Sheet>
