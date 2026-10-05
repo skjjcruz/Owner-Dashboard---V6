@@ -1317,14 +1317,14 @@
       }
       note.hidden = true;
       // No "Welcome back — sign in" detour, for anyone (owner ruling
-      // 2026-10-05): Go continues straight in. A member who signed out on
-      // this device and types their own Sleeper name is signed back in as
-      // that member (js/core.js remembers them, Lab only); anyone else
-      // comes in as a guest.
+      // 2026-10-05): Go continues straight in.
+      //
       // A member still signed in on this device (the hub's DHQ icon opens
-      // this page): their own Sleeper name just goes back in as the member;
-      // any other name signs the member out FIRST, so the guest's league can
-      // never be written onto the member's account (2026-10-05 incident).
+      // this page): their own Sleeper name goes straight back in as the
+      // member; an MFL / ESPN id connects to the account; any other Sleeper
+      // name signs the member out FIRST — and waits for the sign-out to
+      // finish — so the guest's league can never be written onto the
+      // member's account (2026-10-05 incident).
       var idnL = window.OD && window.OD.identity;
       if (idnL && typeof idnL.currentOwner === 'function') {
         var liveOwner = null;
@@ -1338,17 +1338,30 @@
         if (liveOwner && liveOwner !== 'guest' && liveOk) {
           var myHandle = (idnL.getStamp && idnL.getStamp() === liveOwner && idnL.localHandle) ? idnL.localHandle() : null;
           if (platform !== 'sleeper') {
-            // A member adding an MFL / ESPN league: connect it to the account.
             try { sessionStorage.setItem('dhq_connect_prefill', JSON.stringify({ platform: platform, value: v, ts: Date.now() })); } catch (err) {}
             window.location.href = 'connect-sleeper.html';
             return;
           }
           if (myHandle && String(myHandle).toLowerCase() === v.toLowerCase()) { window.location.href = 'index.html'; return; }
-          try { if (typeof idnL.signOutClear === 'function') idnL.signOutClear({ supabase: (typeof getSbClient === 'function' ? getSbClient() : null) }); } catch (err) {}
-          try { localStorage.removeItem('fw_session_v1'); localStorage.removeItem('od_session_v1'); } catch (err) {}
           try { localStorage.removeItem('dhq_remembered_member_v1'); } catch (err) {}
+          var outDone = null;
+          try { if (typeof idnL.signOutClear === 'function') outDone = idnL.signOutClear({ supabase: (typeof getSbClient === 'function' ? getSbClient() : null) }); } catch (err) { outDone = null; }
+          try { localStorage.removeItem('fw_session_v1'); localStorage.removeItem('od_session_v1'); } catch (err) {}
+          var resumed = false;
+          var resume = function () { if (resumed) return; resumed = true; continueIn(platform, v); };
+          Promise.resolve(outDone).then(resume, resume);
+          setTimeout(resume, 2000);
+          return;
         }
       }
+      continueIn(platform, v);
+    });
+
+    // Signed out (or just signed out): a member who signed out on this
+    // device and types their own Sleeper name is signed back in as that
+    // member (js/core.js remembers them, Lab only); anyone else comes in
+    // as a guest.
+    function continueIn(platform, v) {
       if (platform === 'sleeper' && window.DHQ_LAB === true) {
         try {
           var rem = JSON.parse(localStorage.getItem('dhq_remembered_member_v1') || 'null');
@@ -1372,7 +1385,7 @@
       // The Sleeper name goes along: the same person keeps their stuff.
       try { if (idn) idn.beginGuest(platform === 'sleeper' ? v : undefined); } catch (err) {}
       try{localStorage.setItem('wr_guest_v1','1')}catch(e){};window.location.href='connect-sleeper.html';
-    });
+    }
   })();
 </script>
 <script>
