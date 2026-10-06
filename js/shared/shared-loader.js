@@ -33,6 +33,14 @@
         return /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/i.test(window.location.hostname || '');
     }
 
+    // Script-source overrides from the URL (?sharedBase=, ?shared=remote) are
+    // developer tools, honored ONLY on a local dev host or file://. On a
+    // deployed site a crafted link could otherwise make the page load
+    // anyone's script (security fix 2026-10-06).
+    function devOverridesAllowed() {
+        return isLocalHost() || window.location.protocol === 'file:';
+    }
+
     function isGitHubPagesHost() {
         return /(^|\.)github\.io$/i.test(window.location.hostname || '');
     }
@@ -52,14 +60,14 @@
     }
 
     function resolveBase() {
-        const explicit = params().get('sharedBase') || window.WARROOM_SHARED_BASE;
+        const explicit = (devOverridesAllowed() && params().get('sharedBase')) || window.WARROOM_SHARED_BASE;
         if (explicit) return cleanBase(explicit);
         // War Room ships its own copy of the shared engine in reconai-shared/
         // (synced from the canonical ReconAI repo at build time and bundled into
         // the Pages artifact). Always load it same-origin from that vendored copy
         // so the app does NOT depend on the separate /ReconAI/ Scout deploy being
         // live. `?shared=remote` stays as a debug-only escape hatch.
-        if (params().get('shared') === 'remote') return cleanBase(config.remoteBase);
+        if (devOverridesAllowed() && params().get('shared') === 'remote') return cleanBase(config.remoteBase);
         return cleanBase(config.localBase || defaultLocalBase());
     }
 
@@ -74,7 +82,10 @@
     }
 
     function load(file, version) {
-        document.write(`<script src="${src(file, version)}"><\/script>`);
+        const url = src(file, version);
+        // Never write markup-breaking characters into the tag.
+        if (/["'<>\s]/.test(url)) { console.error('[shared-loader] refused unsafe script URL'); return; }
+        document.write(`<script src="${url}"><\/script>`);
     }
 
     function loadMany(files) {
