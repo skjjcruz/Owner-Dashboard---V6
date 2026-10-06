@@ -280,6 +280,26 @@ function CompareTab({
         window.addEventListener('wr:open-compare', onOpenCompare);
         return () => window.removeEventListener('wr:open-compare', onOpenCompare);
     }, []);
+    // Owner DNA → Roster Audit tap lands here with focus 'roster': once the
+    // duel's Full Roster block renders, scroll to it and consume the one-shot
+    // focus + preselect (so a later visit keeps the owner's own pick).
+    React.useEffect(() => {
+        if (window._wrCompareFocus !== 'roster') return undefined;
+        let tries = 0, timer = null;
+        const go = () => {
+            const el = document.getElementById('wr-compare-full-roster');
+            if (el) {
+                window._wrCompareFocus = null;
+                window._wrComparePreselect = null;
+                try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
+                return;
+            }
+            if (++tries < 60) timer = setTimeout(go, 250);
+            else window._wrCompareFocus = null;
+        };
+        timer = setTimeout(go, 150);
+        return () => clearTimeout(timer);
+    }, [compareTeamId]);
 
     // Players mode deep-link: a player card's Compare button sets
     // window._wrAddComparePlayer then fires wr:add-compare-player. We consume the
@@ -2452,7 +2472,7 @@ function CompareTab({
 
                 {/* Full roster sits right under the matchup read card (owner
                     ask 2026-10-06) — was at the page bottom. */}
-                <div style={{ marginBottom: '16px' }}>
+                <div id="wr-compare-full-roster" style={{ marginBottom: '16px', scrollMarginTop: '120px' }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', marginBottom: '10px' }}>
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: '0.72rem', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                             Full Roster Comparison by Position Grouping{histSeason ? (histGridActive ? ' — ' + histSeason + ' rosters' : ' — ' + histSeason + ' rosters unavailable, showing current') : ''}

@@ -3357,6 +3357,25 @@
         }
 
         // ── renderOwnerDna ──
+        // Roster Audit tap (owner ask 2026-10-06): jump to that owner's roster —
+        // Team Comparison (duel) against them, scrolled to the Full Roster block.
+        // Your own team opens My Roster instead. Compare reads the preselect +
+        // scope on mount and consumes the 'roster' focus once it has scrolled.
+        function openOwnerRoster(rosterId) {
+            try {
+                if (rosterId == null) return;
+                const nav = window.wrNavigateTab;
+                if (typeof nav !== 'function') return;
+                if (String(rosterId) === String(myRosterId)) { nav('myteam'); return; }
+                const lid = currentLeague?.league_id || currentLeague?.id || 'default';
+                window._wrComparePreselect = String(rosterId);
+                window._wrCompareFocus = 'roster';
+                try { localStorage.setItem('wr_compare_scope_' + lid, 'duel'); localStorage.setItem('wr_compare_team_' + lid, String(rosterId)); } catch (_) {}
+                nav('compare');
+                setTimeout(() => window.dispatchEvent(new CustomEvent('wr:open-compare', { detail: { rosterId: String(rosterId) } })), 50);
+            } catch (_) { /* noop */ }
+        }
+
         function renderOwnerDna() {
             if (!assessments.length) return <div style={{ color:'var(--silver)', textAlign:'center', padding:'2rem' }}>No roster data.</div>;
             // Phase 5: Two-pane layout — left pane is the Power-Ranking-sorted owner
@@ -3714,9 +3733,12 @@
                     </div>
 
                     <div className="tc-owner-profile-grid">
-                        <section className="tc-owner-panel">
+                        <section className="tc-owner-panel tc-owner-panel-link" role="button" tabIndex={0}
+                            title={String(a.rosterId) === String(myRosterId) ? 'Open My Roster' : 'Open their full roster'}
+                            onClick={() => openOwnerRoster(a.rosterId)}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openOwnerRoster(a.rosterId); } }}>
                             <div className="tc-owner-panel-head">
-                                <span>Roster Audit</span>
+                                <span>Roster Audit <b className="tc-owner-panel-go">View roster ▸</b></span>
                                 <em>{a.strengths?.length ? `Surplus ${a.strengths.join(', ')}` : 'No clean surplus'}{a.needs?.length ? ` · Needs ${a.needs.slice(0, 4).map(n => n.pos).join(', ')}` : ''}</em>
                             </div>
                             <div className="tc-owner-pos-table">

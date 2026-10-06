@@ -1569,6 +1569,10 @@ WRShared.preloadMany(WR_SHARED_FILES);
     .tc-owner-signal-grid em, .tc-owner-panel-head em { display: block; color: var(--silver); opacity: 0.65; font-style: normal; font-size: 0.68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tc-owner-profile-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr); gap: 10px; margin-bottom: 10px; }
     .tc-owner-panel { border: 1px solid rgba(212,175,55,0.14); background: rgba(0,0,0,0.12); border-radius: 8px; padding: 10px; min-width: 0; }
+    /* Roster Audit is a link to that owner's roster (owner ask 2026-10-06). */
+    .tc-owner-panel-link { cursor: pointer; transition: border-color 0.12s, background 0.12s; }
+    .tc-owner-panel-link:hover, .tc-owner-panel-link:focus-visible { border-color: rgba(212,175,55,0.45); background: rgba(212,175,55,0.05); outline: none; }
+    .tc-owner-panel-go { float: right; font-weight: 700; letter-spacing: 0.04em; color: var(--gold); opacity: 0.85; }
     .tc-owner-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; padding-bottom: 7px; border-bottom: 1px solid rgba(212,175,55,0.11); }
     .tc-owner-panel-head em { text-align: right; text-transform: none; letter-spacing: 0; }
     .tc-owner-pos-table { display: flex; flex-direction: column; gap: 6px; }
@@ -3240,7 +3244,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      group, when the owning surface first calls wrLoadModuleGroup('<group>'). -->
 <script src="js/module-loader.js?v=20260927fix3"></script>
 <script type="text/babel" src="js/settings.js?v=20261005avat1"></script>
-<script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20261006deal2"></script>
+<script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20261006dna1"></script>
 <script type="text/babel" src="js/post-draft.js?v=20260907b112"></script>
 <!-- FA waiver tools (C2 wave): stat catalog + stat math, market display helpers, waiver engine (fa group, before free-agency.js) -->
 <script type="text/babel" data-wr-defer="fa" src="js/shared/stat-catalog.js?v=20260927waivers1"></script>
@@ -3341,7 +3345,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script type="text/babel" data-wr-defer="analysis" src="js/tabs/league-map.js?v=20261001tier1"></script>
 <script type="text/babel" data-wr-defer="myteam" src="js/tabs/my-team.js?v=20261006rack1"></script>
 <!-- Compare: extracted from My Roster's former sub-view, now a top-level ROSTER-group tab. -->
-<script type="text/babel" data-wr-defer="compare" src="js/tabs/compare.js?v=20261006rack2"></script>
+<script type="text/babel" data-wr-defer="compare" src="js/tabs/compare.js?v=20261006dna1"></script>
 <script type="text/babel" data-wr-defer="analysis" src="js/tabs/analytics.js?v=20261001tier1"></script>
 <script type="text/babel" data-wr-defer="trophies" src="js/tabs/trophy-room.js?v=20260926qa1"></script>
 <script type="text/babel" src="js/tabs/calendar.js?v=20260927faab1"></script>
