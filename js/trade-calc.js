@@ -1097,7 +1097,9 @@
         // loads before the babel chain, so the hook always exists here.
         const _vp = window.WR.useViewport();
         const [tcTab, _setTcTabRaw] = useState('desk');
-        const [builderExpanded, setBuilderExpanded] = useState(false); // persistent builder panel open/closed
+        // Opens by default (owner ruling 2026-10-06): the Trade Builder is the
+        // Trade Room's first view; the TRADE BUILDER chip / Close still fold it.
+        const [builderExpanded, setBuilderExpanded] = useState(true); // persistent builder panel open/closed
         // ── Typed finder query (Phase 4a) — the single finder input, replacing the
         // legacy mode/focus-pid/partner trio of states ──
         // { intent: 'best'|'help'|'shop'|'picks',
