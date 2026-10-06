@@ -80,6 +80,22 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
     };
     const canOpenPlayer = !!(window.WR?.openPlayerCard || typeof window._wrSelectPlayer === 'function' || typeof window.openPlayerModal === 'function');
 
+    // "This week" follows Sleeper's own final-week marker (last_scored_leg),
+    // read fresh — the league object held since load can predate Monday
+    // night — so a finished week is never shown as the upcoming one.
+    const [freshScored, setFreshScored] = React.useState(0);
+    React.useEffect(() => {
+        if (!supported || !leagueId) return undefined;
+        let alive = true;
+        window.fetch('https://api.sleeper.app/v1/league/' + encodeURIComponent(leagueId), { cache: 'no-store' })
+            .then(r => (r.ok ? r.json() : null))
+            .then(l => { if (alive && l && l.settings) setFreshScored(Number(l.settings.last_scored_leg) || 0); })
+            .catch(() => {});
+        return () => { alive = false; };
+    }, [supported, leagueId, window.S?.nflState?.week, window.S?.nflState?.display_week]);
+    const lastScored = Math.max(Number(currentLeague?.settings?.last_scored_leg) || 0, freshScored);
+    const wireWeek = LLS?.settledWeek ? LLS.settledWeek(currentLeague, lastScored) : undefined;
+
     // ── Live NFL desk (phase-aware). Declared first: its live state sets the
     //    league-score poll cadence below. ──
     const [nflScores, setNflScores] = React.useState([]);
@@ -111,7 +127,10 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
                 return;
             }
             busy = true;
-            const ph = NC.currentPhase();
+            let ph = NC.currentPhase();
+            // Regular season: follow the Wire's week, not Sleeper's lagging
+            // display_week, so a finished week is "last week" here too.
+            if (Number(ph.seasontype) === 2 && Number(wireWeek) > Number(ph.week)) ph = { ...ph, week: Number(wireWeek) };
             const previous = NC.previousPhase(ph);
             const key = `${ph.season}|${ph.seasontype}|${ph.week}`;
             const prevKey = previous ? `${previous.season}|${previous.seasontype}|${previous.week}` : '';
@@ -142,13 +161,13 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         document.addEventListener('visibilitychange', onVisible);
         start();
         return () => { alive = false; if (timer) clearTimeout(timer); if (warmup) clearTimeout(warmup); document.removeEventListener('visibilitychange', onVisible); };
-    }, [supported]);
+    }, [supported, wireWeek]);
     // Live = in progress, OR kickoff passed and not final (a blocked ESPN read
     // or a stale relay can still say 'pre' mid-game — review S6).
     const nflLive = (nflScores || []).some(g => wireGameLive(g));
 
     // ── This league's scoreboard (shared client; polls only during live games) ──
-    const board = LLS.useScores({ league: currentLeague, enabled: supported, interval: nflLive ? undefined : 0 });
+    const board = LLS.useScores({ league: currentLeague, week: wireWeek, enabled: supported, interval: nflLive ? undefined : 0 });
     // useScores returns a fresh object every render; memos depend on its
     // contents, not its identity, so typing in search doesn't rebuild the
     // edition (review S9).

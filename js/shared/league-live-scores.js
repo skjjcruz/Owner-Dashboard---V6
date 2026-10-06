@@ -47,6 +47,22 @@
         }
         return clamp(nfl.display_week || nfl.week || state.currentWeek || league?.settings?.leg || 1);
     }
+    // The week the Wire treats as "this week" (owner report 2026-10-06).
+    // Sleeper's display_week lags: after Monday night's final it keeps
+    // pointing at the finished week for a day or two, so "display_week - 1"
+    // read the week BEFORE as the latest finished one. Sleeper's own
+    // settings.last_scored_leg says which week is final, so in the regular
+    // season "this week" is never earlier than the week after it.
+    function settledWeek(league, lastScored) {
+        const base = currentWeek(league);
+        const nfl = (root.S || {}).nflState || {};
+        const season = Number(league && league.season), live = Number(nfl.season);
+        if (season && live && season !== live) return base;
+        if (nfl.season_type && nfl.season_type !== 'regular') return base;
+        const scored = Math.floor(Number(lastScored));
+        if (!(scored >= 1)) return base;
+        return Math.max(base, Math.min(18, scored + 1));
+    }
     function rosterPoints(row) {
         return number(row?.custom_points) ?? number(row?.points);
     }
@@ -200,5 +216,5 @@
         }, [key]);
         return { ...(result.key === key ? result.state : empty(week, isSupported)), refresh };
     }
-    App.LeagueLiveScores = { INTERVAL, supported, currentWeek, rosterPoints, playerPoints, groupRows, createClient, useScores };
+    App.LeagueLiveScores = { INTERVAL, supported, currentWeek, settledWeek, rosterPoints, playerPoints, groupRows, createClient, useScores };
 })(typeof window !== 'undefined' ? window : globalThis);

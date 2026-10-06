@@ -23,7 +23,10 @@
         const range = root.WrWireStories.bounds(league);
         const historical = Number(league.season) < Number(nfl.season);
         const postseason = String(league.season) === String(nfl.season) && nfl.season_type === 'post';
-        const week = historical || postseason ? range.end + 1 : nfl.season_type === 'regular' ? Math.max(1, Math.min(18, Number(nfl.display_week || nfl.week) || 1)) : 1;
+        // Sleeper's display_week lags a finished week by a day or two; its
+        // last_scored_leg says which week is final (owner report 2026-10-06).
+        const scored = Math.floor(Number(league.settings?.last_scored_leg)) || 0;
+        const week = historical || postseason ? range.end + 1 : nfl.season_type === 'regular' ? Math.max(1, Math.min(18, Math.max(Number(nfl.display_week || nfl.week) || 1, scored + 1))) : 1;
         return { start: range.start, end: Math.min(range.end, week - 1), week, live: !historical && !postseason && Number(league.season) === Number(nfl.season) };
     }
     async function load({ leagues, accountId = '', signal, force = false, onUpdate, fetcher = (...args) => root.fetch(...args), now = Date.now }) {

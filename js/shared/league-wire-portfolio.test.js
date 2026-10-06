@@ -130,6 +130,13 @@ test('C2 all-league Wire: progressive editions, fair coverage, filters, account 
         await api.load({ leagues, signal: ended.signal, fetcher, onUpdate: () => updates++ }); assert.equal(updates, 0);
         assert.equal(api.period({ ...leagues[0], season: '2025' }, { season: '2026', week: 2 }).end, 14);
         assert.equal(api.period(leagues[0], { season: '2026', season_type: 'pre', week: 4 }).end, 0);
+        // display_week lag after a final (owner report 2026-10-06): Sleeper says
+        // week 4 is scored while still displaying week 4 -> results through 4.
+        const scored4 = { ...leagues[0], settings: { ...(leagues[0].settings || {}), last_scored_leg: 4 } };
+        const lag = api.period(scored4, { season: '2026', season_type: 'regular', week: 5, display_week: 4 });
+        assert.equal(lag.week, 5);
+        assert.equal(lag.end, Math.min(root.WrWireStories.bounds(scored4).end, 4));
+        assert.equal(api.period(leagues[0], { season: '2026', season_type: 'regular', week: 5, display_week: 4 }).week, 4, 'no marker: unchanged');
         const ui = fs.readFileSync(path.join(__dirname, '..', 'components', 'league-wire-portfolio.js'), 'utf8');
         assert(ui.includes('showModal()') && ui.includes('onCancel={onClose}') && ui.includes('opener.current?.isConnected'));
         assert(fs.readFileSync(path.join(__dirname, '..', 'components', 'league-wire.js'), 'utf8').includes('setAllWireOpen(true)'), 'the league Wire opens the all-leagues edition');

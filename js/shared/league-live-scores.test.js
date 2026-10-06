@@ -41,6 +41,23 @@ test('C2: scoring helpers, grouping and season/week selection', () => {
     globalThis.S.nflState.season_type = 'regular';
 });
 
+test('settledWeek: a finished week is never "this week" (display_week lag)', () => {
+    // Mon-night final: Sleeper still displays week 4 but says week 4 is scored.
+    globalThis.S = { nflState: { season: '2026', week: 5, display_week: 4, season_type: 'regular' } };
+    assert.equal(L.currentWeek(league), 4);
+    assert.equal(L.settledWeek(league, 4), 5);
+    // Mid-week normal case and live games: unchanged.
+    assert.equal(L.settledWeek(league, 3), 4);
+    assert.equal(L.settledWeek(league, 0), 4);
+    assert.equal(L.settledWeek(league, undefined), 4);
+    // Never past week 18; other seasons / post-season untouched.
+    assert.equal(L.settledWeek(league, 18), 18);
+    assert.equal(L.settledWeek({ season: '2025', settings: { leg: 17 } }, 17), 17);
+    globalThis.S.nflState.season_type = 'post';
+    assert.equal(L.settledWeek(league, 17), 18);
+    globalThis.S.nflState.season_type = 'regular';
+});
+
 test('our leagues: _platform marker, MFL/ESPN/Yahoo ids are unsupported', () => {
     assert.equal(L.supported({ league_id: '1', _platform: 'espn' }), false);
     assert.equal(L.supported({ id: 'mfl_10005_2026', _platform: 'mfl' }), false);
