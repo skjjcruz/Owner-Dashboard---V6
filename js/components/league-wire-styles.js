@@ -134,6 +134,11 @@ dialog.wr-journal .wr-journal-bar{position:sticky;top:0;z-index:5}
 .wr-journal-art.is-history>strong{font:700 clamp(28px,5vw,76px) var(--wj-display);color:var(--wj-accent)}
 .wr-journal-story:not(.is-lead) .wr-journal-art.is-history>strong{font-size:1.6rem}
 .wr-journal-story.is-lead>.wr-journal-art{max-height:200px}
+/* Wide screens: the lead runs across the full width (picture beside the
+   headline) and the stories fill two even columns beneath it — a short lead
+   can no longer leave an empty box beside a long story column (owner report
+   2026-10-06). Narrow screens keep the single stacked column. */
+@media(min-width:1101px){.wr-journal-main{grid-template-columns:minmax(0,1fr)}.wr-journal-story.is-lead{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:28px;align-items:start}.wr-journal-story.is-lead>.wr-journal-art{max-height:none;height:100%;min-height:230px;margin:0}.wr-journal-main>.wr-journal-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:28px;align-items:start;border-left:0;padding-left:0;margin-top:24px;border-top:1px solid var(--wj-rule)}.wr-journal-main>.wr-journal-grid>.wr-journal-story:nth-child(-n+2){padding-top:17px}}
 .wr-journal-story.is-lead .wr-journal-art-teams{inset:38px 14px 50px}
 .wr-journal-story.is-lead .wr-journal-art-teams>div{gap:6px}
 .wr-journal-story.is-lead .wr-journal-art-teams>div>.wr-journal-team-badge{width:clamp(44px,5vw,76px);height:clamp(44px,5vw,76px)}
