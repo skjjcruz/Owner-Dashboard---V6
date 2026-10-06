@@ -191,6 +191,50 @@ function IntelligenceBriefWidget({
 	        window.addEventListener('wr:proj-updated', onProj);
 	        return () => { alive = false; window.removeEventListener('wr:proj-updated', onProj); };
 	    }, [faBidLeagueId, currentLeague?.season]);
+	    // Last week's win (owner ask 2026-10-06): when your most recent SCORED
+	    // head-to-head week was a win, the brief opens with it. Sleeper only —
+	    // settings.last_scored_leg is Sleeper's own "this week is final" marker
+	    // (truth law: no guessing from live, half-played scores). A loss, tie,
+	    // bye, other platform or missing data leaves the brief as it was.
+	    // The dashboard remounts this widget several times while a league loads,
+	    // so the answer is cached per league+week+roster (false = not a win):
+	    // a remount shows it at once instead of blinking out and back.
+	    const _lwLeagueId = String(currentLeague?.league_id || currentLeague?.id || '');
+	    const _lwWeek = Number(currentLeague?.settings?.last_scored_leg) || 0;
+	    const _lwStatus = String(currentLeague?.status || '');
+	    const _lwRid = myRoster?.roster_id != null ? String(myRoster.roster_id) : '';
+	    const _lwKey = _lwLeagueId + '|' + _lwWeek + '|' + _lwRid;
+	    const _lwCache = (window.__dhqLastWinCache = window.__dhqLastWinCache || {});
+	    const [lastWinState, setLastWin] = useState(() => _lwCache[_lwKey] || null);
+	    const lastWin = (lastWinState && lastWinState.key === _lwKey) ? lastWinState : (_lwCache[_lwKey] || null);
+	    useEffect(() => {
+	        if (!/^\d+$/.test(_lwLeagueId) || !_lwWeek || !_lwRid) return undefined;
+	        if (_lwStatus !== 'in_season' && _lwStatus !== 'post_season') return undefined;
+	        if (_lwKey in _lwCache) return undefined;
+	        let alive = true;
+	        const get = typeof window.fetchMatchups === 'function'
+	            ? () => window.fetchMatchups(_lwLeagueId, _lwWeek)
+	            : () => fetch('https://api.sleeper.app/v1/league/' + _lwLeagueId + '/matchups/' + _lwWeek).then(r => (r.ok ? r.json() : []));
+	        Promise.resolve().then(get).then(rows => {
+	            if (!Array.isArray(rows) || !rows.length) return;
+	            _lwCache[_lwKey] = false;
+	            const pts = r => Number(r.custom_points != null ? r.custom_points : r.points) || 0;
+	            const mine = rows.find(r => String(r.roster_id) === _lwRid);
+	            if (!mine || mine.matchup_id == null) return;
+	            const opp = rows.find(r => String(r.roster_id) !== _lwRid && String(r.matchup_id) === String(mine.matchup_id));
+	            if (!opp || !(pts(mine) > pts(opp))) return;
+	            const rosters = currentLeague?.rosters || [];
+	            const users = currentLeague?.users || window.S?.leagueUsers || [];
+	            const oppRoster = rosters.find(r => String(r.roster_id) === String(opp.roster_id));
+	            const u = oppRoster && users.find(x => x && String(x.user_id) === String(oppRoster.owner_id));
+	            const oppName = (u && (u.display_name || u.username)) || (oppRoster?.metadata?.team_name) || ('Team ' + opp.roster_id);
+	            const win = { key: _lwKey, week: _lwWeek, oppName, my: pts(mine), opp: pts(opp) };
+	            _lwCache[_lwKey] = win;
+	            if (alive) setLastWin(win);
+	        }).catch(() => {});
+	        return () => { alive = false; };
+	    }, [_lwKey, _lwStatus]);
+
 	    const briefRosterSig = (currentLeague?.rosters || []).map(r => r.roster_id + ':' + (Number(r.settings?.waiver_budget_used) || 0) + ':' + (r.players || []).length).join(',');
 
 	    // Best waiver target
@@ -614,6 +658,12 @@ function IntelligenceBriefWidget({
         // (owner's brief spec 2026-07-21). The lead read is 📰 on a quiet day
         // and flips to 👀 whenever ANY material change or trade surfaces.
         const lines = [];
+        // Line 0 — last week's win (only when it was a win; see lastWin).
+        if (lastWin) {
+            const _f = n => n.toFixed(2);
+            lines.push({ key: 'win', icon: '🏆', target: 'lineup', src: 'Game Day',
+                body: ['Nice win in Week ' + lastWin.week + '! You beat ', React.createElement('strong', { key: 'o', style: { color: 'var(--white)' } }, lastWin.oppName), ' ', val(_f(lastWin.my) + '–' + _f(lastWin.opp), 'var(--good, #2ecc71)'), '.'] });
+        }
         // Line 1 — 24-hour lead read. A fresh league trade links to the
         // Transaction Ticker; otherwise it scrolls to Power Rankings.
         lines.push({ key: 'lead', icon: _leadHot ? '👀' : '📰', pr: !_leadEyes, txn: _leadEyes, src: _leadEyes ? 'Transaction Ticker' : 'Power Rankings', body: [leadChangeText] });
