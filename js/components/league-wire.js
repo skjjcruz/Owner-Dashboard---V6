@@ -524,13 +524,76 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         const cutoff = Date.now() - 7 * 86400000;
         const effective = t => Number(t.status_updated || t.created || 0);
         const recent = (transactions || []).filter(t => !t._fromDHQ && effective(t) >= cutoff && (!t.status || t.status === 'complete'));
-        recent.filter(t => t.type === 'trade' && t.status === 'complete').slice().sort((a, b) => effective(b) - effective(a)).slice(0, 3).forEach(t => {
-            const owners = (t.roster_ids || []).map(nameFor);
-            if (owners.length < 2) return;
-            const assets = Object.entries(t.adds || {}).map(([pid, rid]) => _getPlayerName(pid) + ' → ' + nameFor(rid));
-            (t.draft_picks || []).forEach(p => assets.push(p.season + ' round ' + p.round + ' pick → ' + nameFor(p.owner_id)));
-            out.push({ kind: 'story', category: 'Trade desk', rosterIds: t.roster_ids || [], weight: 60, label: 'TRADE DESK · LAST 7 DAYS', text: owners.join(' & ') + ' strike a deal', body: assets.length ? assets.join(' · ') : 'A completed trade is on the books.' });
+        // Trade desk (owner ask 2026-10-06): every completed trade from the last
+        // seven days, each side's haul priced on TODAY's DHQ values (players from
+        // the league engine, picks from the shared pick model), plus a "Trade
+        // week" roundup when the league has been busy. Facts come from Sleeper;
+        // the only numbers added are DHQ values, labelled as such.
+        const dhqScores = window.App?.LI?.playerScores || {};
+        const pickValue = p => {
+            try { const r = window.App?.PlayerValue?.resolvePickValue?.(p.season, Number(p.round), p.roster_id, currentLeague?.rosters || []); return Math.max(0, Math.round(Number(r?.value) || 0)); } catch (_) { return 0; }
+        };
+        const fmtDhq = n => Math.round(n).toLocaleString('en-US');
+        const NUM_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
+        const dayLabel = t => { try { return new Date(effective(t)).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(); } catch (_) { return ''; } };
+        const joinNames = arr => arr.length <= 1 ? (arr[0] || '') : arr.length === 2 ? arr[0] + ' and ' + arr[1] : arr.slice(0, -1).join(', ') + ' and ' + arr[arr.length - 1];
+        const tradeRows = recent.filter(t => t.type === 'trade' && t.status === 'complete' && (t.roster_ids || []).length >= 2)
+            .slice().sort((a, b) => effective(b) - effective(a)).map(t => {
+                const sides = new Map((t.roster_ids || []).map(rid => [String(rid), { rid, got: [], total: 0 }]));
+                const side = rid => { const k = String(rid); if (!sides.has(k)) sides.set(k, { rid, got: [], total: 0 }); return sides.get(k); };
+                Object.entries(t.adds || {}).forEach(([pid, rid]) => {
+                    const val = Math.round(Number(dhqScores[pid]) || 0), pos = playersData?.[pid]?.position;
+                    const sd = side(rid); sd.got.push({ label: _getPlayerName(pid) + (pos ? ' (' + pos + ')' : ''), val, pid }); sd.total += val;
+                });
+                (t.draft_picks || []).forEach(p => {
+                    const val = pickValue(p), sd = side(p.owner_id);
+                    // Name the original owner only when it is a third team.
+                    const third = p.roster_id != null && !(t.roster_ids || []).some(rid => sameId(rid, p.roster_id));
+                    const r = Number(p.round), ord = r === 1 ? '1st' : r === 2 ? '2nd' : r === 3 ? '3rd' : r + 'th';
+                    sd.got.push({ label: p.season + ' ' + ord + (third ? ' (' + nameFor(p.roster_id) + ' pick)' : ''), short: 'a ' + p.season + ' ' + ord, val }); sd.total += val;
+                });
+                (t.waiver_budget || []).forEach(w => { const sd = side(w.receiver); sd.got.push({ label: '$' + w.amount + ' FAAB', val: 0 }); });
+                const list = [...sides.values()].filter(sd => sd.got.length);
+                list.forEach(sd => sd.got.sort((x, y) => y.val - x.val));
+                const moved = list.reduce((n, sd) => n + sd.total, 0);
+                const ranked = list.slice().sort((x, y) => y.total - x.total);
+                return { t, list, moved, ranked, players: Object.keys(t.adds || {}).length, picks: (t.draft_picks || []).length };
+            });
+        tradeRows.slice(0, 8).forEach(({ t, list, ranked, moved }) => {
+            if (list.length < 2) return;
+            const [top, next] = ranked;
+            const edge = top.total - next.total;
+            const clear = top.total > 0 && edge >= Math.max(300, top.total * 0.15);
+            const shortOf = g => g.short || g.label.replace(/ \([^)]*\)$/, '');
+            const headliner = sd => (sd.got[0] && shortOf(sd.got[0])) || 'a package';
+            const text = list.length === 2
+                ? (clear ? nameFor(top.rid) + ' land ' + headliner(top) + ' from ' + nameFor(next.rid) : nameFor(list[0].rid) + ' and ' + nameFor(list[1].rid) + ' swap ' + headliner(list[1]) + ' for ' + headliner(list[0]))
+                : joinNames(list.map(sd => nameFor(sd.rid))) + ' pull off a ' + list.length + '-team deal';
+            const sideLines = list.map(sd => nameFor(sd.rid) + ' get: ' + sd.got.map(g => g.label + (g.val ? ' — ' + fmtDhq(g.val) : '')).join(' · ') + (sd.total ? '  (total ' + fmtDhq(sd.total) + ' DHQ)' : ''));
+            const verdict = moved <= 0 ? '' : clear
+                ? 'On today’s DHQ values, ' + nameFor(top.rid) + ' come out ahead by ' + fmtDhq(edge) + '.'
+                : 'On today’s DHQ values, this one is close to even.';
+            const featured = top.got.find(g => g.pid);
+            out.push({ kind: 'story', category: 'Trade desk', rosterIds: list.map(sd => sd.rid), weight: 62 + Math.min(10, Math.round(moved / 2000)), label: 'TRADE DESK · ' + dayLabel(t), text, featuredPid: featured?.pid, metric: moved ? fmtDhq(moved) : undefined, metricLabel: moved ? 'DHQ changed hands' : undefined,
+                body: sideLines.join('\n\n') + (verdict ? '\n\n' + verdict : '') });
         });
+        if (tradeRows.length >= 2) {
+            const biggest = tradeRows.slice().sort((x, y) => y.moved - x.moved)[0];
+            const counts = new Map();
+            tradeRows.forEach(r => r.list.forEach(sd => counts.set(String(sd.rid), (counts.get(String(sd.rid)) || 0) + 1)));
+            const busiestN = Math.max(...counts.values());
+            const busiest = [...counts.entries()].filter(([, n]) => n === busiestN).map(([rid]) => nameFor(rid));
+            const totalMoved = tradeRows.reduce((n, r) => n + r.moved, 0);
+            const players = tradeRows.reduce((n, r) => n + r.players, 0), picks = tradeRows.reduce((n, r) => n + r.picks, 0);
+            const n = tradeRows.length;
+            const paras = [];
+            if (biggest.moved > 0) paras.push('Biggest deal by DHQ value: ' + joinNames(biggest.list.map(sd => nameFor(sd.rid))) + ' — ' + biggest.list.map(sd => nameFor(sd.rid) + ' got ' + joinNames(sd.got.slice(0, 2).map(g => g.short || g.label.replace(/ \([^)]*\)$/, '')))).join('; ') + '. ' + fmtDhq(biggest.moved) + ' DHQ changed hands.');
+            if (busiestN >= 2) paras.push('Busiest dealer' + (busiest.length > 1 ? 's' : '') + ': ' + joinNames(busiest) + ', in ' + busiestN + ' of the ' + n + ' trades.');
+            paras.push(players + ' player' + (players === 1 ? '' : 's') + (picks ? ' and ' + picks + ' draft pick' + (picks === 1 ? '' : 's') : '') + ' moved' + (totalMoved ? ', worth ' + fmtDhq(totalMoved) + ' DHQ on today’s values' : '') + '. Every deal is broken down on its own Trade desk card.');
+            out.push({ kind: 'story', category: 'Trade week', rosterIds: biggest.list.map(sd => sd.rid), weight: 87, label: 'TRADE WEEK · LAST 7 DAYS',
+                text: (NUM_WORDS[n] || String(n)) + ' trades in seven days' + (busiestN >= 3 ? ' — and ' + (busiest.length > 1 ? joinNames(busiest) + ' lead the way' : busiest[0] + ' can’t stop dealing') : ''),
+                metric: String(n), metricLabel: 'completed trades', featuredPid: biggest.ranked[0]?.got.find(g => g.pid)?.pid, body: paras.join('\n\n') });
+        }
         const bids = recent.filter(t => Number(t.settings?.waiver_bid) > 0)
             .sort((a, b) => Number(b.settings.waiver_bid) - Number(a.settings.waiver_bid));
         if (bids.length) {
@@ -570,7 +633,7 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
         if (historicalEdition || editionWeek !== 'latest') return editionStories;
         const priority = { record: -3, story: -2, recap: -1, nfllive: 0, score: 1, faab: 2, rec: 3, top: 4, nfl: 5, nflstat: 6, trend: 7 };
         return out.filter((item, i) => out.findIndex(x => x.kind === item.kind && x.text === item.text) === i).sort((a, b) => priority[a.kind] - priority[b.kind]);
-    }, [editionStories, nflScores, nflLeaders, stableBoard, leaders, leadersKey, transactions, trending, standings, currentLeague, playoffTeams, historicalEdition, editionWeek, supported, headToHead]);
+    }, [editionStories, nflScores, nflLeaders, stableBoard, leaders, leadersKey, transactions, trending, standings, currentLeague, playoffTeams, historicalEdition, editionWeek, supported, headToHead, playersData, window.App?.LI?.builtAt]);
 
     const [topic, setTopic] = React.useState('all');
     const [search, setSearch] = React.useState('');
@@ -724,7 +787,7 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
                 {edition.rivals.length > 0 && <details className="wr-journal-rail-section" open={topic === 'rivalries'}><summary>Rivalry watch <span>Followed & discovered</span></summary>{edition.rivals.filter(r => teamFilter === 'all' || r.rosterIds.some(rid => sameId(rid, teamFilter))).map(r => <article className="wr-journal-rival" key={r.rosterIds.join(':')}><strong>{r.name || <>{r.a} <span>vs.</span> {r.b}</>}</strong>{r.name && <p>{r.a} vs. {r.b}</p>}{r.followed && <small>Following{r.scheduled ? ' · On this week’s schedule' : ''}</small>}{r.meetings > 0 && <div>{r.winsA}<span>–</span>{r.winsB}{r.ties > 0 && <small> · {r.ties} tied</small>}</div>}<p>{r.meetings} recorded regular-season meeting{r.meetings === 1 ? '' : 's'}</p>{studioAvailable && r.broadcast && <button type="button" onClick={() => openStudio({ broadcast: r.broadcast, text: r.name || `${r.a} vs. ${r.b}`, category: 'Rivalry watch' })}>Open rivalry breakdown →</button>}</article>)}</details>}
                 {edition.table.length > 0 && <details className="wr-journal-rail-section" open={topic === 'league'}><summary>The chase <span>THROUGH WK {edition.completedThrough}</span></summary><ol className="wr-journal-table">{edition.table.map(t => <li key={t.rid}><span>{t.rank}</span><strong>{editionName(t.rid)}</strong><span>{t.wins}–{t.losses}{t.ties ? '–' + t.ties : ''}</span></li>)}</ol><p className="wr-journal-footnote">Completed results, including median games where enabled. Ordered by wins, half-credit for ties, then points for. Official division seeds and tiebreaks may differ.</p></details>}
             </aside></div>}
-            <footer className="wr-journal-footer"><strong>FROM THE LEAGUE, FOR THE LEAGUE.</strong><details><summary>Sources & coverage</summary><p>Every story is assembled by fixed rules from Sleeper’s scored regular-season matchups — no AI writes or guesses any of it. Completed weeks {editionStart}–{edition.completedThrough >= editionStart ? edition.completedThrough : 'none yet'} in {editionLeague.season}. Live scores are provisional. Stat corrections can rewrite an edition; use Refresh edition for the latest.</p><p>Historical records cover {edition.archive.allSeasons.join(', ') || 'no completed seasons yet'}. {past.key === pastKey && past.complete ? 'The connected Sleeper history chain has been checked.' : 'Earlier history may still be missing.'} These calculated totals exclude pre-Sleeper seasons and playoffs. Rivalries follow manager accounts, not roster slots. Current team names represent current managers; archived editions use that season’s names. Championship history comes from Sleeper’s playoff brackets.</p><p>Completed older seasons are saved on this device. Refresh edition updates current-season results. <button type="button" onClick={() => { recheckArchiveRef.current = true; setArchiveRevision(n => n + 1); }}>Recheck older seasons</button> to fetch historical corrections.</p><p>Trade and waiver coverage includes loaded, completed transactions from the last seven days. NFL scores come from ESPN; while games are live this page checks once a minute. League scores refresh every 30 seconds during live games. Player trends compare the two labelled seasons.</p></details></footer>
+            <footer className="wr-journal-footer"><strong>FROM THE LEAGUE, FOR THE LEAGUE.</strong><details><summary>Sources & coverage</summary><p>Every story is assembled by fixed rules from Sleeper’s scored regular-season matchups — no AI writes or guesses any of it. Completed weeks {editionStart}–{edition.completedThrough >= editionStart ? edition.completedThrough : 'none yet'} in {editionLeague.season}. Live scores are provisional. Stat corrections can rewrite an edition; use Refresh edition for the latest.</p><p>Historical records cover {edition.archive.allSeasons.join(', ') || 'no completed seasons yet'}. {past.key === pastKey && past.complete ? 'The connected Sleeper history chain has been checked.' : 'Earlier history may still be missing.'} These calculated totals exclude pre-Sleeper seasons and playoffs. Rivalries follow manager accounts, not roster slots. Current team names represent current managers; archived editions use that season’s names. Championship history comes from Sleeper’s playoff brackets.</p><p>Completed older seasons are saved on this device. Refresh edition updates current-season results. <button type="button" onClick={() => { recheckArchiveRef.current = true; setArchiveRevision(n => n + 1); }}>Recheck older seasons</button> to fetch historical corrections.</p><p>Trade and waiver coverage includes loaded, completed transactions from the last seven days; trade values use Dynasty HQ’s current DHQ values (players and picks), not the values on the day of the deal. NFL scores come from ESPN; while games are live this page checks once a minute. League scores refresh every 30 seconds during live games. Player trends compare the two labelled seasons.</p></details></footer>
         </div>
         {studioAvailable && studio?.scope === studioScope && <window.WrWireStudio league={editionLeague} story={studio.story} seasons={pastSeasons.filter(s => Number(s.league.season) < Number(editionLeague.season))} race={race} onClose={() => setStudio(null)} />}
         {allWire}
