@@ -2455,7 +2455,7 @@ function CompareTab({
                 <div style={{ marginBottom: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', marginBottom: '10px' }}>
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: '0.72rem', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                            Full Roster by Position{histSeason ? (histGridActive ? ' — ' + histSeason + ' rosters' : ' — ' + histSeason + ' rosters unavailable, showing current') : ''}
+                            Full Roster Comparison by Position Grouping{histSeason ? (histGridActive ? ' — ' + histSeason + ' rosters' : ' — ' + histSeason + ' rosters unavailable, showing current') : ''}
                         </div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.62 }}>{isPhone ? 'Tap' : 'Click'} any player to open the player card.</div>
                     </div>
