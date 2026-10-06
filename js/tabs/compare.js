@@ -714,6 +714,12 @@ function CompareTab({
         if ((roster.starters || []).some(x => String(x) === sid && sid !== '0')) return 'ST';
         return 'BN';
     };
+    // Full Roster stacking (owner ruling 2026-10-06, same as My Roster):
+    // inside each position, starters first, then bench, taxi, IR last —
+    // each band by DHQ, high to low.
+    const SLOT_RACK = { ST: 0, BN: 1, TX: 2, IR: 3 };
+    const rackBySlot = (rows) => (rows || []).slice().sort((a, b) =>
+        ((SLOT_RACK[a.slot] ?? 1) - (SLOT_RACK[b.slot] ?? 1)) || ((b.dhq || 0) - (a.dhq || 0)));
     const slotChip = (slot) => {
         if (!slot) return null;
         const cfg = slot === 'ST' ? { color: 'var(--good)', title: 'Starter' }
@@ -2454,6 +2460,8 @@ function CompareTab({
                         <div style={{ fontSize: '0.7rem', color: 'var(--silver)', opacity: 0.62 }}>{isPhone ? 'Tap' : 'Click'} any player to open the player card.</div>
                     </div>
                     {gridSummaries.map(summary => {
+                        const mineRack = rackBySlot(summary.myAtPos);
+                        const theirsRack = rackBySlot(summary.theirAtPos);
                         const maxLen = Math.max(summary.myAtPos.length, summary.theirAtPos.length);
                         const total = Math.max(1, summary.myPosDHQ + summary.theirPosDHQ);
                         const myPosPct = summary.myPosDHQ / total * 100;
@@ -2496,8 +2504,8 @@ function CompareTab({
                                     return (
                                         <React.Fragment>
                                             {Array.from({ length: shownLen }).map((_, i) => {
-                                                const mine = summary.myAtPos[i];
-                                                const theirs = summary.theirAtPos[i];
+                                                const mine = mineRack[i];
+                                                const theirs = theirsRack[i];
                                                 return (
                                                     <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', borderBottom: '1px solid var(--ov-2, rgba(255,255,255,0.03))' }}>
                                                         {renderRosterCell(mine, false, theirs)}

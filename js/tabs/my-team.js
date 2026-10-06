@@ -203,6 +203,9 @@ function MyTeamTab({
         const slotRank = r => r.isIR ? 3 : r.isTaxi ? 2 : r.isStarter ? 0 : 1;
         const sd = slotRank(a) - slotRank(b);
         if (sd !== 0) return sd;
+        // Starters always rack by DHQ, high to low, whatever column is
+        // sorted (owner ruling 2026-10-06); IR is already the last band.
+        if (a.isStarter && b.isStarter && !a.isIR && !b.isIR && !a.isTaxi && !b.isTaxi) return (b.dhq || 0) - (a.dhq || 0);
       }
       if (key === 'dhq') return (b.dhq - a.dhq) * dir;
       if (key === 'age') return ((a.age||99) - (b.age||99)) * dir;
