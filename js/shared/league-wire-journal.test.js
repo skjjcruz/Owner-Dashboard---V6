@@ -173,7 +173,7 @@ test('C2 league stories: recaps, record ties, custom totals, streaks, missing we
     assert.equal(build([{ week: 1, rows: [row(1, 500, 1, { custom_points: 50 }), row(2, 60)] }], 1).high, 60);
     const ties = build([{ week: 1, rows: [row(1, 100), row(2, 100)] }, { week: 2, rows: [row(1, 100), row(2, 100)] }], 2);
     assert(ties.stories.some(s => /finish level/.test(s.text)));
-    assert(ties.stories.some(s => /Season scoring high matched/.test(s.text)));
+    assert(ties.stories.some(s => /match the (\d{4}|season) scoring high/.test(s.text)));
     assert(!ties.stories.some(s => /winning margin|straight|winning starters/.test(s.body + s.text)));
     assert.equal(ties.records.length, 4, 'all tied record holders retained');
     assert.equal(build([{ week: 1, rows: [row(1, null), row(2, 80)] }], 1).stories.length, 0);
@@ -210,7 +210,7 @@ test('review fixes: unplayed weeks, History made needs a comparable prior season
     const two = [real, { week: 2, rows: [row(1, 150), row(2, 90), row(3, 80, 2), row(4, 70, 2)] }];
     const noHistory = J.build({ league: lg(), weeks: two, start: 1, end: 2, priorSeasons: [other], nameFor: r => 'T' + r });
     assert(!noHistory.stories.some(s => s.category === 'History made'), 'incomparable seasons cannot anchor an archive record');
-    assert(noHistory.stories.some(s => /A new season scoring high/.test(s.text)), 'the season record still reports');
+    assert(noHistory.stories.some(s => /set the (\d{4}|season) scoring high/.test(s.text)), 'the season record still reports');
     const same = { ...other, league: { ...other.league, scoring_settings: { rec: 1 } }, weeks: [{ week: 1, rows: [row(1, 120), row(2, 10), row(3, 10, 2), row(4, 10, 2)] }] };
     assert(J.build({ league: lg(), weeks: two, start: 1, end: 2, priorSeasons: [same], nameFor: r => 'T' + r }).stories.some(s => s.category === 'History made' && /previous archived high of 120\.00/.test(s.body)));
     // Nit: 0-valued keys and float noise are not rule changes.

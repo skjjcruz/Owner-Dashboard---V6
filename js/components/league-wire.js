@@ -590,7 +590,7 @@ function WrLeagueWire({ currentLeague, standings, transactions, playersData, get
             if (biggest.moved > 0) paras.push('Biggest deal by DHQ value: ' + joinNames(biggest.list.map(sd => nameFor(sd.rid))) + ' — ' + biggest.list.map(sd => nameFor(sd.rid) + ' got ' + joinNames(sd.got.slice(0, 2).map(g => g.short || g.label.replace(/ \([^)]*\)$/, '')))).join('; ') + '. ' + fmtDhq(biggest.moved) + ' DHQ changed hands.');
             if (busiestN >= 2) paras.push('Busiest dealer' + (busiest.length > 1 ? 's' : '') + ': ' + joinNames(busiest) + ', in ' + busiestN + ' of the ' + n + ' trades.');
             paras.push(players + ' player' + (players === 1 ? '' : 's') + (picks ? ' and ' + picks + ' draft pick' + (picks === 1 ? '' : 's') : '') + ' moved' + (totalMoved ? ', worth ' + fmtDhq(totalMoved) + ' DHQ on today’s values' : '') + '. Every deal is broken down on its own Trade desk card.');
-            out.push({ kind: 'story', category: 'Trade week', rosterIds: biggest.list.map(sd => sd.rid), weight: 87, label: 'TRADE WEEK · LAST 7 DAYS',
+            out.push({ kind: 'story', category: 'Trade week', rosterIds: biggest.list.map(sd => sd.rid), weight: 72, label: 'TRADE WEEK · LAST 7 DAYS',
                 text: (NUM_WORDS[n] || String(n)) + ' trades in seven days' + (busiestN >= 3 ? ' — and ' + (busiest.length > 1 ? joinNames(busiest) + ' lead the way' : busiest[0] + ' can’t stop dealing') : ''),
                 metric: String(n), metricLabel: 'completed trades', featuredPid: biggest.ranked[0]?.got.find(g => g.pid)?.pid, body: paras.join('\n\n') });
         }

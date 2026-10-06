@@ -159,7 +159,7 @@
         let high = null, marginRecord = null, completedThrough = start - 1;
         let archiveHigh = null, archiveMargin = null, historicalHigh = null;
         const historicalRecords = [];
-        const archiveRecords = [], archiveMargins = [], careerWins = new Map();
+        const archiveRecords = [], archiveMargins = [], careerWins = new Map(), seasonWins = new Map();
         let rulesChanged = false;
         const comparableSeasons = [];
         const collectRecord = (value, holders, entry, current) => {
@@ -211,7 +211,11 @@
             const before = new Map(previousTable.map(t => [id(t.rid), t]));
             const sorted = rows.slice().sort((a, b) => points(b) - points(a)), best = points(sorted[0]);
             const top = sorted.filter(r => points(r) === best), winners = top.map(r => nameFor(r.roster_id)).join(' & ');
-            if (high !== null && best >= high) add('record', 'Record book', `${best > high ? 'A new season scoring high' : 'Season scoring high matched'}: ${winners}`, `A ${fmt(best)}-point week ${best > high ? 'beats' : 'matches'} the previous season high of ${fmt(high)}.`, top.map(r => r.roster_id), { weight: 85, metric: fmt(best), metricLabel: 'fantasy points' });
+            // This SEASON's high, worded as such (owner ruling 2026-10-06: a
+            // season record leads the paper, but it is not an all-time mark —
+            // that is the separate "History made" story below).
+            const seasonLabel = /^\d{4}$/.test(String(season)) ? String(season) : 'season';
+            if (high !== null && best >= high) add('record', 'Record book', `${winners} ${best > high ? 'set' : 'match'} the ${seasonLabel} scoring high`, `A ${fmt(best)}-point week is ${best > high ? 'the highest score in the league this season, beating' : 'tied for the highest score in the league this season, matching'} the previous high of ${fmt(high)}.`, top.map(r => r.roster_id), { weight: 95, metric: fmt(best), metricLabel: seasonLabel === 'season' ? 'season high' : seasonLabel + ' season high' });
             // Needs a COMPARABLE earlier season: archiveHigh here is the max of
             // that and this season's weeks so far (review S1).
             if (priorHigh !== null && archiveHigh !== null && best > archiveHigh) add('record', 'History made', `An archive scoring high for ${winners}`, `A ${fmt(best)}-point week beats the previous archived high of ${fmt(archiveHigh)}. ${archiveComplete && !rulesChanged ? 'Every linked season has been checked.' : 'Compared with loaded seasons using the same scoring and starting positions.'}`, top.map(r => r.roster_id), { weight: 100, metric: fmt(best), metricLabel: 'new archive high' });
@@ -265,7 +269,11 @@
                 if (oa && ob && oa !== ob) games.push({ a: oa, b: ob, pa: points(a), pb: points(b), week, season });
                 if (gap > 0 && oa) {
                     const wins = (careerWins.get(oa) || 0) + 1; careerWins.set(oa, wins);
-                    if ([10, 25, 50, 75, 100, 150, 200].includes(wins) && archiveComplete) add('story', 'Career milestone', `${nameFor(a.roster_id)} reach win No. ${wins}`, `${wins} regular-season head-to-head wins across this owner's linked league history. ${nameFor(b.roster_id)} were the opponent for the milestone.`, [a.roster_id], { weight: 90, metric: String(wins), metricLabel: 'career wins' });
+                    const thisSeason = (seasonWins.get(oa) || 0) + 1; seasonWins.set(oa, thisSeason);
+                    // Career = every linked season, so say so plainly (owner report
+                    // 2026-10-06: "win No. 10" read like 10 wins in 4 games). Small
+                    // round numbers are notes, not front-page news.
+                    if ([10, 25, 50, 75, 100, 150, 200].includes(wins) && archiveComplete) add('story', 'Career milestone', `${nameFor(a.roster_id)} reach ${wins} career wins in this league`, `That's ${wins} regular-season head-to-head wins across every season this owner has played in the league — ${thisSeason} this season and ${wins - thisSeason} before it. ${nameFor(b.roster_id)} were the opponent for the milestone.`, [a.roster_id], { weight: wins >= 100 ? 90 : wins >= 50 ? 70 : 50, metric: String(wins), metricLabel: 'career wins' });
                 }
             });
             for (const rid of runs.keys()) if (!paired.has(rid)) runs.delete(rid);
