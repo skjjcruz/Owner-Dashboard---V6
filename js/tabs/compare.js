@@ -2527,77 +2527,9 @@ function CompareTab({
                     </div>
                 </div>
 
-                {/* Leverage/exposure cards — removed on phone (owner ask). */}
-                {!isPhone && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginBottom: '16px' }}>
-                    <div style={{ ...panelStyle, padding: '14px' }}>
-                        <div style={{ ...labelStyle, color: 'var(--gold)', opacity: 1, marginBottom: '8px' }}>Where you can press</div>
-                        {leverage.length ? leverage.map(item => (
-                            <div key={item.pos} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '7px 0', borderTop: '1px solid var(--ov-3, rgba(255,255,255,0.05))' }}>
-                                <span style={{ color: posColors[item.pos] || 'var(--white)', fontWeight: 800 }}>{posLabel(item.pos)}</span>
-                                <span style={{ color: 'var(--silver)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{renderMiniPlayer(item.topMine)} over {renderMiniPlayer(item.topTheirs)}</span>
-                                <span style={{ ...mono, color: 'var(--good)', fontWeight: 800 }}>+{item.diff.toLocaleString()}</span>
-                            </div>
-                        )) : <div style={{ color: 'var(--silver)', opacity: 0.68, fontSize: '0.8rem' }}>No clear surplus edge. This matchup is more about player-level choices.</div>}
-                    </div>
-                    <div style={{ ...panelStyle, padding: '14px' }}>
-                        <div style={{ ...labelStyle, color: 'var(--bad)', opacity: 1, marginBottom: '8px' }}>Where they can hurt you</div>
-                        {exposures.length ? exposures.map(item => (
-                            <div key={item.pos} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '7px 0', borderTop: '1px solid var(--ov-3, rgba(255,255,255,0.05))' }}>
-                                <span style={{ color: posColors[item.pos] || 'var(--white)', fontWeight: 800 }}>{posLabel(item.pos)}</span>
-                                <span style={{ color: 'var(--silver)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{renderMiniPlayer(item.topTheirs)} over {renderMiniPlayer(item.topMine)}</span>
-                                <span style={{ ...mono, color: 'var(--bad)', fontWeight: 800 }}>{item.diff.toLocaleString()}</span>
-                            </div>
-                        )) : <div style={{ color: 'var(--silver)', opacity: 0.68, fontSize: '0.8rem' }}>No obvious room where this opponent has a strong value edge.</div>}
-                    </div>
-                </div>
-                )}
-
-                <div style={{ ...panelStyle, padding: '14px', marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline', marginBottom: '10px' }}>
-                        <div>
-                            <div style={{ fontFamily: 'var(--font-title)', color: 'var(--white)', fontWeight: 800, fontSize: 'var(--text-title)', letterSpacing: 0 }}>Draft Picks & FAAB</div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--silver)', opacity: 0.66 }}>{skinFeatures.showFuturePicks === false ? 'Draft capital' : 'Future capital'} is included in {valueLabel}; FAAB stays separate as waiver leverage.</div>
-                        </div>
-                        <div style={{ ...mono, color: myAssetTotal >= theirAssetTotal ? 'var(--good)' : 'var(--bad)', fontWeight: 850 }}>{myAssetTotal >= theirAssetTotal ? '+' : ''}{(myAssetTotal - theirAssetTotal).toLocaleString()} assets</div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px' }}>
-                        {[
-                            { name: myName, pickCapital: myPickCapital, faab: myFaab, assetTotal: myAssetTotal, mine: true },
-                            { name: theirName, pickCapital: theirPickCapital, faab: theirFaab, assetTotal: theirAssetTotal, mine: false },
-                        ].map(side => (
-                            <div key={side.name} style={{ padding: '10px', borderRadius: '7px', background: side.mine ? 'var(--acc-fill2, rgba(212,175,55,0.08))' : 'rgba(124,107,248,0.055)', border: '1px solid ' + (side.mine ? 'var(--acc-line1, rgba(212,175,55,0.24))' : 'rgba(124,107,248,0.18)') }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline', marginBottom: '8px' }}>
-                                    <div style={{ color: side.mine ? myColor : theirColor, fontWeight: 850, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{side.name}</div>
-                                    <div style={{ ...mono, color: 'var(--white)', fontSize: '0.76rem', fontWeight: 850 }}>{side.assetTotal.toLocaleString()}</div>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: isPhone ? 'repeat(2, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))', gap: '8px' }}>
-                                    <div>
-                                        <div style={labelStyle}>Pick Value</div>
-                                        <div style={{ ...mono, color: side.pickCapital.totalValue >= myPickCapital.totalValue ? 'var(--good)' : 'var(--silver)', fontWeight: 850 }}>{Math.round(side.pickCapital.totalValue / 1000)}k</div>
-                                        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.58 }}>draft {valueShortLabel}</div>
-                                    </div>
-                                    <div>
-                                        <div style={labelStyle}>Pick Count</div>
-                                        <div style={{ ...mono, color: side.pickCapital.count >= myPickCapital.count ? 'var(--good)' : 'var(--silver)', fontWeight: 850 }}>{side.pickCapital.count}</div>
-                                        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.58 }}>{Object.entries(side.pickCapital.byRound || {}).slice(0, 3).map(([rd, ct]) => 'R' + rd + ':' + ct).join('  ') || 'No picks'}</div>
-                                    </div>
-                                    <div>
-                                        <div style={labelStyle}>Best Picks</div>
-                                        <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.76, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{side.pickCapital.topPicks.length ? side.pickCapital.topPicks.slice(0, 2).map(p => p.label).join(' · ') : 'None'}</div>
-                                    </div>
-                                    <div>
-                                        <div style={labelStyle}>FAAB</div>
-                                        <div style={{ ...mono, color: side.faab.isFaab ? (side.faab.remaining >= myFaab.remaining ? 'var(--good)' : 'var(--silver)') : 'var(--ov-8, rgba(255,255,255,0.32))', fontWeight: 850 }}>{side.faab.isFaab ? '$' + side.faab.remaining : '—'}</div>
-                                        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.58 }}>{side.faab.isFaab ? side.faab.pct + '% left' : 'No FAAB'}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                <div style={{ marginTop: '16px' }}>
+                {/* Full roster sits right under the Position Edge Matrix /
+                    H2H row (owner ask 2026-10-06) — was at the page bottom. */}
+                <div style={{ marginBottom: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', marginBottom: '10px' }}>
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: '0.72rem', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                             Full Roster by Position{histSeason ? (histGridActive ? ' — ' + histSeason + ' rosters' : ' — ' + histSeason + ' rosters unavailable, showing current') : ''}
@@ -2670,6 +2602,77 @@ function CompareTab({
                         );
                     })}
                 </div>
+
+                {/* Leverage/exposure cards — removed on phone (owner ask). */}
+                {!isPhone && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+                    <div style={{ ...panelStyle, padding: '14px' }}>
+                        <div style={{ ...labelStyle, color: 'var(--gold)', opacity: 1, marginBottom: '8px' }}>Where you can press</div>
+                        {leverage.length ? leverage.map(item => (
+                            <div key={item.pos} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '7px 0', borderTop: '1px solid var(--ov-3, rgba(255,255,255,0.05))' }}>
+                                <span style={{ color: posColors[item.pos] || 'var(--white)', fontWeight: 800 }}>{posLabel(item.pos)}</span>
+                                <span style={{ color: 'var(--silver)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{renderMiniPlayer(item.topMine)} over {renderMiniPlayer(item.topTheirs)}</span>
+                                <span style={{ ...mono, color: 'var(--good)', fontWeight: 800 }}>+{item.diff.toLocaleString()}</span>
+                            </div>
+                        )) : <div style={{ color: 'var(--silver)', opacity: 0.68, fontSize: '0.8rem' }}>No clear surplus edge. This matchup is more about player-level choices.</div>}
+                    </div>
+                    <div style={{ ...panelStyle, padding: '14px' }}>
+                        <div style={{ ...labelStyle, color: 'var(--bad)', opacity: 1, marginBottom: '8px' }}>Where they can hurt you</div>
+                        {exposures.length ? exposures.map(item => (
+                            <div key={item.pos} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '7px 0', borderTop: '1px solid var(--ov-3, rgba(255,255,255,0.05))' }}>
+                                <span style={{ color: posColors[item.pos] || 'var(--white)', fontWeight: 800 }}>{posLabel(item.pos)}</span>
+                                <span style={{ color: 'var(--silver)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{renderMiniPlayer(item.topTheirs)} over {renderMiniPlayer(item.topMine)}</span>
+                                <span style={{ ...mono, color: 'var(--bad)', fontWeight: 800 }}>{item.diff.toLocaleString()}</span>
+                            </div>
+                        )) : <div style={{ color: 'var(--silver)', opacity: 0.68, fontSize: '0.8rem' }}>No obvious room where this opponent has a strong value edge.</div>}
+                    </div>
+                </div>
+                )}
+
+                <div style={{ ...panelStyle, padding: '14px', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline', marginBottom: '10px' }}>
+                        <div>
+                            <div style={{ fontFamily: 'var(--font-title)', color: 'var(--white)', fontWeight: 800, fontSize: 'var(--text-title)', letterSpacing: 0 }}>Draft Picks & FAAB</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--silver)', opacity: 0.66 }}>{skinFeatures.showFuturePicks === false ? 'Draft capital' : 'Future capital'} is included in {valueLabel}; FAAB stays separate as waiver leverage.</div>
+                        </div>
+                        <div style={{ ...mono, color: myAssetTotal >= theirAssetTotal ? 'var(--good)' : 'var(--bad)', fontWeight: 850 }}>{myAssetTotal >= theirAssetTotal ? '+' : ''}{(myAssetTotal - theirAssetTotal).toLocaleString()} assets</div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px' }}>
+                        {[
+                            { name: myName, pickCapital: myPickCapital, faab: myFaab, assetTotal: myAssetTotal, mine: true },
+                            { name: theirName, pickCapital: theirPickCapital, faab: theirFaab, assetTotal: theirAssetTotal, mine: false },
+                        ].map(side => (
+                            <div key={side.name} style={{ padding: '10px', borderRadius: '7px', background: side.mine ? 'var(--acc-fill2, rgba(212,175,55,0.08))' : 'rgba(124,107,248,0.055)', border: '1px solid ' + (side.mine ? 'var(--acc-line1, rgba(212,175,55,0.24))' : 'rgba(124,107,248,0.18)') }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline', marginBottom: '8px' }}>
+                                    <div style={{ color: side.mine ? myColor : theirColor, fontWeight: 850, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{side.name}</div>
+                                    <div style={{ ...mono, color: 'var(--white)', fontSize: '0.76rem', fontWeight: 850 }}>{side.assetTotal.toLocaleString()}</div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: isPhone ? 'repeat(2, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))', gap: '8px' }}>
+                                    <div>
+                                        <div style={labelStyle}>Pick Value</div>
+                                        <div style={{ ...mono, color: side.pickCapital.totalValue >= myPickCapital.totalValue ? 'var(--good)' : 'var(--silver)', fontWeight: 850 }}>{Math.round(side.pickCapital.totalValue / 1000)}k</div>
+                                        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.58 }}>draft {valueShortLabel}</div>
+                                    </div>
+                                    <div>
+                                        <div style={labelStyle}>Pick Count</div>
+                                        <div style={{ ...mono, color: side.pickCapital.count >= myPickCapital.count ? 'var(--good)' : 'var(--silver)', fontWeight: 850 }}>{side.pickCapital.count}</div>
+                                        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.58 }}>{Object.entries(side.pickCapital.byRound || {}).slice(0, 3).map(([rd, ct]) => 'R' + rd + ':' + ct).join('  ') || 'No picks'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={labelStyle}>Best Picks</div>
+                                        <div style={{ fontSize: 'var(--text-micro, 0.6875rem)', color: 'var(--silver)', opacity: 0.76, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{side.pickCapital.topPicks.length ? side.pickCapital.topPicks.slice(0, 2).map(p => p.label).join(' · ') : 'None'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={labelStyle}>FAAB</div>
+                                        <div style={{ ...mono, color: side.faab.isFaab ? (side.faab.remaining >= myFaab.remaining ? 'var(--good)' : 'var(--silver)') : 'var(--ov-8, rgba(255,255,255,0.32))', fontWeight: 850 }}>{side.faab.isFaab ? '$' + side.faab.remaining : '—'}</div>
+                                        <div style={{ fontSize: 'var(--text-micro)', color: 'var(--silver)', opacity: 0.58 }}>{side.faab.isFaab ? side.faab.pct + '% left' : 'No FAAB'}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
               </div>
             );
           })()}
