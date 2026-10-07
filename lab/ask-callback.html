@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://openrouter.ai; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
+<meta name="referrer" content="no-referrer">
+<title>Connecting your AI</title>
+<!-- Lab only (lab/ask-callback.html, copied in by scripts/publish-lab.cjs).
+     OpenRouter sends the member back here after they approve Dynasty HQ.
+     This page swaps the one-time code for the member's own API key, keeps
+     it in this browser, strips the code from the address bar, and returns
+     them to the screen they came from. It runs on its own page so the
+     app's sign-in system never sees OpenRouter's ?code= parameter. -->
+<style>
+  :root { --bg: #0a0a0a; --fg: #e6e6e6; --gold: #D4AF37; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, sans-serif; padding: 0 16px; }
+  main { max-width: 420px; text-align: center; }
+  h1 { font-size: 1.1rem; color: var(--gold); letter-spacing: 0.04em; }
+  a { color: var(--gold); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Connecting your AI…</h1>
+  <p id="msg">One moment.</p>
+</main>
+<script>
+(function () {
+  var msg = document.getElementById('msg');
+  var q = new URLSearchParams(location.search);
+  var code = q.get('code'), state = q.get('state');
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  var saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem('dhq_lab_ai_pkce_v1') || 'null'); } catch (e) {}
+  var back = (saved && saved.back && saved.back.indexOf(location.origin + '/') === 0) ? saved.back : 'index.html';
+  function fail(text) {
+    msg.innerHTML = '';
+    msg.appendChild(document.createTextNode(text + ' '));
+    var a = document.createElement('a'); a.href = back; a.textContent = 'Back to Dynasty HQ';
+    msg.appendChild(a);
+  }
+  if (!code) return fail('The sign-in was cancelled.');
+  if (!saved || !saved.verifier || !saved.state || saved.state !== state) return fail('This sign-in link is stale or came from somewhere else. Please start again from the Ask button.');
+  fetch('https://openrouter.ai/api/v1/auth/keys', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: code, code_verifier: saved.verifier, code_challenge_method: 'S256' })
+  }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) {
+      if (!res.ok || !res.j || !res.j.key) throw new Error((res.j && res.j.error && (res.j.error.message || res.j.error)) || 'no key returned');
+      localStorage.setItem('dhq_lab_ai_key_v1', JSON.stringify({ key: res.j.key, via: 'signin', at: Date.now() }));
+      sessionStorage.removeItem('dhq_lab_ai_pkce_v1');
+      sessionStorage.setItem('dhq_lab_ai_just_connected', '1');
+      msg.textContent = 'Connected. Taking you back…';
+      location.replace(back);
+    })
+    .catch(function (e) { fail('OpenRouter did not hand over a key (' + (e && e.message || e) + ').'); });
+})();
+</script>
+</body>
+</html>

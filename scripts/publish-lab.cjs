@@ -21,7 +21,9 @@
 //      it also sets window.DHQ_LAB = true, the one Lab-only switch app code
 //      reads (today: the hub v2 home, HUB_V2 in js/app.js)
 //   7. add the Lab-only extras kept under lab/: the Cutdown Desk script
-//      (wired into the app page) and the ESPN test harness page
+//      (wired into the app page), the ESPN test harness page, and Ask
+//      (bring your own AI: lab-ask.js on the app page, its sign-in return
+//      page ask-callback.html, and openrouter.ai in the app page's CSP)
 //   8. write trade-lab.html as a copy of index.html (the owner's bookmark)
 //   9. mark the build tag "bNNN · LAB" in gold so a Lab page is never
 //      mistaken for the website
@@ -135,7 +137,7 @@ function run(script, env) {
 // ── preflight ──────────────────────────────────────────────────────────────
 if (!fs.existsSync(path.join(LAB_DIR, '.git'))) fail('LAB_DIR is not a git checkout: ' + LAB_DIR);
 if (!fs.existsSync(LAB_SRC)) fail('lab/ folder missing in this repo');
-for (const f of ['gate.html', 'lab-cutdown.js', 'espn-lab.html']) {
+for (const f of ['gate.html', 'lab-cutdown.js', 'espn-lab.html', 'lab-ask.js', 'ask-callback.html']) {
   if (!fs.existsSync(path.join(LAB_SRC, f))) fail('lab/' + f + ' missing');
 }
 // The engine the Lab receives must be a committed version: uncommitted edits
@@ -221,6 +223,13 @@ if (!sharedLoaderTag) fail('index.html: shared-loader tag with a version not fou
 const cutdown = read(path.join(LAB_SRC, 'lab-cutdown.js'));
 write(path.join(LAB_DIR, 'js', 'lab-cutdown.js'), cutdown);
 const cutdownTag = '<script src="js/lab-cutdown.js?v=' + contentHash(cutdown) + '"></script>';
+// Ask (bring your own AI, owner direction 2026-10-07: Lab only). The panel
+// script rides on the app page; the sign-in return page swaps OpenRouter's
+// one-time code for the member's own key, away from the app's sign-in code.
+const ask = read(path.join(LAB_SRC, 'lab-ask.js'));
+write(path.join(LAB_DIR, 'js', 'lab-ask.js'), ask);
+const askTag = '<script src="js/lab-ask.js?v=' + contentHash(ask) + '"></script>';
+write(path.join(LAB_DIR, 'ask-callback.html'), read(path.join(LAB_SRC, 'ask-callback.html')));
 let espn = read(path.join(LAB_SRC, 'espn-lab.html'));
 // The harness loads the shared loader by hand; keep its version in step with the build.
 espn = espn.replace(/js\/shared\/shared-loader\.js\?v=[0-9a-f]+/g, sharedLoaderTag);
@@ -230,6 +239,12 @@ write(path.join(LAB_DIR, 'espn-lab.html'), espn);
 function labifyAppPage(html, name) {
   if (!html.includes('src="js/post-draft.js')) fail(name + ': post-draft.js tag not found (cutdown anchor)');
   html = html.replace(/(<script src="js\/post-draft\.js[^>]*><\/script>)/, cutdownTag + '\n$1');
+  html = html.replace(/(<script src="js\/post-draft\.js[^>]*><\/script>)/, askTag + '\n$1');
+  // The member's AI is called straight from the browser: the Lab page (only)
+  // may talk to openrouter.ai.
+  const csp = /(<meta http-equiv="Content-Security-Policy" content="[^"]*connect-src 'self')/;
+  if (!csp.test(html)) fail(name + ': CSP connect-src not found (Ask needs openrouter.ai)');
+  html = html.replace(csp, '$1 https://openrouter.ai');
   const tagRe = /(<div id="dhq-build-tag"[^>]*>)([^<]*)(<\/div>)/;
   if (!tagRe.test(html)) fail(name + ': build tag not found');
   html = html.replace(tagRe, function (_, open, text, close) {
