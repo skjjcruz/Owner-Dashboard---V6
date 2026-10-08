@@ -71,6 +71,31 @@
         } catch (e) { /* fall through to the league name */ }
         return '';
     }
+    // My Sleeper avatar in this league (Lab, owner ask 2026-10-08): the
+    // league-specific team avatar Sleeper keeps on the league user
+    // (metadata.avatar, a full image URL), else my account avatar. ESPN / MFL
+    // and anyone without one keep the initials crest.
+    function teamAvatarUrl(league, sleeperUserId) {
+        try {
+            if (!league || league._espn || league._mfl) return null;
+            const me = myRoster(league, sleeperUserId);
+            const u = me ? (league.users || []).find(x => x.user_id === me.owner_id) : null;
+            if (!u) return null;
+            const custom = u.metadata && u.metadata.avatar;
+            if (typeof custom === 'string' && /^https:\/\//.test(custom)) return custom;
+            if (u.avatar && /^[A-Za-z0-9]+$/.test(String(u.avatar))) return 'https://sleepercdn.com/avatars/thumbs/' + u.avatar;
+        } catch (e) { /* initials */ }
+        return null;
+    }
+    function TeamCrest({ src, label }) {
+        const [bad, setBad] = React.useState(false);
+        if (!src || bad) return <span className="hv2-team-avatar" aria-hidden="true">{label}</span>;
+        return <span className="hv2-team-avatar" aria-hidden="true" style={{ overflow: 'hidden', padding: 0 }}>
+            <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBad(true)}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        </span>;
+    }
+
     // Sleeper leagues carry my W-L on the league object (app.js loadSleeperData).
     // ESPN / MFL league objects are built with 0-0, but my roster carries the
     // platform's real standings (espn-api record.overall, mfl-api h2hw/h2hl).
@@ -183,7 +208,9 @@
                 className={'hv2-league-card' + (isLast ? ' is-last' : '') + (!q && i >= 3 ? ' hv2-league-overflow' + (showAll ? ' is-expanded' : '') : '')}
                 onClick={() => onSelect(l)}>
                 <span className="hv2-league-card-top">
-                    <span className="hv2-team-avatar" aria-hidden="true">{initialsFor(title)}</span>
+                    {window.DHQ_LAB === true
+                        ? <TeamCrest src={teamAvatarUrl(l, sleeperUserId)} label={initialsFor(title)} />
+                        : <span className="hv2-team-avatar" aria-hidden="true">{initialsFor(title)}</span>}
                     <span className="hv2-league-identity"><strong>{title}</strong><span>{sub}</span></span>
                     {isLast && <span className="hv2-last-badge">Last opened</span>}
                 </span>
