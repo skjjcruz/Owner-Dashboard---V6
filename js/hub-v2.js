@@ -206,7 +206,9 @@
         React.useEffect(() => {
             const on = () => setHasKey(!!(window.App && window.App.AskDHQ && window.App.AskDHQ.savedKey && window.App.AskDHQ.savedKey()));
             window.addEventListener('dhq:ai-key-changed', on);
-            return () => window.removeEventListener('dhq:ai-key-changed', on);
+            // Sign-in finishes after the first paint: look again shortly.
+            const t1 = setTimeout(on, 1500), t2 = setTimeout(on, 5000);
+            return () => { window.removeEventListener('dhq:ai-key-changed', on); clearTimeout(t1); clearTimeout(t2); };
         }, []);
         React.useEffect(() => {
             const A = window.App && window.App.AskDHQ;

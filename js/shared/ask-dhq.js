@@ -432,8 +432,10 @@
     // Owner report 2026-10-09: the saved key vanished after an hour. The old
     // dynastyhq_ai_key is a "device secret" the shared client wipes whenever
     // it can't tell who is signed in for a moment. The member's key now has
-    // its own record, tied to their account: only they can use it, sign-out
-    // removes it (core.js / landing.html), and session blips leave it alone.
+    // its own record, tied to their account: only they can use it, and
+    // session blips leave it alone. Owner ask 2026-10-09: it also stays
+    // through sign-out, so signing back in finds it; "Remove my key" (🔑)
+    // takes it off the device. Anyone else signing in here can't use it.
     const MEMBER_KEY = 'dhq_member_ai_v1';
     function ownerNow() {
         try { const idn = root.OD && root.OD.identity; return idn && idn.currentOwner ? String(idn.currentOwner() || '') : ''; } catch (e) { return ''; }

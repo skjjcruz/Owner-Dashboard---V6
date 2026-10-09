@@ -3152,7 +3152,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 
 <!-- War Room modules — loaded in dependency order by Babel standalone -->
 <!-- 1. Core: tier system, React hooks, fetch helpers (everything depends on this) -->
-<script type="text/babel" src="js/core.js?v=20261009aikey1"></script>
+<script type="text/babel" src="js/core.js?v=20261009aikey2"></script>
 <!-- 1a. Central data-sync manager — window.WR.Sync — stale-while-revalidate on tab return + in-season interval (plain JS) -->
 <script src="js/shared/sync-manager.js?v=20260706sync1"></script>
 <!-- 1a2. Shared viewport seam — WR.useViewport() hook + WR.viewport() snapshot (plain JS; must precede components.js and all tab files) -->
@@ -3180,7 +3180,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script src="js/shared/faab-league.js?v=20260927faab1"></script>
 <script src="js/shared/sleeper-proj.js?v=20260917truth3"></script>
 <script src="js/shared/game-locks.js?v=20261009lock2"></script>
-<script src="js/shared/ask-dhq.js?v=20261009ask16"></script>
+<script src="js/shared/ask-dhq.js?v=20261009ask17"></script>
 <script src="js/shared/dhq-proj.js?v=20261009lock1"></script>
 <script src="js/shared/nfl-context.js?v=20260929proj1"></script>
 <script src="js/shared/matchup.js?v=20260927live2"></script>
@@ -3289,7 +3289,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      check). Its stylesheet sits in an inert <template> (never fetched) that
      js/hub-v2.js clones in when it renders. Bump both ?v=. -->
 <template id="dhq-hub-v2-css"><link rel="stylesheet" href="js/hub-v2.css?v=20261005strip1"></template>
-<script type="text/babel" data-wr-defer="hubv2" src="js/hub-v2.js?v=20261009ask2"></script>
+<script type="text/babel" data-wr-defer="hubv2" src="js/hub-v2.js?v=20261009ask3"></script>
 <!-- 4b. Draft Command Center modules — group "draft" (~28 scripts, ~1.26MB),
      loaded on first Draft-tab open. -->
 <script type="text/babel" data-wr-defer="draft" src="js/draft/styles.js?v=20260427font1"></script>
