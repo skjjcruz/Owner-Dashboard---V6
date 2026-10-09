@@ -328,6 +328,7 @@
     let _brain = null;
     function brain() {
         if (_brain) return _brain;
+        if (savedKey()) return (_brain = Promise.resolve('key'));
         const LM = root.LanguageModel;
         _brain = !LM || typeof LM.availability !== 'function' ? Promise.resolve('engine')
             : LM.availability({ expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['en'] }] })
@@ -365,6 +366,73 @@
             return null;
         }
     }
+    // ── The member's own AI key ─────────────────────────────────────
+    // Pasted once, kept on this device only (localStorage), sent only to
+    // the AI company it belongs to, never to DHQ. The company is read from
+    // the key itself. Owner ask 2026-10-09: "bring his own AI into the app
+    // with a key, so the questions get asked in the app".
+    const KEY_NAME = 'dynastyhq_ai_key', PROVIDER_NAME = 'dynastyhq_ai_provider';
+    const PROVIDERS = {
+        openai: { label: 'OpenAI', model: 'gpt-5.4-mini' },
+        anthropic: { label: 'Claude', model: 'claude-haiku-5-5' },
+        gemini: { label: 'Gemini', model: 'gemini-flash-latest' },
+    };
+    function providerOf(key) {
+        const k = String(key || '').trim();
+        if (/^sk-ant-/.test(k)) return 'anthropic';
+        if (/^AIza[0-9A-Za-z_-]{20,}$/.test(k)) return 'gemini';
+        if (/^sk-/.test(k)) return 'openai';
+        return null;
+    }
+    function savedKey() {
+        try {
+            const key = root.localStorage.getItem(KEY_NAME) || '';
+            const prov = root.localStorage.getItem(PROVIDER_NAME) || providerOf(key);
+            return key && PROVIDERS[prov] ? { key, provider: prov } : null;
+        } catch (e) { return null; }
+    }
+    function saveKey(key) {
+        const prov = providerOf(key);
+        if (!prov) return null;
+        try { root.localStorage.setItem(KEY_NAME, String(key).trim()); root.localStorage.setItem(PROVIDER_NAME, prov); } catch (e) { return null; }
+        _brain = null;
+        return prov;
+    }
+    function forgetKey() { try { root.localStorage.removeItem(KEY_NAME); root.localStorage.removeItem(PROVIDER_NAME); } catch (e) { /* nothing saved */ } _brain = null; }
+    async function askWithKey(question, ans) {
+        const k = savedKey();
+        if (!k) return { ok: false, error: 'no key' };
+        const user = 'Question: ' + question + '\nDHQ\'s answer: ' + ans.text + '\nFacts:\n- ' + (ans.lines || []).join('\n- ');
+        const model = PROVIDERS[k.provider].model;
+        const ctl = root.AbortController ? new root.AbortController() : null;
+        const timer = ctl ? setTimeout(() => ctl.abort(), 30000) : null;
+        try {
+            let r, j, text = '';
+            if (k.provider === 'anthropic') {
+                r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model, max_tokens: 400, system: SYSTEM, messages: [{ role: 'user', content: user }] }) });
+                j = await r.json().catch(() => ({}));
+                text = ((j.content || []).find(c => c.type === 'text') || {}).text || '';
+            } else if (k.provider === 'gemini') {
+                r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { maxOutputTokens: 400 } }) });
+                j = await r.json().catch(() => ({}));
+                text = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
+            } else {
+                r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + k.key }, body: JSON.stringify({ model, max_completion_tokens: 400, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] }) });
+                j = await r.json().catch(() => ({}));
+                text = (((j.choices || [])[0] || {}).message || {}).content || '';
+            }
+            if (!r.ok) {
+                const why = r.status === 401 || r.status === 403 ? 'That key was turned down by ' + PROVIDERS[k.provider].label + '. Check it, or paste a new one.'
+                    : r.status === 429 ? PROVIDERS[k.provider].label + ' says this key is out of quota or rate-limited right now.'
+                    : PROVIDERS[k.provider].label + ' had a problem (' + r.status + ').';
+                return { ok: false, error: why };
+            }
+            return text.trim() ? { ok: true, text: text.trim(), provider: k.provider } : { ok: false, error: PROVIDERS[k.provider].label + ' sent back an empty answer.' };
+        } catch (e) {
+            return { ok: false, error: 'Couldn\'t reach ' + PROVIDERS[k.provider].label + '. Check your connection.' };
+        } finally { if (timer) clearTimeout(timer); }
+    }
+
     // The question, sent to the member's own AI with DHQ connected.
     function askElsewhereUrl(where, question) {
         const lg = league();
@@ -399,7 +467,32 @@
     ].join('\n');
     function el(tag, cls, text) { const e = root.document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
     let ui = null;
-    function brainLabel(b) { return b === 'device' ? 'Your device\'s AI · free' : b === 'device-download' ? 'Your device\'s AI (sets up on first ask)' : 'Your ChatGPT or Claude'; }
+    function brainLabel(b) { const k = savedKey(); return b === 'key' && k ? 'Your ' + PROVIDERS[k.provider].label + ' key' : b === 'device' ? 'Your device\'s AI · free' : b === 'device-download' ? 'Your device\'s AI (sets up on first ask)' : 'Your ChatGPT or Claude'; }
+    // Paste-your-key card: one box, the company is read from the key.
+    function keyCard(note) {
+        const box = el('div', 'askdhq-a');
+        box.appendChild(el('h4', null, 'Use your own AI key'));
+        box.appendChild(el('p', null, note || 'Paste a key from OpenAI, Anthropic (Claude) or Google (Gemini) and your AI answers right here.'));
+        const f = el('form', 'askdhq-form'); f.style.padding = '8px 0 0'; f.style.borderTop = '0';
+        const inp = el('input', 'askdhq-in'); inp.type = 'password'; inp.placeholder = 'sk-…, sk-ant-… or AIza…'; inp.autocomplete = 'off'; inp.setAttribute('aria-label', 'Your AI key');
+        const b = el('button', 'askdhq-send', 'Save'); b.type = 'submit';
+        f.appendChild(inp); f.appendChild(b);
+        const msg = el('div', 'askdhq-src', 'Stays on this device. Sent only to the AI company it belongs to, never to DHQ. Usage is billed to your own account.');
+        f.onsubmit = e => {
+            e.preventDefault();
+            const prov = saveKey(inp.value);
+            if (!prov) { msg.textContent = 'That doesn\'t look like an OpenAI, Anthropic or Gemini key.'; return; }
+            inp.value = '';
+            msg.textContent = 'Saved. ' + PROVIDERS[prov].label + ' will answer your questions here.';
+            if (ui) ui.brain.textContent = brainLabel('key');
+        };
+        box.appendChild(f); box.appendChild(msg);
+        const more = el('div', 'askdhq-more');
+        const free = el('a', 'askdhq-chip', 'Get a free Gemini key'); free.href = 'https://aistudio.google.com/apikey'; free.target = '_blank'; free.rel = 'noopener'; more.appendChild(free);
+        if (savedKey()) { const rm = el('button', 'askdhq-chip', 'Remove my key'); rm.type = 'button'; rm.onclick = () => { forgetKey(); msg.textContent = 'Removed from this device.'; if (ui) brain().then(x => { ui.brain.textContent = brainLabel(x); }); }; more.appendChild(rm); }
+        box.appendChild(more);
+        return box;
+    }
     function render(q, ans, narrated, b) {
         const box = el('div', 'askdhq-a');
         box.appendChild(el('h4', null, ans.title || 'DHQ'));
@@ -438,7 +531,10 @@
         const more = el('div', 'askdhq-more');
         [['chatgpt', 'Ask in ChatGPT'], ['claude', 'Ask in Claude']].forEach(([w, label]) => { const a = el('a', 'askdhq-chip', label); a.href = askElsewhereUrl(w, q); a.target = '_blank'; a.rel = 'noopener'; more.appendChild(a); });
         box.appendChild(more);
-        box.appendChild(el('div', 'askdhq-src', 'Uses your ChatGPT or Claude plan with the Dynasty HQ connector. On Chrome for desktop, your computer\'s built-in AI answers right here instead.'));
+        const k = el('button', 'askdhq-chip', 'Answer here with my AI key'); k.type = 'button';
+        k.onclick = () => { box.replaceWith(keyCard('Paste your key once, then ask again: your AI answers right here.')); };
+        more.appendChild(k);
+        box.appendChild(el('div', 'askdhq-src', 'ChatGPT and Claude use your plan with the Dynasty HQ connector. With your own key, or on Chrome for desktop, your AI answers right here.'));
         return box;
     }
     async function ask(question) {
@@ -450,6 +546,29 @@
         const b = await brain();
         if (ans.intent === 'help') { ui.log.appendChild(render(q, ans, null, b).box); ui.log.scrollTop = ui.log.scrollHeight; return; }
         if (b === 'engine') { ui.log.appendChild(handoff(q)); ui.log.scrollTop = ui.log.scrollHeight; return; }
+        if (b === 'key') {
+            const k = savedKey();
+            const box = el('div', 'askdhq-a');
+            box.appendChild(el('h4', null, 'Your AI · ' + PROVIDERS[k.provider].label));
+            const p = el('p', null, PROVIDERS[k.provider].label + ' is answering with DHQ\'s data…');
+            box.appendChild(p);
+            const src = el('div', 'askdhq-src', '');
+            box.appendChild(src);
+            ui.log.appendChild(box); ui.log.scrollTop = ui.log.scrollHeight;
+            const res = await askWithKey(q, ans);
+            if (res.ok) {
+                p.textContent = res.text;
+                src.textContent = 'Answered by your ' + PROVIDERS[k.provider].label + ' key with DHQ\'s data. DHQ never saw your key.';
+                if (ans.lines && ans.lines.length) {
+                    const d = el('details'); const sm = el('summary', null, 'DHQ\'s data'); sm.style.cursor = 'pointer'; d.appendChild(sm);
+                    const ul = el('ul'); ans.lines.forEach(t => ul.appendChild(el('li', null, t))); d.appendChild(ul); box.insertBefore(d, src);
+                }
+            } else {
+                box.replaceWith(keyCard(res.error));
+            }
+            ui.log.scrollTop = ui.log.scrollHeight;
+            return;
+        }
         const box = el('div', 'askdhq-a');
         box.appendChild(el('h4', null, 'Your AI'));
         const p = el('p', null, '…');
@@ -476,6 +595,9 @@
         const panel = el('div', 'askdhq-panel'); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Ask your AI');
         const head = el('div', 'askdhq-head'); head.appendChild(el('b', null, 'ASK YOUR AI'));
         const brainEl = el('span', 'askdhq-brain', '…'); head.appendChild(brainEl);
+        const kb = el('button', 'askdhq-x', '🔑'); kb.type = 'button'; kb.title = 'Use your own AI key'; kb.setAttribute('aria-label', 'Use your own AI key');
+        kb.onclick = () => { if (ui) { ui.log.appendChild(keyCard()); ui.log.scrollTop = ui.log.scrollHeight; } };
+        head.appendChild(kb);
         const x = el('button', 'askdhq-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.onclick = () => { panel.style.display = 'none'; btn.style.display = ''; };
         head.appendChild(x);
         const log = el('div', 'askdhq-log');
@@ -509,7 +631,7 @@
         }, 1500);
     }
 
-    App.AskDHQ = App.AskDHQ || { answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, mount, _help: help };
+    App.AskDHQ = App.AskDHQ || { answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help };
     if (typeof document !== 'undefined' && root.DHQ_LAB === true) {
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
     }

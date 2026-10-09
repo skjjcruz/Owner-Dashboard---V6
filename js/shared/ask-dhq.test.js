@@ -150,3 +150,49 @@ test('anything else gets the help card; ask-elsewhere links carry the question',
 test('no device AI in this environment: the brain is DHQ\'s engine', async () => {
     assert.equal(await A.brain(), 'engine');
 });
+
+// ── The member's own AI key (owner ask 2026-10-09) ────────────────────
+const store = {};
+globalThis.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+
+test('the AI company is read from the key itself', () => {
+    assert.equal(A.providerOf('sk-ant-api03-abc'), 'anthropic');
+    assert.equal(A.providerOf('sk-proj-abc123'), 'openai');
+    assert.equal(A.providerOf('AIzaSyD-abcdefghijklmnopqrstu'), 'gemini');
+    assert.equal(A.providerOf('hello'), null);
+});
+
+test('a saved key answers in the app; it goes only to its own AI company', async () => {
+    const seen = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+        seen.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
+        if (/anthropic/.test(url)) return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: 'Start Sutton.' }] }) };
+        if (/googleapis/.test(url)) return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Start Sutton.' }] } }] }) };
+        return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'Start Sutton.' } }] }) };
+    };
+    const ans = A.answer('Who should I start, Chig Okonkwo or Courtland Sutton?');
+    for (const [key, host] of [['sk-ant-x', 'api.anthropic.com'], ['AIzaSyD-abcdefghijklmnopqrstu', 'generativelanguage.googleapis.com'], ['sk-proj-x', 'api.openai.com']]) {
+        assert.ok(A.saveKey(key));
+        assert.equal(await A.brain(), 'key');
+        const r = await A.askWithKey('Who should I start?', ans);
+        assert.equal(r.ok, true); assert.equal(r.text, 'Start Sutton.');
+        const call = seen[seen.length - 1];
+        assert.ok(call.url.includes(host), call.url);
+        assert.ok(JSON.stringify(call.body).includes('Start Courtland Sutton over Chig Okonkwo'), 'DHQ\'s facts go with the question');
+    }
+    assert.ok(seen.every(c => !/dhqfootball|supabase|sleeper/.test(c.url)), 'the key never goes anywhere but the AI company');
+    globalThis.fetch = realFetch;
+});
+
+test('a rejected key says so plainly; removing it falls back', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'bad key' } }) });
+    A.saveKey('sk-proj-bad');
+    const r = await A.askWithKey('Who should I start?', A.answer('What does my team need?'));
+    assert.equal(r.ok, false); assert.match(r.error, /turned down by OpenAI/);
+    A.forgetKey();
+    assert.equal(A.savedKey(), null);
+    assert.equal(await A.brain(), 'engine');
+    globalThis.fetch = realFetch;
+});
