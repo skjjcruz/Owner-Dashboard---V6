@@ -747,7 +747,7 @@ function LineupTab({
         return (<React.Fragment>
             <span style={rep || (!bare && replaceMap[String(pid)]) ? { minWidth: 0, overflow: 'hidden', display: 'flex', alignItems: 'baseline', gap: '12px' } : { minWidth: 0, overflow: 'hidden' }}>
                 <span style={rep || (!bare && replaceMap[String(pid)]) ? { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 } : null}>
-                <span style={{ color: unavail ? SILVER : TEXT, fontWeight: 500, textDecoration: unavail ? 'line-through' : 'none' }}>{meta.name}</span>
+                <span style={{ color: lk && lk.locked ? GREEN : unavail ? SILVER : TEXT, fontWeight: 500, textDecoration: unavail && !(lk && lk.locked) ? 'line-through' : 'none' }}>{meta.name}</span>
                 {/* the red "Recommend replacing" chip gave way to the Replace note */}
                 {chip && chip.label && chip.label !== 'Recommend replacing' ? <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '8px', padding: '1px 7px', borderRadius: '4px', border: '1px solid ' + chip.color, color: chip.color, fontSize: fz('0.56rem'), fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{chip.label}</span> : null}
                 <span style={{ color: SILVER, fontSize: '0.7rem', marginLeft: '6px' }}>{meta.pos}{meta.team ? ' · ' + meta.team : ''}</span>
@@ -1186,7 +1186,7 @@ function LineupTab({
             const lk = lockOf(pid), locked = !!(lk && lk.locked);
             const atRisk = !locked && (!!status || (proj && proj.available === false));
             const shade = starterShade(pid);
-            const row = <AssetRow key={sl.idx} pos={meta.pos || '?'} name={meta.name}
+            const row = <AssetRow key={sl.idx} pos={meta.pos || '?'} name={locked ? <span style={{ color: GREEN }}>{meta.name}</span> : meta.name}
                 tag={wrapTag([slotLabel, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, locked ? '\u{1F512} ' + lk.label + ' · ' + (Number(lk.pts) || 0).toFixed(1) + ' pts' : (injShort(status) || null)])}
                 slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ PROJ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—', tone: 'gold' }]}
                 verdict={pro ? gradeChip((proj && proj.matchupGrade) || '—') : null}
@@ -1218,7 +1218,7 @@ function LineupTab({
             const status = (proj && proj.injuryStatus) || (playersData[pid] || {}).injury_status || '';
             const fs = formOf(pid);
             const lk = lockOf(pid), locked = !!(lk && lk.locked);
-            return <AssetRow key={label + pid} pos={meta.pos || '?'} name={meta.name}
+            return <AssetRow key={label + pid} pos={meta.pos || '?'} name={locked ? <span style={{ color: GREEN }}>{meta.name}</span> : meta.name}
                 tag={wrapTag([label, meta.team || 'FA', opp && opp.abbr ? (opp.home ? 'vs ' : '@ ') + opp.abbr : null, locked ? '\u{1F512} ' + lk.label + ' · ' + (Number(lk.pts) || 0).toFixed(1) + ' pts' : (injShort(status) || null)])}
                 slots={[{ label: (window.App && window.App.DhqProj ? window.App.DhqProj.provLabel() : 'Sleeper').toUpperCase(), value: pts ? (pts[objective] || 0).toFixed(1) : '—' }, { label: 'DHQ PROJ', value: window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—', tone: 'gold' }, { label: formWinLabel, value: fs ? fs.rollingPPG.toFixed(1) : '—', tone: 'mute' }]} />;
         };
