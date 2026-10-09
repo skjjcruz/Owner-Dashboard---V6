@@ -114,7 +114,7 @@
     function intentOf(q, players) {
         const t = norm(q);
         const has = re => re.test(t);
-        if (has(/\b(waiver|pick up|pickup|free agent|add|faab|stream)\b/)) return 'waivers';
+        if (has(/\b(waivers?|wire|pick ?ups?|picked up|free agents?|fa|adds?|faab|stream(ing|er)?|available|unrostered)\b/)) return 'waivers';
         if (has(/\btrade (with|partner|target)|who (should|can) i trade|trade targets?|who has\b|buy low on\b/) && players.length < 2) return 'targets';
         if (players.length >= 2 && has(/\b(for|trade|give|deal|offer)\b/) && !has(/\b(start|sit|play|bench|lineup)\b/)) return 'trade';
         if (has(/\b(start|sit|play|bench|lineup|flex|who should i (start|play))\b/)) return 'startsit';
@@ -336,6 +336,33 @@
                 .catch(() => 'engine');
         return _brain;
     }
+    // Everything a member's own AI needs to answer any question about this
+    // league, not just the ones DHQ recognises (owner test 2026-10-09:
+    // "Who's the best RB available on waivers" got the examples back).
+    function briefing() {
+        const lg = league(), me = myRoster(), a = me ? assessOf(me.roster_id) : null;
+        const out = [];
+        if (lg) out.push('League: ' + (lg.name || '') + ' · ' + (lg.total_rosters || rosters().length) + ' teams · season ' + (lg.season || '') + ' · week ' + ((App.WeeklyProj && App.WeeklyProj.currentWeek && App.WeeklyProj.currentWeek()) || S().currentWeek || '?'));
+        if (lg && lg.roster_positions) out.push('Lineup slots: ' + lg.roster_positions.filter(x => x !== 'BN').join(', '));
+        if (lg && lg.scoring_settings) out.push('Scoring: ' + (lg.scoring_settings.rec === 1 ? 'PPR' : lg.scoring_settings.rec === 0.5 ? 'half-PPR' : 'standard') + (lg.scoring_settings.bonus_rec_te ? ', TE premium' : ''));
+        if (me) {
+            out.push('My team: ' + teamName(me) + (a ? ' · ' + String(a.tier || '').toLowerCase() + ' · window ' + String(a.window || '').toLowerCase() + ' · holes ' + ((a.needs || []).map(n => n.pos).join(', ') || 'none') + ' · surplus ' + ((a.strengths || []).join(', ') || 'none') + (a.faabRemaining != null ? ' · $' + a.faabRemaining + ' FAAB left' : '') : ''));
+            const starters = new Set((me.starters || []).map(String));
+            (me.players || []).map(String).sort((x, y) => dhq(y) - dhq(x)).forEach(pid => {
+                const w = weekPts(pid), g = lock(pid);
+                out.push('My player: ' + pname(pid) + ' · ' + ppos(pid) + ' ' + (pl(pid).team || 'FA') + ' · DHQ ' + dhq(pid) + (starters.has(pid) ? ' · starting' : ' · bench') + (w.pts != null ? ' · ' + f1(w.pts) + (w.kind === 'proj' ? ' projected this week' : ' scored this week (' + w.kind + ')') : '') + (g && g.status === 'bye' ? ' · bye' : '') + (injury(pid) ? ' · ' + injury(pid) : ''));
+            });
+        }
+        const rostered = new Set(rosters().flatMap(r => (r.players || []).map(String)));
+        ['QB', 'RB', 'WR', 'TE'].forEach(pos => {
+            Object.keys(LI().playerScores || {}).filter(pid => !rostered.has(pid) && pl(pid).team && ppos(pid) === pos).sort((x, y) => dhq(y) - dhq(x)).slice(0, 4).forEach(pid => {
+                const w = weekPts(pid);
+                out.push('Free agent: ' + pname(pid) + ' · ' + pos + ' ' + pl(pid).team + ' · DHQ ' + dhq(pid) + (w.pts != null && w.kind === 'proj' ? ' · ' + f1(w.pts) + ' projected this week' : '') + (injury(pid) ? ' · ' + injury(pid) : ''));
+            });
+        });
+        return out;
+    }
+    const SYSTEM_KEY = 'You are the member\'s own AI, answering a question about their fantasy football league inside Dynasty HQ. Talk like a sharp GM to a friend: lead with the call, then two to four plain sentences with the key numbers. When DHQ\'s call is given, back it; never change it. Use ONLY the facts given: never add a player, number, injury or news that is not in them. If the facts can\'t answer it, say what\'s missing in one sentence. DHQ value: higher is better (7,000+ elite, 3,000+ solid starter, under 1,000 depth). No headings.';
     const SYSTEM = 'You are the Dynasty HQ assistant, a sharp, friendly fantasy football GM. You are given a question and DHQ\'s answer with its facts. Rewrite DHQ\'s answer in two to four plain sentences, as a GM talking to a friend. Lead with the call. Use ONLY the facts given: never add a player, number, injury or news that is not in them, and never change DHQ\'s call. No lists, no headings.';
     let _session = null;
     async function narrate(question, ans, onText, onProgress) {
@@ -422,26 +449,29 @@
     async function askWithKey(question, ans) {
         const k = savedKey();
         if (!k) return { ok: false, error: 'no key' };
-        const user = 'Question: ' + question + '\nDHQ\'s answer: ' + ans.text + '\nFacts:\n- ' + (ans.lines || []).join('\n- ');
+        const call = ans && ans.intent !== 'help' ? '\nDHQ\'s call: ' + ans.text + ((ans.lines || []).length ? '\nDHQ\'s facts for it:\n- ' + ans.lines.join('\n- ') : '') : '';
+        const user = 'Question: ' + question + call + '\nLeague facts:\n- ' + briefing().join('\n- ');
         const model = PROVIDERS[k.provider].model;
         const ctl = root.AbortController ? new root.AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), 30000) : null;
         try {
             let r, j, text = '';
             if (k.provider === 'anthropic') {
-                r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model, max_tokens: 400, system: SYSTEM, messages: [{ role: 'user', content: user }] }) });
+                r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model, max_tokens: 4000, output_config: { effort: 'low' }, system: SYSTEM_KEY, messages: [{ role: 'user', content: user }] }) });
                 j = await r.json().catch(() => ({}));
                 text = ((j.content || []).find(c => c.type === 'text') || {}).text || '';
             } else if (k.provider === 'gemini') {
-                r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { maxOutputTokens: 400 } }) });
+                r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM_KEY }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { maxOutputTokens: 4000 } }) });
                 j = await r.json().catch(() => ({}));
                 text = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
             } else {
-                r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + k.key }, body: JSON.stringify({ model, max_completion_tokens: 400, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }] }) });
+                r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + k.key }, body: JSON.stringify({ model, max_completion_tokens: 4000, messages: [{ role: 'system', content: SYSTEM_KEY }, { role: 'user', content: user }] }) });
                 j = await r.json().catch(() => ({}));
                 text = (((j.choices || [])[0] || {}).message || {}).content || '';
             }
             if (!r.ok) {
+                const detail = (j && j.error && (j.error.message || (typeof j.error === 'string' ? j.error : ''))) || '';
+                if (r.status !== 401 && r.status !== 403) return { ok: false, error: PROVIDERS[k.provider].label + ' had a problem (' + r.status + ')' + (detail ? ': ' + String(detail).slice(0, 200) : '') + '.' };
                 const why = r.status === 401 || r.status === 403 ? 'That key was turned down by ' + PROVIDERS[k.provider].label + '. Check it, or paste a new one.'
                     : r.status === 429 ? PROVIDERS[k.provider].label + ' says this key is out of quota or rate-limited right now.'
                     : PROVIDERS[k.provider].label + ' had a problem (' + r.status + ').';
@@ -594,7 +624,9 @@
         }
         const ans = answer(q);
         const b = await brain();
-        if (ans.intent === 'help') { ui.log.appendChild(render(q, ans, null, b).box); ui.log.scrollTop = ui.log.scrollHeight; return; }
+        // With the member's own key, every question goes to their AI with the
+        // league facts; the examples only come back without one.
+        if (ans.intent === 'help' && b !== 'key') { ui.log.appendChild(render(q, ans, null, b).box); ui.log.scrollTop = ui.log.scrollHeight; return; }
         if (b === 'engine') { ui.log.appendChild(handoff(q)); ui.log.scrollTop = ui.log.scrollHeight; return; }
         if (b === 'key') {
             const k = savedKey();
@@ -614,7 +646,8 @@
                     const ul = el('ul'); ans.lines.forEach(t => ul.appendChild(el('li', null, t))); d.appendChild(ul); box.insertBefore(d, src);
                 }
             } else {
-                box.replaceWith(keyCard(res.error));
+                if (/turned down/.test(res.error)) box.replaceWith(keyCard(res.error));
+                else { p.textContent = res.error; src.textContent = 'Try again in a moment.'; }
             }
             ui.log.scrollTop = ui.log.scrollHeight;
             return;

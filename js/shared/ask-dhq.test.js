@@ -191,6 +191,19 @@ test('a saved key answers in the app; it goes only to its own AI company', async
     globalThis.fetch = realFetch;
 });
 
+test('owner test 2026-10-09: plural "waivers" is a waiver question, and the AI gets the whole league', async () => {
+    assert.equal(A.intentOf("Who's the best RB available on waivers", []), 'waivers');
+    assert.equal(A.intentOf('Who the best waiver wire RB available', []), 'waivers');
+    const realFetch = globalThis.fetch; let body = null;
+    globalThis.fetch = async (url, opts) => { body = JSON.parse(opts.body); return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: 'ok' }] }) }; };
+    A.saveKey('sk-ant-api03-abcdefghijklmnop');
+    await A.askWithKey('Anything odd?', A.answer('Anything odd?'));
+    const sent = JSON.stringify(body);
+    assert.match(sent, /League facts/); assert.match(sent, /My player: /);
+    assert.ok(body.max_tokens >= 2000, 'room for the model to think and still answer');
+    A.forgetKey(); globalThis.fetch = realFetch;
+});
+
 test('a rejected key says so plainly; removing it falls back', async () => {
     const realFetch = globalThis.fetch;
     globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'bad key' } }) });
