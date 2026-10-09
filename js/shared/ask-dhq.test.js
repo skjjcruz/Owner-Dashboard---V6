@@ -33,7 +33,7 @@ App.LI = {
     playerScores: { chig: 1153, sutton: 938, turpin: 700, jt: 4288, dak: 4019, puka: 7091, mcb: 2881, henry: 2096, fa1: 333, fa2: 410 },
     playerMeta: { sutton: { peakYrsLeft: 0, trend: -68, ageCurvePhase: 'decline' }, jt: { peakYrsLeft: 0, trend: 3, ageCurvePhase: 'decline' }, puka: { peakYrsLeft: 3, trend: 10, ageCurvePhase: 'peak' } },
 };
-App.DhqProj = { get: pid => ({ chig: { mean: 6.5 }, sutton: { mean: 8.4 }, jt: { mean: 22.6 }, henry: { mean: 22.3 } })[pid] || null };
+App.DhqProj = { get: pid => ({ chig: { mean: 6.5, median: 6.5 }, sutton: { mean: 8.4, median: 8.4 }, jt: { mean: 22.6, median: 22.6 }, henry: { mean: 22.3, median: 22.3 } })[pid] || null };
 App.GameLocks = { state: pid => (['turpin', 'dak'].includes(pid) ? { status: 'final', locked: true, pts: pid === 'turpin' ? 8.7 : 16.6, label: 'FINAL' } : null) };
 App.getPlayerAction = pid => (pid === 'sutton' ? { label: 'Sell high', reason: 'In the veteran decline band and production is slipping (-68%).' } : { label: 'Hold', reason: 'Hold.' });
 const mine = { tier: 'CONTENDER', window: 'CONTENDING', healthScore: 87, needs: [{ pos: 'TE', urgency: 'deficit' }], strengths: ['WR'], faabRemaining: 1715, posAssessment: { TE: { status: 'deficit', nflStarters: 0, minQuality: 2 }, WR: { status: 'surplus', nflStarters: 4, minQuality: 4 } } };
@@ -103,6 +103,28 @@ test('who should I trade with: a partner with surplus at my need', () => {
     const a = A.answer('Who should I trade with?');
     assert.equal(a.intent, 'targets');
     assert.match(a.text, /^Call GasMan612 first: they have Trey McBride/);
+});
+
+test('trade answers use plain English, not model terms', () => {
+    const a = A.answer('Jonathan Taylor for Puka Nacua?');
+    assert.ok(a.lines.some(l => /^Helps: you fill a position they need$/.test(l)), a.lines.join(' | '));
+});
+
+test('the number shown is the Game Day column (typical week); the call runs on the average week', () => {
+    const save = App.DhqProj.get;
+    App.DhqProj.get = pid => ({ chig: { mean: 6.0, median: 5.0 }, sutton: { mean: 5.9, median: 5.6 } })[pid] || null;
+    const a = A.answer('Chig Okonkwo or Courtland Sutton?  who do I start');
+    assert.match(a.text, /^Toss-up: Chig Okonkwo \(5\.0\) and Courtland Sutton \(5\.6\)/);
+    App.DhqProj.get = save;
+});
+
+test('no holes: who to sell your surplus to', () => {
+    const save = mine.needs; mine.needs = []; mine.posAssessment.WR.sortedIds = ['sutton', 'turpin', 'x1', 'x2', 'x3']; mine.posAssessment.WR.nflStarters = 5;
+    theirs.needs = [{ pos: 'WR', urgency: 'thin' }];
+    const a = A.answer('Who should I trade with?');
+    assert.equal(a.title, 'Sell your surplus');
+    assert.match(a.text, /GasMan612 needs WR/);
+    mine.needs = save;
 });
 
 test('waivers by position, unrostered only', () => {

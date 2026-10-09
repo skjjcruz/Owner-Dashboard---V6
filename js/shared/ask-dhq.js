@@ -29,6 +29,7 @@
     const S = () => root.S || {};
     const LI = () => App.LI || {};
     const round1 = n => Math.round((Number(n) || 0) * 10) / 10;
+    const f1 = v => (v == null ? '—' : (Math.round(Number(v) * 10) / 10).toFixed(1));
     const norm = s => String(s || '').toLowerCase().replace(/[’']/g, '').replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
     // ── League facts ───────────────────────────────────────────────
@@ -63,7 +64,9 @@
         const DQ = App.DhqProj;
         if (DQ && DQ.get) {
             const r = DQ.get(String(pid));
-            if (r) return { pts: round1(r.mean != null ? r.mean : r.median), kind: 'proj' };
+            // Shown: his typical week, the number in Game Day's DHQ column.
+            // Decided on: his average week, as Game Day's own call is.
+            if (r) return { pts: round1(r.median != null ? r.median : r.mean), avg: round1(r.mean != null ? r.mean : r.median), kind: 'proj' };
         }
         return { pts: null, kind: 'none' };
     }
@@ -133,19 +136,19 @@
                 if (g && g.status === 'bye') why = 'on bye';
                 else if (/^(OUT|IR|PUP|SUS|NA|COV)$/.test(st)) why = 'ruled ' + pl(pid).injury_status;
                 else if (st === 'DOUBTFUL' || st === 'D') why = 'doubtful (DHQ treats doubtful as out)';
-                return { pid, name: pname(pid), pts: w.pts, kind: w.kind, inj, why, locked: !!(g && g.locked), status: g ? g.label : '' };
+                return { pid, name: pname(pid), pts: w.pts, avg: w.avg != null ? w.avg : w.pts, kind: w.kind, inj, why, locked: !!(g && g.locked), status: g ? g.label : '' };
             });
-            const open = rows.filter(r => !r.locked && !r.why && r.pts != null).sort((a, b) => b.pts - a.pts);
+            const open = rows.filter(r => !r.locked && !r.why && r.pts != null).sort((a, b) => b.avg - a.avg);
             const locked = rows.filter(r => r.locked);
-            const lines = rows.map(r => r.name + ': ' + (r.locked ? (r.kind === 'live' ? 'playing now, ' : 'already played, ') + r.pts + ' pts (locked)' : r.why ? 'can\'t start, ' + r.why : r.pts == null ? 'no projection yet' : r.pts + ' projected') + (r.inj && !r.why ? ' · ' + r.inj : ''));
+            const lines = rows.map(r => r.name + ': ' + (r.locked ? (r.kind === 'live' ? 'playing now, ' : 'already played, ') + f1(r.pts) + ' pts (locked)' : r.why ? 'can\'t start, ' + r.why : r.pts == null ? 'no projection yet' : f1(r.pts) + ' projected') + (r.inj && !r.why ? ' · ' + r.inj : ''));
             let text;
             if (!open.length) text = locked.length ? 'None of them can be moved now: ' + locked.map(r => r.name).join(' and ') + (locked.length > 1 ? ' have' : ' has') + ' already played.' : 'I can\'t make that call yet: DHQ has no projection for them this week.';
             else if (open.length === 1) text = 'Start ' + open[0].name + ' (' + open[0].pts + ' projected).' + (rows.filter(r => r !== open[0]).map(r => ' ' + r.name + (r.locked ? ' is locked, his game has started.' : r.why ? ' can\'t start: ' + r.why + '.' : ' has no projection.')).join(''));
             else {
-                const a = open[0], b = open[1], gap = round1(a.pts - b.pts);
-                text = gap < 0.5
-                    ? 'Toss-up: ' + a.name + ' (' + a.pts + ') and ' + b.name + ' (' + b.pts + ') are within half a point. Go with the healthier player and the better news.'
-                    : 'Start ' + a.name + ' over ' + b.name + ': ' + a.pts + ' vs ' + b.pts + ' projected (+' + gap + ').' + (a.inj ? ' Note ' + a.name + ' is ' + a.inj + '.' : '');
+                const a = open[0], b = open[1], gap = round1(a.pts - b.pts), edge = round1(a.avg - b.avg);
+                text = edge < 0.5
+                    ? 'Toss-up: ' + a.name + ' (' + f1(a.pts) + ') and ' + b.name + ' (' + f1(b.pts) + ') are within half a point. Go with the healthier player and the better news.'
+                    : 'Start ' + a.name + ' over ' + b.name + ': ' + f1(a.pts) + ' vs ' + f1(b.pts) + ' projected' + (gap > 0 ? ' (+' + gap.toFixed(1) + ')' : '') + '.' + (a.inj ? ' Note ' + a.name + ' is ' + a.inj + '.' : '');
             }
             return { intent: 'startsit', title: 'Start / sit', text, lines, players: rows.map(r => r.pid), facts: { rows } };
         }
@@ -154,14 +157,14 @@
         // "Should I start X?": is he in DHQ's best lineup?
         if (players.length === 1) {
             const pid = players[0], g = lock(pid), w = weekPts(pid), name = pname(pid);
-            if (g && g.locked) return { intent: 'startsit', title: 'Start / sit', text: name + '\'s game has already started (' + w.pts + ' pts so far); he can\'t be moved now.', lines: [], players: [pid], facts: {} };
+            if (g && g.locked) return { intent: 'startsit', title: 'Start / sit', text: name + '\'s game has already started (' + f1(w.pts) + ' pts so far); he can\'t be moved now.', lines: [], players: [pid], facts: {} };
             if (!chk) return { intent: 'startsit', title: 'Start / sit', text: 'DHQ is still projecting this week; ask again in a few seconds.', lines: [], players: [pid], facts: {} };
             const inBest = chk.optimal.starters.some(x => String(x.pid) === String(pid));
             const slot = (chk.optimal.starters.find(x => String(x.pid) === String(pid)) || {}).slot;
-            const ahead = chk.optimal.starters.filter(x => String(x.slot) !== '' && (pl(x.pid).fantasy_positions || [ppos(x.pid)]).some(q => (pl(pid).fantasy_positions || [ppos(pid)]).includes(q)) && String(x.pid) !== String(pid)).map(x => pname(x.pid) + ' (' + round1(x.pts) + ')');
+            const ahead = chk.optimal.starters.filter(x => String(x.slot) !== '' && (pl(x.pid).fantasy_positions || [ppos(x.pid)]).some(q => (pl(pid).fantasy_positions || [ppos(pid)]).includes(q)) && String(x.pid) !== String(pid)).map(x => pname(x.pid) + ' (' + f1(weekPts(x.pid).pts) + ')');
             return {
                 intent: 'startsit', title: 'Start / sit',
-                text: inBest ? 'Yes, start ' + name + ': he\'s in DHQ\'s best lineup at ' + String(slot).replace('_', ' ') + ' (' + w.pts + ' projected).' : 'No, bench ' + name + ' (' + (w.pts == null ? 'no projection' : w.pts + ' projected') + '). DHQ starts ' + (ahead.slice(0, 3).join(', ') || 'others') + ' ahead of him.',
+                text: inBest ? 'Yes, start ' + name + ': he\'s in DHQ\'s best lineup at ' + String(slot).replace('_', ' ') + ' (' + f1(w.pts) + ' projected).' : 'No, bench ' + name + ' (' + (w.pts == null ? 'no projection' : f1(w.pts) + ' projected') + '). DHQ starts ' + (ahead.slice(0, 3).join(', ') || 'others') + ' ahead of him.',
                 lines: injury(pid) ? ['Injury: ' + injury(pid)] : [], players: [pid], facts: { inBest },
             };
         }
@@ -169,12 +172,12 @@
         if (/\bor\b|\bvs\b|\bover\b/.test(norm(q))) return { intent: 'startsit', title: 'Start / sit', text: 'I couldn\'t match those names to players in this league. Try full names, like "Chig Okonkwo or Courtland Sutton".', lines: [], players: [], facts: {} };
         if (!chk) return { intent: 'startsit', title: 'Your lineup', text: 'DHQ is still projecting this week. Open Game Day for the full lineup check, or ask me again in a few seconds.', lines: [], players: [], facts: {} };
         const d = chk.delta;
-        if (d.isOptimal) return { intent: 'startsit', title: 'Your lineup', text: 'Start who you have in: your lineup is already DHQ\'s best (' + round1(d.currentTotal) + ' projected).', lines: [], players: [], facts: { total: d.currentTotal } };
-        const ins = d.startInstead.map(x => pname(x.pid) + ' at ' + String(x.slot).replace('_', ' ') + ' (' + round1(x.pts) + ')');
-        const outs = d.benchInstead.map(pid => pname(pid) + ' (' + round1(weekPts(pid).pts) + ')');
+        if (d.isOptimal) return { intent: 'startsit', title: 'Your lineup', text: 'Start who you have in: your lineup is already DHQ\'s best (' + f1(d.currentTotal) + ' projected).', lines: [], players: [], facts: { total: d.currentTotal } };
+        const ins = d.startInstead.map(x => pname(x.pid) + ' at ' + String(x.slot).replace('_', ' ') + ' (' + f1(weekPts(x.pid).pts) + ')');
+        const outs = d.benchInstead.map(pid => pname(pid) + ' (' + f1(weekPts(pid).pts) + ')');
         return {
             intent: 'startsit', title: 'Your lineup',
-            text: 'You\'re leaving ' + round1(d.optimalTotal - d.currentTotal) + ' points on the bench. Start ' + ins[0] + (outs[0] ? ' instead of ' + outs[0] : '') + (ins.length > 1 ? ', and ' + (ins.length - 1) + ' more change' + (ins.length > 2 ? 's' : '') + '.' : '.'),
+            text: 'You\'re leaving ' + round1(d.optimalTotal - d.currentTotal).toFixed(1) + ' points on the bench. Start ' + ins[0] + (outs[0] ? ' instead of ' + outs[0] : '') + (ins.length > 1 ? ', and ' + (ins.length - 1) + ' more change' + (ins.length > 2 ? 's' : '') + '.' : '.'),
             lines: ins.map((x, i) => 'Start ' + x + (outs[i] ? ', sit ' + outs[i] : '')),
             players: d.startInstead.map(x => x.pid).concat(d.benchInstead), facts: { current: d.currentTotal, optimal: d.optimalTotal },
         };
@@ -188,7 +191,7 @@
         const lines = [
             'DHQ value ' + dhq(pid) + (m.ageCurvePhase ? ' · ' + m.ageCurvePhase.replace('_', ' ') + ' phase' : '') + (m.peakYrsLeft != null ? ' · ' + m.peakYrsLeft + ' peak year' + (m.peakYrsLeft === 1 ? '' : 's') + ' left' : ''),
             m.trend ? 'Production ' + (m.trend > 0 ? 'up ' : 'down ') + Math.abs(m.trend) + '% on last season' : null,
-            w.pts != null ? (w.kind === 'proj' ? 'This week: ' + w.pts + ' projected' : 'This week: ' + w.pts + ' pts (' + (w.kind === 'live' ? 'playing now' : 'final') + ')') : null,
+            w.pts != null ? (w.kind === 'proj' ? 'This week: ' + f1(w.pts) + ' projected' : 'This week: ' + f1(w.pts) + ' pts (' + (w.kind === 'live' ? 'playing now' : 'final') + ')') : null,
             injury(pid) ? 'Injury: ' + injury(pid) : null,
             'Rostered by ' + (holder ? teamName(holder) + (me && holder.roster_id === me.roster_id ? ' (you)' : '') : 'nobody: free agent'),
         ].filter(Boolean);
@@ -204,14 +207,15 @@
         if (gap >= 10) text = a.name + ' is the better dynasty asset: DHQ ' + a.value + ' vs ' + b.value + ' (' + gap + '% gap)' + (b.peak - a.peak >= 2 ? ', though ' + b.name + ' has the longer runway (' + b.peak + ' vs ' + a.peak + ' peak years).' : '.');
         else if (Math.abs(a.peak - b.peak) >= 2) { const l = a.peak > b.peak ? a : b; text = 'Close on value (DHQ ' + a.value + ' vs ' + b.value + '); ' + l.name + ' has the longer runway (' + l.peak + ' peak years), which tips it.'; }
         else text = 'Too close to call on dynasty value (DHQ ' + a.value + ' vs ' + b.value + '). For this week, ask who to start; for a trade, the one who fills your need wins.';
-        const lines = rows.map(r => r.name + ': DHQ ' + r.value + ' · ' + r.peak + ' peak yrs · age ' + (r.age || '?') + (r.week != null ? ' · this week ' + r.week : ''));
+        const lines = rows.map(r => r.name + ': DHQ ' + r.value + ' · ' + (r.peak > 0 ? r.peak + ' peak yr' + (r.peak === 1 ? '' : 's') + ' left' : 'past his peak years') + ' · age ' + (r.age || '?') + (r.week != null ? ' · this week ' + Number(r.week).toFixed(1) : ''));
         return { intent: 'compare', title: 'Compare', text, lines, players: ids, facts: { rows } };
     }
     function needs() {
         const me = myRoster(); const a = me ? assessOf(me.roster_id) : null;
         if (!a) return { intent: 'needs', title: 'Your team', text: 'DHQ is still reading your league. Ask again in a moment.', lines: [], players: [], facts: {} };
         const need = (a.needs || []).map(n => n.pos + ' (' + n.urgency + ')');
-        const lines = Object.entries(a.posAssessment || {}).filter(([, x]) => x.status !== 'ok').map(([pos, x]) => pos + ': ' + x.status + ' · ' + x.nflStarters + ' quality starter' + (x.nflStarters === 1 ? '' : 's') + ' for ' + x.minQuality + ' slot' + (x.minQuality === 1 ? '' : 's'));
+        const word = x => x.status === 'deficit' ? 'hole' : x.status === 'thin' ? 'thin' : x.status === 'surplus' && x.nflStarters > x.minQuality ? 'surplus' : 'covered';
+        const lines = Object.entries(a.posAssessment || {}).filter(([, x]) => word(x) !== 'covered').map(([pos, x]) => pos + ': ' + word(x) + ' · ' + x.nflStarters + ' quality starter' + (x.nflStarters === 1 ? '' : 's') + ' for ' + x.minQuality + ' lineup spot' + (x.minQuality === 1 ? '' : 's'));
         const win = a.window === 'CONTENDING' ? 'You\'re contending: spend picks and youth for starters who score now.' : a.window === 'REBUILDING' ? 'You\'re rebuilding: sell veterans near the end of their peak for picks and young players.' : 'You\'re in between: pick a lane before the deadline.';
         const text = (need.length ? 'Your holes: ' + need.join(', ') + '.' : 'No real holes: every position is covered.') + ((a.strengths || []).length ? ' Trade from your surplus at ' + a.strengths.join(', ') + '.' : '') + ' ' + win;
         return { intent: 'needs', title: teamName(me) + ' · ' + String(a.tier || '').toLowerCase(), text, lines, players: [], facts: { tier: a.tier, window: a.window, needs: need, strengths: a.strengths, health: a.healthScore } };
@@ -244,13 +248,15 @@
             }
         } catch (e) { /* acceptance is a bonus */ }
         const text = (fair ? fair.grade + ' (' + fair.label + ')' : 'Graded') + ': you give DHQ ' + tg + ', you get ' + tt + ' (' + (tt - tg >= 0 ? '+' : '') + (tt - tg) + ' for you).' + (accept != null ? ' About ' + accept + '% chance ' + (partner ? teamName(partner) : 'they') + ' says yes.' : '');
-        const lines = give.map(p => 'You give ' + pname(p) + ' · DHQ ' + dhq(p)).concat(get.map(p => 'You get ' + pname(p) + ' · DHQ ' + dhq(p)), posture ? ['Their posture: ' + posture.label] : [], taxes.slice(0, 3).map(x => x.name + ' (' + (x.impact > 0 ? '+' : '') + x.impact + ')'));
+        const PLAIN = { 'Endowment Effect': 'they value their own players more than the market does', 'Panic Premium': 'they are hurting and more willing to deal', 'Status Tax': 'they hate losing a trade', 'Loss Aversion': 'they fear giving up value', 'Rebuilding Discount': 'they like selling for futures', 'Need Fulfillment': 'you fill a position they need', 'Window Alignment': 'your windows fit (one buying now, one building)', 'Window Friction': 'you are both chasing the same window', 'Locked Roster Tax': 'their roster is set and they rarely move', 'Seller Momentum': 'they are in selling mode' };
+        const lines = give.map(p => 'You give ' + pname(p) + ' · DHQ ' + dhq(p)).concat(get.map(p => 'You get ' + pname(p) + ' · DHQ ' + dhq(p)), taxes.slice(0, 3).map(x => (x.impact > 0 ? 'Helps: ' : 'Hurts: ') + (PLAIN[x.name] || String(x.name).toLowerCase())));
         return { intent: 'trade', title: 'Trade grade', text, lines, players: give.concat(get), facts: { give: tg, get: tt, fair, accept } };
     }
     function targets(q) {
         const me = myRoster(), mine = me ? assessOf(me.roster_id) : null, TE = App.TradeEngine;
         if (!mine) return { intent: 'targets', title: 'Trade targets', text: 'DHQ is still reading your league. Ask again in a moment.', lines: [], players: [], facts: {} };
         const want = findPos(q) ? [findPos(q)] : (mine.needs || []).map(n => n.pos);
+        if (!want.length && (mine.strengths || []).length) return sellTargets(me, mine);
         const list = allAssess().filter(a => String(a.rosterId) !== String(me.roster_id)).map(a => {
             const fit = TE && TE.calcComplementarity ? Number(TE.calcComplementarity(mine, a)) || 0 : 0;
             const hits = want.flatMap(pos => (((a.posAssessment || {})[pos] || {}).sortedIds || []).filter(pid => dhq(pid) >= (/^(DL|LB|DB|K|DEF)$/.test(pos) ? 500 : 2000)).slice(0, 1));
@@ -263,6 +269,19 @@
         const text = 'Call ' + top.a.teamName + ' first: they have ' + top.hits.map(pname).join(' and ') + ' and they need ' + (((top.a.needs || []).map(n => n.pos)).join(', ') || 'depth') + '. ' + ((mine.strengths || []).length ? 'Pay from your ' + mine.strengths.join('/') + ' surplus.' : mine.window === 'CONTENDING' ? 'Pay with future picks.' : 'Ask for picks and youth back.');
         return { intent: 'targets', title: 'Trade targets', text, lines, players: list.flatMap(x => x.hits), facts: { want } };
     }
+    // No holes to fill: who needs what you have too much of.
+    function sellTargets(me, mine) {
+        const list = allAssess().filter(a => String(a.rosterId) !== String(me.roster_id)).map(a => {
+            const wants = (a.needs || []).map(n => n.pos).filter(p => (mine.strengths || []).includes(p));
+            const lane = (mine.window === 'CONTENDING' && a.window === 'REBUILDING') || (mine.window === 'REBUILDING' && a.window === 'CONTENDING');
+            return { a, wants, score: wants.length * 10 + (lane ? 14 : 0) + Number(a.panic || 0) * 2 };
+        }).filter(x => x.wants.length).sort((x, y) => y.score - x.score).slice(0, 3);
+        const extra = pos => { const x = (mine.posAssessment || {})[pos] || {}; return (x.sortedIds || []).slice(Math.max(1, x.minQuality || 1)).slice(0, 2); };
+        if (!list.length) return { intent: 'targets', title: 'Trade targets', text: 'You have no holes, and nobody in your league needs what you have extra of right now. Hold, and check back after injuries shake things up.', lines: [], players: [], facts: {} };
+        const lines = list.map(x => x.a.teamName + ' needs ' + x.wants.join(', ') + ': offer ' + x.wants.flatMap(extra).map(p => pname(p) + ' (DHQ ' + dhq(p) + ')').join(', '));
+        const top = list[0];
+        return { intent: 'targets', title: 'Sell your surplus', text: 'You have no holes, so sell from strength. ' + top.a.teamName + ' needs ' + top.wants.join(' and ') + ', where you have extra. ' + (mine.window === 'CONTENDING' ? 'Ask for a starter-level upgrade elsewhere or future picks.' : 'Ask for picks and young players.'), lines, players: list.flatMap(x => x.wants.flatMap(extra)), facts: {} };
+    }
     function waivers(q) {
         const pos = findPos(q);
         const me = myRoster(), mine = me ? assessOf(me.roster_id) : null;
@@ -271,7 +290,7 @@
         const pool = Object.keys(LI().playerScores || {}).filter(pid => !rostered.has(pid) && pl(pid).team && (!want.length || want.includes(ppos(pid)) || (pl(pid).fantasy_positions || []).some(x => want.includes(String(x).toUpperCase()))))
             .sort((a, b) => dhq(b) - dhq(a)).slice(0, 5);
         if (!pool.length) return { intent: 'waivers', title: 'Waivers', text: 'Nothing worth a claim at ' + (want.join('/') || 'that spot') + ' right now.', lines: [], players: [], facts: {} };
-        const lines = pool.map(pid => { const w = weekPts(pid); return pname(pid) + ' · ' + ppos(pid) + ' ' + (pl(pid).team || 'FA') + ' · DHQ ' + dhq(pid) + (w.pts != null && w.kind === 'proj' ? ' · ' + w.pts + ' this week' : '') + (injury(pid) ? ' · ' + injury(pid) : ''); });
+        const lines = pool.map(pid => { const w = weekPts(pid); return pname(pid) + ' · ' + ppos(pid) + ' ' + (pl(pid).team || 'FA') + ' · DHQ ' + dhq(pid) + (w.pts != null && w.kind === 'proj' ? ' · ' + f1(w.pts) + ' this week' : '') + (injury(pid) ? ' · ' + injury(pid) : ''); });
         const text = 'Best available' + (want.length ? ' at ' + want.join('/') : '') + ': ' + pname(pool[0]) + ' (DHQ ' + dhq(pool[0]) + ').' + (mine && mine.faabRemaining != null ? ' You have $' + mine.faabRemaining + ' FAAB left; Free Agency has the bid model.' : '');
         return { intent: 'waivers', title: 'Waivers', text, lines, players: pool, facts: { want } };
     }
