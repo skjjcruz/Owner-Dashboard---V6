@@ -478,16 +478,16 @@
             }
             if (!r.ok) {
                 const detail = (j && j.error && (j.error.message || (typeof j.error === 'string' ? j.error : ''))) || '';
-                if (r.status !== 401 && r.status !== 403) return { ok: false, error: PROVIDERS[k.provider].label + ' had a problem (' + r.status + ')' + (detail ? ': ' + String(detail).slice(0, 200) : '') + '.' };
-                const why = r.status === 401 || r.status === 403 ? 'That key was turned down by ' + PROVIDERS[k.provider].label + '. Check it, or paste a new one.'
-                    : r.status === 429 ? PROVIDERS[k.provider].label + ' says this key is out of quota or rate-limited right now.'
-                    : PROVIDERS[k.provider].label + ' had a problem (' + r.status + ').';
-                return { ok: false, error: why };
+                // Owner test 2026-10-09: a working key was sent back to the
+                // paste box twice. Only a 401 means the key itself is bad;
+                // anything else keeps the key and shows the company's reason.
+                if (r.status === 401) return { ok: false, badKey: true, error: PROVIDERS[k.provider].label + ' turned that key down' + (detail ? ' (' + String(detail).slice(0, 160) + ')' : '') + '. Paste a new one and your question is asked again.' };
+                return { ok: false, retry: r.status === 429 || r.status >= 500, error: (r.status === 429 ? PROVIDERS[k.provider].label + ' says this key is out of quota or busy right now' : PROVIDERS[k.provider].label + ' had a problem (' + r.status + ')') + (detail ? ': ' + String(detail).slice(0, 200) : '') + '.' };
             }
             if (text.trim()) { chat.push({ q: question, a: text.trim() }); if (chat.length > CHAT_TURNS) chat.shift(); }
             return text.trim() ? { ok: true, text: text.trim(), provider: k.provider } : { ok: false, error: PROVIDERS[k.provider].label + ' sent back an empty answer.' };
         } catch (e) {
-            return { ok: false, error: 'Couldn\'t reach ' + PROVIDERS[k.provider].label + '. Check your connection.' };
+            return { ok: false, retry: true, error: 'Couldn\'t reach ' + PROVIDERS[k.provider].label + '. Check your connection.' };
         } finally { if (timer) clearTimeout(timer); }
     }
 
@@ -527,7 +527,7 @@
     let ui = null;
     function brainLabel(b) { const k = savedKey(); return b === 'key' && k ? 'Your ' + PROVIDERS[k.provider].label + ' key' : b === 'device' ? 'Your device\'s AI · free' : b === 'device-download' ? 'Your device\'s AI (sets up on first ask)' : 'Your ChatGPT or Claude'; }
     // Paste-your-key card: one box, the company is read from the key.
-    function keyCard(note) {
+    function keyCard(note, retryQ) {
         const box = el('div', 'askdhq-a askdhq-key');
         box.appendChild(el('h4', null, 'Use your own AI key'));
         box.appendChild(el('p', null, note || 'Paste a key from OpenAI, Anthropic (Claude) or Google (Gemini) and your AI answers right here.'));
@@ -549,7 +549,8 @@
             if (ui) ui.brain.textContent = brainLabel('key');
             // Owner ask 2026-10-09: once the key is in, fold the box up to
             // one line so nothing looks unfinished.
-            box.replaceChildren(el('p', null, '✓ ' + (ok === 'ok' ? 'Your ' + PROVIDERS[prov].label + ' key is saved and working.' : 'Your ' + PROVIDERS[prov].label + ' key is saved.') + ' Ask away below.'));
+            box.replaceChildren(el('p', null, '✓ ' + (ok === 'ok' ? 'Your ' + PROVIDERS[prov].label + ' key is saved and working.' : 'Your ' + PROVIDERS[prov].label + ' key is saved.') + (retryQ ? ' Asking your question again…' : ' Ask away below.')));
+            if (retryQ) { box.remove(); const last = ui && ui.log.lastElementChild; if (last && last.classList.contains('askdhq-q') && last.textContent === retryQ) last.remove(); ask(retryQ); return; }
             if (ui) ui.input.focus();
         };
         box.appendChild(f); box.appendChild(msg);
@@ -645,7 +646,9 @@
             const src = el('div', 'askdhq-src', '');
             box.appendChild(src);
             ui.log.appendChild(box); ui.log.scrollTop = ui.log.scrollHeight;
-            const res = await askWithKey(q, ans);
+            let res = await askWithKey(q, ans);
+            // One quiet retry for a blip (busy, timeout, dropped connection).
+            if (!res.ok && res.retry) { await new Promise(rs => setTimeout(rs, 1500)); res = await askWithKey(q, ans); }
             if (res.ok) {
                 p.textContent = res.text;
                 src.textContent = 'Answered by your ' + PROVIDERS[k.provider].label + ' key with DHQ\'s data. DHQ never saw your key.';
@@ -654,8 +657,13 @@
                     const ul = el('ul'); ans.lines.forEach(t => ul.appendChild(el('li', null, t))); d.appendChild(ul); box.insertBefore(d, src);
                 }
             } else {
-                if (/turned down/.test(res.error)) box.replaceWith(keyCard(res.error));
-                else { p.textContent = res.error; src.textContent = 'Try again in a moment.'; }
+                if (res.badKey) { box.replaceWith(keyCard(res.error, q)); }
+                else {
+                    p.textContent = res.error; src.textContent = 'Your key is still saved.';
+                    const again = el('button', 'askdhq-chip', 'Try again'); again.type = 'button';
+                    again.onclick = () => { box.remove(); ui.log.lastElementChild && ui.log.lastElementChild.classList.contains('askdhq-q') && ui.log.lastElementChild.remove(); ask(q); };
+                    const row = el('div', 'askdhq-more'); row.appendChild(again); box.appendChild(row);
+                }
             }
             ui.log.scrollTop = ui.log.scrollHeight;
             return;

@@ -212,7 +212,12 @@ test('a rejected key says so plainly; removing it falls back', async () => {
     globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'bad key' } }) });
     A.saveKey('sk-proj-badbadbadbadbadbadbad');
     const r = await A.askWithKey('Who should I start?', A.answer('What does my team need?'));
-    assert.equal(r.ok, false); assert.match(r.error, /turned down by OpenAI/);
+    assert.equal(r.ok, false); assert.match(r.error, /OpenAI turned that key down/); assert.equal(r.badKey, true);
+    // Anything but a 401 keeps the key and gives the company's reason.
+    globalThis.fetch = async () => ({ ok: false, status: 403, json: async () => ({ error: { message: 'workspace not allowed' } }) });
+    const r2 = await A.askWithKey('Who should I start?', A.answer('What does my team need?'));
+    assert.ok(!r2.badKey); assert.match(r2.error, /\(403\): workspace not allowed/);
+    assert.ok(A.savedKey(), 'the key stays saved');
     A.forgetKey();
     assert.equal(A.savedKey(), null);
     assert.equal(await A.brain(), 'engine');
