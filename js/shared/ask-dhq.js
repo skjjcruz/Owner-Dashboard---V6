@@ -446,9 +446,16 @@
     function forgetKey() { try { root.localStorage.removeItem(KEY_NAME); root.localStorage.removeItem(PROVIDER_NAME); } catch (e) { /* nothing saved */ } _brain = null; keyChanged(); }
     // The leagues page hides its "New: Ask your AI" card once a key is in.
     function keyChanged() { try { if (root.dispatchEvent && root.CustomEvent) root.dispatchEvent(new root.CustomEvent('dhq:ai-key-changed')); } catch (e) { /* no listeners */ } }
+    // Owner ask 2026-10-09: purely conversational. The last few turns go
+    // with each question so follow-ups ("what about him?") work.
+    const chat = [];
+    const CHAT_TURNS = 6;
     async function askWithKey(question, ans) {
         const k = savedKey();
         if (!k) return { ok: false, error: 'no key' };
+        // A new league starts a new conversation.
+        const lid = String(S().currentLeagueId || '');
+        if (chat.league !== lid) { chat.length = 0; chat.league = lid; }
         const call = ans && ans.intent !== 'help' ? '\nDHQ\'s call: ' + ans.text + ((ans.lines || []).length ? '\nDHQ\'s facts for it:\n- ' + ans.lines.join('\n- ') : '') : '';
         const user = 'Question: ' + question + call + '\nLeague facts:\n- ' + briefing().join('\n- ');
         const model = PROVIDERS[k.provider].model;
@@ -457,15 +464,15 @@
         try {
             let r, j, text = '';
             if (k.provider === 'anthropic') {
-                r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model, max_tokens: 4000, output_config: { effort: 'low' }, system: SYSTEM_KEY, messages: [{ role: 'user', content: user }] }) });
+                r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model, max_tokens: 4000, output_config: { effort: 'low' }, system: SYSTEM_KEY, messages: chat.flatMap(t => [{ role: 'user', content: t.q }, { role: 'assistant', content: t.a }]).concat([{ role: 'user', content: user }]) }) });
                 j = await r.json().catch(() => ({}));
                 text = ((j.content || []).find(c => c.type === 'text') || {}).text || '';
             } else if (k.provider === 'gemini') {
-                r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM_KEY }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { maxOutputTokens: 4000 } }) });
+                r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM_KEY }] }, contents: chat.flatMap(t => [{ role: 'user', parts: [{ text: t.q }] }, { role: 'model', parts: [{ text: t.a }] }]).concat([{ role: 'user', parts: [{ text: user }] }]), generationConfig: { maxOutputTokens: 4000 } }) });
                 j = await r.json().catch(() => ({}));
                 text = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
             } else {
-                r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + k.key }, body: JSON.stringify({ model, max_completion_tokens: 4000, messages: [{ role: 'system', content: SYSTEM_KEY }, { role: 'user', content: user }] }) });
+                r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + k.key }, body: JSON.stringify({ model, max_completion_tokens: 4000, messages: [{ role: 'system', content: SYSTEM_KEY }].concat(chat.flatMap(t => [{ role: 'user', content: t.q }, { role: 'assistant', content: t.a }]), [{ role: 'user', content: user }]) }) });
                 j = await r.json().catch(() => ({}));
                 text = (((j.choices || [])[0] || {}).message || {}).content || '';
             }
@@ -477,6 +484,7 @@
                     : PROVIDERS[k.provider].label + ' had a problem (' + r.status + ').';
                 return { ok: false, error: why };
             }
+            if (text.trim()) { chat.push({ q: question, a: text.trim() }); if (chat.length > CHAT_TURNS) chat.shift(); }
             return text.trim() ? { ok: true, text: text.trim(), provider: k.provider } : { ok: false, error: PROVIDERS[k.provider].label + ' sent back an empty answer.' };
         } catch (e) {
             return { ok: false, error: 'Couldn\'t reach ' + PROVIDERS[k.provider].label + '. Check your connection.' };
@@ -626,7 +634,7 @@
         const b = await brain();
         // With the member's own key, every question goes to their AI with the
         // league facts; the examples only come back without one.
-        if (ans.intent === 'help' && b !== 'key') { ui.log.appendChild(render(q, ans, null, b).box); ui.log.scrollTop = ui.log.scrollHeight; return; }
+        if (ans.intent === 'help' && b !== 'key') { ui.log.appendChild(handoff(q)); ui.log.scrollTop = ui.log.scrollHeight; return; }
         if (b === 'engine') { ui.log.appendChild(handoff(q)); ui.log.scrollTop = ui.log.scrollHeight; return; }
         if (b === 'key') {
             const k = savedKey();
@@ -695,7 +703,10 @@
         ui = { panel, log, input, brain: brainEl, btn };
         if (btn) btn.style.display = 'none';
         brain().then(b => { brainEl.textContent = brainLabel(b); });
-        const h = help(); const v = render('', h, null, 'engine'); log.appendChild(v.box);
+        // No canned questions (owner ask 2026-10-09): one line, then talk.
+        const hi = el('div', 'askdhq-a'); const lgName = (league() || {}).name;
+        hi.appendChild(el('p', null, 'Ask me anything about ' + (lgName ? lgName : 'your league') + ': lineups, trades, waivers, players. Follow-ups work too.'));
+        log.appendChild(hi);
         input.focus();
     }
     // ── Members only (owner ruling 2026-10-09) ─────────────────────────

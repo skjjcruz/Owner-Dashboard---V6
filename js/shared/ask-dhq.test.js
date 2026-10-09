@@ -201,6 +201,9 @@ test('owner test 2026-10-09: plural "waivers" is a waiver question, and the AI g
     const sent = JSON.stringify(body);
     assert.match(sent, /League facts/); assert.match(sent, /My player: /);
     assert.ok(body.max_tokens >= 2000, 'room for the model to think and still answer');
+    // Purely conversational: the next question carries the last turn.
+    await A.askWithKey('And at WR?', A.answer('And at WR?'));
+    assert.ok(body.messages.length >= 3 && body.messages.some(m => m.role === 'assistant' && m.content === 'ok'), 'follow-ups carry the conversation');
     A.forgetKey(); globalThis.fetch = realFetch;
 });
 
