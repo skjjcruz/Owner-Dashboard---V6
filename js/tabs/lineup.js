@@ -157,7 +157,8 @@ function LineupTab({
         const on = () => { if (alive) setCtxTick(t => t + 1); };
         window.addEventListener('wr:locks-updated', on);
         return () => { alive = false; clearInterval(iv); window.removeEventListener('wr:locks-updated', on); };
-    }, [lineupKey]);
+        // Keyed on the week: a cold load can read week 1 before the real week lands.
+    }, [lineupKey, WP && WP.currentWeek ? WP.currentWeek() : 1]);
 
     // ── Weekly opponent (head-to-head): resolve, project, forecast ──
     const [oppRosterId, setOppRosterId] = React.useState(null);
@@ -1191,7 +1192,7 @@ function LineupTab({
                 verdict={pro ? gradeChip((proj && proj.matchupGrade) || '—') : null}
                 accent={open ? 'gold' : atRisk ? 'risk' : undefined}
                 style={shade ? { background: 'transparent' } : undefined}
-                onClick={() => { if (locked) return; setOpenSlot(open ? null : sl.idx); }} />;
+                onClick={locked ? undefined : () => setOpenSlot(open ? null : sl.idx)} />;
             // The optimizer's note gets its own full-width line under the row
             // (it used to prefix the tag, where a 375px row cut the
             // replacement's name and pushed slot / team / opponent out of
