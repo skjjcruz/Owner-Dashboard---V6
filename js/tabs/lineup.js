@@ -479,6 +479,16 @@ function LineupTab({
         const last = h.length ? h[h.length - 1] : null;
         return last ? { v: last.pts, now: false, week: last.week } : null;
     };
+    // Hi turns green only when the season high came in his most recent game
+    // (owner ask 2026-10-09). Most recent = this week once his game has
+    // started, otherwise the last week he played.
+    const hiIsRecent = pid => {
+        const h = (WP && WP.weeklyHistory ? WP.weeklyHistory(String(pid)) : []).filter(g => g.pts > 0.1);
+        if (!h.length) return false;
+        let hi = h[0]; h.forEach(g => { if (g.pts >= hi.pts) hi = g; });
+        const recentWeek = actualOf(pid) != null ? curWeek : h[h.length - 1].week;
+        return hi.week === recentWeek;
+    };
     const formOf = pid => window.App.WeeklyProj.formStats(pid, formWindow);
 
     // Roster pools.
@@ -768,9 +778,9 @@ function LineupTab({
             <span style={{ textAlign: 'right', color: 'var(--gold, #d4af37)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{window.App && window.App.DhqProj ? window.App.DhqProj.fmt(pid) : '—'}</span>
             {pro ? <span style={{ textAlign: 'center' }}><span title={opp && opp.abbr ? ('vs ' + opp.abbr) : ('Matchup ' + grade)} style={{ fontWeight: 700, color: gradeColor(grade), fontSize: '0.78rem' }}>{grade}</span></span> : null}
             {!isPhone ? (<React.Fragment>
-                <span title={l1 ? (l1.now ? 'This week, actual points' + (lk && lk.status === 'live' ? ' so far' : '') : 'Week ' + l1.week + ', actual points (his last game)') : 'No games yet'} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: l1 && l1.now ? TEXT : SILVER, fontWeight: l1 && l1.now ? 800 : 400 }}>{l1 ? Number(l1.v).toFixed(1) : '—'}</span>
+                <span title={l1 ? (l1.now ? 'This week, actual points' + (lk && lk.status === 'live' ? ' so far' : '') : 'Week ' + l1.week + ', actual points (his last game)') : 'No games yet'} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: l1 && l1.now ? GREEN : SILVER, fontWeight: l1 && l1.now ? 800 : 400 }}>{l1 ? Number(l1.v).toFixed(1) : '—'}</span>
                 {num(fs ? fs.rollingPPG.toFixed(1) : '—', TEXT)}
-                {num(fs ? fs.high.toFixed(1) : '—', GREEN)}
+                {num(fs ? fs.high.toFixed(1) : '—', fs && hiIsRecent(pid) ? GREEN : SILVER)}
                 {num(fs ? fs.low.toFixed(1) : '—', SILVER)}
             </React.Fragment>) : null}
         </React.Fragment>);
@@ -1722,7 +1732,7 @@ function LineupTab({
                                         return fs ? (
                                             <div style={{ padding: '6px 14px 2px', fontSize: '0.7rem', color: SILVER, fontVariantNumeric: 'tabular-nums' }}>
                                                 {formWinLabel} <span style={{ color: TEXT, fontWeight: 700 }}>{fs.rollingPPG.toFixed(1)}</span>
-                                                {' · Hi '}<span style={{ color: GREEN, fontWeight: 700 }}>{fs.high.toFixed(1)}</span>
+                                                {' · Hi '}<span style={{ color: hiIsRecent(pid) ? GREEN : SILVER, fontWeight: 700 }}>{fs.high.toFixed(1)}</span>
                                                 {' · Lo '}<span style={{ color: SILVER, fontWeight: 700 }}>{fs.low.toFixed(1)}</span>
                                             </div>
                                         ) : null;
@@ -1759,7 +1769,7 @@ function LineupTab({
             </div>
 
             <div style={{ color: SILVER, fontSize: '0.66rem', marginTop: '10px', lineHeight: 1.6, opacity: 0.9 }}>
-                <strong style={{ color: TEXT }}>Proj</strong> projected pts (your {objective} strategy){pro ? <React.Fragment> · <strong style={{ color: TEXT }}>Mtch</strong> matchup grade A–F (opponent's implied total)</React.Fragment> : null} · <strong style={{ color: TEXT }}>L1</strong> last game's actual pts (bold = this week, once his game has started) · <strong style={{ color: TEXT }}>{'\u{1F512}'}</strong> game started: locked, cannot be moved · <strong style={{ color: TEXT }}>{formWinLabel}</strong> rolling avg of actual pts · <strong style={{ color: TEXT }}>Hi/Lo</strong> season best/worst week
+                <strong style={{ color: TEXT }}>Proj</strong> projected pts (your {objective} strategy){pro ? <React.Fragment> · <strong style={{ color: TEXT }}>Mtch</strong> matchup grade A–F (opponent's implied total)</React.Fragment> : null} · <strong style={{ color: TEXT }}>L1</strong> last game's actual pts (green = this week, once his game has started) · <strong style={{ color: TEXT }}>{'\u{1F512}'}</strong> game started: locked, cannot be moved · <strong style={{ color: TEXT }}>{formWinLabel}</strong> rolling avg of actual pts · <strong style={{ color: TEXT }}>Hi/Lo</strong> season best/worst week (Hi in green = his best week was his latest)
             </div>
             <div style={{ color: SILVER, fontSize: '0.72rem', marginTop: '8px', lineHeight: 1.5 }}>
                 Projections are league-scored from role, recent form{objective !== 'median' ? `, your ${result.mode.replace('_', '-')} strategy` : ''}, matchup and defense-vs-position; form columns are actual weekly points over the chosen window. Build and compare here{isMfl ? ' — then push straight to MFL above' : ' — set the final lineup on your platform'}.
