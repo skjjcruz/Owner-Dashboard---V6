@@ -196,3 +196,14 @@ test('a rejected key says so plainly; removing it falls back', async () => {
     assert.equal(await A.brain(), 'engine');
     globalThis.fetch = realFetch;
 });
+
+test('members only: guests and signed-out visitors never get it', () => {
+    globalThis.OD = { identity: { currentOwner: () => 'guest' } };
+    assert.equal(A.isMember(), false);
+    globalThis.OD = { identity: { currentOwner: () => null } };
+    assert.equal(A.isMember(), false);
+    globalThis.OD = { identity: { currentOwner: () => 'user-123' } };
+    assert.equal(A.isMember(), true);
+    delete globalThis.OD;
+    assert.equal(A.isMember(), false);
+});

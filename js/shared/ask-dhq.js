@@ -615,6 +615,9 @@
         const h = help(); const v = render('', h, null, 'engine'); log.appendChild(v.box);
         input.focus();
     }
+    function isMember() {
+        try { const owner = root.OD && root.OD.identity && root.OD.identity.currentOwner ? root.OD.identity.currentOwner() : null; return !!owner && owner !== 'guest'; } catch (e) { return false; }
+    }
     function mount() {
         const d = root.document;
         if (!d || !d.body || d.querySelector('.askdhq-btn')) return;
@@ -623,15 +626,17 @@
         btn.onclick = open;
         btn.style.display = 'none';
         d.body.appendChild(btn);
-        // Show the button only while a league is open.
+        // Show the button only to signed-in members (owner ruling
+        // 2026-10-09: a members-only feature; guests never see it), and only
+        // while a league is open.
         setInterval(() => {
-            const on = !!(S().currentLeagueId && rosters().length);
+            const on = isMember() && !!(S().currentLeagueId && rosters().length);
             if (!ui || ui.panel.style.display === 'none') btn.style.display = on ? '' : 'none';
             else if (!on) { ui.panel.style.display = 'none'; btn.style.display = 'none'; }
         }, 1500);
     }
 
-    App.AskDHQ = App.AskDHQ || { answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help };
+    App.AskDHQ = App.AskDHQ || { isMember, answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help };
     if (typeof document !== 'undefined' && root.DHQ_LAB === true) {
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
     }
