@@ -156,9 +156,14 @@ const store = {};
 globalThis.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
 
 test('the AI company is read from the key itself', () => {
-    assert.equal(A.providerOf('sk-ant-api03-abc'), 'anthropic');
-    assert.equal(A.providerOf('sk-proj-abc123'), 'openai');
+    assert.equal(A.providerOf('sk-ant-api03-abcdefghijklmnop'), 'anthropic');
+    assert.equal(A.providerOf('sk-proj-abc123defghijklmnop'), 'openai');
     assert.equal(A.providerOf('AIzaSyD-abcdefghijklmnopqrstu'), 'gemini');
+    // Owner test 2026-10-09: a new-style Google key was refused. Any
+    // key-shaped string without a known prefix is read as Google's, and
+    // spaces or line breaks picked up while copying are dropped.
+    assert.equal(A.providerOf('AQ.Ab8RN6Kx_abcdefghijklmnopqrstuvwxyz'), 'gemini');
+    assert.equal(A.providerOf(' AIzaSyD-abcdefghij\nklmnopqrstu '), 'gemini');
     assert.equal(A.providerOf('hello'), null);
 });
 
@@ -172,7 +177,7 @@ test('a saved key answers in the app; it goes only to its own AI company', async
         return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'Start Sutton.' } }] }) };
     };
     const ans = A.answer('Who should I start, Chig Okonkwo or Courtland Sutton?');
-    for (const [key, host] of [['sk-ant-x', 'api.anthropic.com'], ['AIzaSyD-abcdefghijklmnopqrstu', 'generativelanguage.googleapis.com'], ['sk-proj-x', 'api.openai.com']]) {
+    for (const [key, host] of [['sk-ant-api03-abcdefghijklmnop', 'api.anthropic.com'], ['AIzaSyD-abcdefghijklmnopqrstu', 'generativelanguage.googleapis.com'], ['sk-proj-abcdefghijklmnopqrst', 'api.openai.com']]) {
         assert.ok(A.saveKey(key));
         assert.equal(await A.brain(), 'key');
         const r = await A.askWithKey('Who should I start?', ans);
@@ -188,7 +193,7 @@ test('a saved key answers in the app; it goes only to its own AI company', async
 test('a rejected key says so plainly; removing it falls back', async () => {
     const realFetch = globalThis.fetch;
     globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'bad key' } }) });
-    A.saveKey('sk-proj-bad');
+    A.saveKey('sk-proj-badbadbadbadbadbadbad');
     const r = await A.askWithKey('Who should I start?', A.answer('What does my team need?'));
     assert.equal(r.ok, false); assert.match(r.error, /turned down by OpenAI/);
     A.forgetKey();

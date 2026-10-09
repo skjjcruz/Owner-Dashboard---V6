@@ -260,13 +260,14 @@
       if (!member) return;
       box.hidden = false;
       var NAMES = { openai: 'OpenAI', anthropic: 'Claude', gemini: 'Gemini' };
-      function providerOf(k) { k = String(k || '').trim(); return /^sk-ant-/.test(k) ? 'anthropic' : /^AIza[0-9A-Za-z_-]{20,}$/.test(k) ? 'gemini' : /^sk-/.test(k) ? 'openai' : null; }
+      // Same rule as js/shared/ask-dhq.js: known prefixes, otherwise Google's.
+      function providerOf(k) { k = String(k || '').replace(/\s+/g, ''); if (k.length < 20 || !/^[\x21-\x7e]+$/.test(k)) return null; return /^sk-ant-/.test(k) ? 'anthropic' : /^sk-/.test(k) ? 'openai' : 'gemini'; }
       try { var had = localStorage.getItem('dynastyhq_ai_provider'); if (had && NAMES[had] && localStorage.getItem('dynastyhq_ai_key')) msg.textContent = 'Your ' + NAMES[had] + ' key is already saved on this device.'; } catch (e) {}
       function save() {
-        var k = inp.value.trim();
+        var k = inp.value.replace(/\s+/g, '');
         if (!k) { msg.textContent = ''; return; }
         var p = providerOf(k);
-        if (!p) { msg.textContent = 'That doesn\'t look like an OpenAI, Anthropic or Gemini key.'; return; }
+        if (!p) { msg.textContent = 'That looks too short to be a key. Copy the whole key and paste it again.'; return; }
         try { localStorage.setItem('dynastyhq_ai_key', k); localStorage.setItem('dynastyhq_ai_provider', p); inp.value = ''; msg.textContent = 'Saved. Your ' + NAMES[p] + ' key will answer your questions in the app.'; }
         catch (e) { msg.textContent = 'Couldn\'t save it on this device.'; }
       }

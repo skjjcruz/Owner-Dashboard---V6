@@ -377,12 +377,29 @@
         anthropic: { label: 'Claude', model: 'claude-haiku-5-5' },
         gemini: { label: 'Gemini', model: 'gemini-flash-latest' },
     };
+    // Owner test 2026-10-09: a fresh Google AI Studio key was refused as
+    // "doesn't look like a key". Key formats change; read the company from
+    // the prefix when there is one, treat any other key-shaped string as
+    // Google's (the free one), and let the live check on Save decide.
+    const cleanKey = key => String(key || '').replace(/\s+/g, '');
     function providerOf(key) {
-        const k = String(key || '').trim();
+        const k = cleanKey(key);
+        if (k.length < 20 || !/^[\x21-\x7e]+$/.test(k)) return null;
         if (/^sk-ant-/.test(k)) return 'anthropic';
-        if (/^AIza[0-9A-Za-z_-]{20,}$/.test(k)) return 'gemini';
         if (/^sk-/.test(k)) return 'openai';
-        return null;
+        return 'gemini';
+    }
+    // One cheap read with the key: does its company accept it?
+    // → 'ok' | 'bad' | 'unknown' (offline or blocked: keep the key).
+    async function checkKey(key, prov) {
+        const k = cleanKey(key);
+        try {
+            const r = prov === 'anthropic' ? await fetch('https://api.anthropic.com/v1/models', { headers: { 'x-api-key': k, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' } })
+                : prov === 'openai' ? await fetch('https://api.openai.com/v1/models', { headers: { Authorization: 'Bearer ' + k } })
+                : await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': k } });
+            if (r.ok) return 'ok';
+            return r.status === 400 || r.status === 401 || r.status === 403 ? 'bad' : 'unknown';
+        } catch (e) { return 'unknown'; }
     }
     function savedKey() {
         try {
@@ -394,7 +411,7 @@
     function saveKey(key) {
         const prov = providerOf(key);
         if (!prov) return null;
-        try { root.localStorage.setItem(KEY_NAME, String(key).trim()); root.localStorage.setItem(PROVIDER_NAME, prov); } catch (e) { return null; }
+        try { root.localStorage.setItem(KEY_NAME, cleanKey(key)); root.localStorage.setItem(PROVIDER_NAME, prov); } catch (e) { return null; }
         _brain = null;
         return prov;
     }
@@ -470,7 +487,7 @@
     function brainLabel(b) { const k = savedKey(); return b === 'key' && k ? 'Your ' + PROVIDERS[k.provider].label + ' key' : b === 'device' ? 'Your device\'s AI · free' : b === 'device-download' ? 'Your device\'s AI (sets up on first ask)' : 'Your ChatGPT or Claude'; }
     // Paste-your-key card: one box, the company is read from the key.
     function keyCard(note) {
-        const box = el('div', 'askdhq-a');
+        const box = el('div', 'askdhq-a askdhq-key');
         box.appendChild(el('h4', null, 'Use your own AI key'));
         box.appendChild(el('p', null, note || 'Paste a key from OpenAI, Anthropic (Claude) or Google (Gemini) and your AI answers right here.'));
         const f = el('form', 'askdhq-form'); f.style.padding = '8px 0 0'; f.style.borderTop = '0';
@@ -478,12 +495,17 @@
         const b = el('button', 'askdhq-send', 'Save'); b.type = 'submit';
         f.appendChild(inp); f.appendChild(b);
         const msg = el('div', 'askdhq-src', 'Stays on this device. Sent only to the AI company it belongs to, never to DHQ. Usage is billed to your own account.');
-        f.onsubmit = e => {
+        f.onsubmit = async e => {
             e.preventDefault();
-            const prov = saveKey(inp.value);
-            if (!prov) { msg.textContent = 'That doesn\'t look like an OpenAI, Anthropic or Gemini key.'; return; }
+            const val = inp.value, prov = providerOf(val);
+            if (!prov) { msg.textContent = 'That looks too short to be a key. Copy the whole key and paste it again.'; return; }
+            b.disabled = true; msg.textContent = 'Checking your key with ' + PROVIDERS[prov].label + '…';
+            const ok = await checkKey(val, prov);
+            b.disabled = false;
+            if (ok === 'bad') { msg.textContent = PROVIDERS[prov].label + ' turned that key down. Copy it again from the key page and paste it here.'; return; }
+            if (!saveKey(val)) { msg.textContent = 'This browser wouldn\'t store the key (private browsing?). Try a normal tab.'; return; }
             inp.value = '';
-            msg.textContent = 'Saved. ' + PROVIDERS[prov].label + ' will answer your questions here.';
+            msg.textContent = (ok === 'ok' ? 'Saved and working. ' : 'Saved. ') + PROVIDERS[prov].label + ' will answer your questions here. Ask away below.';
             if (ui) ui.brain.textContent = brainLabel('key');
         };
         box.appendChild(f); box.appendChild(msg);
@@ -596,7 +618,7 @@
         const head = el('div', 'askdhq-head'); head.appendChild(el('b', null, 'ASK YOUR AI'));
         const brainEl = el('span', 'askdhq-brain', '…'); head.appendChild(brainEl);
         const kb = el('button', 'askdhq-x', '🔑'); kb.type = 'button'; kb.title = 'Use your own AI key'; kb.setAttribute('aria-label', 'Use your own AI key');
-        kb.onclick = () => { if (ui) { ui.log.appendChild(keyCard()); ui.log.scrollTop = ui.log.scrollHeight; } };
+        kb.onclick = () => showKeyCard();
         head.appendChild(kb);
         const x = el('button', 'askdhq-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.onclick = () => { panel.style.display = 'none'; btn.style.display = ''; };
         head.appendChild(x);
@@ -650,7 +672,13 @@
         if (!isMember()) { membersOnly('Ask your AI'); return; }
         if (!root.document.querySelector('style[data-askdhq]') && !root.document.querySelector('.askdhq-btn')) { const st = root.document.createElement('style'); st.setAttribute('data-askdhq', '1'); st.textContent = CSS; root.document.head.appendChild(st); }
         open();
-        if (ui) { ui.log.appendChild(keyCard()); ui.log.scrollTop = ui.log.scrollHeight; }
+        showKeyCard();
+    }
+    // One key card at a time: a new one replaces any already showing.
+    function showKeyCard(note) {
+        if (!ui) return;
+        ui.log.querySelectorAll('.askdhq-key').forEach(n => n.remove());
+        ui.log.appendChild(keyCard(note)); ui.log.scrollTop = ui.log.scrollHeight;
     }
     function mount() {
         const d = root.document;
