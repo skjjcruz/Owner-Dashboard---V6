@@ -362,8 +362,9 @@
         });
         return out;
     }
-    const SYSTEM_KEY = 'You are the member\'s own AI, answering a question about their fantasy football league inside Dynasty HQ. Talk like a sharp GM to a friend: lead with the call, then two to four plain sentences with the key numbers. When DHQ\'s call is given, back it; never change it. Use ONLY the facts given: never add a player, number, injury or news that is not in them. If the facts can\'t answer it, say what\'s missing in one sentence. DHQ value: higher is better (7,000+ elite, 3,000+ solid starter, under 1,000 depth). No headings.';
-    const SYSTEM = 'You are the Dynasty HQ assistant, a sharp, friendly fantasy football GM. You are given a question and DHQ\'s answer with its facts. Rewrite DHQ\'s answer in two to four plain sentences, as a GM talking to a friend. Lead with the call. Use ONLY the facts given: never add a player, number, injury or news that is not in them, and never change DHQ\'s call. No lists, no headings.';
+    // Owner ask 2026-10-09: answer in its own voice; never "DHQ's call".
+    const SYSTEM_KEY = 'You are the member\'s own AI, answering a question about their fantasy football league. Talk like a sharp GM to a friend: lead with the answer, then two to four plain sentences with the key numbers. When a recommendation is given, that is your answer: state it as your own and never contradict it. Never mention DHQ, Dynasty HQ, "the call", "the data" or where the facts came from; just answer. Call a player\'s value his "dynasty value". Use ONLY the facts given: never add a player, number, injury or news that is not in them. If the facts can\'t answer it, say what\'s missing in one sentence. Dynasty value: higher is better (7,000+ elite, 3,000+ solid starter, under 1,000 depth). No headings.';
+    const SYSTEM = 'You are a sharp, friendly fantasy football GM. You are given a question and the recommendation with its facts. Answer in two to four plain sentences, as a GM talking to a friend, stating the recommendation as your own. Lead with the answer. Never mention DHQ, Dynasty HQ, "the call" or where the facts came from. Use ONLY the facts given: never add a player, number, injury or news that is not in them, and never change the recommendation. No lists, no headings.';
     let _session = null;
     async function narrate(question, ans, onText, onProgress) {
         if (!ans || ans.intent === 'help') return null;
@@ -378,7 +379,7 @@
                 });
             }
             const s = await _session.clone();
-            const prompt = 'Question: ' + question + '\nDHQ\'s answer: ' + ans.text + '\nFacts:\n- ' + (ans.lines || []).join('\n- ');
+            const prompt = ('Question: ' + question + '\nRecommendation: ' + ans.text + '\nFacts:\n- ' + (ans.lines || []).join('\n- ')).replace(/\bDHQ\b(?!')/g, 'value').replace(/\bDHQ's\s*/g, '');
             let out = '';
             const stream = s.promptStreaming(prompt);
             for await (const chunk of stream) {
@@ -474,8 +475,9 @@
         // A new league starts a new conversation.
         const lid = String(S().currentLeagueId || '');
         if (chat.league !== lid) { chat.length = 0; chat.league = lid; }
-        const call = ans && ans.intent !== 'help' ? '\nDHQ\'s call: ' + ans.text + ((ans.lines || []).length ? '\nDHQ\'s facts for it:\n- ' + ans.lines.join('\n- ') : '') : '';
-        const user = 'Question: ' + question + call + '\nLeague facts:\n- ' + briefing().join('\n- ');
+        const call = ans && ans.intent !== 'help' ? '\nRecommendation: ' + ans.text + ((ans.lines || []).length ? '\nFacts behind it:\n- ' + ans.lines.join('\n- ') : '') : '';
+        // The facts say "value", not "DHQ", so the AI has no brand to repeat.
+        const user = ('Question: ' + question + call + '\nLeague facts:\n- ' + briefing().join('\n- ')).replace(/\bDHQ\b(?!')/g, 'value').replace(/\bDHQ's\s*/g, '');
         const model = PROVIDERS[k.provider].model;
         const ctl = root.AbortController ? new root.AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), 30000) : null;
@@ -659,7 +661,7 @@
             const k = savedKey();
             const box = el('div', 'askdhq-a');
             box.appendChild(el('h4', null, 'Your AI · ' + PROVIDERS[k.provider].label));
-            const p = el('p', null, PROVIDERS[k.provider].label + ' is answering with DHQ\'s data…');
+            const p = el('p', null, PROVIDERS[k.provider].label + ' is thinking…');
             box.appendChild(p);
             const src = el('div', 'askdhq-src', '');
             box.appendChild(src);
@@ -669,9 +671,9 @@
             if (!res.ok && res.retry) { await new Promise(rs => setTimeout(rs, 1500)); res = await askWithKey(q, ans); }
             if (res.ok) {
                 p.textContent = res.text;
-                src.textContent = 'Answered by your ' + PROVIDERS[k.provider].label + ' key with DHQ\'s data. DHQ never saw your key.';
+                src.textContent = 'Answered by your ' + PROVIDERS[k.provider].label + '. Your key stays on this device.';
                 if (ans.lines && ans.lines.length) {
-                    const d = el('details'); const sm = el('summary', null, 'DHQ\'s data'); sm.style.cursor = 'pointer'; d.appendChild(sm);
+                    const d = el('details'); const sm = el('summary', null, 'The numbers'); sm.style.cursor = 'pointer'; d.appendChild(sm);
                     const ul = el('ul'); ans.lines.forEach(t => ul.appendChild(el('li', null, t))); d.appendChild(ul); box.insertBefore(d, src);
                 }
             } else {
@@ -698,7 +700,7 @@
             p.textContent = out;
             src.textContent = 'Answered by your device\'s AI with DHQ\'s data. Nothing was sent to DHQ or any AI company.';
             if (ans.lines && ans.lines.length) {
-                const d = el('details'); const sm = el('summary', null, 'DHQ\'s data'); sm.style.cursor = 'pointer'; d.appendChild(sm);
+                const d = el('details'); const sm = el('summary', null, 'The numbers'); sm.style.cursor = 'pointer'; d.appendChild(sm);
                 const ul = el('ul'); ans.lines.forEach(t => ul.appendChild(el('li', null, t))); d.appendChild(ul); box.insertBefore(d, src);
             }
             _brain = Promise.resolve('device'); ui.brain.textContent = brainLabel('device');

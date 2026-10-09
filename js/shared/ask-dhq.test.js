@@ -188,6 +188,8 @@ test('a saved key answers in the app; it goes only to its own AI company', async
         assert.ok(JSON.stringify(call.body).includes('Start Courtland Sutton over Chig Okonkwo'), 'DHQ\'s facts go with the question');
     }
     assert.ok(seen.every(c => !/dhqfootball|supabase|sleeper/.test(c.url)), 'the key never goes anywhere but the AI company');
+    // Owner ask 2026-10-09: the AI answers in its own voice, never "DHQ's call".
+    assert.ok(seen.every(c => !/\bDHQ\b/.test(JSON.stringify((c.body.messages || c.body.contents).filter(m => m.role !== 'system')))), 'nothing sent asks the AI to talk about DHQ');
     globalThis.fetch = realFetch;
 });
 
