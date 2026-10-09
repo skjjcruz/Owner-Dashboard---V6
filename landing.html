@@ -1109,6 +1109,8 @@
     // full reconnect; the stamp clears it if someone else signs in.
     (async function forceSignOut() {
       if (!FORCE_SIGNOUT) return;
+      // The member's own AI key (js/shared/ask-dhq.js) leaves with them.
+      try { localStorage.removeItem('dhq_member_ai_v1'); } catch {}
       const idn = window.OD?.identity;
       if (idn) {
         try { await idn.signOutClear({ supabase: getSbClient() }); } catch {}

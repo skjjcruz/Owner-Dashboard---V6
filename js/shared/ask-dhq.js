@@ -428,22 +428,40 @@
             return r.status === 400 || r.status === 401 || r.status === 403 ? 'bad' : 'unknown';
         } catch (e) { return 'unknown'; }
     }
+    // Owner report 2026-10-09: the saved key vanished after an hour. The old
+    // dynastyhq_ai_key is a "device secret" the shared client wipes whenever
+    // it can't tell who is signed in for a moment. The member's key now has
+    // its own record, tied to their account: only they can use it, sign-out
+    // removes it (core.js / landing.html), and session blips leave it alone.
+    const MEMBER_KEY = 'dhq_member_ai_v1';
+    function ownerNow() {
+        try { const idn = root.OD && root.OD.identity; return idn && idn.currentOwner ? String(idn.currentOwner() || '') : ''; } catch (e) { return ''; }
+    }
     function savedKey() {
         try {
+            const owner = ownerNow();
+            const rec = JSON.parse(root.localStorage.getItem(MEMBER_KEY) || 'null');
+            if (rec && rec.key && PROVIDERS[rec.provider] && rec.owner === owner) return { key: rec.key, provider: rec.provider };
+            // A key saved by an older build or the sign-up page moves over.
             const key = root.localStorage.getItem(KEY_NAME) || '';
             const prov = root.localStorage.getItem(PROVIDER_NAME) || providerOf(key);
-            return key && PROVIDERS[prov] ? { key, provider: prov } : null;
+            if (key && PROVIDERS[prov] && owner !== 'guest') { writeKey(key, prov); return { key: cleanKey(key), provider: prov }; }
+            return null;
         } catch (e) { return null; }
+    }
+    function writeKey(key, prov) {
+        root.localStorage.setItem(MEMBER_KEY, JSON.stringify({ key: cleanKey(key), provider: prov, owner: ownerNow(), at: Date.now() }));
+        try { root.localStorage.removeItem(KEY_NAME); root.localStorage.removeItem(PROVIDER_NAME); } catch (e) { /* old copy */ }
     }
     function saveKey(key) {
         const prov = providerOf(key);
         if (!prov) return null;
-        try { root.localStorage.setItem(KEY_NAME, cleanKey(key)); root.localStorage.setItem(PROVIDER_NAME, prov); } catch (e) { return null; }
+        try { writeKey(key, prov); } catch (e) { return null; }
         _brain = null;
         keyChanged();
         return prov;
     }
-    function forgetKey() { try { root.localStorage.removeItem(KEY_NAME); root.localStorage.removeItem(PROVIDER_NAME); } catch (e) { /* nothing saved */ } _brain = null; keyChanged(); }
+    function forgetKey() { try { [MEMBER_KEY, KEY_NAME, PROVIDER_NAME].forEach(k => root.localStorage.removeItem(k)); } catch (e) { /* nothing saved */ } _brain = null; keyChanged(); }
     // The leagues page hides its "New: Ask your AI" card once a key is in.
     function keyChanged() { try { if (root.dispatchEvent && root.CustomEvent) root.dispatchEvent(new root.CustomEvent('dhq:ai-key-changed')); } catch (e) { /* no listeners */ } }
     // Owner ask 2026-10-09: purely conversational. The last few turns go

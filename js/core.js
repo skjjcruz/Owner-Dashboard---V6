@@ -317,7 +317,7 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
         } catch (e) { window.wrLog?.('signOut.clear', e); }
         // The keys that decide whether the next page load is signed in — and,
         // if the shared client never loaded, the platform logins it would clear.
-        const keys = ['fw_session_v1', 'od_session_v1', 'wr_guest_v1'];
+        const keys = ['fw_session_v1', 'od_session_v1', 'wr_guest_v1', 'dhq_member_ai_v1'];  // + the member's own AI key (ask-dhq.js)
         // Keep in step with DEVICE_SECRET_KEYS in DHQ-Shared supabase-client.js
         // (js/shared/device-secret-keys.test.js fails if a key is missing here).
         if (!cleared) keys.push('espn_s2', 'espn_swid', 'mfl_api_key', 'mfl_write_cookie', 'mfl_write_host', 'yahoo_session_id',

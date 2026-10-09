@@ -207,6 +207,18 @@ test('owner test 2026-10-09: plural "waivers" is a waiver question, and the AI g
     A.forgetKey(); globalThis.fetch = realFetch;
 });
 
+test('owner report 2026-10-09: the key survives the shared client wiping device secrets, and is only the member\'s', () => {
+    globalThis.OD = { identity: { currentOwner: () => 'account:steve' } };
+    A.saveKey('sk-ant-api03-abcdefghijklmnop');
+    ['dynastyhq_ai_key', 'dynastyhq_ai_provider'].forEach(k => localStorage.removeItem(k)); // the shared wipe
+    assert.equal(A.savedKey().provider, 'anthropic', 'still saved');
+    globalThis.OD.identity.currentOwner = () => 'account:someone-else';
+    assert.equal(A.savedKey(), null, 'another account on this device cannot use it');
+    globalThis.OD.identity.currentOwner = () => 'account:steve';
+    A.forgetKey(); assert.equal(A.savedKey(), null);
+    delete globalThis.OD;
+});
+
 test('a rejected key says so plainly; removing it falls back', async () => {
     const realFetch = globalThis.fetch;
     globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'bad key' } }) });
