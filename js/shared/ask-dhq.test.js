@@ -142,6 +142,7 @@ test('compare two players', () => {
 
 test('anything else gets the help card; ask-elsewhere links carry the question', () => {
     assert.equal(A.answer('hello').intent, 'help');
+    assert.equal(A.answer('hello').unmatched, true, 'an unmatched question says so, not just the examples again');
     const u = A.askElsewhereUrl('chatgpt', 'Who should I start?');
     assert.match(u, /^https:\/\/chatgpt\.com\/\?q=/);
     assert.match(decodeURIComponent(u), /Dynasty HQ connector, in my league "The Psycho League": Who should I start\?/);

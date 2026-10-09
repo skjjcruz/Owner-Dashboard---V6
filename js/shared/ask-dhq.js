@@ -294,10 +294,10 @@
         const text = 'Best available' + (want.length ? ' at ' + want.join('/') : '') + ': ' + pname(pool[0]) + ' (DHQ ' + dhq(pool[0]) + ').' + (mine && mine.faabRemaining != null ? ' You have $' + mine.faabRemaining + ' FAAB left; Free Agency has the bid model.' : '');
         return { intent: 'waivers', title: 'Waivers', text, lines, players: pool, facts: { want } };
     }
-    function help() {
+    function help(unmatched) {
         return {
-            intent: 'help', title: 'Ask your AI',
-            text: 'Ask about your league in plain English. Your own AI answers, using DHQ\'s data and calls.',
+            intent: 'help', title: 'Ask your AI', unmatched: !!unmatched,
+            text: unmatched ? 'I couldn\'t tie that to one of DHQ\'s calls yet. Name the players, or tap one of these:' : 'Ask about your league in plain English. Your own AI answers, using DHQ\'s data and calls.',
             lines: ['Who should I start, Sutton or Okonkwo?', 'What does my team need?', 'Who should I trade with?', 'Jonathan Taylor for Puka Nacua?', 'Should I sell Derrick Henry?', 'Best waiver RB?'],
             players: [], facts: {},
         };
@@ -318,7 +318,7 @@
                 case 'waivers': return waivers(q);
             }
         } catch (e) { if (root.wrLog) root.wrLog('askdhq.answer', e); }
-        return help();
+        return help(true);
     }
 
     // ── The member's own AI ─────────────────────────────────────────
@@ -567,6 +567,17 @@
         const q = String(question || '').trim();
         if (!q) return;
         ui.log.appendChild(el('div', 'askdhq-q', q));
+        // Owner test 2026-10-09: asked from the leagues page (no league open)
+        // and the panel just repeated its examples. Say what's needed, keep
+        // the question, and ask it as soon as a league opens.
+        if (!leagueReady()) {
+            try { root.sessionStorage.setItem(PENDING, q); } catch (e) { /* asked again by hand */ }
+            const box = el('div', 'askdhq-a');
+            box.appendChild(el('h4', null, 'Pick a league first'));
+            box.appendChild(el('p', null, 'Your AI needs a league\'s rosters to answer. Tap one of your leagues and your question will be asked there.'));
+            ui.log.appendChild(box); ui.log.scrollTop = ui.log.scrollHeight;
+            return;
+        }
         const ans = answer(q);
         const b = await brain();
         if (ans.intent === 'help') { ui.log.appendChild(render(q, ans, null, b).box); ui.log.scrollTop = ui.log.scrollHeight; return; }
@@ -683,6 +694,15 @@
         ui.log.querySelectorAll('.askdhq-key').forEach(n => n.remove());
         ui.log.appendChild(keyCard(note)); ui.log.scrollTop = ui.log.scrollHeight;
     }
+    const PENDING = 'askdhq_pending';
+    const leagueReady = () => !!(S().currentLeagueId && rosters().length && Object.keys(LI().playerScores || {}).length);
+    function askPending() {
+        let q = null;
+        try { q = root.sessionStorage.getItem(PENDING); } catch (e) { return; }
+        if (!q || !leagueReady() || !isMember()) return;
+        try { root.sessionStorage.removeItem(PENDING); } catch (e) { /* once is enough */ }
+        open(); ask(q);
+    }
     function mount() {
         const d = root.document;
         if (!d || !d.body || d.querySelector('.askdhq-btn')) return;
@@ -698,6 +718,7 @@
             const on = !!(S().currentLeagueId && rosters().length);
             if (!ui || ui.panel.style.display === 'none') btn.style.display = on ? '' : 'none';
             else if (!isMember()) { ui.panel.style.display = 'none'; btn.style.display = on ? '' : 'none'; }
+            askPending();
         }, 1500);
     }
 
