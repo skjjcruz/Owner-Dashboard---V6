@@ -505,8 +505,11 @@
             if (ok === 'bad') { msg.textContent = PROVIDERS[prov].label + ' turned that key down. Copy it again from the key page and paste it here.'; return; }
             if (!saveKey(val)) { msg.textContent = 'This browser wouldn\'t store the key (private browsing?). Try a normal tab.'; return; }
             inp.value = '';
-            msg.textContent = (ok === 'ok' ? 'Saved and working. ' : 'Saved. ') + PROVIDERS[prov].label + ' will answer your questions here. Ask away below.';
             if (ui) ui.brain.textContent = brainLabel('key');
+            // Owner ask 2026-10-09: once the key is in, fold the box up to
+            // one line so nothing looks unfinished.
+            box.replaceChildren(el('p', null, '✓ ' + (ok === 'ok' ? 'Your ' + PROVIDERS[prov].label + ' key is saved and working.' : 'Your ' + PROVIDERS[prov].label + ' key is saved.') + ' Ask away below.'));
+            if (ui) ui.input.focus();
         };
         box.appendChild(f); box.appendChild(msg);
         const more = el('div', 'askdhq-more');
