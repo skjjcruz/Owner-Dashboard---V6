@@ -3,20 +3,20 @@
 // "Ask DHQ": ask a question in plain English, inside the app, and get an
 // answer — with nobody paying for AI and nobody setting anything up.
 //
-// Owner direction 2026-10-09: users stay in the app and use their own AI,
-// at zero cost to DHQ. How:
-//   1. DHQ answers. The engine already in the page (values, the lineup
-//      solver, the team assessor, the player-action chain, the trade
-//      engine, game locks) makes the call and writes the answer. Every
-//      member gets a real answer with no AI at all.
-//   2. The member's device makes it conversational. Chrome on desktop
-//      ships Google's Gemini Nano built in (the Prompt API, free, on the
-//      device). When it is there, DHQ hands it the verdict and it rewrites
-//      it as a GM would say it, using only DHQ's facts. iPhone (Apple
-//      Intelligence) and Android (Gemini Nano) come with the native app.
-//   3. One tap takes the question to the member's own ChatGPT or Claude,
-//      where the Dynasty HQ connector answers with the same tools.
-// DHQ decides; the AI only explains. Nothing here calls a paid model.
+// Owner direction 2026-10-09: members stay in the app and use THEIR OWN AI,
+// at zero cost to DHQ. DHQ is never the assistant (owner ruling the same
+// day): it supplies the data and its calls; the member's AI answers.
+//   1. DHQ prepares the facts: the engine already in the page (values, the
+//      lineup solver, the team assessor, the player-action chain, the trade
+//      engine, game locks) works out the call and the numbers behind it.
+//   2. The member's device AI answers with them. Chrome on desktop ships
+//      Google's Gemini Nano built in (the Prompt API, free, on the device);
+//      it answers using only DHQ's facts. iPhone (Apple Intelligence) and
+//      Android (Gemini Nano) come with the native app; the member's ChatGPT
+//      plan joins when OpenAI opens Sign in with ChatGPT to us.
+//   3. No AI of theirs here: one tap asks their own ChatGPT or Claude, where
+//      the Dynasty HQ connector supplies the same data.
+// Nothing here calls a paid model and DHQ never writes the reply itself.
 //
 //   answer(question) → { intent, title, text, lines[], facts, players[] }
 //   brain() → Promise<'device' | 'device-download' | 'engine'>
@@ -296,8 +296,8 @@
     }
     function help() {
         return {
-            intent: 'help', title: 'Ask DHQ',
-            text: 'Ask me about your league in plain English. I use DHQ\'s own engine, the same one behind every screen.',
+            intent: 'help', title: 'Ask your AI',
+            text: 'Ask about your league in plain English. Your own AI answers, using DHQ\'s data and calls.',
             lines: ['Who should I start, Sutton or Okonkwo?', 'What does my team need?', 'Who should I trade with?', 'Jonathan Taylor for Puka Nacua?', 'Should I sell Derrick Henry?', 'Best waiver RB?'],
             players: [], facts: {},
         };
@@ -399,7 +399,7 @@
     ].join('\n');
     function el(tag, cls, text) { const e = root.document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
     let ui = null;
-    function brainLabel(b) { return b === 'device' ? 'Your device\'s AI · free' : b === 'device-download' ? 'Your device\'s AI (sets up on first ask)' : 'DHQ engine'; }
+    function brainLabel(b) { return b === 'device' ? 'Your device\'s AI · free' : b === 'device-download' ? 'Your device\'s AI (sets up on first ask)' : 'Your ChatGPT or Claude'; }
     function render(q, ans, narrated, b) {
         const box = el('div', 'askdhq-a');
         box.appendChild(el('h4', null, ans.title || 'DHQ'));
@@ -427,6 +427,20 @@
         }
         return { box, p, src };
     }
+    // Owner ruling 2026-10-09: DHQ is never the assistant. The member's own
+    // AI answers (on the device today; their ChatGPT plan when OpenAI opens
+    // it). DHQ only supplies the data and its calls. With no AI of theirs
+    // reachable here, the question goes to their ChatGPT or Claude.
+    function handoff(q, note) {
+        const box = el('div', 'askdhq-a');
+        box.appendChild(el('h4', null, 'Ask your AI'));
+        box.appendChild(el('p', null, note || 'Your AI answers this with DHQ\'s data. Pick where to ask:'));
+        const more = el('div', 'askdhq-more');
+        [['chatgpt', 'Ask in ChatGPT'], ['claude', 'Ask in Claude']].forEach(([w, label]) => { const a = el('a', 'askdhq-chip', label); a.href = askElsewhereUrl(w, q); a.target = '_blank'; a.rel = 'noopener'; more.appendChild(a); });
+        box.appendChild(more);
+        box.appendChild(el('div', 'askdhq-src', 'Uses your ChatGPT or Claude plan with the Dynasty HQ connector. On Chrome for desktop, your computer\'s built-in AI answers right here instead.'));
+        return box;
+    }
     async function ask(question) {
         if (!ui) return;
         const q = String(question || '').trim();
@@ -434,22 +448,33 @@
         ui.log.appendChild(el('div', 'askdhq-q', q));
         const ans = answer(q);
         const b = await brain();
-        const view = render(q, ans, null, b);
-        ui.log.appendChild(view.box);
-        ui.log.scrollTop = ui.log.scrollHeight;
-        if ((b === 'device' || b === 'device-download') && ans.intent !== 'help') {
-            const dhqText = ans.text;
-            view.src.textContent = b === 'device-download' ? 'Setting up your device\'s free AI (one time)…' : 'Your device\'s AI is wording it…';
-            const out = await narrate(q, ans, t => { view.p.textContent = t; ui.log.scrollTop = ui.log.scrollHeight; }, pct => { view.src.textContent = 'Setting up your device\'s free AI: ' + Math.round((pct || 0) * 100) + '%'; });
-            if (out) { view.p.textContent = out; view.src.textContent = 'The call is DHQ\'s; the wording is your device\'s AI.'; _brain = Promise.resolve('device'); ui.brain.textContent = brainLabel('device'); }
-            else { view.p.textContent = dhqText; view.src.textContent = 'The call is DHQ\'s.'; }
+        if (ans.intent === 'help') { ui.log.appendChild(render(q, ans, null, b).box); ui.log.scrollTop = ui.log.scrollHeight; return; }
+        if (b === 'engine') { ui.log.appendChild(handoff(q)); ui.log.scrollTop = ui.log.scrollHeight; return; }
+        const box = el('div', 'askdhq-a');
+        box.appendChild(el('h4', null, 'Your AI'));
+        const p = el('p', null, '…');
+        box.appendChild(p);
+        const src = el('div', 'askdhq-src', b === 'device-download' ? 'Setting up your device\'s free AI (one time)…' : 'Your AI is answering with DHQ\'s data…');
+        box.appendChild(src);
+        ui.log.appendChild(box); ui.log.scrollTop = ui.log.scrollHeight;
+        const out = await narrate(q, ans, t => { p.textContent = t; ui.log.scrollTop = ui.log.scrollHeight; }, pct => { src.textContent = 'Setting up your device\'s free AI: ' + Math.round((pct || 0) * 100) + '%'; });
+        if (out) {
+            p.textContent = out;
+            src.textContent = 'Answered by your device\'s AI with DHQ\'s data. Nothing was sent to DHQ or any AI company.';
+            if (ans.lines && ans.lines.length) {
+                const d = el('details'); const sm = el('summary', null, 'DHQ\'s data'); sm.style.cursor = 'pointer'; d.appendChild(sm);
+                const ul = el('ul'); ans.lines.forEach(t => ul.appendChild(el('li', null, t))); d.appendChild(ul); box.insertBefore(d, src);
+            }
+            _brain = Promise.resolve('device'); ui.brain.textContent = brainLabel('device');
+        } else {
+            box.replaceWith(handoff(q, 'Your device\'s AI couldn\'t answer just now. Ask your own AI instead:'));
         }
     }
     function open() {
         if (ui) { ui.panel.style.display = 'flex'; ui.btn.style.display = 'none'; ui.input.focus(); return; }
         const d = root.document;
-        const panel = el('div', 'askdhq-panel'); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Ask DHQ');
-        const head = el('div', 'askdhq-head'); head.appendChild(el('b', null, 'ASK DHQ'));
+        const panel = el('div', 'askdhq-panel'); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Ask your AI');
+        const head = el('div', 'askdhq-head'); head.appendChild(el('b', null, 'ASK YOUR AI'));
         const brainEl = el('span', 'askdhq-brain', '…'); head.appendChild(brainEl);
         const x = el('button', 'askdhq-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.onclick = () => { panel.style.display = 'none'; btn.style.display = ''; };
         head.appendChild(x);
@@ -472,7 +497,7 @@
         const d = root.document;
         if (!d || !d.body || d.querySelector('.askdhq-btn')) return;
         const st = d.createElement('style'); st.textContent = CSS; d.head.appendChild(st);
-        const btn = el('button', 'askdhq-btn', 'Ask DHQ'); btn.type = 'button'; btn.setAttribute('aria-label', 'Ask DHQ a question');
+        const btn = el('button', 'askdhq-btn', 'Ask your AI'); btn.type = 'button'; btn.setAttribute('aria-label', 'Ask your AI about this league');
         btn.onclick = open;
         btn.style.display = 'none';
         d.body.appendChild(btn);
