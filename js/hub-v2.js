@@ -258,11 +258,21 @@
                 {guest && <div className="hv2-signup" role="region" aria-label="Sign up">
                     <div className="hv2-signup-copy">
                         <strong>Sign up for <em>FREE</em> member services</strong>
-                        <span>Save your leagues on every device and lock in founding-member status.</span>
+                        <span>Save your leagues on every device and lock in founding-member status.{window.DHQ_LAB === true ? ' Members also ask about their league with their own AI (ChatGPT, Claude or Gemini).' : ''}</span>
                     </div>
                     <div className="hv2-signup-actions">
                         <a className="hv2-signup-btn" href={links.signup}>Sign up free</a>
                         <a className="hv2-signup-signin" href={links.signin}>Already a member? Sign in</a>
+                    </div>
+                </div>}
+                {/* Members (Lab, owner ask 2026-10-09): Ask your AI. */}
+                {!guest && window.DHQ_LAB === true && <div className="hv2-signup" role="region" aria-label="Ask your AI">
+                    <div className="hv2-signup-copy">
+                        <strong>New: <em>Ask your AI</em></strong>
+                        <span>Open any league and tap the gold "Ask your AI" button. Ask in plain English and your own AI answers with DHQ's numbers: your computer's built-in AI, your ChatGPT or Claude, or your own key.</span>
+                    </div>
+                    <div className="hv2-signup-actions">
+                        <button type="button" className="hv2-signup-btn" style={{ border: 0, cursor: 'pointer' }} onClick={() => { if (window.App && window.App.AskDHQ) window.App.AskDHQ.openKeySetup(); }}>Add my AI key</button>
                     </div>
                 </div>}
                 {notices.map(n => <div key={n.key} className="hv2-notice" role="status">

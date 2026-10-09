@@ -207,3 +207,15 @@ test('members only: guests and signed-out visitors never get it', () => {
     delete globalThis.OD;
     assert.equal(A.isMember(), false);
 });
+
+test('guests are guests; signed-out counts as a guest for AI', () => {
+    globalThis.OD = { identity: { currentOwner: () => 'guest' } };
+    assert.equal(A.isGuest(), true);
+    globalThis.OD = { identity: { currentOwner: () => null } };
+    assert.equal(A.isGuest(), true);
+    globalThis.OD = { identity: { currentOwner: () => 'account:abc' } };
+    assert.equal(A.isGuest(), false);
+    delete globalThis.OD;
+    assert.equal(typeof A.membersOnly, 'function');
+    assert.equal(typeof A.openKeySetup, 'function');
+});

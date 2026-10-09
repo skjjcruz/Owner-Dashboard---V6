@@ -615,30 +615,92 @@
         const h = help(); const v = render('', h, null, 'engine'); log.appendChild(v.box);
         input.focus();
     }
+    // ── Members only (owner ruling 2026-10-09) ─────────────────────────
+    // Guests use the app, not its AI. Any AI button a guest taps shows this
+    // instead, with a way to sign up (their connected leagues carry over).
+    const SIGNUP_URL = 'landing.html?signin=new', SIGNIN_URL = 'landing.html?signin';
+    function membersOnly(feature) {
+        const d = root.document;
+        if (!d || !d.body || d.querySelector('.askdhq-mo')) return;
+        if (!d.querySelector('style[data-askdhq]')) { const st = d.createElement('style'); st.setAttribute('data-askdhq', '1'); st.textContent = CSS; d.head.appendChild(st); }
+        const ov = el('div', 'askdhq-mo');
+        ov.style.cssText = 'position:fixed;inset:0;z-index:2147483001;background:rgba(4,6,10,.72);display:flex;align-items:center;justify-content:center;padding:16px';
+        const card = el('div', 'askdhq-a');
+        card.style.cssText = 'max-width:380px;width:100%;background:var(--off-black,#15151b);border:1px solid rgba(212,175,55,.45);border-radius:var(--card-radius-lg,14px);padding:20px 18px;color:var(--white,#F5F2EA);font:400 .92rem/1.5 system-ui,-apple-system,sans-serif';
+        card.setAttribute('role', 'dialog'); card.setAttribute('aria-modal', 'true');
+        card.appendChild(el('h4', null, (feature || 'AI features') + ' · members only'));
+        card.appendChild(el('p', null, 'AI is for Dynasty HQ members. Create a free account to ask about your league with your own AI (ChatGPT, Claude or Gemini), at no cost from us. Your connected leagues come with you.'));
+        const row = el('div', 'askdhq-more'); row.style.marginTop = '14px';
+        const up = el('a', 'askdhq-send', 'Create free account'); up.href = SIGNUP_URL; up.style.cssText = 'display:inline-flex;align-items:center;padding:10px 14px;text-decoration:none';
+        const inn = el('a', 'askdhq-chip', 'Sign in'); inn.href = SIGNIN_URL;
+        const back = el('button', 'askdhq-chip', 'Keep browsing'); back.type = 'button'; back.onclick = () => ov.remove();
+        row.appendChild(up); row.appendChild(inn); row.appendChild(back);
+        card.appendChild(row);
+        ov.appendChild(card);
+        ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+        d.body.appendChild(ov);
+    }
+    function isGuest() {
+        try { const owner = root.OD && root.OD.identity && root.OD.identity.currentOwner ? root.OD.identity.currentOwner() : null; return owner === 'guest' || !owner; } catch (e) { return true; }
+    }
     function isMember() {
         try { const owner = root.OD && root.OD.identity && root.OD.identity.currentOwner ? root.OD.identity.currentOwner() : null; return !!owner && owner !== 'guest'; } catch (e) { return false; }
+    }
+    function openKeySetup() {
+        if (!isMember()) { membersOnly('Ask your AI'); return; }
+        if (!root.document.querySelector('style[data-askdhq]') && !root.document.querySelector('.askdhq-btn')) { const st = root.document.createElement('style'); st.setAttribute('data-askdhq', '1'); st.textContent = CSS; root.document.head.appendChild(st); }
+        open();
+        if (ui) { ui.log.appendChild(keyCard()); ui.log.scrollTop = ui.log.scrollHeight; }
     }
     function mount() {
         const d = root.document;
         if (!d || !d.body || d.querySelector('.askdhq-btn')) return;
-        const st = d.createElement('style'); st.textContent = CSS; d.head.appendChild(st);
+        if (!d.querySelector('style[data-askdhq]')) { const st = d.createElement('style'); st.setAttribute('data-askdhq', '1'); st.textContent = CSS; d.head.appendChild(st); }
         const btn = el('button', 'askdhq-btn', 'Ask your AI'); btn.type = 'button'; btn.setAttribute('aria-label', 'Ask your AI about this league');
-        btn.onclick = open;
+        btn.onclick = () => (isMember() ? open() : membersOnly('Ask your AI'));
         btn.style.display = 'none';
         d.body.appendChild(btn);
         // Show the button only to signed-in members (owner ruling
         // 2026-10-09: a members-only feature; guests never see it), and only
         // while a league is open.
         setInterval(() => {
-            const on = isMember() && !!(S().currentLeagueId && rosters().length);
+            const on = !!(S().currentLeagueId && rosters().length);
             if (!ui || ui.panel.style.display === 'none') btn.style.display = on ? '' : 'none';
-            else if (!on) { ui.panel.style.display = 'none'; btn.style.display = 'none'; }
+            else if (!isMember()) { ui.panel.style.display = 'none'; btn.style.display = on ? '' : 'none'; }
         }, 1500);
     }
 
-    App.AskDHQ = App.AskDHQ || { isMember, answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help };
+    App.AskDHQ = App.AskDHQ || { isMember, isGuest, membersOnly, openKeySetup, answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help };
+    // Every AI request in the app funnels through OD.callAI or callClaude.
+    // For a guest, one the guest started with a tap shows the members-only
+    // card; background ones fail quietly as before. Members are untouched.
+    function guardAI() {
+        const tapNow = () => !!(root.navigator && root.navigator.userActivation && root.navigator.userActivation.isActive);
+        const wrap = (obj, name) => {
+            if (!obj || typeof obj[name] !== 'function' || obj[name].__dhqMembersOnly) return false;
+            const orig = obj[name];
+            const w = function () {
+                if (isGuest()) {
+                    if (tapNow()) membersOnly();
+                    const e = new Error('AI is for Dynasty HQ members. Create a free account to use it.'); e.dhqCode = 'signin_required';
+                    return Promise.reject(e);
+                }
+                return orig.apply(this, arguments);
+            };
+            w.__dhqMembersOnly = true;
+            obj[name] = w;
+            return true;
+        };
+        let tries = 0;
+        const iv = setInterval(() => {
+            tries++;
+            wrap(root.OD, 'callAI'); wrap(root, 'callClaude'); wrap(root, 'dhqAI');
+            if (tries > 40) clearInterval(iv);
+        }, 500);
+    }
     if (typeof document !== 'undefined' && root.DHQ_LAB === true) {
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
+        guardAI();
     }
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.AskDHQ;
