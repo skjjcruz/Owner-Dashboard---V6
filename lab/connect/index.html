@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://hovnqztlbsgsywrbidbh.supabase.co; img-src https: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
+<title>Connect your AI · Dynasty HQ</title>
+<!-- DHQ Connect sign-in page (Lab-hosted; lab/connect/index.html, copied in
+     by scripts/publish-lab.cjs and never gated). A member's AI (ChatGPT,
+     Claude, Gemini, any agent) sends them here through the dhq-auth sign-in
+     service on the engine project. This page only talks to that service:
+     email + password go straight to it (it checks them against the live
+     Dynasty HQ login and never stores them), it returns the member's
+     leagues, and after Allow it tells us where to send the member back. -->
+<style>
+  :root { --bg: #0b0b0b; --card: #141414; --gold: #D4AF37; --fg: #e8e8e8; --muted: #9a9a9a; --line: rgba(255,255,255,0.1); --r: 10px; --rs: 8px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+  .card { width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 26px 22px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .brand b { color: var(--gold); letter-spacing: .08em; font-size: .85rem; }
+  .brand span { color: var(--muted); font-size: .8rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 6px; }
+  h1 em { color: var(--gold); font-style: normal; }
+  p { margin: 8px 0; color: var(--muted); font-size: .92rem; }
+  p.err { color: #ff9d9d; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: 14px 0 6px; }
+  input[type=email], input[type=password] { width: 100%; padding: 11px 12px; border: 1px solid rgba(255,255,255,.2); border-radius: var(--rs); background: #000; color: #fff; font-size: 1rem; }
+  .btn { display: block; width: 100%; margin-top: 16px; padding: 12px; border: none; border-radius: var(--rs); background: var(--gold); color: #111; font-weight: 800; font-size: 1rem; cursor: pointer; }
+  .btn:disabled { opacity: .6; cursor: default; }
+  .btn.alt { background: none; border: 1px solid rgba(255,255,255,.25); color: var(--fg); font-weight: 600; margin-top: 8px; }
+  .lg { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--rs); margin-top: 8px; cursor: pointer; }
+  .lg small { color: var(--muted); display: block; }
+  .foot { margin-top: 18px; font-size: .78rem; color: var(--muted); }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand"><b>DYNASTY HQ</b><span>· Connect your AI</span></div>
+
+  <section id="login">
+    <h1>Allow <em id="client1">your AI</em> to use your Dynasty HQ</h1>
+    <p>Sign in with the email and password you use on dhqfootball.com. Your AI will be able to read your leagues' rosters, DHQ values and verdicts, never make moves.</p>
+    <p class="err hide" id="err1"></p>
+    <form id="f1" autocomplete="on">
+      <label for="email">Email</label><input type="email" id="email" name="email" autocomplete="username" required>
+      <label for="password">Password</label><input type="password" id="password" name="password" autocomplete="current-password" required>
+      <button class="btn" type="submit" id="b1">Sign in</button>
+    </form>
+    <p class="foot">Signed up with Google? Set a password in Dynasty HQ → Settings first, then sign in here. Your password is checked by Dynasty HQ and never stored by this page.</p>
+  </section>
+
+  <section id="consent" class="hide">
+    <h1>Which leagues can <em id="client2">your AI</em> see?</h1>
+    <p id="who"></p>
+    <p class="err hide" id="err2"></p>
+    <form id="f2">
+      <div id="leagues"></div>
+      <button class="btn" type="submit" id="allow">Allow</button>
+      <button class="btn alt" type="button" id="deny">Cancel</button>
+    </form>
+    <p class="foot">Read-only. You can disconnect any time from your AI's connector settings. New leagues take up to two hours to get their first DHQ numbers.</p>
+  </section>
+
+  <section id="dead" class="hide">
+    <h1>Something's off</h1>
+    <p class="err" id="err3"></p>
+    <p>Go back to your AI and try connecting again.</p>
+  </section>
+</div>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var $ = function (id) { return document.getElementById(id); };
+  var show = function (id) { ['login', 'consent', 'dead'].forEach(function (s) { $(s).classList.toggle('hide', s !== id); }); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var auth = q.get('auth') || 'https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-auth';
+  if (!/^https:\/\/hovnqztlbsgsywrbidbh\.supabase\.co\/functions\/v1\/dhq-auth$/.test(auth)) auth = 'https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-auth';
+  var keep = { client_id: q.get('client_id') || '', redirect_uri: q.get('redirect_uri') || '', state: q.get('state') || '', code_challenge: q.get('code_challenge') || '', scope: q.get('scope') || 'read', resource: q.get('resource') || '' };
+  var clientName = q.get('client_name') || 'your AI';
+  $('client1').textContent = clientName; $('client2').textContent = clientName;
+  if (q.get('error')) { $('err3').textContent = q.get('error'); show('dead'); return; }
+  if (!keep.client_id || !keep.redirect_uri || !keep.code_challenge) { $('err3').textContent = 'This page only works when your AI sends you here.'; show('dead'); return; }
+
+  function post(path, body) {
+    return fetch(auth + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (j) { return j; }, function () { return { ok: false, error: 'The sign-in service did not answer (' + r.status + ').' }; }); });
+  }
+  var pending = null;
+  $('f1').addEventListener('submit', function (e) {
+    e.preventDefault();
+    $('err1').classList.add('hide'); $('b1').disabled = true; $('b1').textContent = 'Signing in…';
+    var body = Object.assign({}, keep, { email: $('email').value.trim(), password: $('password').value });
+    post('/authorize/login', body).then(function (j) {
+      $('b1').disabled = false; $('b1').textContent = 'Sign in';
+      if (!j.ok) { $('err1').textContent = j.error || 'Sign-in failed.'; $('err1').classList.remove('hide'); return; }
+      pending = j.pending;
+      $('who').textContent = 'Signed in as ' + j.who + '. Untick any league you want to keep private.';
+      var L = j.leagues || [];
+      $('leagues').innerHTML = L.length ? L.map(function (l) {
+        return '<label class="lg"><input type="checkbox" name="league" value="' + esc(l.league_id) + '" checked><span>' + esc(l.name) + '<small>' + esc(l.teams) + ' teams · ' + esc(String(l.status || '').replace('_', ' ')) + '</small></span></label>';
+      }).join('') : '<p class="err">No Sleeper leagues found for this account this season.</p>';
+      $('allow').disabled = !L.length;
+      show('consent');
+    }).catch(function () { $('b1').disabled = false; $('b1').textContent = 'Sign in'; $('err1').textContent = 'Could not reach the sign-in service. Check your connection and try again.'; $('err1').classList.remove('hide'); });
+  });
+  function decide(decision) {
+    $('err2').classList.add('hide'); $('allow').disabled = true; $('deny').disabled = true;
+    var leagues = Array.prototype.map.call(document.querySelectorAll('input[name=league]:checked'), function (c) { return c.value; });
+    post('/authorize/decision', { pending: pending, decision: decision, _leagues: leagues.join(',') }).then(function (j) {
+      if (!j.ok || !j.redirect) { $('err2').textContent = j.error || 'Something went wrong.'; $('err2').classList.remove('hide'); $('allow').disabled = false; $('deny').disabled = false; return; }
+      $('allow').textContent = 'Taking you back…';
+      location.replace(j.redirect);
+    }).catch(function () { $('err2').textContent = 'Could not reach the sign-in service.'; $('err2').classList.remove('hide'); $('allow').disabled = false; $('deny').disabled = false; });
+  }
+  $('f2').addEventListener('submit', function (e) { e.preventDefault(); decide('allow'); });
+  $('deny').addEventListener('click', function () { decide('deny'); });
+})();
+</script>
+</body>
+</html>
