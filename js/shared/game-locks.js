@@ -24,8 +24,9 @@
     'use strict';
     const App = root.App = root.App || {};
     const SL = 'https://api.sleeper.app/v1';
-    const st = { key: '', at: 0, games: {}, points: {}, inflight: null, sig: '' };
+    const st = { key: '', at: 0, week: 0, games: {}, points: {}, inflight: null, sig: '' };
     const S = () => root.S || {};
+    const currentWeekNow = () => week();
 
     function teamOf(pid) {
         const p = (S().players || {})[pid];
@@ -39,10 +40,11 @@
 
     function load(leagueId, season, week) {
         season = Number(season) || 0; week = Number(week) || 0;
-        if (!season || !week) return Promise.resolve(false);
+        // Never read a week the app is not on (see state()).
+        if (!season || !week || week !== currentWeekNow()) return Promise.resolve(false);
         const key = (leagueId || '') + '|' + season + '|' + week;
         const prevKey = st.key;
-        if (st.key === key && Date.now() - st.at < 30000) return st.inflight || Promise.resolve(false);
+        if (st.key === key && Date.now() - st.at < 55000) return st.inflight || Promise.resolve(false);
         const job = Promise.all([
             getJson(SL + '/scores/nfl/regular/' + season + '/' + week).catch(() => null),
             leagueId ? getJson(SL + '/league/' + leagueId + '/matchups/' + week).catch(() => null) : Promise.resolve(null),
@@ -67,7 +69,7 @@
                 Object.keys(pp).forEach(pid => { points[pid] = Number(pp[pid]) || 0; });
             });
             // Keep the last good read if a feed failed this time.
-            if (Object.keys(games).length || prevKey !== key) st.games = games;
+            if (Object.keys(games).length || prevKey !== key) { st.games = games; st.week = week; }
             if (Object.keys(points).length || prevKey !== key) st.points = points;
             st.key = key; st.at = Date.now();
             const sig = Object.keys(st.games).filter(t => st.games[t].locked).sort().map(t => t + st.games[t].status).join(',') + '|' + Object.keys(st.points).length + ':' + Object.values(st.points).reduce((x, y) => x + y, 0).toFixed(2);
@@ -81,7 +83,10 @@
     }
 
     function state(pid) {
-        if (!pid || !Object.keys(st.games).length) return null;
+        // Only answer for the week the app is on now (browser check
+        // 2026-10-09: a cold load read week 1 before the app knew it was
+        // week 5, and every starter showed locked with week-1 points).
+        if (!pid || !Object.keys(st.games).length || st.week !== week()) return null;
         const team = teamOf(String(pid));
         if (!team) return null;
         const g = st.games[team];
@@ -92,7 +97,7 @@
     }
     const isLocked = pid => { const s = state(pid); return !!(s && s.locked); };
     const actual = pid => { const s = state(pid); return s && s.locked ? s.pts : null; };
-    const ready = () => Object.keys(st.games).length > 0;
+    const ready = () => Object.keys(st.games).length > 0 && st.week === week();
     const stamp = () => st.sig;
 
     // Load for the league the app has open, and keep it fresh while the page
@@ -102,14 +107,18 @@
         const lg = id ? (s.leagues || []).find(l => String(l.league_id || l.id) === id) : null;
         return lg ? { id, season: lg.season || s.season || (s.nflState && s.nflState.season) } : null;
     }
+    // The week the app is on, or 0 while it doesn't know yet (before the
+    // league loads, the app's own week reads a placeholder 1).
     function week() {
-        const WP = App.WeeklyProj;
-        return Number((WP && WP.currentWeek && WP.currentWeek()) || (S().nflState && S().nflState.week) || 0);
+        const s = S(), WP = App.WeeklyProj;
+        if (!(Number(s.currentWeek) > 0) && !(s.nflState && (s.nflState.week || s.nflState.display_week))) return 0;
+        return Number((WP && WP.currentWeek && WP.currentWeek()) || s.currentWeek || s.nflState.display_week || s.nflState.week || 0);
     }
+    // Wait until the league and its week are actually known, then follow
+    // the week: a check every 5 s is free (load() reuses a read for 55 s).
     function tick() { const lg = league(); if (lg && week()) load(lg.id, lg.season, week()); }
     function boot() {
-        setTimeout(tick, 1500);
-        setInterval(tick, 60000);
+        setInterval(tick, 5000);
     }
 
     App.GameLocks = App.GameLocks || { load, state, isLocked, actual, ready, stamp, teamOf, _st: st };

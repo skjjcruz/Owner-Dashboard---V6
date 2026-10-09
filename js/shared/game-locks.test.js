@@ -19,7 +19,7 @@ const SCORES = [
 const MATCHUPS = [{ roster_id: 1, players_points: { turpin: 8.7, pickens: 11.2, henry: 6.1 } }];
 globalThis.fetch = async (url) => ({ ok: true, json: async () => (/\/scores\//.test(url) ? SCORES : MATCHUPS) });
 
-globalThis.S = { players: {
+globalThis.S = { nflState: { week: 5, season_type: 'regular' }, players: {
     turpin: { position: 'WR', team: 'DAL' }, pickens: { position: 'WR', team: 'DAL' },
     sanders: { position: 'RB', team: 'LAR' }, adams: { position: 'WR', team: 'LAR' },
     henry: { position: 'RB', team: 'BAL' }, byeguy: { position: 'WR', team: 'NYJ' },
@@ -39,7 +39,17 @@ test('game state, lock and actual points per player', async () => {
     assert.equal(GL.actual('sanders'), null, 'an upcoming player has no actual yet');
     assert.equal(GL.state('byeguy').status, 'bye');
     assert.equal(GL.isLocked('byeguy'), false);
-    assert.equal(await GL.load('L', 2026, 5), false, 'a repeat read inside 30 s changes nothing');
+    assert.equal(await GL.load('L', 2026, 5), false, 'a repeat read inside 55 s changes nothing');
+    assert.equal(await GL.load('L', 2026, 1), false, 'a week the app is not on is never read');
+    assert.equal(GL.state('turpin').status, 'final', 'and the current week still answers');
+});
+
+test('nothing is locked while the app does not know its week', () => {
+    const saved = globalThis.S.nflState;
+    globalThis.S.nflState = null;
+    assert.equal(GL.state('turpin'), null);
+    assert.equal(GL.ready(), false);
+    globalThis.S.nflState = saved;
 });
 
 test('the Sleeper-numbers optimizer keeps a locked starter and never starts a locked bench player', async () => {
