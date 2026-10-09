@@ -13,7 +13,7 @@ globalThis.S = {
     leagueUsers: [{ user_id: 'me', display_name: 'skjjcruz', metadata: { team_name: 'Dirty Mike' } }, { user_id: 'them', display_name: 'Gas', metadata: { team_name: 'GasMan612' } }],
     rosters: [
         { roster_id: 13, owner_id: 'me', players: ['chig', 'sutton', 'turpin', 'jt', 'dak'], starters: ['dak', 'turpin', 'sutton'] },
-        { roster_id: 2, owner_id: 'them', players: ['puka', 'mcb', 'henry'], starters: [] },
+        { roster_id: 2, owner_id: 'them', players: ['puka', 'mcb', 'henry', 'camsutton'], starters: [] },
     ],
     players: {
         chig: { full_name: 'Chig Okonkwo', position: 'TE', team: 'WAS', injury_status: 'Questionable', injury_body_part: 'Hamstring', age: 27 },
@@ -24,6 +24,7 @@ globalThis.S = {
         puka: { full_name: 'Puka Nacua', position: 'WR', team: 'LAR', age: 25 },
         mcb: { full_name: 'Trey McBride', position: 'TE', team: 'ARI', age: 26 },
         henry: { full_name: 'Derrick Henry', position: 'RB', team: 'BAL', age: 32 },
+        camsutton: { full_name: 'Cam Sutton', position: 'DB', team: 'PIT', age: 31 },
         fa1: { full_name: 'Michael Carter', position: 'RB', team: 'TEN', age: 27 },
         fa2: { full_name: 'Tyler Badie', position: 'RB', team: 'DEN', age: 26 },
     },
@@ -59,6 +60,17 @@ test('who do I start: DHQ picks the higher projection and names the injury', () 
     assert.equal(a.intent, 'startsit');
     assert.match(a.text, /^Start Courtland Sutton over Chig Okonkwo: 8\.4 vs 6\.5/);
     assert.ok(a.lines.some(l => /Questionable \(Hamstring\)/.test(l)));
+});
+
+test('last names shared by two rostered players go to the member\'s own player (owner report 2026-10-09)', () => {
+    assert.deepEqual(A.findPlayers('Who should I start, Sutton or Okonkwo?'), ['sutton', 'chig']);
+    const a = A.answer('Who should I start, Sutton or Okonkwo?');
+    assert.match(a.text, /^Start Courtland Sutton over Chig Okonkwo: 8\.4 vs 6\.5/);
+});
+
+test('names it cannot find get an honest reply, not a different answer', () => {
+    const a = A.answer('Who should I start, Zzyzx or Qwerty?');
+    assert.match(a.text, /couldn't match those names/);
 });
 
 test('a player whose game is over is never recommended in or out', () => {

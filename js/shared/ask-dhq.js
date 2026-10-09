@@ -86,12 +86,18 @@
             const at = text.indexOf(' ' + n + ' ');
             if (at >= 0) add(pid, at);
         }
+        // A last name more than one rostered player shares ("Sutton": a WR
+        // and a DB in an IDP league) goes to the member's own player first,
+        // then the most valuable one (owner report 2026-10-09: the shared
+        // name was dropped and the question got the wrong answer).
         const byLast = {};
-        for (const pid of rostered) { const parts = norm(pname(pid)).split(' '); const last = parts[parts.length - 1]; if (last && last.length >= 4) (byLast[last] = byLast[last] || []).push(pid); }
+        for (const pid of rostered) { const parts = norm(pname(pid)).split(' '); const last = parts[parts.length - 1]; if (last && last.length >= 3) (byLast[last] = byLast[last] || []).push(pid); }
+        const mine = new Set(((myRoster() || {}).players || []).map(String));
         for (const last of Object.keys(byLast)) {
-            if (byLast[last].length !== 1) continue;
             const at = text.indexOf(' ' + last + ' ');
-            if (at >= 0 && !hits.some(h => norm(pname(h.pid)).endsWith(' ' + last))) add(byLast[last][0], at);
+            if (at < 0 || hits.some(h => norm(pname(h.pid)).endsWith(' ' + last))) continue;
+            const pick = [...byLast[last]].sort((a, b) => (mine.has(b) ? 1 : 0) - (mine.has(a) ? 1 : 0) || dhq(b) - dhq(a))[0];
+            add(pick, at);
         }
         return hits.sort((a, b) => a.at - b.at).map(h => h.pid);
     }
@@ -145,6 +151,22 @@
         }
         const DQ = App.DhqProj;
         const chk = me && lg && DQ && DQ.lineupCheck ? DQ.lineupCheck(me, lg) : null;
+        // "Should I start X?": is he in DHQ's best lineup?
+        if (players.length === 1) {
+            const pid = players[0], g = lock(pid), w = weekPts(pid), name = pname(pid);
+            if (g && g.locked) return { intent: 'startsit', title: 'Start / sit', text: name + '\'s game has already started (' + w.pts + ' pts so far); he can\'t be moved now.', lines: [], players: [pid], facts: {} };
+            if (!chk) return { intent: 'startsit', title: 'Start / sit', text: 'DHQ is still projecting this week; ask again in a few seconds.', lines: [], players: [pid], facts: {} };
+            const inBest = chk.optimal.starters.some(x => String(x.pid) === String(pid));
+            const slot = (chk.optimal.starters.find(x => String(x.pid) === String(pid)) || {}).slot;
+            const ahead = chk.optimal.starters.filter(x => String(x.slot) !== '' && (pl(x.pid).fantasy_positions || [ppos(x.pid)]).some(q => (pl(pid).fantasy_positions || [ppos(pid)]).includes(q)) && String(x.pid) !== String(pid)).map(x => pname(x.pid) + ' (' + round1(x.pts) + ')');
+            return {
+                intent: 'startsit', title: 'Start / sit',
+                text: inBest ? 'Yes, start ' + name + ': he\'s in DHQ\'s best lineup at ' + String(slot).replace('_', ' ') + ' (' + w.pts + ' projected).' : 'No, bench ' + name + ' (' + (w.pts == null ? 'no projection' : w.pts + ' projected') + '). DHQ starts ' + (ahead.slice(0, 3).join(', ') || 'others') + ' ahead of him.',
+                lines: injury(pid) ? ['Injury: ' + injury(pid)] : [], players: [pid], facts: { inBest },
+            };
+        }
+        // Named someone we couldn't find: say so instead of answering something else.
+        if (/\bor\b|\bvs\b|\bover\b/.test(norm(q))) return { intent: 'startsit', title: 'Start / sit', text: 'I couldn\'t match those names to players in this league. Try full names, like "Chig Okonkwo or Courtland Sutton".', lines: [], players: [], facts: {} };
         if (!chk) return { intent: 'startsit', title: 'Your lineup', text: 'DHQ is still projecting this week. Open Game Day for the full lineup check, or ask me again in a few seconds.', lines: [], players: [], facts: {} };
         const d = chk.delta;
         if (d.isOptimal) return { intent: 'startsit', title: 'Your lineup', text: 'Start who you have in: your lineup is already DHQ\'s best (' + round1(d.currentTotal) + ' projected).', lines: [], players: [], facts: { total: d.currentTotal } };
