@@ -135,7 +135,7 @@ function run(script, env) {
 // ── preflight ──────────────────────────────────────────────────────────────
 if (!fs.existsSync(path.join(LAB_DIR, '.git'))) fail('LAB_DIR is not a git checkout: ' + LAB_DIR);
 if (!fs.existsSync(LAB_SRC)) fail('lab/ folder missing in this repo');
-for (const f of ['gate.html', 'lab-cutdown.js', 'espn-lab.html', 'connect/index.html']) {
+for (const f of ['gate.html', 'lab-cutdown.js', 'espn-lab.html', 'connect/index.html', 'connect/ai.html']) {
   if (!fs.existsSync(path.join(LAB_SRC, f))) fail('lab/' + f + ' missing');
 }
 // The engine the Lab receives must be a committed version: uncommitted edits
@@ -226,6 +226,8 @@ const cutdownTag = '<script src="js/lab-cutdown.js?v=' + contentHash(cutdown) + 
 // connect/ so the Lab gate never wraps it (members' AIs land here).
 fs.mkdirSync(path.join(LAB_DIR, 'connect'), { recursive: true });
 write(path.join(LAB_DIR, 'connect', 'index.html'), read(path.join(LAB_SRC, 'connect', 'index.html')));
+// "Bring your AI": how a member connects Claude, ChatGPT or their own agent.
+write(path.join(LAB_DIR, 'connect', 'ai.html'), read(path.join(LAB_SRC, 'connect', 'ai.html')));
 let espn = read(path.join(LAB_SRC, 'espn-lab.html'));
 // The harness loads the shared loader by hand; keep its version in step with the build.
 espn = espn.replace(/js\/shared\/shared-loader\.js\?v=[0-9a-f]+/g, sharedLoaderTag);

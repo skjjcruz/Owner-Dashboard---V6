@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none';">
+<title>Bring your AI · Dynasty HQ</title>
+<!-- DHQ Connect: the "Bring your AI" page (Lab-hosted; lab/connect/ai.html,
+     copied in by scripts/publish-lab.cjs and never gated). Plain words for a
+     member who wants Claude, ChatGPT or their own agent to use Dynasty HQ.
+     No scripts beyond the copy button; nothing here talks to any server. -->
+<style>
+  :root { --bg: #0b0b0b; --card: #141414; --well: #0f0f0f; --gold: #D4AF37; --fg: #e8e8e8; --muted: #9a9a9a; --line: rgba(255,255,255,0.1); --r: 10px; --rs: 8px; --rx: 5px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 24px 16px 60px; }
+  main { max-width: 680px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .brand b { color: var(--gold); letter-spacing: .08em; font-size: .85rem; }
+  .brand span { color: var(--muted); font-size: .8rem; }
+  h1 { font-size: 1.7rem; line-height: 1.2; margin: 0 0 8px; }
+  h1 em { color: var(--gold); font-style: normal; }
+  .lead { color: var(--muted); font-size: 1.05rem; margin: 0 0 22px; }
+  h2 { font-size: 1.1rem; margin: 26px 0 8px; }
+  p { margin: 8px 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 18px; margin: 12px 0; }
+  .card h3 { margin: 0 0 6px; font-size: 1rem; }
+  .card h3 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  ol { padding-left: 20px; margin: 8px 0; } li { margin: 4px 0; }
+  .url { display: flex; gap: 8px; align-items: center; background: var(--well); border: 1px solid var(--line); border-radius: var(--rs); padding: 10px 12px; margin: 10px 0; font-family: ui-monospace, Menlo, monospace; font-size: .85rem; word-break: break-all; }
+  .url button { flex: none; background: var(--gold); color: #111; border: none; border-radius: var(--rx); padding: 6px 10px; font-weight: 700; cursor: pointer; font-size: .8rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .chip { background: var(--well); border: 1px solid var(--line); border-radius: var(--rx); padding: 4px 9px; font-size: .82rem; color: var(--muted); }
+  .muted { color: var(--muted); }
+  .foot { margin-top: 28px; font-size: .8rem; color: var(--muted); }
+  a { color: var(--gold); }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><b>DYNASTY HQ</b><span>· DHQ Connect</span></div>
+  <h1>Bring your <em>own AI</em>.<br>We bring the football intelligence.</h1>
+  <p class="lead">Connect the AI you already use to Dynasty HQ, and it can see your leagues the way DHQ sees them: rosters, DHQ values, owner habits, picks, this week's projections and news. You ask the questions. Your AI does the thinking. DHQ does the football.</p>
+
+  <h2>What your AI can do once it's connected</h2>
+  <div class="chips">
+    <span class="chip">Start / sit</span><span class="chip">Grade a trade</span><span class="chip">Find trade targets</span><span class="chip">Waiver targets and bids</span><span class="chip">Your matchup this week</span><span class="chip">Roster needs</span><span class="chip">Player outlook</span><span class="chip">Owner DNA</span><span class="chip">Pick values</span><span class="chip">Compare players</span>
+  </div>
+  <p class="muted">It reads. It never makes moves. Nothing in Sleeper changes unless you change it.</p>
+
+  <h2>Connect in two minutes</h2>
+
+  <div class="card">
+    <h3>Claude <small>Pro, Max, Team or Enterprise</small></h3>
+    <ol>
+      <li>Open Claude → <b>Settings</b> → <b>Connectors</b> → <b>Add custom connector</b>.</li>
+      <li>Name it <b>Dynasty HQ</b> and paste this address:</li>
+    </ol>
+    <div class="url"><span id="u1">https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-tools</span><button type="button" data-copy="u1">Copy</button></div>
+    <ol start="3">
+      <li>Leave the advanced settings alone and tap <b>Add</b>, then <b>Connect</b>.</li>
+      <li>Sign in with your Dynasty HQ email and password, tick the leagues your AI may see, tap <b>Allow</b>.</li>
+      <li>Start a new chat and ask: <i>"Who should I start this week in my Psycho league?"</i></li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h3>ChatGPT <small>Plus, Pro, Team or Enterprise</small></h3>
+    <ol>
+      <li>Open ChatGPT → <b>Settings</b> → <b>Connectors</b> (on some plans this is under <b>Apps</b> or needs <b>Developer mode</b> turned on in Settings → Connectors → Advanced).</li>
+      <li>Choose <b>Create</b> (or <b>Add custom connector</b>), name it <b>Dynasty HQ</b>, and paste the same address:</li>
+    </ol>
+    <div class="url"><span id="u2">https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-tools</span><button type="button" data-copy="u2">Copy</button></div>
+    <ol start="3">
+      <li>Authentication: <b>OAuth</b>. Leave the client fields blank; ChatGPT registers itself.</li>
+      <li>Sign in with your Dynasty HQ email and password, pick your leagues, <b>Allow</b>.</li>
+      <li>In a chat, turn on the Dynasty HQ connector and ask away.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h3>Your own agent or app <small>any tool that speaks MCP, or plain HTTPS</small></h3>
+    <p>Point it at the same address. It speaks MCP (Streamable HTTP) and plain JSON. Sign in happens the standard way (OAuth with PKCE, clients register automatically), or ask us for a DHQ Connect key and send it as <span class="muted">Authorization: Bearer dhq_ck_…</span></p>
+    <p class="muted">Self-serve keys are coming. For now, message us and we'll mint one for you.</p>
+  </div>
+
+  <h2>Good to know</h2>
+  <div class="card">
+    <p><b>Read-only.</b> Your AI can look, compare and recommend. It cannot add, drop, trade or set a lineup. You do that in Sleeper.</p>
+    <p><b>You choose the leagues.</b> Untick any league on the sign-in screen and your AI never sees it. Disconnect any time from your AI's connector settings.</p>
+    <p><b>Signed up with Google?</b> Set a password in Dynasty HQ → Settings first, then sign in here with your email and that password.</p>
+    <p><b>Numbers refresh every two hours;</b> lineups, scores and injuries are checked live when you ask. New leagues get their first DHQ numbers within two hours of connecting.</p>
+    <p><b>Your AI, your bill.</b> DHQ never charges for the AI's thinking. The AI runs on the plan you already have.</p>
+  </div>
+
+  <p class="foot">Dynasty HQ provides the football intelligence. Your AI does the thinking. Questions: hello@dhqfootball.com</p>
+</main>
+<script>
+(function () {
+  Array.prototype.forEach.call(document.querySelectorAll('button[data-copy]'), function (b) {
+    b.addEventListener('click', function () {
+      var t = document.getElementById(b.getAttribute('data-copy')).textContent;
+      var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, done); else done();
+    });
+  });
+})();
+</script>
+</body>
+</html>
