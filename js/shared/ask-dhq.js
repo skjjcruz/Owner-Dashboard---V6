@@ -363,7 +363,7 @@
         return out;
     }
     // Owner ask 2026-10-09: answer in its own voice; never "DHQ's call".
-    const SYSTEM_KEY = 'You are the member\'s own AI, answering a question about their fantasy football league. Talk like a sharp GM to a friend: lead with the answer, then two to four plain sentences with the key numbers. When a recommendation is given, that is your answer: state it as your own and never contradict it. Never mention DHQ, Dynasty HQ, "the call", "the data" or where the facts came from; just answer. Call a player\'s value his "dynasty value". Use ONLY the facts given: never add a player, number, injury or news that is not in them. If the facts can\'t answer it, say what\'s missing in one sentence. Dynasty value: higher is better (7,000+ elite, 3,000+ solid starter, under 1,000 depth). No headings.';
+    const SYSTEM_KEY = 'You are the member\'s own AI, answering a question about their fantasy football league. Talk like a sharp GM to a friend: lead with the answer, then two to four plain sentences with the key numbers. When a recommendation is given, that is your answer: state it as your own and never contradict it. Never mention DHQ, Dynasty HQ, "the call", "the data" or where the league facts came from; just answer. Call a player\'s value his "dynasty value". Rosters, lineups, values, projections and free agents come ONLY from the league facts given: never add or change them. For anything else, especially news, injuries, depth charts, coaching and play-calling, trades and signings, use web search when you have it, prefer the last two weeks, and name the outlet in a few words (for example "per ESPN"). Never invent news. If you can\'t find it, say so in one sentence. Dynasty value: higher is better (7,000+ elite, 3,000+ solid starter, under 1,000 depth). No headings.';
     const SYSTEM = 'You are a sharp, friendly fantasy football GM. You are given a question and the recommendation with its facts. Answer in two to four plain sentences, as a GM talking to a friend, stating the recommendation as your own. Lead with the answer. Never mention DHQ, Dynasty HQ, "the call" or where the facts came from. Use ONLY the facts given: never add a player, number, injury or news that is not in them, and never change the recommendation. No lists, no headings.';
     let _session = null;
     async function narrate(question, ans, onText, onProgress) {
@@ -482,22 +482,59 @@
         const user = ('Question: ' + question + call + '\nLeague facts:\n- ' + briefing().join('\n- ')).replace(/\bDHQ\b(?!')/g, 'value').replace(/\bDHQ's\s*/g, '');
         const model = PROVIDERS[k.provider].model;
         const ctl = root.AbortController ? new root.AbortController() : null;
-        const timer = ctl ? setTimeout(() => ctl.abort(), 30000) : null;
-        try {
-            let r, j, text = '';
+        // A web search can take a while; give it a minute.
+        const timer = ctl ? setTimeout(() => ctl.abort(), 60000) : null;
+        const signal = ctl && ctl.signal;
+        const hist = chat.flatMap(t => [{ role: 'user', content: t.q }, { role: 'assistant', content: t.a }]);
+        // Owner ask 2026-10-09: up-to-date NFL news. Each company's own web
+        // search runs on the member's key (DHQ pays nothing, sees nothing).
+        // If their account can't search, the question is asked without it.
+        async function send(search) {
+            let r, j, text = '', sources = [];
             if (k.provider === 'anthropic') {
-                r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model, max_tokens: 4000, output_config: { effort: 'low' }, system: SYSTEM_KEY, messages: chat.flatMap(t => [{ role: 'user', content: t.q }, { role: 'assistant', content: t.a }]).concat([{ role: 'user', content: user }]) }) });
+                const body = { model, max_tokens: 4000, output_config: { effort: 'low' }, system: SYSTEM_KEY, messages: hist.concat([{ role: 'user', content: user }]) };
+                if (search) body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }];
+                r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify(body) });
                 j = await r.json().catch(() => ({}));
-                text = ((j.content || []).find(c => c.type === 'text') || {}).text || '';
+                // A long search can pause mid-turn; let it finish once.
+                if (r.ok && j.stop_reason === 'pause_turn') {
+                    body.messages = body.messages.concat([{ role: 'assistant', content: j.content }]);
+                    const r2 = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify(body) });
+                    const j2 = await r2.json().catch(() => ({}));
+                    if (r2.ok) j = Object.assign({}, j2, { content: (j.content || []).concat(j2.content || []) });
+                }
+                const blocks = j.content || [];
+                text = blocks.filter(c => c.type === 'text').map(c => c.text || '').join('');
+                blocks.forEach(c => { if (c.type === 'web_search_tool_result' && Array.isArray(c.content)) c.content.forEach(x => x.url && sources.push({ url: x.url, title: x.title })); (c.citations || []).forEach(x => x.url && sources.unshift({ url: x.url, title: x.title })); });
             } else if (k.provider === 'gemini') {
-                r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM_KEY }] }, contents: chat.flatMap(t => [{ role: 'user', parts: [{ text: t.q }] }, { role: 'model', parts: [{ text: t.a }] }]).concat([{ role: 'user', parts: [{ text: user }] }]), generationConfig: { maxOutputTokens: 4000 } }) });
+                const body = { systemInstruction: { parts: [{ text: SYSTEM_KEY }] }, contents: hist.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })).concat([{ role: 'user', parts: [{ text: user }] }]), generationConfig: { maxOutputTokens: 4000 } };
+                if (search) body.tools = [{ google_search: {} }];
+                r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.key }, body: JSON.stringify(body) });
                 j = await r.json().catch(() => ({}));
-                text = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
+                const cand = (j.candidates || [])[0] || {};
+                text = ((cand.content || {}).parts || []).map(p => p.text || '').join('');
+                (((cand.groundingMetadata || {}).groundingChunks) || []).forEach(g => g.web && g.web.uri && sources.push({ url: g.web.uri, title: g.web.title }));
+            } else if (search) {
+                const body = { model, instructions: SYSTEM_KEY, input: hist.concat([{ role: 'user', content: user }]), tools: [{ type: 'web_search' }], max_output_tokens: 4000 };
+                r = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + k.key }, body: JSON.stringify(body) });
+                j = await r.json().catch(() => ({}));
+                if (typeof j.output_text === 'string') text = j.output_text;
+                (j.output || []).forEach(o => (o.content || []).forEach(c => { if (c.type === 'output_text') { if (!j.output_text) text += c.text || ''; (c.annotations || []).forEach(a => a.url && sources.push({ url: a.url, title: a.title })); } }));
+                if (!text && j.choices) text = (((j.choices[0] || {}).message) || {}).content || '';
             } else {
-                r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', signal: ctl && ctl.signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + k.key }, body: JSON.stringify({ model, max_completion_tokens: 4000, messages: [{ role: 'system', content: SYSTEM_KEY }].concat(chat.flatMap(t => [{ role: 'user', content: t.q }, { role: 'assistant', content: t.a }]), [{ role: 'user', content: user }]) }) });
+                r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + k.key }, body: JSON.stringify({ model, max_completion_tokens: 4000, messages: [{ role: 'system', content: SYSTEM_KEY }].concat(hist, [{ role: 'user', content: user }]) }) });
                 j = await r.json().catch(() => ({}));
                 text = (((j.choices || [])[0] || {}).message || {}).content || '';
             }
+            const seen = new Set();
+            sources = sources.filter(x => { const key = String(x.url).split('#')[0]; if (seen.has(key)) return false; seen.add(key); return true; }).slice(0, 4);
+            return { r, j, text, sources };
+        }
+        try {
+            let out = await send(true);
+            // Search not available on this account or model: ask without it.
+            if (!out.r.ok && out.r.status === 400) { const plain = await send(false); if (plain.r.ok) out = Object.assign(plain, { noSearch: true }); }
+            const { r, j, text, sources } = out;
             if (!r.ok) {
                 const detail = (j && j.error && (j.error.message || (typeof j.error === 'string' ? j.error : ''))) || '';
                 // Owner test 2026-10-09: a working key was sent back to the
@@ -507,7 +544,7 @@
                 return { ok: false, retry: r.status === 429 || r.status >= 500, error: (r.status === 429 ? PROVIDERS[k.provider].label + ' says this key is out of quota or busy right now' : PROVIDERS[k.provider].label + ' had a problem (' + r.status + ')') + (detail ? ': ' + String(detail).slice(0, 200) : '') + '.' };
             }
             if (text.trim()) { chat.push({ q: question, a: text.trim() }); if (chat.length > CHAT_TURNS) chat.shift(); }
-            return text.trim() ? { ok: true, text: text.trim(), provider: k.provider } : { ok: false, error: PROVIDERS[k.provider].label + ' sent back an empty answer.' };
+            return text.trim() ? { ok: true, text: text.trim(), provider: k.provider, sources, noSearch: !!out.noSearch } : { ok: false, error: PROVIDERS[k.provider].label + ' sent back an empty answer.' };
         } catch (e) {
             return { ok: false, retry: true, error: 'Couldn\'t reach ' + PROVIDERS[k.provider].label + '. Check your connection.' };
         } finally { if (timer) clearTimeout(timer); }
@@ -673,7 +710,12 @@
             if (!res.ok && res.retry) { await new Promise(rs => setTimeout(rs, 1500)); res = await askWithKey(q, ans); }
             if (res.ok) {
                 p.textContent = res.text;
-                src.textContent = 'Answered by your ' + PROVIDERS[k.provider].label + '. Your key stays on this device.';
+                src.textContent = 'Answered by your ' + PROVIDERS[k.provider].label + '. Your key stays on this device.' + (res.noSearch ? ' (Web search isn\'t turned on for this key, so no news lookups.)' : '');
+                if (res.sources && res.sources.length) {
+                    const row = el('div', 'askdhq-more');
+                    res.sources.forEach(x => { let host = ''; try { host = new URL(x.url).hostname.replace(/^www\./, ''); } catch (e) { return; } const a = el('a', 'askdhq-chip', host); a.href = x.url; a.target = '_blank'; a.rel = 'noopener'; if (x.title) a.title = x.title; row.appendChild(a); });
+                    if (row.childNodes.length) box.insertBefore(row, src);
+                }
                 if (ans.lines && ans.lines.length) {
                     const d = el('details'); const sm = el('summary', null, 'The numbers'); sm.style.cursor = 'pointer'; d.appendChild(sm);
                     const ul = el('ul'); ans.lines.forEach(t => ul.appendChild(el('li', null, t))); d.appendChild(ul); box.insertBefore(d, src);

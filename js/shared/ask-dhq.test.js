@@ -188,8 +188,11 @@ test('a saved key answers in the app; it goes only to its own AI company', async
         assert.ok(JSON.stringify(call.body).includes('Start Courtland Sutton over Chig Okonkwo'), 'DHQ\'s facts go with the question');
     }
     assert.ok(seen.every(c => !/dhqfootball|supabase|sleeper/.test(c.url)), 'the key never goes anywhere but the AI company');
+    // Owner ask 2026-10-09: up-to-date news. Every company gets its own web search tool.
+    assert.ok(seen.every(c => Array.isArray(c.body.tools) && c.body.tools.length === 1), 'web search goes with each question');
+    assert.ok(seen.some(c => /\/v1\/responses$/.test(c.url)), 'OpenAI asks through the API that can search');
     // Owner ask 2026-10-09: the AI answers in its own voice, never "DHQ's call".
-    assert.ok(seen.every(c => !/\bDHQ\b/.test(JSON.stringify((c.body.messages || c.body.contents).filter(m => m.role !== 'system')))), 'nothing sent asks the AI to talk about DHQ');
+    assert.ok(seen.every(c => !/\bDHQ\b/.test(JSON.stringify((c.body.messages || c.body.contents || c.body.input).filter(m => m.role !== 'system')))), 'nothing sent asks the AI to talk about DHQ');
     globalThis.fetch = realFetch;
 });
 
@@ -219,6 +222,15 @@ test('owner report 2026-10-09: the key survives the shared client wiping device 
     globalThis.OD.identity.currentOwner = () => 'account:steve';
     A.forgetKey(); assert.equal(A.savedKey(), null);
     delete globalThis.OD;
+});
+
+test('an account that cannot search still gets an answer, without the search', async () => {
+    const realFetch = globalThis.fetch; const bodies = [];
+    globalThis.fetch = async (url, opts) => { const b = JSON.parse(opts.body); bodies.push(b); return b.tools ? { ok: false, status: 400, json: async () => ({ error: { message: 'web search is not enabled' } }) } : { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: 'Start Sutton.' }] }) }; };
+    A.saveKey('sk-ant-api03-abcdefghijklmnop');
+    const r = await A.askWithKey('Who calls plays for Denver?', A.answer('Who calls plays for Denver?'));
+    assert.equal(r.ok, true); assert.equal(r.noSearch, true); assert.equal(bodies.length, 2);
+    A.forgetKey(); globalThis.fetch = realFetch;
 });
 
 test('a rejected key says so plainly; removing it falls back', async () => {
