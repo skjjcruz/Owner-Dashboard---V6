@@ -199,6 +199,23 @@
         }
         const AllWire = wire === 'open' ? window.WrAllLeaguesWire : null;
 
+        // Lab (owner ask 2026-10-09): with an AI key saved, a question asked
+        // here opens the last-opened league and is answered there; the
+        // "New: Ask your AI" card goes away once the key is in.
+        const [hasKey, setHasKey] = React.useState(() => !!(window.App && window.App.AskDHQ && window.App.AskDHQ.savedKey && window.App.AskDHQ.savedKey()));
+        React.useEffect(() => {
+            const on = () => setHasKey(!!(window.App && window.App.AskDHQ && window.App.AskDHQ.savedKey && window.App.AskDHQ.savedKey()));
+            window.addEventListener('dhq:ai-key-changed', on);
+            return () => window.removeEventListener('dhq:ai-key-changed', on);
+        }, []);
+        React.useEffect(() => {
+            const A = window.App && window.App.AskDHQ;
+            if (window.DHQ_LAB !== true || guest || !A || !focus) return undefined;
+            const link = { name: titleOf(focus), open: () => onSelect(focus) };
+            A.hubLeague = link;
+            return () => { if (A.hubLeague === link) A.hubLeague = null; };
+        }, [focus && focus.id, guest]);
+
         const cards = filtered.map((l, i) => {
             const title = titleOf(l);
             const rec = recordOf(l, sleeperUserId);
@@ -266,7 +283,7 @@
                     </div>
                 </div>}
                 {/* Members (Lab, owner ask 2026-10-09): Ask your AI. */}
-                {!guest && window.DHQ_LAB === true && <div className="hv2-signup" role="region" aria-label="Ask your AI">
+                {!guest && !hasKey && window.DHQ_LAB === true && <div className="hv2-signup" role="region" aria-label="Ask your AI">
                     <div className="hv2-signup-copy">
                         <strong>New: <em>Ask your AI</em></strong>
                         <span>Open any league and tap the gold "Ask your AI" button. Ask in plain English and your own AI answers with DHQ's numbers: your computer's built-in AI, your ChatGPT or Claude, or your own key.</span>

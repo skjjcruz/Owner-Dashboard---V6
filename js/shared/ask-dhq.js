@@ -413,9 +413,12 @@
         if (!prov) return null;
         try { root.localStorage.setItem(KEY_NAME, cleanKey(key)); root.localStorage.setItem(PROVIDER_NAME, prov); } catch (e) { return null; }
         _brain = null;
+        keyChanged();
         return prov;
     }
-    function forgetKey() { try { root.localStorage.removeItem(KEY_NAME); root.localStorage.removeItem(PROVIDER_NAME); } catch (e) { /* nothing saved */ } _brain = null; }
+    function forgetKey() { try { root.localStorage.removeItem(KEY_NAME); root.localStorage.removeItem(PROVIDER_NAME); } catch (e) { /* nothing saved */ } _brain = null; keyChanged(); }
+    // The leagues page hides its "New: Ask your AI" card once a key is in.
+    function keyChanged() { try { if (root.dispatchEvent && root.CustomEvent) root.dispatchEvent(new root.CustomEvent('dhq:ai-key-changed')); } catch (e) { /* no listeners */ } }
     async function askWithKey(question, ans) {
         const k = savedKey();
         if (!k) return { ok: false, error: 'no key' };
@@ -572,7 +575,18 @@
         // the question, and ask it as soon as a league opens.
         if (!leagueReady()) {
             try { root.sessionStorage.setItem(PENDING, q); } catch (e) { /* asked again by hand */ }
+            // Owner ask 2026-10-09: ask right from the leagues page. The
+            // leagues page hands us its last-opened league; open it and the
+            // question is answered there as soon as its rosters load.
+            const hub = App.AskDHQ && App.AskDHQ.hubLeague;
             const box = el('div', 'askdhq-a');
+            if (hub && hub.open) {
+                box.appendChild(el('h4', null, 'Opening ' + (hub.name || 'your league')));
+                box.appendChild(el('p', null, 'Your AI will answer as soon as the league loads.'));
+                ui.log.appendChild(box); ui.log.scrollTop = ui.log.scrollHeight;
+                try { hub.open(); } catch (e) { if (root.wrLog) root.wrLog('askdhq.hubopen', e); }
+                return;
+            }
             box.appendChild(el('h4', null, 'Pick a league first'));
             box.appendChild(el('p', null, 'Your AI needs a league\'s rosters to answer. Tap one of your leagues and your question will be asked there.'));
             ui.log.appendChild(box); ui.log.scrollTop = ui.log.scrollHeight;
@@ -686,7 +700,8 @@
         if (!isMember()) { membersOnly('Ask your AI'); return; }
         if (!root.document.querySelector('style[data-askdhq]') && !root.document.querySelector('.askdhq-btn')) { const st = root.document.createElement('style'); st.setAttribute('data-askdhq', '1'); st.textContent = CSS; root.document.head.appendChild(st); }
         open();
-        showKeyCard();
+        // A saved key stays saved: reopening never asks for it again.
+        if (!savedKey()) showKeyCard();
     }
     // One key card at a time: a new one replaces any already showing.
     function showKeyCard(note) {
@@ -715,7 +730,9 @@
         // 2026-10-09: a members-only feature; guests never see it), and only
         // while a league is open.
         setInterval(() => {
-            const on = !!(S().currentLeagueId && rosters().length);
+            // With a saved key the button also shows on the leagues page.
+            const hub = App.AskDHQ && App.AskDHQ.hubLeague;
+            const on = !!(S().currentLeagueId && rosters().length) || !!(hub && savedKey() && isMember());
             if (!ui || ui.panel.style.display === 'none') btn.style.display = on ? '' : 'none';
             else if (!isMember()) { ui.panel.style.display = 'none'; btn.style.display = on ? '' : 'none'; }
             askPending();
