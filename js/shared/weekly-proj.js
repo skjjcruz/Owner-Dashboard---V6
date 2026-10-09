@@ -395,16 +395,40 @@
         const ids = ((roster && roster.players) || []).filter(id => id && !resSet.has(id) && !taxiSet.has(id));
 
         const projections = projectRoster(ids, { playersData: opts.playersData, statsData: opts.statsData, priorData: opts.priorData, scoring, week, requireSleeper: sleeperOnly });
-        const scoreOf = pid => { const p = projections[pid]; return p && p.available ? (p.points[objective] || 0) : 0; };
+        // Game locks (js/shared/game-locks.js): a player whose game has kicked
+        // off this week counts his actual points and cannot move. Only for the
+        // week being played; season simulations of future weeks are unaffected.
+        const GL = App.GameLocks;
+        const lockOn = !!(GL && GL.ready && GL.ready() && sleeperOnly);
+        const lockedPts = pid => { if (!lockOn) return null; const a = GL.actual(String(pid)); return a == null ? null : Number(a) || 0; };
+        const scoreOf = pid => { const a = lockedPts(pid); if (a != null) return a; const p = projections[pid]; return p && p.available ? (p.points[objective] || 0) : 0; };
 
-        const players = ids.map(pid => {
+        const players = ids.filter(pid => lockedPts(pid) == null).map(pid => {
             const p = projections[pid];
             const pl = opts.playersData && opts.playersData[pid];
             return { pid, pos: (App.normPos && App.normPos(pl && pl.position)) || (pl && pl.position) || '', available: !!(p && p.available), pts: scoreOf(pid) };
         });
 
-        const optimal = ss.optimalLineupWeekly(players, rosterPositions);
-        const delta = ss.lineupDelta((roster && roster.starters) || [], optimal, scoreOf);
+        // Locked starters keep their slot; the solver fills the rest.
+        const starters = (roster && roster.starters) || [];
+        const pinned = [], open = [];
+        let t = 0;
+        rosterPositions.forEach(raw => {
+            const nm = ss.normSlot(raw);
+            if (/^(BN|BE|BENCH|IR|TAXI|RES)$/.test(nm)) { open.push(raw); return; }
+            const pid = starters[t] && String(starters[t]) !== '0' ? String(starters[t]) : null;
+            if (pid && lockedPts(pid) != null) pinned.push({ pid, slot: nm, pts: lockedPts(pid) }); else open.push(raw);
+            t++;
+        });
+        const optimal = ss.optimalLineupWeekly(players, open);
+        pinned.forEach(x => {
+            const pl = opts.playersData && opts.playersData[x.pid];
+            optimal.starters.push({ pid: x.pid, slot: x.slot, pts: x.pts, pos: (App.normPos && App.normPos(pl && pl.position)) || (pl && pl.position) || '', locked: true });
+            optimal.slots.push({ slot: x.slot, pid: x.pid });
+            if (optimal.used && optimal.used.add) optimal.used.add(x.pid);
+            optimal.total = +((Number(optimal.total) || 0) + x.pts).toFixed(1);
+        });
+        const delta = ss.lineupDelta(starters, optimal, scoreOf);
         const sleeperLines = Object.keys(projections).filter(pid => projections[pid] && (projections[pid].projSource === 'sleeper' || projections[pid].projSource === platformSource(week))).length;
         return { week, mode, objective, scoring, projections, optimal, delta, sleeperOnly, sleeperLines, rosterSize: ids.length };
     }

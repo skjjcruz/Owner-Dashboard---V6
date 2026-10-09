@@ -427,7 +427,9 @@
         const cur = {};
         if (current) Object.keys(current).forEach(k => { if (current[k] && String(current[k]) !== '0') cur[k] = String(current[k]); });
         else slots.forEach(x => { const pid = (roster.starters || [])[x.idx]; if (pid && String(pid) !== '0') cur[x.idx] = String(pid); });
-        const held = slots.filter(x => cur[x.idx] && !skip.has(cur[x.idx]) && noNumber(cur[x.idx]) && posList(cur[x.idx]).some(q => x.elig.includes(q)));
+        // Held: a starter DHQ has no number for, or one whose game has
+        // kicked off (locked: he stays put and counts his actual points).
+        const held = slots.filter(x => cur[x.idx] && !skip.has(cur[x.idx]) && ((noNumber(cur[x.idx]) && posList(cur[x.idx]).some(q => x.elig.includes(q))) || lockedPts(cur[x.idx]) != null));
         const heldIdx = new Set(held.map(x => x.idx)), heldPid = new Set(held.map(x => cur[x.idx]));
         const rest = []; let t = 0;
         (rosterPositions || []).forEach(raw => {
@@ -435,16 +437,17 @@
             if (!heldIdx.has(t)) rest.push(raw);
             t++;
         });
-        const list = (roster.players || []).map(String).filter(pid => pid && !skip.has(pid) && !heldPid.has(pid)).map(pid => {
+        const list = (roster.players || []).map(String).filter(pid => pid && !skip.has(pid) && !heldPid.has(pid) && lockedPts(pid) == null).map(pid => {
             const r = get(pid), p = players[pid] || {};
             const pos = String((App.normPos && App.normPos(p.position)) || p.position || '').toUpperCase();
             return { pid, pos, positions: (p.fantasy_positions || []).concat([pos]), available: avg(r) > 0, pts: avg(r) };
         });
         const out = SS.optimalLineupWeekly(list, rest);
         held.forEach(x => {
-            const pid = cur[x.idx], l = posList(pid);
-            out.starters.push({ pid, slot: x.slotName, pts: 0, pos: l.length ? l[l.length - 1] : '', held: true });
+            const pid = cur[x.idx], l = posList(pid), a = lockedPts(pid);
+            out.starters.push({ pid, slot: x.slotName, pts: a != null ? a : 0, pos: l.length ? l[l.length - 1] : '', held: true, locked: a != null });
             out.slots.push({ slot: x.slotName, pid });
+            if (a != null) out.total = +((Number(out.total) || 0) + a).toFixed(1);
         });
         out.held = [...heldPid];
         return out;
@@ -452,9 +455,18 @@
     // Numeric total of several players, or null while any is still working.
     // A player's average week, for totals and lineup choices.
     function avg(r) { return r ? (Number(r.mean != null ? r.mean : r.median) || 0) : 0; }
+    // Game locks (js/shared/game-locks.js): once a player's game has kicked
+    // off he counts his actual points, not a projection, and cannot move.
+    const GL = () => App.GameLocks || null;
+    const lockedPts = pid => { const g = GL(); const a = g ? g.actual(String(pid)) : null; return a == null ? null : Number(a) || 0; };
+    function ptsOf(pid) { const a = lockedPts(pid); return a != null ? a : avg(get(pid)); }
     function totalNum(pids) {
         let t = 0;
-        for (const pid of (pids || [])) { const r = get(pid); if (r) t += avg(r); else if (!(String(pid) in st.results)) return null; }
+        for (const pid of (pids || [])) {
+            const a = lockedPts(pid);
+            if (a != null) { t += a; continue; }
+            const r = get(pid); if (r) t += avg(r); else if (!(String(pid) in st.results)) return null;
+        }
         return +t.toFixed(1);
     }
     // The week's matchup on DHQ's numbers: the lineup you have set against
@@ -475,6 +487,8 @@
         if (totalNum(oppIds) == null || !cur.length || totalNum(cur) == null) return null;
         const map = {};
         mine.concat(oppIds, cur).forEach(pid => {
+            const a = lockedPts(pid);
+            if (a != null) { map[pid] = { available: true, points: { median: a, floor: a, ceiling: a } }; return; }
             const r = get(pid); if (!r) return;
             const med = avg(r);
             map[pid] = { available: med > 0, points: { median: med, floor: r.floor != null ? Number(r.floor) : med * 0.7, ceiling: r.ceiling != null ? Number(r.ceiling) : med * 1.35 } };
@@ -491,6 +505,8 @@
         if (!M || !M.dist || !ids.length || totalNum(ids) == null) return null;
         const map = {};
         ids.forEach(pid => {
+            const a = lockedPts(pid);
+            if (a != null) { map[pid] = { available: true, points: { median: a, floor: a, ceiling: a } }; return; }
             const r = get(pid); if (!r) return;
             const med = avg(r);
             map[pid] = { available: med > 0, points: { median: med, floor: r.floor != null ? Number(r.floor) : med * 0.7, ceiling: r.ceiling != null ? Number(r.ceiling) : med * 1.35 } };
@@ -577,7 +593,12 @@
         const sl = (slots || []).filter(x => x && Array.isArray(x.elig));
         if (!list.length || list.length > sl.length) return null;
         const BIG = 1e6, cur = current || {};
-        const cost = list.map(pid => { const pos = posList(pid); return sl.map(x => !pos.some(q => x.elig.includes(q)) ? BIG : (String(cur[x.idx] || '') === pid ? 0 : 1)); });
+        // A locked player (his game has kicked off) stays in the slot he is in.
+        const curIdxOf = {}; Object.keys(cur).forEach(k => { if (cur[k]) curIdxOf[String(cur[k])] = String(k); });
+        const cost = list.map(pid => {
+            const pos = posList(pid), pinned = lockedPts(pid) != null && curIdxOf[pid] != null ? curIdxOf[pid] : null;
+            return sl.map(x => pinned != null ? (String(x.idx) === pinned ? 0 : BIG) : !pos.some(q => x.elig.includes(q)) ? BIG : (String(cur[x.idx] || '') === pid ? 0 : 1));
+        });
         const pick = hungarian(cost);
         const out = {};
         for (let r = 0; r < list.length; r++) { const c = pick[r]; if (c < 0 || cost[r][c] >= BIG) return null; out[sl[c].idx] = list[r]; }
@@ -621,7 +642,7 @@
         const d = Math.round((best.total - cur) * 10) / 10;
         const nameOfSlot = k => { const x = slots.find(y => String(y.idx) === String(k)); return x ? x.slotName : ''; };
         const base = pid => { const l = posList(pid); return l.length ? l[l.length - 1] : ''; };
-        const startInstead = Object.keys(placed).filter(k => !curPids.includes(placed[k])).map(k => ({ pid: placed[k], slot: nameOfSlot(k), pos: base(placed[k]), pts: avg(get(placed[k])) }));
+        const startInstead = Object.keys(placed).filter(k => !curPids.includes(placed[k])).map(k => ({ pid: placed[k], slot: nameOfSlot(k), pos: base(placed[k]), pts: ptsOf(placed[k]) }));
         const benchInstead = curPids.filter(pid => !bestPids.includes(pid));
         const moves = Object.keys(placed).filter(k => curPids.includes(placed[k]) && String(current[k] || '') !== placed[k]).map(k => ({ pid: placed[k], slot: nameOfSlot(k), pos: base(placed[k]), from: nameOfSlot(Object.keys(current).find(c => current[c] === placed[k])) }));
         return {
@@ -632,10 +653,10 @@
     // Total of several players (a lineup), '…' while any is still working.
     // Changes whenever a batch of DHQ numbers lands (or the league or week
     // moves), so a cached result built on DHQ's numbers knows to rebuild.
-    function stamp() { return (st.key || '') + ':' + Object.keys(st.results).length + ':' + (sleeperReady(week()) ? 's' : '-'); }
+    function stamp() { return (st.key || '') + ':' + Object.keys(st.results).length + ':' + (sleeperReady(week()) ? 's' : '-') + ':' + (GL() ? GL().stamp() : ''); }
     function sum(pids) {
         let t = 0, waiting = false;
-        (pids || []).forEach(pid => { const r = get(pid); if (r) t += avg(r); else if (!(String(pid) in st.results)) waiting = true; });
+        (pids || []).forEach(pid => { const a = lockedPts(pid); if (a != null) { t += a; return; } const r = get(pid); if (r) t += avg(r); else if (!(String(pid) in st.results)) waiting = true; });
         return waiting ? '\u2026' : t.toFixed(1);
     }
     // Every rostered player in the league, so rosters, Start/Sit and the
@@ -669,7 +690,7 @@
         root.addEventListener && root.addEventListener('wr:proj-updated', (e) => { if (!(e && e.detail && e.detail.source === 'dhq')) { loadPlatform(); setTimeout(warmLeague, 500); } });
     }
 
-    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, avgOf, dataStatus, cols: COLS, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
+    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, avgOf, ptsOf, dataStatus, cols: COLS, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
     if (typeof document !== 'undefined') boot();
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.DhqProj;
