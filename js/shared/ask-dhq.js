@@ -581,6 +581,10 @@
     const CSS = [
         '.askdhq-btn{position:fixed;right:16px;bottom:64px;z-index:2147482990;display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border:1px solid rgba(212,175,55,.55);border-radius:999px;background:var(--off-black,#1B1B22);color:var(--gold,#D4AF37);font:700 .8rem/1 system-ui,-apple-system,sans-serif;letter-spacing:.04em;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.45)}',
         '.askdhq-btn:hover{background:#24242c}',
+        // In the top bar's open middle (owner ask 2026-10-10): bigger, no float.
+        '.askdhq-btn.askdhq-btn--top{position:static;right:auto;bottom:auto;padding:8px 18px;font-size:.88rem;box-shadow:0 0 0 1px rgba(212,175,55,.25),0 4px 16px rgba(212,175,55,.18);background:linear-gradient(180deg,rgba(212,175,55,.22),rgba(212,175,55,.08)),var(--off-black,#1B1B22)}',
+        '.askdhq-btn.askdhq-btn--top:hover{background:linear-gradient(180deg,rgba(212,175,55,.32),rgba(212,175,55,.12)),var(--off-black,#1B1B22)}',
+        '.askdhq-panel.askdhq-panel--top{top:calc(var(--sat,0px) + 64px);bottom:auto}',
         '@media(max-width:767px){.askdhq-btn{bottom:calc(var(--wr-tab-bar-h,56px) + var(--sab,0px) + 12px)}}',
         '.askdhq-panel{position:fixed;right:16px;bottom:64px;z-index:2147482995;width:min(420px,calc(100vw - 32px));max-height:min(640px,calc(100vh - 120px));display:flex;flex-direction:column;background:var(--off-black,#15151b);border:1px solid rgba(212,175,55,.4);border-radius:var(--card-radius-lg,14px);box-shadow:0 14px 40px rgba(0,0,0,.6);color:var(--white,#F5F2EA);font:400 .88rem/1.45 system-ui,-apple-system,sans-serif;overflow:hidden}',
         '@media(max-width:767px){.askdhq-panel{left:8px;right:8px;width:auto;bottom:calc(var(--wr-tab-bar-h,56px) + var(--sab,0px) + 8px);max-height:calc(100vh - var(--wr-tab-bar-h,56px) - var(--sab,0px) - 70px)}}',
@@ -773,7 +777,14 @@
         }
     }
     function open() {
-        if (ui) { ui.panel.style.display = 'flex'; ui.btn.style.display = 'none'; ui.input.focus(); return; }
+        // The top-bar button stays put (and toggles); the corner one hides.
+        const onTop = b => !!(b && b.classList.contains('askdhq-btn--top'));
+        if (ui) {
+            if (onTop(ui.btn) && ui.panel.style.display !== 'none') { ui.panel.style.display = 'none'; return; }
+            ui.panel.style.display = 'flex'; ui.panel.classList.toggle('askdhq-panel--top', onTop(ui.btn));
+            if (!onTop(ui.btn)) ui.btn.style.display = 'none';
+            ui.input.focus(); return;
+        }
         const d = root.document;
         const panel = el('div', 'askdhq-panel'); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Ask your AI');
         const head = el('div', 'askdhq-head'); head.appendChild(el('b', null, 'ASK YOUR AI'));
@@ -793,7 +804,8 @@
         d.body.appendChild(panel);
         const btn = ui && ui.btn || d.querySelector('.askdhq-btn');
         ui = { panel, log, input, brain: brainEl, btn };
-        if (btn) btn.style.display = 'none';
+        if (onTop(btn)) panel.classList.add('askdhq-panel--top');
+        else if (btn) btn.style.display = 'none';
         brain().then(b => { brainEl.textContent = brainLabel(b); });
         // No canned questions (owner ask 2026-10-09): one line, then talk.
         const hi = el('div', 'askdhq-a'); const lgName = (league() || {}).name;
@@ -865,11 +877,24 @@
         // Show the button only to signed-in members (owner ruling
         // 2026-10-09: a members-only feature; guests never see it), and only
         // while a league is open.
+        // The top bar's slot when the page has one showing (league pages on a
+        // tablet or computer); otherwise the floating corner button (phones,
+        // the leagues page). The panel opens under whichever was tapped.
+        const place = () => {
+            const slot = d.getElementById('askdhq-slot');
+            const top = !!(slot && slot.offsetParent !== null);
+            if (top && btn.parentNode !== slot) slot.appendChild(btn);
+            else if (!top && btn.parentNode !== d.body) d.body.appendChild(btn);
+            btn.classList.toggle('askdhq-btn--top', top);
+            if (ui) ui.panel.classList.toggle('askdhq-panel--top', top);
+        };
+        place();
         setInterval(() => {
+            place();
             // With a saved key the button also shows on the leagues page.
             const hub = App.AskDHQ && App.AskDHQ.hubLeague;
             const on = !!(S().currentLeagueId && rosters().length) || !!(hub && savedKey() && isMember());
-            if (!ui || ui.panel.style.display === 'none') btn.style.display = on ? '' : 'none';
+            if (!ui || ui.panel.style.display === 'none' || btn.classList.contains('askdhq-btn--top')) btn.style.display = on ? '' : 'none';
             else if (!isMember()) { ui.panel.style.display = 'none'; btn.style.display = on ? '' : 'none'; }
             askPending();
         }, 1500);
