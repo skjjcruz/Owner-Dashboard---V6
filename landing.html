@@ -197,8 +197,8 @@
   .signin:hover, .signin:focus-visible { color: var(--text-1); border-color: var(--border-strong); }
 
   .hero {
-    display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center;
-    padding-block: 36px 64px;
+    display: grid; grid-template-columns: 1.05fr .95fr; gap: 0 48px; align-items: center;
+    padding-block: 8px 64px;
   }
   /* "New" announcement (owner ask 2026-10-10): pops, but stays classy. */
   .announce { display: flex; width: fit-content; max-width: 100%; align-items: center; gap: 14px; margin: 0 0 22px; padding: 10px 18px 10px 12px; border: 1px solid rgba(232,178,58,.4); border-radius: var(--r-lg, 14px); background: linear-gradient(180deg, rgba(232,178,58,.13), rgba(232,178,58,.04)); box-shadow: 0 6px 24px rgba(0,0,0,.25); color: var(--text-1); text-decoration: none; transition: border-color .15s, background .15s; }
@@ -209,11 +209,11 @@
   .announce:focus-visible { outline: 2px solid var(--forge-bright); outline-offset: 3px; }
   .announce-tag { flex: none; padding: 5px 9px; border-radius: 999px; background: var(--forge); color: #15120a; font: 700 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
   .announce-go { flex: none; color: var(--forge); font: 600 18px/1 var(--sans); }
-  /* Owner ask 2026-10-10: top right, beside Sign in. Phones keep it above the hero. */
-  .top-right { display: flex; align-items: center; gap: 14px; min-width: 0; }
-  .announce--nav { margin: 0; }
-  .announce--hero { display: none; }
-  @media (max-width: 880px) { .announce--nav { display: none; } .announce--hero { display: flex; } }
+  /* Owner ask 2026-10-10: banner top right, level with the hero's top line.
+     Phones stack it above the eyebrow. */
+  .hero-top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .hero-top .announce { margin: 0; }
+  @media (max-width: 880px) { .hero-top { flex-direction: column-reverse; align-items: flex-start; gap: 22px; } }
   .eyebrow { display: inline-flex; align-items: center; gap: 8px; font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--forge); }
   .eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--pos); box-shadow: 0 0 0 4px rgba(47,191,136,.15); }
   h1 {
@@ -304,7 +304,8 @@
   footer small { color: var(--text-3); font: 400 12px/1 var(--mono); }
 
   @media (max-width: 880px) {
-    .hero { grid-template-columns: 1fr; gap: 36px; padding-block: 20px 48px; }
+    .hero { grid-template-columns: 1fr; gap: 0 36px; padding-block: 12px 48px; }
+    .hero-art { margin-top: 36px; }
     .hero-art .phone { width: min(100%, 300px); }
     .hero-art .phone img { max-height: 420px; }
     .rail {
@@ -418,17 +419,17 @@
       <img src="img/logo.png" alt="" width="36" height="36">
       <span>DYNASTY HQ</span>
     </a>
-    <div class="top-right">
-      <a class="announce announce--nav" href="#auth" data-open-sheet="signup"><span class="announce-tag">New</span><span class="announce-text"><span class="announce-title">Bring your own AI to the fight</span><span class="announce-sub">Your AI. Your league data. Your competitive edge.</span></span><span class="announce-go" aria-hidden="true">&rarr;</span></a>
-      <button class="signin nav-btn" id="navSignin" type="button" data-open-sheet="signin">Sign in</button>
-    </div>
+    <button class="signin nav-btn" id="navSignin" type="button" data-open-sheet="signin">Sign in</button>
   </header>
 
   <main id="top">
     <section class="hero">
-      <div>
-        <a class="announce announce--hero" href="#auth" data-open-sheet="signup"><span class="announce-tag">New</span><span class="announce-text"><span class="announce-title">Bring your own AI to the fight</span><span class="announce-sub">Your AI. Your league data. Your competitive edge.</span></span><span class="announce-go" aria-hidden="true">&rarr;</span></a>
+      <!-- Owner ask 2026-10-10: the hero's top line sits level with the AI banner. -->
+      <div class="hero-top">
         <span class="eyebrow">Built for Sleeper, MFL and ESPN leagues</span>
+        <a class="announce" href="#auth" data-open-sheet="signup"><span class="announce-tag">New</span><span class="announce-text"><span class="announce-title">Bring your own AI to the fight</span><span class="announce-sub">Your AI. Your league data. Your competitive edge.</span></span><span class="announce-go" aria-hidden="true">&rarr;</span></a>
+      </div>
+      <div>
         <h1>Generic advice <em>stops here.</em></h1>
         <p class="lede"><strong class="kicker">Stop playing by other people's rules.</strong> <span id="ask">Type your Sleeper name.</span> DHQ reads your league and shows you who to start, which trades your leaguemates will take, and where you really stand. <span class="win">Because Winning Matters 🏆</span></p>
         <div class="platform" role="group" aria-label="Where your league lives">
