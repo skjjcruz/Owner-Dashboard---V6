@@ -363,7 +363,7 @@
         return out;
     }
     // Owner ask 2026-10-09: answer in its own voice; never "DHQ's call".
-    const SYSTEM_KEY = 'You are the member\'s own AI, answering a question about their fantasy football league. Talk like a sharp GM to a friend: lead with the answer, then two to four plain sentences with the key numbers. When a recommendation is given, that is your answer: state it as your own and never contradict it. Never mention DHQ, Dynasty HQ, "the call", "the data" or where the league facts came from; just answer. Call a player\'s value his "dynasty value". Rosters, lineups, values, projections and free agents come ONLY from the league facts given: never add or change them. For anything else, especially news, injuries, depth charts, coaching and play-calling, trades and signings, use web search when you have it, prefer the last two weeks, and name the outlet in a few words (for example "per ESPN"). Never invent news. If you can\'t find it, say so in one sentence. Dynasty value: higher is better (7,000+ elite, 3,000+ solid starter, under 1,000 depth). No headings.';
+    const SYSTEM_KEY = 'You are the member\'s own AI, answering a question about their fantasy football league. Talk like a sharp GM to a friend: lead with the answer, then two to four plain sentences with the key numbers. When a recommendation is given, that is your answer: state it as your own and never contradict it. Never mention DHQ, Dynasty HQ, "the call", "the data" or where the league facts came from; just answer. Call a player\'s value his "dynasty value". Rosters, lineups, values, projections and free agents come ONLY from the league facts given: never add or change them. For anything else, especially news, injuries, depth charts, coaching and play-calling, trades and signings, use web search when you have it, prefer the last two weeks, and name the outlet in a few words (for example "per ESPN"). Never invent news. Never tell the member to check another app, site or page, or to paste anything in; if the facts and search can\'t answer it, say in one sentence that you don\'t have it yet. Dynasty value: higher is better (7,000+ elite, 3,000+ solid starter, under 1,000 depth). No headings.';
     const SYSTEM = 'You are a sharp, friendly fantasy football GM. You are given a question and the recommendation with its facts. Answer in two to four plain sentences, as a GM talking to a friend, stating the recommendation as your own. Lead with the answer. Never mention DHQ, Dynasty HQ, "the call" or where the facts came from. Use ONLY the facts given: never add a player, number, injury or news that is not in them, and never change the recommendation. No lists, no headings.';
     let _session = null;
     async function narrate(question, ans, onText, onProgress) {
@@ -467,6 +467,45 @@
     function forgetKey() { try { [MEMBER_KEY, KEY_NAME, PROVIDER_NAME].forEach(k => root.localStorage.removeItem(k)); } catch (e) { /* nothing saved */ } _brain = null; keyChanged(); }
     // The leagues page hides its "New: Ask your AI" card once a key is in.
     function keyChanged() { try { if (root.dispatchEvent && root.CustomEvent) root.dispatchEvent(new root.CustomEvent('dhq:ai-key-changed')); } catch (e) { /* no listeners */ } }
+    // Owner test 2026-10-10: "Who is my opponent this week" got "the facts
+    // don't include the schedule" and a referral to another site. The AI now
+    // gets what the league page shows: this week's matchup (opponent, both
+    // lineups, projected totals, win chance, live points), the standings and
+    // the league's settings.
+    const wl = r => { const st = (r && r.settings) || {}; return (st.wins || 0) + '-' + (st.losses || 0) + (st.ties ? '-' + st.ties : ''); };
+    const pf = r => { const st = (r && r.settings) || {}; return Math.round(((st.fpts || 0) + (st.fpts_decimal || 0) / 100) * 10) / 10; };
+    async function leagueContext() {
+        const out = [];
+        const lg = league(), me = myRoster();
+        if (!lg) return out;
+        const st = lg.settings || {};
+        const wk = Number((App.WeeklyProj && App.WeeklyProj.currentWeek && App.WeeklyProj.currentWeek()) || S().currentWeek || 0);
+        const bits = [];
+        if (st.playoff_teams) bits.push(st.playoff_teams + ' teams make the playoffs' + (st.playoff_week_start ? ', starting week ' + st.playoff_week_start : ''));
+        if (st.trade_deadline) bits.push('trade deadline week ' + st.trade_deadline);
+        if (st.waiver_budget) bits.push('FAAB budget $' + st.waiver_budget);
+        if (bits.length) out.push('League settings: ' + bits.join(' · '));
+        // Standings, best record first (Sleeper's order: wins, then points for).
+        const table = rosters().slice().sort((a, b) => ((b.settings || {}).wins || 0) - ((a.settings || {}).wins || 0) || pf(b) - pf(a));
+        table.forEach((r, i) => out.push('Standings ' + (i + 1) + ': ' + teamName(r) + (me && r.roster_id === me.roster_id ? ' (me)' : '') + ' · ' + wl(r) + ' · ' + pf(r) + ' points for'));
+        if (!me || !wk) return out;
+        // This week's matchup.
+        let oppRid = null;
+        try { if (App.Matchup && App.Matchup.resolveOpponentRosterId) oppRid = await Promise.race([App.Matchup.resolveOpponentRosterId({ league: lg, myRosterId: me.roster_id, week: wk }), new Promise(r => setTimeout(() => r(null), 4000))]); } catch (e) { oppRid = null; }
+        const opp = oppRid != null ? rosters().find(r => String(r.roster_id) === String(oppRid)) : null;
+        if (!opp) { out.push('Week ' + wk + ' matchup: no head-to-head opponent this week (bye, playoffs or a league without matchups).'); return out; }
+        let line = 'Week ' + wk + ' matchup: me (' + teamName(me) + ', ' + wl(me) + ') vs ' + teamName(opp) + ' (' + wl(opp) + ', ' + pf(opp) + ' points for)';
+        try {
+            const m = App.DhqProj && App.DhqProj.matchup ? App.DhqProj.matchup((me.starters || []).filter(x => x && x !== '0'), opp, lg.roster_positions || []) : null;
+            if (m && m.fc) line += ' · projected ' + f1(m.fc.projMe) + ' to ' + f1(m.fc.projOpp) + (m.fc.winPct != null ? ' · my win chance ' + m.fc.winPct + '%' : '') + (m.oppIdeal && m.oppIdeal > m.oppCur + 0.5 ? ' · their best possible lineup ' + f1(m.oppIdeal) : '');
+        } catch (e) { /* totals are a bonus */ }
+        out.push(line);
+        (opp.starters || []).filter(x => x && x !== '0').forEach(pid => {
+            const w = weekPts(pid), g = lock(pid);
+            out.push('Opponent starter: ' + pname(pid) + ' · ' + ppos(pid) + ' ' + (pl(pid).team || 'FA') + (w.pts != null ? ' · ' + f1(w.pts) + (w.kind === 'proj' ? ' projected' : ' scored (' + w.kind + ')') : '') + (g && g.status === 'bye' ? ' · bye' : '') + (injury(pid) ? ' · ' + injury(pid) : ''));
+        });
+        return out;
+    }
     async function newsFor(pids) {
         const PN = App.PlayerNews;
         if (!PN || !pids.length) return [];
@@ -499,7 +538,8 @@
         // and the ones in the question, so the AI knows without a search.
         const newsLines = await newsFor(((myRoster() || {}).players || []).map(String).concat((ans && ans.players) || []));
         // The facts say "value", not "DHQ", so the AI has no brand to repeat.
-        const user = ('Question: ' + question + call + '\nLeague facts:\n- ' + briefing().join('\n- ') + (newsLines.length ? '\nRecent NFL news (last 14 days; "via" means team news that affects him):\n- ' + newsLines.join('\n- ') : '')).replace(/\bDHQ\b(?!')/g, 'value').replace(/\bDHQ's\s*/g, '');
+        const ctxLines = await leagueContext().catch(() => []);
+        const user = ('Question: ' + question + call + '\nLeague facts:\n- ' + briefing().concat(ctxLines).join('\n- ') + (newsLines.length ? '\nRecent NFL news (last 14 days; "via" means team news that affects him):\n- ' + newsLines.join('\n- ') : '')).replace(/\bDHQ\b(?!')/g, 'value').replace(/\bDHQ's\s*/g, '');
         const model = PROVIDERS[k.provider].model;
         const ctl = root.AbortController ? new root.AbortController() : null;
         // A web search can take a while; give it a minute.
@@ -824,11 +864,11 @@
         const ov = el('div', 'askdhq-mo');
         ov.style.cssText = 'position:fixed;inset:0;z-index:2147483001;background:rgba(4,6,10,.72);display:flex;align-items:center;justify-content:center;padding:16px';
         const card = el('div', 'askdhq-a');
-        card.style.cssText = 'max-width:380px;width:100%;background:var(--off-black,#15151b);border:1px solid rgba(212,175,55,.45);border-radius:var(--card-radius-lg,14px);padding:20px 18px;color:var(--white,#F5F2EA);font:400 .92rem/1.5 system-ui,-apple-system,sans-serif';
+        card.style.cssText = 'max-width:440px;width:100%;background:var(--off-black,#15151b);border:1px solid rgba(212,175,55,.45);border-radius:var(--card-radius-lg,14px);padding:20px 18px;color:var(--white,#F5F2EA);font:400 .92rem/1.5 system-ui,-apple-system,sans-serif';
         card.setAttribute('role', 'dialog'); card.setAttribute('aria-modal', 'true');
         card.appendChild(el('h4', null, (feature || 'AI features') + ' · members only'));
         card.appendChild(el('p', null, 'AI is for Dynasty HQ members. Create a free account to ask about your league with your own AI (ChatGPT, Claude or Gemini), at no cost from us. Your connected leagues come with you.'));
-        const row = el('div', 'askdhq-more'); row.style.marginTop = '14px';
+        const row = el('div', 'askdhq-more'); row.style.marginTop = '14px'; row.style.alignItems = 'center';
         const up = el('a', 'askdhq-send', 'Create free account'); up.href = SIGNUP_URL; up.style.cssText = 'display:inline-flex;align-items:center;padding:10px 14px;text-decoration:none';
         const inn = el('a', 'askdhq-chip', 'Sign in'); inn.href = SIGNIN_URL;
         const back = el('button', 'askdhq-chip', 'Keep browsing'); back.type = 'button'; back.onclick = () => ov.remove();

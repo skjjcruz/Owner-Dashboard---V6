@@ -205,6 +205,8 @@ test('owner test 2026-10-09: plural "waivers" is a waiver question, and the AI g
     await A.askWithKey('Anything odd?', A.answer('Anything odd?'));
     const sent = JSON.stringify(body);
     assert.match(sent, /League facts/); assert.match(sent, /My player: /);
+    // Owner test 2026-10-10: the opponent question. Standings always go along.
+    assert.match(sent, /Standings 1: /);
     assert.ok(body.max_tokens >= 2000, 'room for the model to think and still answer');
     // Purely conversational: the next question carries the last turn.
     await A.askWithKey('And at WR?', A.answer('And at WR?'));
