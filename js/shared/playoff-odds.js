@@ -178,7 +178,16 @@
         // this one, on DHQ's projections (App.DhqProj.seasonDists); a team or
         // week it doesn't cover keeps the fitted distribution.
         const fd = (opts && opts.futureDists) || null;
-        const distFor = (id, w) => (wd && Number(wd.week) === w && wd.byRoster[id]) || (fd && fd[w] && fd[w].byRoster && fd[w].byRoster[id]) || dists[id];
+        // DHQ sets the level; the spread is never tighter than the team's real
+        // week-to-week swing this season (a lineup's player-by-player spread
+        // understates it: live check 2026-10-10, ±18 a week sent a 4-0 team
+        // to 100% after four games).
+        // Four games is a thin read on one team's swing, so the league's
+        // typical swing is the floor.
+        const sds = Object.values(dists).map(d => d.sd).filter(x => x > 0).sort((a, b) => a - b);
+        const leagueSd = sds.length ? sds[Math.floor(sds.length / 2)] : 25;
+        const fdFor = (id, w) => { const x = fd && fd[w] && fd[w].byRoster && fd[w].byRoster[id]; return x ? { mean: x.mean, sd: Math.max(x.sd || 0, (dists[id] && dists[id].sd) || 0, leagueSd) } : null; };
+        const distFor = (id, w) => (wd && Number(wd.week) === w && wd.byRoster[id]) || fdFor(id, w) || dists[id];
         const futureWeeks = Object.keys(futurePairs).map(Number).sort((a, b) => a - b);
         const curWeek = futureWeeks.length ? futureWeeks[0] : null;
 
