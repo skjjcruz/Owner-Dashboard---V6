@@ -520,6 +520,7 @@
     // value: a rebuilder pays up for near picks and youth and pays almost
     // nothing for a veteran past his age cliff; a contender is the reverse.
     function appealFor(mode, x) {
+        if (x.kind === 'faab') return { mult: 1, why: 'FAAB' };
         if (mode === 'REBUILDING') {
             if (x.kind === 'pick') {
                 // Nearer picks matter more to a rebuild: next draft x1.15,
@@ -549,7 +550,18 @@
     }
 
     // ── evaluate_trade ─────────────────────────────────────────────
+    // FAAB as a trade piece ("$250 FAAB"), at the Trade Room's rate (1 FAAB
+    // dollar = 2 DHQ), so the builder and this evaluator price it the same.
+    const FAAB_RATE = 2;
+    function faabPiece(text) {
+        const m = String(text || '').trim().match(/^\$\s*(\d+)(?:\s*faab)?$|^(\d+)\s*(?:\$\s*)?faab$/i);
+        if (!m) return null;
+        const d = Number(m[1] || m[2]);
+        return d > 0 ? { kind: 'faab', label: '$' + d + ' FAAB', dollars: d, value: Math.round(d * FAAB_RATE) } : null;
+    }
     function resolvePiece(text, holderHint) {
+        const fb = faabPiece(text);
+        if (fb) return fb;
         const pk = parsePick(text);
         if (pk) {
             const own = picksByOwner();

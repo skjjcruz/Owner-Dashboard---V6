@@ -307,3 +307,11 @@ test('trade_plan answer shape and comparables from this season\'s league trades'
     const bad = await run('trade_plan', { target: 'Jordan Love', partner: 'DJAlexB' });
     assert.match(bad.error, /is on bwit13/);
 });
+
+test('FAAB is a trade piece at the Trade Room rate (1 FAAB dollar = 2 value)', async () => {
+    const e = await run('evaluate_trade', { give: ['2029 1st', '$100 FAAB'], get: ['Jordan Love'] });
+    assert.ok(!e.error, e.error);
+    assert.ok(JSON.stringify(e).includes('$100 FAAB'));
+    const plain = await run('evaluate_trade', { give: ['2029 1st'], get: ['Jordan Love'] });
+    assert.ok(e.verdict && plain.verdict);
+});

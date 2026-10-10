@@ -412,9 +412,64 @@
     // ── TcDealCard — extracted from renderDealHQ (Step-1 refactor; no behavior change) ──
     // One generated deal package: send/receive summary, decision strip (grade/accept/Δ), and an
     // expandable why-drawer. Closures it used (sideSummary, loadDealIntoBuilder, saveDeal) are props.
+    // ── The shared trade call (owner ask 2026-10-10: one message everywhere) ──
+    // Builder, finder cards, Ask your AI and the connector all read the same
+    // evaluator: App.AskTools evaluate_trade. Pieces go in as Sleeper player
+    // ids, picks as "2027 1st from <rosterId>" (or "2027 1.04 from 5"), FAAB
+    // as "$250 FAAB".
+    const TC_ORD = { 1: '1st', 2: '2nd', 3: '3rd' };
+    function tcPickText(id) { const p = String(id).split('-'); const sl = (p[4] || '').charAt(0) === 's' ? Number(p[4].slice(1)) : null; return p[1] + ' ' + (sl ? p[2] + '.' + String(sl).padStart(2, '0') : (TC_ORD[p[2]] || p[2] + 'th')) + ' from ' + p[3]; }
+    function tcCallArgs(ids, pickIds, faab) { return (ids || []).map(String).concat((pickIds || []).map(tcPickText), faab > 0 ? ['$' + faab + ' FAAB'] : []); }
+    const TC_CALL = {
+        word: v => (v.decision === 'offer' ? 'Send it' : v.decision === 'counter' ? 'Counter' : 'Pass'),
+        color: v => (v.decision === 'offer' ? 'var(--good, var(--win-green))' : v.decision === 'counter' ? 'var(--warn)' : 'var(--bad, var(--loss-red))'),
+    };
+    function useTcSharedCall(give, get, partnerRid) {
+        const [call, setCall] = React.useState(null);
+        const key = give.join('|') + '>' + get.join('|') + '@' + (partnerRid || '');
+        React.useEffect(() => {
+            const T = window.App?.AskTools;
+            if (!T || !give.length || !get.length) { setCall(null); return undefined; }
+            let live = true;
+            T.run('evaluate_trade', Object.assign({ give, get }, partnerRid != null ? { partner: String(partnerRid) } : {}))
+                .then(r => { if (live) setCall(r && r.verdict ? { key, verdict: r.verdict, headliner: r.headliner || null } : null); })
+                .catch(() => { if (live) setCall(null); });
+            return () => { live = false; };
+        }, [key]);
+        return call && call.key === key ? call : null;
+    }
+    function useTcDealCall(deal) {
+        const partnerRid = (window.S?.rosters || []).find(r => String(r.owner_id) === String(deal.partnerOwnerId))?.roster_id;
+        return useTcSharedCall(
+            tcCallArgs((deal.givePlayers || []).map(p => p.pid || p.id), (deal.givePicks || []).map(p => p.id), deal.giveFaab || 0),
+            tcCallArgs((deal.receivePlayers || []).map(p => p.pid || p.id), (deal.receivePicks || []).map(p => p.id), deal.receiveFaab || 0),
+            partnerRid);
+    }
+    // Phone finder card pieces (that card is a plain render function, so the
+    // shared call lives in these two small components).
+    function TcPhDealChips({ deal, floor, chip }) {
+        const sc = useTcDealCall(deal), sv = sc && sc.verdict;
+        const lk = sv && sv.accept_chance_pct != null ? sv.accept_chance_pct : deal.likelihood;
+        const likeColor = lk >= floor ? 'var(--good)' : lk >= Math.max(55, floor - 15) ? 'var(--warn)' : 'var(--bad)';
+        const deltaColor = deal.userGain >= 0 ? 'var(--good)' : 'var(--bad)';
+        return <>
+            {sv && chip(TC_CALL.word(sv), TC_CALL.color(sv))}
+            {chip(deal.grade, deal.gradeColor || 'var(--gold)')}
+            {chip(lk + '%', likeColor)}
+            {chip((deal.userGain >= 0 ? '+' : '') + Math.round(deal.userGain).toLocaleString(), deltaColor)}
+        </>;
+    }
+    function TcPhCallLine({ deal }) {
+        const sc = useTcDealCall(deal), sv = sc && sc.verdict;
+        if (!sv) return null;
+        return <div style={{ marginTop: '7px', fontSize: '0.74rem', lineHeight: 1.45, color: 'var(--silver)' }}><b style={{ color: TC_CALL.color(sv) }}>{TC_CALL.word(sv)}:</b> {sv.call}</div>;
+    }
     function TcDealCard({ deal, idx, actionFloor, expandedDealId, setExpandedDealId, loadDealIntoBuilder, saveDeal, sideSummary }) {
+                const shared = useTcDealCall(deal);
+                const sv = shared ? shared.verdict : null;
+                const shownLikelihood = sv && sv.accept_chance_pct != null ? sv.accept_chance_pct : deal.likelihood;
                 const deltaColor = deal.userGain >= 0 ? 'var(--good)' : 'var(--bad)';
-                const likelihoodColor2 = deal.likelihood >= actionFloor ? 'var(--good)' : deal.likelihood >= Math.max(55, actionFloor - 15) ? 'var(--warn)' : 'var(--bad)';
+                const likelihoodColor2 = shownLikelihood >= actionFloor ? 'var(--good)' : shownLikelihood >= Math.max(55, actionFloor - 15) ? 'var(--warn)' : 'var(--bad)';
                 const expanded = expandedDealId === deal.id;
                 const whyView = typeof window.App?.Intelligence?.buildWhyView === 'function'
                     ? window.App.Intelligence.buildWhyView(deal.intelligence, { title: 'Why this trade', limit: 4 })
@@ -432,18 +487,21 @@
                             <button onClick={() => saveDeal(deal)}>Save</button>
                         </div>
                     </div>
+                    {sv && <div className="tc-dhq-call" style={{ border:'1px solid ' + TC_CALL.color(sv), borderRadius:'var(--card-radius-sm, 8px)', padding:'0.45rem 0.6rem', margin:'0.35rem 0', fontSize:'0.8rem', lineHeight:1.4 }}>
+                        <strong style={{ color: TC_CALL.color(sv), marginRight:'0.4rem' }}>{TC_CALL.word(sv)}</strong>{sv.call}
+                    </div>}
                     <div className="tc-dhq-deal-grid">
                         {sideSummary('You Send', deal, 'give')}
                         {sideSummary('You Get', deal, 'receive')}
                     </div>
                     <div className="tc-dhq-decision-strip">
                         <div className="tc-dhq-decision">
-                            <span>Grade</span>
+                            <span>{sv ? 'Value grade' : 'Grade'}</span>
                             <strong style={{ color:deal.gradeColor }}>{deal.grade}</strong>
                         </div>
                         <div className="tc-dhq-decision">
                             <span>Accept %</span>
-                            <strong style={{ color:likelihoodColor2 }}>{deal.likelihood}%</strong>
+                            <strong style={{ color:likelihoodColor2 }}>{shownLikelihood}%</strong>
                         </div>
                         <div className="tc-dhq-decision">
                             <span>DHQ Delta</span>
@@ -1284,12 +1342,9 @@
             // The call is from the member's seat: side A must be their team.
             const mineA = !tradeOwner.A || (sideA && String(sideA.roster_id) === String(meRid));
             const hasA = tradeIds.A.length || tradePickIds.A.length, hasB = tradeIds.B.length || tradePickIds.B.length;
-            if (!T || !meRid || !mineA || !hasA || !hasB || tradeFaab.A > 0 || tradeFaab.B > 0) { setDhqCall(null); return undefined; }
-            // PICK-<year>-<round>-<fromRosterId>[-s<slot>] → "2027 1st from 5" / "2027 1.04 from 5".
-            const ORD = { 1: '1st', 2: '2nd', 3: '3rd' };
-            const pickText = id => { const p = String(id).split('-'); const sl = (p[4] || '').charAt(0) === 's' ? Number(p[4].slice(1)) : null; return p[1] + ' ' + (sl ? p[2] + '.' + String(sl).padStart(2, '0') : (ORD[p[2]] || p[2] + 'th')) + ' from ' + p[3]; };
-            const give = tradeIds.A.map(String).concat(tradePickIds.A.map(pickText));
-            const get = tradeIds.B.map(String).concat(tradePickIds.B.map(pickText));
+            if (!T || !meRid || !mineA || !hasA || !hasB) { setDhqCall(null); return undefined; }
+            const give = tcCallArgs(tradeIds.A, tradePickIds.A, tradeFaab.A);
+            const get = tcCallArgs(tradeIds.B, tradePickIds.B, tradeFaab.B);
             const partner = tradeOwner.B ? rosterOfOwner(tradeOwner.B) : null;
             const key = dhqCallKey;
             let live = true;
@@ -5614,17 +5669,14 @@
                 </div>
             );
             const phDealCard = (deal, idx) => {
-                const likeColor = deal.likelihood >= finderActionFloor ? 'var(--good)' : deal.likelihood >= Math.max(55, finderActionFloor - 15) ? 'var(--warn)' : 'var(--bad)';
-                const deltaColor = deal.userGain >= 0 ? 'var(--good)' : 'var(--bad)';
                 const expanded = expandedDealId === deal.id;
                 return (
                     <div key={deal.id} style={{ background: 'var(--black, #121217)', border: '1px solid ' + (idx === 0 ? 'rgba(212,175,55,0.4)' : 'rgba(255,255,255,0.07)'), borderRadius: '9px', padding: '11px 12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             <strong style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--white)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto' }}>{deal.partnerName}</strong>
-                            {chip(deal.grade, deal.gradeColor || 'var(--gold)')}
-                            {chip(deal.likelihood + '%', likeColor)}
-                            {chip((deal.userGain >= 0 ? '+' : '') + Math.round(deal.userGain).toLocaleString(), deltaColor)}
+                            <TcPhDealChips deal={deal} floor={finderActionFloor} chip={chip} />
                         </div>
+                        <TcPhCallLine deal={deal} />
                         <div style={{ display: 'flex', marginTop: '9px' }}>
                             <div style={{ flex: 1, minWidth: 0, paddingRight: '11px' }}>{phDealSide('You get', deal.receivePlayers, deal.receivePicks, deal.receiveFaab, deal.totals.receive.total)}</div>
                             <div style={{ flex: 1, minWidth: 0, paddingLeft: '11px', borderLeft: '1px solid rgba(255,255,255,0.08)' }}>{phDealSide('You send', deal.givePlayers, deal.givePicks, deal.giveFaab, deal.totals.give.total)}</div>
