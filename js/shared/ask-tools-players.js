@@ -264,7 +264,7 @@
             if (want && !want.every(p => POS_ALL.includes(p))) throw new Error('Unknown position "' + a.position + '". Use QB, RB, WR, TE, K, DEF, DL, LB, DB or FLEX.');
             const avail = String(a.availability || 'all').toLowerCase().replace(/[\s-]/g, '_');
             const sort = String(a.sort || 'value').toLowerCase();
-            const team = a.nfl_team ? String(a.nfl_team).toUpperCase().trim() : null;
+            const team = (a.nfl_team || a.team) ? String(a.nfl_team || a.team).toUpperCase().trim() : null;
             const limit = Math.max(1, Math.min(40, Number(a.limit) || 15));
             const players = S().players || {};
             if (!Object.keys(players).length) throw new Error('Player data is still loading.');
@@ -463,7 +463,7 @@
             const PN = App.PlayerNews;
             if (!PN || !PN.get) throw new Error('News is not available on this page.');
             const ask = Array.isArray(a.players) ? a.players : a.players ? String(a.players).split(',') : [];
-            const team = a.nfl_team ? String(a.nfl_team).toUpperCase().trim() : null;
+            const team = (a.nfl_team || a.team) ? String(a.nfl_team || a.team).toUpperCase().trim() : null;
             if (!ask.length && !team) throw new Error('Name players or an NFL team.');
             const pids = [];
             const missing = [];
