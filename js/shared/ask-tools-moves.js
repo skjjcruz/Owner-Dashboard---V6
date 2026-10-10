@@ -737,7 +737,7 @@
         else if (!o.headliner && r < 0.85) { decision = 'counter'; call = 'You give up more than you get (' + o.tg + ' for ' + o.tt + '). Trim what you send.'; }
         else if (o.pv && o.pv.ratio < 0.95) { decision = 'offer'; call = 'Close: send it, and be ready to add a small piece of the kind ' + who + ' values.'; }
         else { decision = 'offer'; call = o.headliner ? 'Send it: it meets the going rate for a young starter.' : 'Send it: it works for both sides.'; }
-        if (decision === 'offer' && o.accept != null && o.accept < 20) { decision = 'counter'; call = 'The value works on paper, but the chance is low (' + o.accept + '%). ' + call; }
+        if (decision === 'offer' && o.accept != null && o.accept < 20) { decision = 'counter'; call = 'The value works on paper, but ' + who + ' is unlikely to take it (about ' + o.accept + '%). Add a piece of the kind they value, or look elsewhere.'; }
         return { decision, call, market_label: market };
     }
     const confidenceOf = o => (!o.partnerKnown || o.unknownHolders) ? 'low' : (o.mode === 'NEUTRAL' || !o.engine || !o.picksLoaded) ? 'medium' : 'high';

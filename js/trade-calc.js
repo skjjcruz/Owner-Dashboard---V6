@@ -361,7 +361,7 @@
                         )}
                         <div className="tc-tax-table-row tc-total">
                             <span className="tc-tax-name">NET MODIFIER</span>
-                            <span className="tc-tax-desc">Applied to verdict score & acceptance likelihood</span>
+                            <span className="tc-tax-desc">{dhqVerdict ? 'Background on this owner; the call at the top is the decision' : 'Applied to verdict score & acceptance likelihood'}</span>
                             <span className="tc-tax-val" style={{ color: netTaxTotal > 0 ? 'var(--win-green)' : netTaxTotal < 0 ? 'var(--loss-red)' : 'var(--silver)' }}>{netTaxTotal > 0 ? '+' : ''}{netTaxTotal}%</span>
                         </div>
                     </div>
