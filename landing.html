@@ -200,6 +200,12 @@
     display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center;
     padding-block: 36px 64px;
   }
+  /* "New" announcement (owner ask 2026-10-10): pops, but stays classy. */
+  .announce { display: flex; width: fit-content; max-width: 100%; align-items: center; gap: 10px; margin: 0 0 22px; padding: 5px 14px 5px 5px; border: 1px solid rgba(232,178,58,.35); border-radius: 999px; background: linear-gradient(180deg, rgba(232,178,58,.12), rgba(232,178,58,.04)); color: var(--text-1); font: 500 14px/1.3 var(--sans); text-decoration: none; transition: border-color .15s, background .15s; }
+  .announce:hover, .announce:focus-visible { border-color: var(--forge); background: linear-gradient(180deg, rgba(232,178,58,.18), rgba(232,178,58,.06)); }
+  .announce:focus-visible { outline: 2px solid var(--forge-bright); outline-offset: 3px; }
+  .announce-tag { flex: none; padding: 5px 9px; border-radius: 999px; background: var(--forge); color: #15120a; font: 700 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+  .announce-go { flex: none; color: var(--forge); font-weight: 600; }
   .eyebrow { display: inline-flex; align-items: center; gap: 8px; font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--forge); }
   .eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--pos); box-shadow: 0 0 0 4px rgba(47,191,136,.15); }
   h1 {
@@ -302,6 +308,7 @@
   }
   @media (max-width: 480px) {
     .eyebrow { font-size: 11px; letter-spacing: .09em; white-space: nowrap; }
+    .announce { font-size: 13px; gap: 8px; padding-right: 12px; }
     form.go { flex-direction: column; }
     button.cta { width: 100%; }
     .lede { font-size: 17px; }
@@ -407,6 +414,7 @@
   <main id="top">
     <section class="hero">
       <div>
+        <a class="announce" href="#auth" data-open-sheet="signup"><span class="announce-tag">New</span><span>Bring your own AI: ask about your league in plain English</span><span class="announce-go" aria-hidden="true">&rarr;</span></a>
         <span class="eyebrow">Built for Sleeper, MFL and ESPN leagues</span>
         <h1>Generic advice <em>stops here.</em></h1>
         <p class="lede"><strong class="kicker">Stop playing by other people's rules.</strong> <span id="ask">Type your Sleeper name.</span> DHQ reads your league and shows you who to start, which trades your leaguemates will take, and where you really stand. <span class="win">Because Winning Matters 🏆</span></p>
