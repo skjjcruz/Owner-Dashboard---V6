@@ -261,7 +261,7 @@
                                 {dhqVerdict.market_label && <span style={{ fontSize:'0.78rem', color:'var(--silver)' }}>{dhqVerdict.market_label}</span>}
                                 {dhqVerdict.accept_chance_pct != null && <span style={{ marginLeft:'auto', fontFamily:'var(--font-mono)', fontSize:'0.85rem', color: col }}>{dhqVerdict.accept_chance_pct}% to accept</span>}
                             </div>
-                            <div style={{ fontSize:'0.82rem', lineHeight:1.45, color:'var(--white, #F5F2EA)', marginTop:'0.25rem' }}>{dhqVerdict.call}</div>
+                            <div style={{ fontSize:'0.82rem', lineHeight:1.45, color:'var(--white, #F5F2EA)', marginTop:'0.25rem' }}>{TC_CALL.text(dhqVerdict)}</div>
                             {(dhqHeadliner?.notes || []).map((n, i) => <div key={i} style={{ fontSize:'0.76rem', color:'var(--silver)', marginTop:'0.2rem' }}>{n}</div>)}
                         </div>
                     );
@@ -422,6 +422,8 @@
     function tcCallArgs(ids, pickIds, faab) { return (ids || []).map(String).concat((pickIds || []).map(tcPickText), faab > 0 ? ['$' + faab + ' FAAB'] : []); }
     const TC_CALL = {
         word: v => (v.decision === 'offer' ? 'Send it' : v.decision === 'counter' ? 'Counter' : 'Pass'),
+        // The call text without a repeat of the headline word ("Send it: …").
+        text: v => String(v.call || '').replace(/^(send it|counter|pass)\s*:\s*/i, '').replace(/^./, c => c.toUpperCase()),
         color: v => (v.decision === 'offer' ? 'var(--good, var(--win-green))' : v.decision === 'counter' ? 'var(--warn)' : 'var(--bad, var(--loss-red))'),
     };
     function useTcSharedCall(give, get, partnerRid) {
@@ -471,7 +473,7 @@
     function TcPhCallLine({ deal }) {
         const sc = useTcDealCall(deal), sv = sc && sc.verdict;
         if (!sv) return null;
-        return <div style={{ marginTop: '7px', fontSize: '0.74rem', lineHeight: 1.45, color: 'var(--silver)' }}><b style={{ color: TC_CALL.color(sv) }}>{TC_CALL.word(sv)}:</b> {sv.call}</div>;
+        return <div style={{ marginTop: '7px', fontSize: '0.74rem', lineHeight: 1.45, color: 'var(--silver)' }}><b style={{ color: TC_CALL.color(sv) }}>{TC_CALL.word(sv)}:</b> {TC_CALL.text(sv)}</div>;
     }
     function TcDealCard({ deal, idx, actionFloor, expandedDealId, setExpandedDealId, loadDealIntoBuilder, saveDeal, sideSummary }) {
                 const shared = useTcDealCall(deal);
@@ -497,7 +499,7 @@
                         </div>
                     </div>
                     {sv && <div className="tc-dhq-call" style={{ border:'1px solid ' + TC_CALL.color(sv), borderRadius:'var(--card-radius-sm, 8px)', padding:'0.45rem 0.6rem', margin:'0.35rem 0', fontSize:'0.8rem', lineHeight:1.4 }}>
-                        <strong style={{ color: TC_CALL.color(sv), marginRight:'0.4rem' }}>{TC_CALL.word(sv)}</strong>{sv.call}
+                        <strong style={{ color: TC_CALL.color(sv), marginRight:'0.4rem' }}>{TC_CALL.word(sv)}:</strong>{TC_CALL.text(sv)}
                     </div>}
                     <div className="tc-dhq-deal-grid">
                         {sideSummary('You Send', deal, 'give')}
