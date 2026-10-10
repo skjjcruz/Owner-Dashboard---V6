@@ -206,6 +206,7 @@
   .announce:focus-visible { outline: 2px solid var(--forge-bright); outline-offset: 3px; }
   .announce-tag { flex: none; padding: 5px 9px; border-radius: 999px; background: var(--forge); color: #15120a; font: 700 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
   .announce-go { flex: none; color: var(--forge); font-weight: 600; }
+  .announce-short { display: none; }
   .eyebrow { display: inline-flex; align-items: center; gap: 8px; font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--forge); }
   .eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--pos); box-shadow: 0 0 0 4px rgba(47,191,136,.15); }
   h1 {
@@ -309,6 +310,8 @@
   @media (max-width: 480px) {
     .eyebrow { font-size: 11px; letter-spacing: .09em; white-space: nowrap; }
     .announce { font-size: 13px; gap: 8px; padding-right: 12px; }
+    .announce-long { display: none; }
+    .announce-short { display: inline; }
     form.go { flex-direction: column; }
     button.cta { width: 100%; }
     .lede { font-size: 17px; }
@@ -414,7 +417,7 @@
   <main id="top">
     <section class="hero">
       <div>
-        <a class="announce" href="#auth" data-open-sheet="signup"><span class="announce-tag">New</span><span>Bring your own AI: ask about your league in plain English</span><span class="announce-go" aria-hidden="true">&rarr;</span></a>
+        <a class="announce" href="#auth" data-open-sheet="signup"><span class="announce-tag">New</span><span class="announce-long">Bring your own AI: ask about your league in plain English</span><span class="announce-short">Bring your own AI to your league</span><span class="announce-go" aria-hidden="true">&rarr;</span></a>
         <span class="eyebrow">Built for Sleeper, MFL and ESPN leagues</span>
         <h1>Generic advice <em>stops here.</em></h1>
         <p class="lede"><strong class="kicker">Stop playing by other people's rules.</strong> <span id="ask">Type your Sleeper name.</span> DHQ reads your league and shows you who to start, which trades your leaguemates will take, and where you really stand. <span class="win">Because Winning Matters 🏆</span></p>
