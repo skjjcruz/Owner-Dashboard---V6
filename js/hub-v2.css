@@ -61,6 +61,7 @@ body:has(.hv2-shell)::before { opacity: 0; }
 
 /* Guest sign-up strip (guests only) */
 .hv2-signup { display: flex; align-items: center; justify-content: space-between; gap: 14px 22px; flex-wrap: wrap; margin: 0 0 22px; padding: 16px 18px; border: 1px solid var(--gold); border-radius: var(--card-radius-lg, 14px); background: linear-gradient(120deg, rgba(212,175,55,.16), rgba(212,175,55,.04)); }
+.hv2-signup--compact { max-width: 760px; }
 .hv2-signup-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 260px; }
 .hv2-signup-copy strong { color: var(--white); font: 700 17px/1.25 var(--font-body); letter-spacing: -.01em; }
 .hv2-signup-copy em { font-style: normal; color: var(--gold); }
