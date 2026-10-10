@@ -274,14 +274,14 @@
                     <b aria-hidden="true">→</b>
                 </button>}
                 {/* Guests only (owner ask 2026-10-05): the free account pitch. */}
-                {guest && <div className={'hv2-signup' + (window.DHQ_LAB === true ? ' hv2-signup--compact' : '')} role="region" aria-label="Sign up">
+                {guest && <div className="hv2-signup" role="region" aria-label="Sign up">
                     <div className="hv2-signup-copy">
                         {/* Owner ask 2026-10-10 (Lab): the founding-member + AI pitch. */}
                         {window.DHQ_LAB === true
                             ? <strong>Sign up to become a <em>Founding Member</em> and Bring Your Own AI Agent to the Fight</strong>
                             : <strong>Sign up for <em>FREE</em> member services</strong>}
-                        {/* Owner ask 2026-10-10: shorter and narrower in the Lab. */}
-                        <span>{window.DHQ_LAB === true ? 'Free. Your leagues on every device.' : 'Save your leagues on every device and lock in founding-member status.'}</span>
+                        {/* Owner ask 2026-10-10: full width, one short line under the headline. */}
+                        <span>{window.DHQ_LAB === true ? 'Your AI. Your league data. Your competitive edge.' : 'Save your leagues on every device and lock in founding-member status.'}</span>
                     </div>
                     <div className="hv2-signup-actions">
                         <a className="hv2-signup-btn" href={links.signup}>Sign up free</a>
