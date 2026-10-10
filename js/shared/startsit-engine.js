@@ -227,11 +227,19 @@
     }
 
     // ── Lineup solver ────────────────────────────────────────────────
-    // Exact optimal starting lineup for nested (laminar) slot eligibility —
-    // i.e. every real fantasy roster. Process slots narrowest-eligibility
-    // first, assigning the best unused eligible+available player. This is
-    // provably optimal when eligibility sets are nested (QB ⊂ SUPER_FLEX,
-    // RB/WR/TE ⊂ FLEX ⊂ SUPER_FLEX, …), which holds for standard formats.
+    // Two passes. First the old greedy: slots narrowest-eligibility first,
+    // each taking the best unused eligible+available player. That is optimal
+    // only when eligibility sets are nested (QB ⊂ SUPER_FLEX, RB/WR/TE ⊂
+    // FLEX …). A player listed at two positions breaks the nesting (an edge
+    // rusher Sleeper lists as DL and LB): with slots DL, LB and players X
+    // (DL/LB, 10), Y (DL, 9), Z (LB, 1) the greedy put X at DL and Z at LB
+    // for 11 when Y at DL and X at LB makes 19 (Lab research 2026-10-10,
+    // IDP league 1312100327931019264). So an exact pass follows: a
+    // max-weight assignment of players to slots with the Hungarian routine
+    // DhqProj already ships (dhq-proj.js `hungarian`, reused, not copied).
+    // The exact answer replaces the greedy one only when it fills more slots
+    // or scores more, so every lineup the greedy already got right comes
+    // back exactly as before (same players, same slots, same order).
     //
     // players: [{ pid, pos, positions?, available, pts }] (pts = objective
     //   score; positions = every slot position he is eligible for, e.g.
@@ -259,6 +267,7 @@
             // narrowest eligibility first; dedicated slots before flex on ties
             .sort((a, b) => a.size - b.size);
 
+        const fits = (p, sl) => p.positions.some(x => sl.elig.includes(x));
         const used = new Set();
         const starters = [];
         const filled = [];
@@ -267,7 +276,7 @@
             let best = null;
             for (const p of pool) {
                 if (used.has(p.pid)) continue;
-                if (p.positions.some(x => sl.elig.includes(x))) { best = p; break; } // pool is pre-sorted desc
+                if (fits(p, sl)) { best = p; break; } // pool is pre-sorted desc
             }
             if (best) {
                 used.add(best.pid);
@@ -278,7 +287,57 @@
                 filled.push({ slot: sl.slot, pid: null });
             }
         }
+
+        // Exact pass (see the note above). Rows are slots, columns are the
+        // players plus one "leave it empty" column per slot, so there are
+        // always at least as many columns as rows. Costs: an eligible player
+        // costs minus his points; an empty slot costs EMPTY (far more than
+        // any points gap, so filling every slot that can be filled always
+        // comes first, as the greedy did); an ineligible player costs NO.
+        const solve = hungarianFn();
+        if (solve && slots.length && pool.length) {
+            const EMPTY = 1e6, NO = 1e9;
+            const cost = slots.map(sl => pool.map(p => (fits(p, sl) ? -p.pts : NO)).concat(slots.map(() => EMPTY)));
+            let pick = null;
+            try { pick = solve(cost); } catch (e) { pick = null; }
+            if (Array.isArray(pick) && pick.length === slots.length) {
+                const xUsed = new Set(), xStarters = [], xFilled = [];
+                let xTotal = 0, ok = true;
+                slots.forEach((sl, i) => {
+                    const c = pick[i];
+                    const p = c >= 0 && c < pool.length ? pool[c] : null;
+                    if (c < 0 || (p && (!fits(p, sl) || xUsed.has(p.pid)))) { ok = false; return; }
+                    if (p) {
+                        xUsed.add(p.pid);
+                        xTotal += p.pts;
+                        xStarters.push({ pid: p.pid, slot: sl.slot, pts: p.pts, pos: p.pos });
+                        xFilled.push({ slot: sl.slot, pid: p.pid });
+                    } else {
+                        xFilled.push({ slot: sl.slot, pid: null });
+                    }
+                });
+                const better = ok && (xStarters.length > starters.length || (xStarters.length === starters.length && xTotal > total + 1e-9));
+                if (better) return { total: Math.round(xTotal * 10) / 10, starters: xStarters, slots: xFilled, used: xUsed };
+            }
+        }
         return { total: Math.round(total * 10) / 10, starters, slots: filled, used };
+    }
+
+    // The Hungarian routine (min-cost, n rows ≤ m columns → row → column)
+    // lives in dhq-proj.js, which loads after this file; it is looked up
+    // when a lineup is solved. In Node it is required from the same folder.
+    // Null when neither is reachable: the solver then keeps the greedy.
+    function hungarianFn() {
+        const D = App.DhqProj;
+        if (D && typeof D.hungarian === 'function') return D.hungarian;
+        /* global require */
+        if (typeof require === 'function' && typeof module !== 'undefined' && module.exports) {
+            try {
+                const m = require('./dhq-proj.js');
+                if (m && typeof m.hungarian === 'function') return m.hungarian;
+            } catch (e) { /* not available here */ }
+        }
+        return null;
     }
 
     // Diff the optimal lineup against the user's CURRENT starters. Returns
