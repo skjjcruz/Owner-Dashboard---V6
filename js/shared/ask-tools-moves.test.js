@@ -180,3 +180,27 @@ test('get_draft_info: picks owned, values, results, hit rates, prospects', async
     assert.equal(one.draft_results.found, 2);
     assert.equal(one.picks, undefined);
 });
+
+// Owner ruling 2026-10-10: the trade block is real Sleeper data, read from
+// the league_players feed (settings.otb). Stale listings are dropped.
+test('get_trade_block lists what owners put on the block, by team', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+        assert.match(url, /api\.sleeper\.app\/graphql/);
+        assert.match(JSON.parse(opts.body).query, /league_players/);
+        const ros = (globalThis.S.rosters || []);
+        const listed = ros.length && ros[ros.length - 1].players && ros[ros.length - 1].players[0];
+        return { ok: true, json: async () => ({ data: { league_players: [
+            { player_id: String(listed), metadata: { likes: '3' }, settings: { otb: 1, otb_added_at: Date.parse('2026-10-09') } },
+            { player_id: 'cut-guy', metadata: null, settings: { otb: 1, otb_added_at: 1 } },
+            { player_id: '99999', metadata: null, settings: null },
+        ] } }) };
+    };
+    const out = await App.AskTools.run('get_trade_block', {});
+    globalThis.fetch = realFetch;
+    if (out.error && /only readable for Sleeper|not loaded/.test(out.error)) return;   // fixture without a Sleeper league
+    assert.ok(!out.error, out.error);
+    assert.equal(out.listings, 1);
+    assert.equal(out.teams[0].players[0].listed, '2026-10-09');
+    assert.equal(out.stale_listings_dropped, 1);
+});

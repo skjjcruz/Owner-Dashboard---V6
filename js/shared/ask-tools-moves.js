@@ -681,6 +681,80 @@
         },
     });
 
+    // ── The league's trade block (owner ruling 2026-10-10: "no assumptions") ──
+    // Sleeper's documented API has no trade block, but the GraphQL feed its
+    // own app uses answers league_players without a login: each player (and
+    // pick) carries settings.otb = 1 and otb_added_at when an owner puts him
+    // on the block, plus metadata.likes. Checked 2026-10-10 on the live
+    // Psycho League: 65 entries, e.g. bwit13 listed Jordan Love on Oct 9.
+    // Browsers may call it (Access-Control-Allow-Origin: *). Pending offers
+    // and league notes on that feed need a login, so they stay out of reach.
+    // A listing whose player has since changed teams (or been cut) is stale
+    // and dropped; picks show only for drafts not yet held.
+    const blockCache = {};
+    async function leaguePlayers(lid) {
+        const c = blockCache[lid];
+        if (c && Date.now() - c.at < 5 * 60 * 1000) return c.rows;
+        const r = await fetch('https://api.sleeper.app/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: '{ league_players(league_id: "' + String(lid).replace(/[^0-9]/g, '') + '") { player_id metadata settings } }' }) });
+        if (!r.ok) throw new Error('Sleeper\'s trade block didn\'t answer (' + r.status + ').');
+        const j = await r.json();
+        const rows = (j && j.data && j.data.league_players) || [];
+        blockCache[lid] = { at: Date.now(), rows };
+        return rows;
+    }
+    AT.register({
+        name: 'get_trade_block',
+        description: 'Who is on the trade block in this league right now (what owners have listed in Sleeper), by team: players with position, value, age, this week, and when they were listed, plus future draft picks on the block. Filter by team or position. Use it for "who\'s for sale", "is anyone shopping a WR", or before proposing a trade.',
+        parameters: { type: 'object', properties: {
+            team: { type: 'string', description: 'Only this team\'s block (name, owner, roster id or "me").' },
+            position: { type: 'string', description: 'Only this position (QB, RB, WR, TE, K, DL, LB, DB).' },
+        } },
+        timeoutMs: 20000,
+        async run(a, h) {
+            if (h.platform() !== 'sleeper') throw new Error('The trade block is only readable for Sleeper leagues.');
+            const lg = h.league();
+            if (!lg) throw new Error('League not loaded yet.');
+            const rows = await h.withTimeout(leaguePlayers(lg.league_id || lg.id), 12000, null);
+            if (!rows) throw new Error('Sleeper\'s trade block took too long to answer.');
+            const only = a.team ? h.findTeam(a.team) : null;
+            if (a.team && !only) throw new Error('No team matches "' + a.team + '".');
+            const pos = a.position ? String(a.position).toUpperCase() : null;
+            const season = Number(h.season()) || new Date().getFullYear();
+            const day = ms => { try { return new Date(Number(ms)).toISOString().slice(0, 10); } catch (e) { return null; } };
+            const byTeam = new Map();
+            const add = (r, item) => { const k = String(r.roster_id); if (!byTeam.has(k)) byTeam.set(k, { team: h.label(r), roster_id: r.roster_id, players: [], picks: [] }); byTeam.get(k)[item.pick ? 'picks' : 'players'].push(item); };
+            let stale = 0;
+            rows.filter(x => x && x.settings && x.settings.otb).forEach(x => {
+                const id = String(x.player_id), at = x.settings.otb_added_at;
+                if (id.includes(',')) {
+                    // Picks read "original roster, season, round".
+                    const [rid, yr, rd] = id.split(',').map(Number);
+                    if (!(yr > season || (yr === season && !(h.S().drafts || []).some(d => String(d.season) === String(yr) && d.status === 'complete')))) { stale++; return; }
+                    const orig = h.rosters().find(r => Number(r.roster_id) === rid);
+                    if (!orig) return;
+                    if (only && String(only.roster_id) !== String(orig.roster_id)) return;
+                    add(orig, { pick: true, pick_label: yr + ' round ' + rd + ' (originally ' + h.teamName(orig) + ')', listed: day(at) });
+                    return;
+                }
+                const r = h.rosterOf(id);
+                if (!r) { stale++; return; }   // cut or traded since listing
+                if (only && String(only.roster_id) !== String(r.roster_id)) return;
+                const b = h.playerBrief(id);
+                if (pos && b.pos !== pos && !(h.pl(id).fantasy_positions || []).includes(pos)) return;
+                add(r, { name: b.name, pos: b.pos, nfl_team: b.nfl_team, age: b.age, value: b.value, injury: b.injury, this_week: b.this_week, listed: day(at), likes: x.metadata && x.metadata.likes ? Number(x.metadata.likes) : undefined });
+            });
+            const teams = [...byTeam.values()].map(t => Object.assign(t, { players: t.players.sort((x, y) => (y.listed || '').localeCompare(x.listed || '')).slice(0, 15) }))
+                .sort((x, y) => (y.players.length + y.picks.length) - (x.players.length + x.picks.length));
+            return {
+                source: 'Sleeper trade block (what owners listed in Sleeper)',
+                teams_shopping: teams.length, listings: teams.reduce((n, t) => n + t.players.length + t.picks.length, 0),
+                stale_listings_dropped: stale || undefined,
+                teams,
+                note: teams.length ? undefined : 'Nobody has anything on the block' + (only ? ' for that team' : '') + (pos ? ' at ' + pos : '') + ' right now.',
+            };
+        },
+    });
+
     // Test hooks.
     AT._moves = { parsePick, pickValue, computeDNA };
 })(typeof window !== 'undefined' ? window : globalThis);
