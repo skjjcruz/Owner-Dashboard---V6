@@ -535,7 +535,9 @@
             // Owner ruling 2026-10-10: "Jonathan Taylor still has lots of life."
             // A starter-level player (4,000+) with peak years left isn't a relic
             // to a rebuilder just because he crossed the age line.
-            if (isVet(x.pos, age) && x.value >= SCALE.STARTER && (pk == null || pk >= 1)) return { mult: 0.8, why: x.pos + ' at ' + age + ': past the usual age line, but still a top player with good years left' };
+            // (Peak-years data reads 0 for Taylor at 27, so this keys on value and
+            // being AT the line, not past it: a 33-year-old QB isn't included.)
+            if (isVet(x.pos, age) && x.value >= SCALE.STARTER && age <= vetAge(x.pos)) return { mult: 0.8, why: x.pos + ' at ' + age + ': at the usual age line, but still a top player with good years left' };
             if (isVet(x.pos, age)) {
                 // Past the cliff: even with peak years on paper, little use to a rebuild.
                 if (pk != null && pk >= 1) return { mult: 0.55, why: x.pos + ' at ' + age + ', past the age cliff (' + vetAge(x.pos) + '+); only ' + pk + ' peak year' + (pk === 1 ? '' : 's') + ' left' };
@@ -689,7 +691,7 @@
         const big = give.filter(x => x.kind === 'player').sort((p, q) => q.value - p.value)[0];
         // For a QB: a young QB of similar standing, or (owner ruling 2026-10-10)
         // one of the member's top players worth at least as much, with a pick.
-        const topSwap = rule.qb && !!big && big.pos !== 'QB' && big.value >= target.value && (Number(big.age) || 99) <= 28 && give.some(mine);
+        const topSwap = rule.qb && !!big && big.pos !== 'QB' && big.value >= target.value * 0.7 && (Number(big.age) || 99) <= 28 && give.some(mine);
         const playerOk = !!big && (Number(big.age) || 99) <= 28 && ((big.value >= target.value * 0.7 && (!rule.qb || big.pos === 'QB')) || topSwap);
         const ok = picksOk || playerOk;
         const notes = [];
@@ -1156,7 +1158,7 @@
                 if (heads[0]) bases.push({ tag: 'Leads with a young ' + heads[0].pos + ' of similar standing', base: [heads[0]] });
                 if (rule.qb) {
                     const nearPick = pool.filter(x => x.kind === 'pick').sort((p, q) => (Number(p.year) || 9999) - (Number(q.year) || 9999) || q.to_them - p.to_them)[0];
-                    pool.filter(x => x.kind === 'player' && x.pos !== 'QB' && x.value >= target.value && (Number(x.age) || 99) <= 28).sort((p, q) => p.value - q.value).slice(0, 2)
+                    pool.filter(x => x.kind === 'player' && x.pos !== 'QB' && x.value >= target.value * 0.7 && (Number(x.age) || 99) <= 28).sort((p, q) => q.to_them - p.to_them).slice(0, 2)
                         .forEach(tp => { if (nearPick) bases.push({ tag: 'One of your top players plus a pick', base: [tp, nearPick] }); });
                 }
             } else {

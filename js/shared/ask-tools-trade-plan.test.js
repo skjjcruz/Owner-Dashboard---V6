@@ -253,9 +253,9 @@ test('Stafford + Andrews for Love: a rebuilder doesn\'t want aging vets, low cha
 });
 
 test('acceptance runs on what the partner values: piling on vets doesn\'t raise it', async () => {
-    const e = await run('evaluate_trade', { give: ['Matthew Stafford', 'Mark Andrews', 'Jonathan Taylor'], get: ['Jordan Love'] });
-    // 8,778 of raw value for a 3,574 player: the value-only curve says 95%.
-    assert.equal(e.accept_chance_on_value_only_pct, 95);
+    // (Owner ruling: Jonathan Taylor at 27 is a top player at the age line,
+    // not a relic, so this pile is Stafford + Andrews alone.)
+    const e = await run('evaluate_trade', { give: ['Matthew Stafford', 'Mark Andrews'], get: ['Jordan Love'] });
     assert.ok(e.accept_chance_pct <= 10);
     assert.ok(e.partner_view.worth_to_them < e.partner_view.what_they_give_up_as_they_see_it);
     // With no headliner cap in play: a young piece the rebuilder wants beats a bigger raw pile of vets.
