@@ -276,8 +276,11 @@
                 {/* Guests only (owner ask 2026-10-05): the free account pitch. */}
                 {guest && <div className="hv2-signup" role="region" aria-label="Sign up">
                     <div className="hv2-signup-copy">
-                        <strong>Sign up for <em>FREE</em> member services</strong>
-                        <span>Save your leagues on every device and lock in founding-member status.{window.DHQ_LAB === true ? ' Members also ask about their league with their own AI (ChatGPT, Claude or Gemini).' : ''}</span>
+                        {/* Owner ask 2026-10-10 (Lab): the founding-member + AI pitch. */}
+                        {window.DHQ_LAB === true
+                            ? <strong>Sign up to become a <em>Founding Member</em> and Bring Your Own AI Agent to the Fight</strong>
+                            : <strong>Sign up for <em>FREE</em> member services</strong>}
+                        <span>Save your leagues on every device and lock in founding-member status.{window.DHQ_LAB === true ? ' Members ask about their league in plain English with their own AI (ChatGPT, Claude or Gemini). Free.' : ''}</span>
                     </div>
                     <div className="hv2-signup-actions">
                         <a className="hv2-signup-btn" href={links.signup}>Sign up free</a>
