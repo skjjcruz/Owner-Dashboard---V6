@@ -819,6 +819,24 @@
         else if (btn) btn.style.display = 'none';
         brain().then(b => { brainEl.textContent = brainLabel(b); });
         // No canned questions (owner ask 2026-10-09): one line, then talk.
+        // Lab testing (owner 2026-10-10): the page updates itself only after
+        // being away or idle, so an active tester kept asking an old build.
+        // When a newer build is published, say so with a one-tap reload.
+        (async () => {
+            try {
+                const meta = d.querySelector('meta[name="dhq-build"]');
+                if (!meta || root.DHQ_LAB !== true) return;
+                const r = await fetch('version.json?ask=' + Date.now(), { cache: 'no-store' });
+                const j = r.ok ? await r.json() : null;
+                if (!j || !j.build || j.build === meta.content) return;
+                const note = el('div', 'askdhq-a');
+                note.appendChild(el('p', null, 'A newer version of Ask your AI is out.'));
+                const go = el('button', 'askdhq-send', 'Reload now'); go.type = 'button'; go.style.padding = '8px 14px'; go.style.marginTop = '8px';
+                go.onclick = () => { try { root.location.reload(); } catch (e) { /* manual */ } };
+                note.appendChild(go);
+                log.insertBefore(note, log.firstChild);
+            } catch (e) { /* offline: skip */ }
+        })();
         const hi = el('div', 'askdhq-a'); const lgName = (league() || {}).name;
         hi.appendChild(el('p', null, 'Ask me anything about ' + (lgName ? lgName : 'your league') + ': lineups, trades, waivers, players. Follow-ups work too.'));
         log.appendChild(hi);
