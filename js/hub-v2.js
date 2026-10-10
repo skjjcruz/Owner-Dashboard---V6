@@ -161,6 +161,20 @@
         </svg>;
     }
 
+    // Lab (owner ask 2026-10-10): sign-up (landing.html) leaves a one-time
+    // note so the member who just joined is greeted on arrival, right where
+    // they add their AI key. Read once per page load.
+    let justJoined = null;
+    function takeJustJoined() {
+        if (justJoined !== null) return justJoined;
+        justJoined = false;
+        try {
+            justJoined = window.sessionStorage.getItem('dhq_just_joined_v1') === '1';
+            if (justJoined) window.sessionStorage.removeItem('dhq_just_joined_v1');
+        } catch (e) { justJoined = false; }
+        return justJoined;
+    }
+
     // Props (all supplied by app.js — the hub owns no data of its own):
     //   leagues, sleeperLeagues, sleeperUserId, lastLeagueId, displayName,
     //   syncing, notices [{ key, text, action: { label, onClick | href } }],
@@ -291,7 +305,9 @@
                 {/* Members (Lab, owner ask 2026-10-09): Ask your AI. */}
                 {!guest && !hasKey && window.DHQ_LAB === true && <div className="hv2-signup" role="region" aria-label="Ask your AI">
                     <div className="hv2-signup-copy">
-                        <strong>New: <em>Ask your AI</em></strong>
+                        {takeJustJoined()
+                            ? <strong>You're in, <em>Founding Member</em>. Now add your AI.</strong>
+                            : <strong>New: <em>Ask your AI</em></strong>}
                         <span>Open any league and tap the gold "Ask your AI" button. Ask in plain English and your own AI answers with DHQ's numbers: your computer's built-in AI, your ChatGPT or Claude, or your own key.</span>
                     </div>
                     <div className="hv2-signup-actions">

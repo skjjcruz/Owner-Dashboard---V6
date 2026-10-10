@@ -380,6 +380,34 @@
   .auth-linkbtn { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; text-decoration: underline; font-family: inherit; }
   .auth-linkbtn:hover { color: var(--accent); }
 
+  /* ── Lab sign-up (owner ask 2026-10-10): the league account step and the
+     guest's carried-over league. Both stay hidden unless window.DHQ_LAB. ── */
+  .auth-step { font: 500 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--forge); margin: 4px 0 10px; }
+  .auth-step + .auth-step, .auth-league + .auth-step { margin-top: 18px; }
+  .auth-platform { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; margin-bottom: 10px; background: var(--bg-inset); border: 1px solid var(--border-strong); border-radius: var(--r-sm); }
+  .auth-platform button { height: 34px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--r-xs); background: transparent; color: var(--text-2); cursor: pointer; font: 700 14px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; }
+  .auth-platform button:hover { color: var(--text-1); }
+  .auth-platform button[aria-pressed="true"] { background: var(--bg-2); color: var(--forge); border-color: rgba(232,178,58,.45); }
+  .auth-platform button:focus-visible { outline: 2px solid var(--forge-bright); outline-offset: 2px; }
+  .auth-league .auth-input { margin-bottom: 6px; }
+  .auth-league-hint { margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: var(--text-3); }
+  .auth-league-hint b { color: var(--text-2); font-weight: 500; }
+  .auth-linked { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid rgba(47,191,136,.3); border-radius: var(--r-sm); background: rgba(47,191,136,.07); font-size: 13px; line-height: 1.4; color: var(--text-2); }
+  .auth-linked strong { color: var(--text-1); font-weight: 600; }
+  .auth-linked-tick { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--pos); color: #062015; font: 800 13px/22px var(--sans); text-align: center; }
+  .auth-back { display: none; margin: 0 0 6px; color: var(--text-2); font-size: 13px; text-decoration: none; }
+  .auth-back:hover, .auth-back:focus-visible { color: var(--text-1); }
+  /* A guest coming from their leagues page gets sign-up as its own page:
+     no marketing page behind it, and "Back to my leagues" instead of ×. */
+  body.auth-page .wrap, body.auth-page .brandwash { visibility: hidden; }
+  body.auth-page .sheet-backdrop { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  body.auth-page .sheet-close { display: none; }
+  body.auth-page .auth-back { display: inline-block; }
+  @media (max-width: 560px) {
+    body.auth-page .sheet { place-items: start center; padding: calc(12px + var(--sat)) 0 0; }
+    body.auth-page .sheet-panel { max-height: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--bg); }
+  }
+
   /* ── Phone fit (2026-09-26) ── */
   /* Short viewports (a phone with the keyboard up, or a landscape phone):
      compact the sheet header so the email field, password and submit fit
@@ -512,11 +540,35 @@
   <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="authTitle">
     <button class="sheet-close" type="button" aria-label="Close" data-close-sheet>&times;</button>
     <section class="auth" id="auth">
+      <a class="auth-back" id="authBack" href="index.html">&larr; Back to my leagues</a>
       <img class="auth-crest" src="img/dhq-crest.jpg" alt="" width="52" height="52">
       <h2 class="auth-title" id="authTitle">Create your account</h2>
       <p class="auth-sub" id="authSub">Become a founding member. Your first year of full DHQ is free when paid plans start.</p>
 
       <div class="alert" id="alertJoin"></div>
+
+      <!-- Lab sign-up (owner ask 2026-10-10). Hidden on the website; the Lab
+           script below shows one of these two in sign-up mode:
+           - a guest (already in the app) sees the league they connected,
+             which comes with them — nothing to retype;
+           - a new visitor links their league account here, then makes the
+             account. No AI key anywhere in sign-up: that lives on the
+             leagues page ("Add my AI key") and in Ask your AI. -->
+      <div class="auth-linked" id="authLinked" hidden>
+        <span class="auth-linked-tick" aria-hidden="true">&#10003;</span>
+        <span>Your leagues come with you: <strong id="authLinkedName"></strong></span>
+      </div>
+      <div class="auth-league" id="authLeague" hidden>
+        <div class="auth-step">1 · Your league account</div>
+        <div class="auth-platform" role="group" aria-label="Where your league lives">
+          <button type="button" data-auth-platform="sleeper" aria-pressed="true">Sleeper</button>
+          <button type="button" data-auth-platform="mfl" aria-pressed="false">MFL</button>
+          <button type="button" data-auth-platform="espn" aria-pressed="false">ESPN</button>
+        </div>
+        <input class="auth-input" id="authLeagueKey" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Your Sleeper username" aria-label="Your Sleeper username">
+        <p class="auth-league-hint" id="authLeagueHint">Your <b>username</b> on Sleeper, not your email. All your Sleeper leagues come in.</p>
+      </div>
+      <div class="auth-step" id="authStepAccount" hidden>2 · Your account</div>
 
 
     <button id="btnGoogle" class="auth-google" onclick="handleGoogle()">
@@ -732,6 +784,154 @@
 
     let authMode = 'signup'; // 'signup' | 'signin'
 
+    // ── Lab sign-up (owner ask 2026-10-10) ─────────────────────────────────
+    // Two clean paths, no AI key anywhere in sign-up (it lives on the leagues
+    // page and in Ask your AI):
+    //  1. A guest (already in the app with a league) signs up from the
+    //     leagues page: account only. Their league comes with them through
+    //     the existing reconcile (identity.js adopts a guest's handle and
+    //     league pointers onto the new account), so nothing is retyped and
+    //     they land back on the leagues page signed in.
+    //  2. A new visitor links their league account (Sleeper / MFL / ESPN)
+    //     on the sign-up sheet itself. It is checked here and left as the
+    //     same one-time note the front-page box leaves; once the account
+    //     exists the connect page consumes it behind its loading screen,
+    //     links it to the account and goes straight in.
+    // Website: LAB_SIGNUP is false and none of this runs.
+    const LAB_SIGNUP = window.DHQ_LAB === true;
+    const PREFILL_KEY = 'dhq_connect_prefill';
+    const JUST_JOINED_KEY = 'dhq_just_joined_v1'; // the leagues page greets a new member once
+    const LAB_COPY = {
+      sleeper: { placeholder: 'Your Sleeper username', mode: 'text', auto: 'username',
+                 hint: 'Your <b>username</b> on Sleeper, not your email. All your Sleeper leagues come in.' },
+      mfl: { placeholder: 'Your MFL league ID', mode: 'numeric', auto: 'off',
+             hint: 'The number after <b>L=</b> in your MFL web address. Next you pick which team is yours.' },
+      espn: { placeholder: 'Your ESPN league ID', mode: 'numeric', auto: 'off',
+              hint: 'The number after <b>leagueId=</b> in your ESPN league\'s web address (pasting the link works). Next you pick which team is yours.' },
+    };
+    let labPlatform = 'sleeper';
+    let labLeagueChecked = false;
+    // The league(s) a guest already connected on this device, as one line,
+    // or null when this visitor is not a guest with a league.
+    function labGuestLeague() {
+      try {
+        if (localStorage.getItem('wr_guest_v1') !== '1') return null;
+        let handle = null;
+        try { handle = window.OD?.identity?.localHandle ? window.OD.identity.localHandle() : null; } catch { handle = null; }
+        if (!handle) {
+          const a = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+          handle = (a && (a.sleeperUsername || a.username)) || null;
+        }
+        const names = [];
+        if (handle) names.push('@' + handle + ' on Sleeper');
+        const mfl = localStorage.getItem('mfl_league_id');
+        if (mfl) names.push('MFL league ' + mfl);
+        const espn = localStorage.getItem('espn_league_id');
+        if (espn) names.push('ESPN league ' + espn);
+        return names.length ? names.join(', ') : null;
+      } catch { return null; }
+    }
+    function labSetPlatform(next) {
+      const c = LAB_COPY[next];
+      if (!c) return;
+      labPlatform = next;
+      const input = document.getElementById('authLeagueKey');
+      document.querySelectorAll('[data-auth-platform]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.authPlatform === next)));
+      input.placeholder = c.placeholder;
+      input.setAttribute('aria-label', c.placeholder);
+      input.inputMode = c.mode;
+      input.setAttribute('autocomplete', c.auto);
+      input.value = '';
+      document.getElementById('authLeagueHint').innerHTML = c.hint;
+    }
+    // Show the right league block for the sheet's mode (sign-up only).
+    function syncLabSignup() {
+      if (!LAB_SIGNUP) return;
+      const signup = authMode === 'signup';
+      const guest = signup ? labGuestLeague() : null;
+      document.getElementById('authLinked').hidden = !guest;
+      if (guest) document.getElementById('authLinkedName').textContent = guest;
+      const league = document.getElementById('authLeague');
+      league.hidden = !signup || !!guest;
+      document.getElementById('authStepAccount').hidden = league.hidden;
+      document.getElementById('sleeperHint').textContent = guest
+        ? 'Next: straight back to your leagues, signed in. Add your AI key there.'
+        : 'Next: your leagues, where you add your AI key with one tap.';
+    }
+    // Whatever was already typed in the front-page box goes along.
+    function labPrefillFromHero() {
+      const box = document.getElementById('authLeagueKey');
+      const hero = document.getElementById('league-key');
+      if (!box || box.value.trim() || !hero || !hero.value.trim()) return;
+      const pressed = document.querySelector('.platform button[aria-pressed="true"]');
+      if (pressed && LAB_COPY[pressed.dataset.platform]) labSetPlatform(pressed.dataset.platform);
+      box.value = hero.value.trim();
+    }
+    function labForgetPrefill() { try { sessionStorage.removeItem(PREFILL_KEY); } catch {} }
+    // Resolves true to go ahead with the sign-up. A new visitor's league is
+    // checked (a Sleeper name must exist; an ID must look like one) and left
+    // as the one-time note for the connect page.
+    async function labLeagueStep() {
+      if (!LAB_SIGNUP || authMode !== 'signup' || labGuestLeague()) return true;
+      const input = document.getElementById('authLeagueKey');
+      let v = (input.value || '').trim();
+      const p = labPlatform;
+      if (p === 'sleeper') {
+        v = v.replace(/^@/, '');
+        if (!v) { showAlert('error', 'Type your Sleeper username first. It is the name on your Sleeper profile, not your email.'); input.focus(); return false; }
+        try {
+          const r = await fetch('https://api.sleeper.app/v1/user/' + encodeURIComponent(v));
+          const u = r.ok ? await r.json().catch(() => null) : null;
+          if (r.status === 404 || (r.ok && !(u && u.user_id))) {
+            showAlert('error', "We couldn't find that Sleeper username. Check the spelling and try again.");
+            input.focus(); return false;
+          }
+        } catch { /* Sleeper unreachable: the connect step checks it again */ }
+      } else {
+        // A pasted league link: MFL's ?L= or its /<season>/home/<id> page;
+        // ESPN's leagueId=. Otherwise just the digits typed.
+        const inLink = p === 'mfl' ? (v.match(/[?&]L=(\d+)/i) || v.match(/\/home\/(\d+)/i)) : v.match(/leagueId=(\d+)/i);
+        v = inLink ? inLink[1] : v.replace(/\D/g, '');
+        if (!/^\d{3,12}$/.test(v)) {
+          showAlert('error', p === 'mfl'
+            ? 'Type your MFL league ID. It is the number after L= in your MFL web address, like 41208.'
+            : "Type your ESPN league ID. It is the number after leagueId= in your ESPN league's web address.");
+          input.focus(); return false;
+        }
+      }
+      try { sessionStorage.setItem(PREFILL_KEY, JSON.stringify({ platform: p, value: v, ts: Date.now() })); } catch {}
+      return true;
+    }
+    // Google / Apple: check the league first, then go to the provider (the
+    // note survives the round trip in this tab's sessionStorage).
+    function labNeedsLeagueFirst(run) {
+      if (!LAB_SIGNUP || authMode !== 'signup' || labGuestLeague() || labLeagueChecked) return false;
+      labLeagueStep().then(ok => {
+        if (!ok) return;
+        labLeagueChecked = true;
+        try { run(); } finally { labLeagueChecked = false; }
+      });
+      return true;
+    }
+    // After a sign-in / sign-up routes: a note the connect page won't read
+    // (the account already has its leagues) is dropped; a new member is
+    // greeted once on the leagues page.
+    function labAfterAuth(dest, isNew) {
+      if (!LAB_SIGNUP) return;
+      if (dest !== CONNECT_URL) labForgetPrefill();
+      if (isNew) { try { sessionStorage.setItem(JUST_JOINED_KEY, '1'); } catch {} }
+    }
+    if (LAB_SIGNUP) {
+      // A league error goes away as soon as the visitor fixes it.
+      const clearLeagueError = () => { const a = document.getElementById('alertJoin'); if (a && a.classList.contains('alert-error')) a.classList.remove('show'); };
+      document.querySelectorAll('[data-auth-platform]').forEach(b => b.addEventListener('click', () => {
+        labSetPlatform(b.dataset.authPlatform);
+        clearLeagueError();
+        document.getElementById('authLeagueKey').focus();
+      }));
+      document.getElementById('authLeagueKey').addEventListener('input', clearLeagueError);
+    }
+
     // ── Sign-up sheet (one-page front door, owner ruling 2026-09-24) ──────
     // Declared here, ahead of the OAuth callback below: that callback can
     // report a provider error synchronously while this script is still
@@ -745,15 +945,20 @@
       const sheet = document.getElementById('authSheet');
       if (!sheet) return;
       if ((mode === 'signup' || mode === 'signin') && mode !== authMode) toggleAuthMode();
+      if (LAB_SIGNUP) { syncLabSignup(); if (authMode === 'signup') labPrefillFromHero(); }
       if (!sheet.hidden) return;
       _sheetReturnFocus = document.activeElement;
       sheet.hidden = false;
       document.body.classList.add('sheet-open');
+      // Lab: a guest with leagues came here from the app — sign-up is its
+      // own page, and leaving it goes back to their leagues.
+      if (LAB_SIGNUP && labGuestLeague()) document.body.classList.add('auth-page');
       setTimeout(() => { try { document.getElementById('btnGoogle').focus(); } catch {} }, 30);
     }
     function closeAuthSheet() {
       const sheet = document.getElementById('authSheet');
       if (!sheet || sheet.hidden) return;
+      if (document.body.classList.contains('auth-page')) { window.location.href = 'index.html'; return; }
       sheet.hidden = true;
       document.body.classList.remove('sheet-open');
       try { if (_sheetReturnFocus && _sheetReturnFocus.focus) _sheetReturnFocus.focus(); } catch {}
@@ -845,6 +1050,7 @@
       document.getElementById('btnApple').lastChild.textContent = signup ? ' Continue with Apple' : ' Sign in with Apple';
       document.getElementById('toggleMode').textContent = signup ? 'Already have an account? Sign in' : 'Need an account? Sign up';
       document.getElementById('forgotBtn').style.display = signup ? 'none' : '';
+      syncLabSignup();
     }
 
     // \u2500\u2500 Email signup / signin (account only \u2014 Sleeper handled on step 2) \u2500
@@ -855,6 +1061,15 @@
       const signup = authMode === 'signup';
       if (!email || !password) { showAlert('error', 'Email and password are required.'); return; }
       if (signup && password.length < 8) { showAlert('error', 'Password must be at least 8 characters.'); return; }
+      // Lab: a new visitor's league account is checked before the account
+      // is made (a typo is fixed here, not after).
+      if (signup && LAB_SIGNUP) {
+        if (btn.disabled) return;
+        btn.disabled = true; btn.textContent = 'Checking your league…';
+        const go = await labLeagueStep();
+        btn.disabled = false; btn.textContent = 'Create account →';
+        if (!go) return;
+      }
       trackLandingEvent(signup ? 'signup_started' : 'signin_started');
       btn.disabled = true; btn.textContent = signup ? 'Creating account\u2026' : 'Signing in\u2026';
       // Hold live-update reloads while the sign-in is in flight.
@@ -875,12 +1090,13 @@
         }
         storeSession(data);
         trackLandingEvent(signup ? 'signup_succeeded' : 'signin_succeeded', { accountId: data?.user?.id || null });
-        showAlert('success', signup ? 'Account ready \u2014 connect your leagues\u2026' : 'Welcome back\u2026');
+        showAlert('success', signup ? (LAB_SIGNUP ? 'Account ready \u2014 taking you to your leagues\u2026' : 'Account ready \u2014 connect your leagues\u2026') : 'Welcome back\u2026');
         // New accounts start at the connect-your-leagues page (a guest who
         // signs up keeps the leagues they connected); returning sign-ins go
         // wherever the account's own identity says.
         if (!window.OD?.identity && signup) resetDeviceOnboardingForNewAccount();
         const [dest] = await Promise.all([destAfterSignIn(data, { isNew: signup }), new Promise(r => setTimeout(r, 600))]);
+        labAfterAuth(dest, signup);
         window.location.href = dest;
       } catch (err) {
         trackLandingEvent(signup ? 'signup_failed' : 'signin_failed', { reason: 'network' });
@@ -893,6 +1109,7 @@
 
     // \u2500\u2500 Google OAuth (account only) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     function handleGoogle() {
+      if (labNeedsLeagueFirst(handleGoogle)) return; // Lab: league account first
       const db = getSbClient();
       if (!db) { showAlert('error', 'Sign-in is still loading \u2014 try again in a moment.'); return; }
       trackLandingEvent('oauth_started', { provider: 'google' });
@@ -906,6 +1123,7 @@
 
     // ── Apple OAuth (account only) ──────────────────────────────────────────
     function handleApple() {
+      if (labNeedsLeagueFirst(handleApple)) return; // Lab: league account first
       const db = getSbClient();
       if (!db) { showAlert('error', 'Sign-in is still loading — try again in a moment.'); return; }
       trackLandingEvent('oauth_started', { provider: 'apple' });
@@ -1092,6 +1310,7 @@
         // the connect-your-leagues page unless it adopted a guest's leagues.
         if (!window.OD?.identity && oauthIsNew) resetDeviceOnboardingForNewAccount();
         const oauthDest = await destAfterSignIn(appSession || null, { isNew: oauthIsNew });
+        labAfterAuth(oauthDest, oauthIsNew);
         clearOAuthPending();
         window.location.href = oauthDest;
       } catch (e) {
@@ -1268,6 +1487,8 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && ['acctEmail', 'acctPassword'].includes(document.activeElement?.id)) handleEmailAuth();
+      // Lab league step: Enter moves on to the account fields.
+      if (e.key === 'Enter' && document.activeElement?.id === 'authLeagueKey') { e.preventDefault(); document.getElementById('acctEmail').focus(); }
     });
     </script>
 
