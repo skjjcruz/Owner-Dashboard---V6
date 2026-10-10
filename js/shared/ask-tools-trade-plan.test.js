@@ -278,10 +278,11 @@ test('balance when the member overpays a rebuilder: their veterans, never their 
     assert.ok(e.balance.options[0].includes('on their block'));
 });
 
-test('listed vets cost their owner less; Love (listed, not a vet) only the listing discount', async () => {
+test('listed vets cost their owner less (down to a market floor); Love (listed, not a vet) only the listing discount', async () => {
     const r = await run('trade_plan', { target: 'Saquon Barkley' });
     assert.ok(!r.error, r.error);
-    assert.ok(r.price_floor.their_price <= Math.round(3100 * 0.5), String(r.price_floor.their_price));
+    // A listed vet costs his rebuilding owner less, but never below his market floor (70%, 85% of that when listed).
+    assert.equal(r.price_floor.their_price, Math.round(3100 * 0.7 * 0.85), String(r.price_floor.their_price));
     assert.match(r.price_floor.headliner_needed, /^none/);
     const love = await run('trade_plan', { target: 'Jordan Love' });
     assert.equal(love.price_floor.their_price, Math.round(3574 * 0.85));

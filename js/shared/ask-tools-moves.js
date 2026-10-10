@@ -696,11 +696,17 @@
     // listed him. The old Math.max(mult, 0.85) raised a listed veteran
     // from 0.2 to 0.85. Now Math.min: a listed piece takes 15% off, and a
     // listed veteran counts at most half his value.
-    const LISTED_DISCOUNT = 0.85, LISTED_VET_CAP = 0.5;
+    // Market floor (LAB243 review): a rebuilder has little USE for a veteran,
+    // but he can still sell him to a contender at market, so what he gives
+    // up is never below about 70% of the veteran's value (85% of that when
+    // he listed him). Without the floor, a listed Josh Jacobs "cost" his
+    // owner 17% of his value and a 24-year-old depth back read as a 95% deal.
+    const LISTED_DISCOUNT = 0.85, VET_MARKET_FLOOR = 0.7;
     function costToOwner(mode, x, listed) {
         const ap = mode === 'REBUILDING' ? appealFor('REBUILDING', x) : { mult: 1, why: '' };
         const vet = x.kind === 'player' && isVet(x.pos, x.age);
-        const mult = listed ? Math.min(ap.mult * LISTED_DISCOUNT, vet ? LISTED_VET_CAP : Infinity) : ap.mult;
+        const base = vet && mode === 'REBUILDING' ? Math.max(ap.mult, VET_MARKET_FLOOR) : ap.mult;
+        const mult = listed ? base * LISTED_DISCOUNT : base;
         return { cost: Math.round(x.value * mult), mult: Math.round(mult * 100) / 100, why: [ap.why, listed ? 'on their trade block, so they want him moved' : ''].filter(Boolean).join('; ') };
     }
     // Both sides of a deal priced the way the partner sees them.
