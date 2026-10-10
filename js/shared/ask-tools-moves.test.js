@@ -125,7 +125,11 @@ test('evaluate_trade: values, grade, acceptance, DNA and plain-English psycholog
     assert.equal(r.totals.give, 6500);
     assert.equal(r.totals.get, 2881 + Math.round(6000 * 0.88));
     assert.equal(r.grade.grade, 'B'); // 8161 / 6500 = 1.26 in the stand-in's bands
-    assert.equal(r.accept_chance_pct, 42);
+    // The engine's value-only read stays visible; the headline chance now
+    // accounts for what this partner wants (owner ruling 2026-10-10).
+    assert.equal(r.accept_chance_on_value_only_pct != null ? r.accept_chance_on_value_only_pct : r.accept_chance_pct, 42);
+    assert.ok(r.partner_view && r.partner_view.their_mode, 'the partner\'s mode is read');
+    assert.ok(Array.isArray(r.partner_view.your_package_to_them) && r.partner_view.your_package_to_them[0].worth_to_them != null);
     assert.equal(r.partner_posture.key, 'SELLER');
     assert.ok(r.psychology.some(p => p.effect === 'helps' && /fills a position they need/.test(p.means)));
     assert.ok(r.fit.for_me.some(l => /McBride fills a TE need/.test(l)));
@@ -185,6 +189,7 @@ test('get_draft_info: picks owned, values, results, hit rates, prospects', async
 // the league_players feed (settings.otb). Stale listings are dropped.
 test('get_trade_block lists what owners put on the block, by team', async () => {
     const realFetch = globalThis.fetch;
+    Object.keys(App.AskTools._moves.blockCache).forEach(k => delete App.AskTools._moves.blockCache[k]);   // earlier tests read the block too
     globalThis.fetch = async (url, opts) => {
         assert.match(url, /api\.sleeper\.app\/graphql/);
         assert.match(JSON.parse(opts.body).query, /league_players/);

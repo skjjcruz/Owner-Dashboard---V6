@@ -355,6 +355,76 @@
         },
     });
 
+    // ── What an owner is trying to do right now (owner ruling 2026-10-10) ──
+    // "BWIT just traded significant assets for draft picks, threw a bunch of
+    // starters on the block, and isn't winning. A rebuilding owner only takes
+    // picks and young, up-and-coming players, not relics." The app's window
+    // label alone said REBUILDING but the AI still pitched a 38-year-old QB.
+    // This reads the evidence (record, this season's trades, the trade
+    // block) into a plain mode, and prices every piece the way THAT owner
+    // sees it. Rules are simple and stated, so the AI can explain them.
+    const curSeason = () => String(h.season() || '');
+    async function ownerIntent(r) {
+        if (!r) return null;
+        const rid = String(r.roster_id), A = assess(r.roster_id) || {}, st = r.settings || {};
+        const wins = Number(st.wins) || 0, losses = Number(st.losses) || 0;
+        const ev = [];
+        // This season's trades: what came in and what went out.
+        let picksIn = 0, picksOut = 0, valOut = 0, valIn = 0;
+        const soldNames = [], boughtNames = [];
+        try {
+            const tx = await AT.run('get_transactions', { team: rid, type: 'trade', season: curSeason(), limit: 50 });
+            (tx.rows || []).forEach(row => (row.sides || []).forEach(side => {
+                const theirs = String(side.roster_id) === rid;
+                const players = side.got_players || [], picks = side.got_picks || [];
+                const v = players.reduce((n, x) => n + (Number(x.value) || 0), 0);
+                if (theirs) { picksIn += picks.length; valIn += v; players.forEach(x => boughtNames.push(x.name)); }
+                else { picksOut += picks.length; valOut += v; players.forEach(x => soldNames.push(x.name)); }
+            }));
+            if (picksIn || soldNames.length) ev.push('this season traded away ' + (soldNames.length ? soldNames.slice(0, 5).join(', ') : 'no players') + ' and took in ' + picksIn + ' draft pick' + (picksIn === 1 ? '' : 's') + (boughtNames.length ? ' plus ' + boughtNames.slice(0, 4).join(', ') : ''));
+        } catch (e) { /* trades still loading */ }
+        // The trade block: veterans listed means selling.
+        let listed = [];
+        try {
+            const lg = h.league();
+            const rows = lg ? await h.withTimeout(leaguePlayers(lg.league_id || lg.id), 8000, null) : null;
+            listed = (rows || []).filter(x => x && x.settings && x.settings.otb && !String(x.player_id).includes(',') && String((rosterOf(String(x.player_id)) || {}).roster_id) === rid).map(x => String(x.player_id));
+        } catch (e) { listed = []; }
+        const vetsListed = listed.filter(pid => (pl(pid).age || 0) >= 26 && value(pid) >= 800);
+        if (listed.length) ev.push(listed.length + ' on the trade block (' + listed.slice(0, 6).map(pid => pname(pid) + ' ' + (pl(pid).age || '?')).join(', ') + ')');
+        ev.push('record ' + wins + '-' + losses + (A.powerRank ? ', power rank ' + A.powerRank : '') + (A.window ? ', app window ' + String(A.window).toLowerCase() : ''));
+        // Mode.
+        let mode = 'NEUTRAL';
+        const sellingSignals = (picksIn >= 3 && valOut > valIn ? 2 : 0) + (vetsListed.length >= 3 ? 1 : 0) + (A.window === 'REBUILDING' ? 1 : 0) + (losses > wins + 1 ? 1 : 0);
+        const buyingSignals = (picksOut >= 2 && valIn > valOut ? 2 : 0) + (A.window === 'CONTENDING' ? 1 : 0) + (wins > losses ? 1 : 0);
+        if (sellingSignals >= 2 && sellingSignals > buyingSignals) mode = 'REBUILDING';
+        else if (buyingSignals >= 2 && buyingSignals > sellingSignals) mode = 'CONTENDING';
+        const wants = mode === 'REBUILDING' ? ['draft picks (the nearer the better)', 'young players (about 24 or under) and rising players with 3+ peak years left']
+            : mode === 'CONTENDING' ? ['proven starters who score now', 'help at their weak spots: ' + ((A.needs || []).map(n => n.pos).join(', ') || 'none')]
+            : ['fair value', 'help at their weak spots: ' + ((A.needs || []).map(n => n.pos).join(', ') || 'none')];
+        const avoids = mode === 'REBUILDING' ? ['veterans past their peak (RB about 27+, WR 29+, TE 30+, QB 33+): little to no use to them, however good this week']
+            : mode === 'CONTENDING' ? ['far-off picks and long-term projects that don\'t score this season'] : [];
+        return { team: label(r), mode, evidence: ev, wants, avoids, _listed: listed };
+    }
+    // How much one piece is worth TO a team in that mode, as a share of its
+    // value: a rebuilder pays up for picks and youth and pays almost nothing
+    // for a veteran past his peak; a contender is the reverse.
+    function appealFor(mode, x) {
+        if (mode === 'REBUILDING') {
+            if (x.kind === 'pick') return { mult: 1.15, why: 'a pick is exactly what a rebuild wants' };
+            const pk = x.peak_years_left, age = Number(x.age) || 0;
+            if (age && age <= 24) return { mult: 1.15, why: 'young (' + age + ')' };
+            if (pk == null || pk >= 3) return { mult: 1, why: 'still has peak years' };
+            if (pk >= 1) return { mult: 0.55, why: 'only ' + pk + ' peak year' + (pk === 1 ? '' : 's') + ' left' };
+            return { mult: 0.2, why: 'past his peak at ' + (age || '?') + ': little use to a rebuild' };
+        }
+        if (mode === 'CONTENDING') {
+            if (x.kind === 'pick') return { mult: 0.8, why: 'a pick doesn\'t help them win now' };
+            return { mult: 1, why: 'helps now if he starts for them' };
+        }
+        return { mult: 1, why: '' };
+    }
+
     // ── evaluate_trade ─────────────────────────────────────────────
     function resolvePiece(text, holderHint) {
         const pk = parsePick(text);
@@ -445,12 +515,34 @@
             give.forEach(x => { if (x.kind === 'player' && x.owner_rid !== String(me.roster_id)) warnings.push('You don\'t own ' + x.label + '.'); if (x.kind === 'pick' && x.holder != null && String(x.holder) !== String(me.roster_id)) warnings.push('You don\'t own ' + x.label + '; ' + teamLabel(x.holder) + ' does.'); });
             if (partner) get.forEach(x => { if (x.kind === 'player' && x.owner_rid !== String(partner.roster_id)) warnings.push(x.label + ' is not on ' + label(partner) + ' (' + (x.owner_rid ? teamLabel(x.owner_rid) : 'free agent') + ').'); if (x.kind === 'pick' && x.holder != null && String(x.holder) !== String(partner.roster_id)) warnings.push(x.label + ' belongs to ' + teamLabel(x.holder) + ', not ' + label(partner) + '.'); });
             const net = tt - tg;
+            // The other owner's side of it: their mode, and what my package
+            // is worth to them (owner ruling 2026-10-10).
+            let partnerView = null, acceptPct = read.accept_pct;
+            if (partner) {
+                const intent = await ownerIntent(partner);
+                if (intent) {
+                    const priced = give.map(x => { const ap = appealFor(intent.mode, x); return { piece: x.label, value: x.value, worth_to_them: Math.round(x.value * ap.mult), why: ap.why || undefined }; });
+                    const toThem = priced.reduce((n, x) => n + x.worth_to_them, 0);
+                    // What they give up, as they see it (a seller discounts the vets it wants gone).
+                    const theirCost = get.reduce((n, x) => { const ap = intent.mode === 'REBUILDING' ? appealFor('REBUILDING', x) : { mult: 1 }; return n + Math.round(x.value * Math.max(ap.mult, intent._listed.includes(x.pid) ? 0.85 : ap.mult)); }, 0);
+                    const ratio = theirCost > 0 ? toThem / theirCost : 1;
+                    if (acceptPct != null && ratio < 0.95) acceptPct = Math.max(1, Math.round(acceptPct * Math.pow(Math.max(ratio, 0.05), 1.6)));
+                    partnerView = {
+                        their_mode: intent.mode, evidence: intent.evidence, they_want: intent.wants, they_avoid: intent.avoids.length ? intent.avoids : undefined,
+                        your_package_to_them: priced, worth_to_them: toThem, what_they_give_up_as_they_see_it: theirCost,
+                        verdict: ratio >= 1 ? 'appealing to them' : ratio >= 0.8 ? 'close, they may want a sweetener of the kind they value' : 'not appealing to them: rebuild the offer around what they want',
+                        listed_by_them: get.filter(x => x.pid && intent._listed.includes(x.pid)).map(x => x.label + ' is on their trade block') || undefined,
+                    };
+                }
+            }
             const out = {
                 you_give: give.map(pieceOut), you_get: get.map(pieceOut),
                 totals: { give: tg, get: tt, net_for_you: net, net_pct: round1(net / Math.max(tg, tt, 1) * 100) },
                 grade: fair ? { grade: fair.grade, label: fair.label } : null,
                 partner: partner ? label(partner) : null,
-                accept_chance_pct: read.accept_pct,
+                accept_chance_pct: acceptPct,
+                accept_chance_on_value_only_pct: acceptPct !== read.accept_pct ? read.accept_pct : undefined,
+                partner_view: partnerView || undefined,
                 partner_dna: read.dna, partner_posture: read.posture,
                 my_team: assessSummary(mineA), their_team: assessSummary(theirA),
                 fit: { for_me: fitFor(mineA, get, give), for_them: theirA ? fitFor(theirA, give, get) : null },
@@ -569,7 +661,7 @@
 
     AT.register({
         name: 'get_owner_profile',
-        description: 'One owner\'s profile: trading DNA and how to negotiate with them, trade record (won/lost/fair), favourite partners, positions they buy and sell, when they trade, biggest win and loss, recent trades, team read and this season\'s activity.',
+        description: 'What this owner is doing RIGHT NOW (rebuilding, contending or neither, from their record, this season\'s trades and their trade block) and what they want and avoid; plus the owner\'s profile: trading DNA and how to negotiate with them, trade record (won/lost/fair), favourite partners, positions they buy and sell, when they trade, biggest win and loss, recent trades, team read and this season\'s activity.',
         parameters: { type: 'object', properties: { team: { type: 'string', description: 'Team or owner name, roster id, or "me".' } }, required: ['team'] },
         async run(a) {
             const r = findTeam(a.team);
@@ -595,6 +687,8 @@
             if (me && !isMe(r)) out.trades_with_me = tradesBetween(rid, me.roster_id);
             const raw = await rawTxns();
             if (raw.length) out.this_season = activityFor(rid, raw);
+            // What they're trying to do right now, from the evidence.
+            try { const it = await ownerIntent(r); if (it) out.right_now = { mode: it.mode, evidence: it.evidence, they_want: it.wants, they_avoid: it.avoids.length ? it.avoids : undefined }; } catch (e) { /* optional */ }
             return out;
         },
     });
@@ -756,5 +850,5 @@
     });
 
     // Test hooks.
-    AT._moves = { parsePick, pickValue, computeDNA };
+    AT._moves = { parsePick, pickValue, computeDNA, blockCache };
 })(typeof window !== 'undefined' ? window : globalThis);
