@@ -742,19 +742,11 @@
     }
     const confidenceOf = o => (!o.partnerKnown || o.unknownHolders) ? 'low' : (o.mode === 'NEUTRAL' || !o.engine || !o.picksLoaded) ? 'medium' : 'high';
 
-    AT.register({
-        name: 'evaluate_trade',
-        description: 'Grade a proposed trade. Read `verdict` first: one decision (offer / counter / pass) that already reconciles the headliner rule, what this partner wants, and value. Also: DHQ value of every player and pick on both sides, the value-only grade, the chance the other owner accepts, their mode, DNA and posture, roster fit and psychology. Picks read like "2027 1st" or "2026 1.03". To BUILD an offer, use trade_plan.',
-        parameters: {
-            type: 'object',
-            properties: {
-                give: { type: 'array', items: { type: 'string' }, description: 'Players or picks I give.' },
-                get: { type: 'array', items: { type: 'string' }, description: 'Players or picks I get.' },
-                partner: { type: 'string', description: 'The other team (default: whoever owns what I get).' },
-            },
-            required: ['give', 'get'],
-        },
-        async run(a) {
+    // evaluate_trade's whole body. `intentFor(partnerRoster)` returns the
+    // partner's ownerIntent (a promise): the tool reads it fresh; the batch
+    // entry below (evaluateDeals) reads it once per partner. Nothing else
+    // differs, so the Trade Finder's list and the tool can never disagree.
+    async function evaluateTrade(a, intentFor) {
             const me = myRoster();
             if (!me) throw new Error('League not loaded yet.');
             const giveIn = [].concat(a.give || []).map(String).filter(Boolean), getIn = [].concat(a.get || []).map(String).filter(Boolean);
@@ -779,7 +771,7 @@
             // ONE reading of the other owner (ownerIntent) feeds the mode,
             // the posture, the pricing and the windows line; the app's
             // window is part of its evidence, not a second opinion.
-            const intent = partner ? await ownerIntent(partner) : null;
+            const intent = partner ? await intentFor(partner) : null;
             const read = dealRead(me, partner, tg, tt, give.length + get.length, intent);
             const mineA = read._mineA || assess(me.roster_id), theirA = partner ? (read._theirA || assess(partner.roster_id)) : null;
             const warnings = [], ownIssues = [];
@@ -876,8 +868,83 @@
             if (!E) out.note = 'The trade engine is still loading, so there is no grade yet; the acceptance chance uses the plain value curve.';
             out.values_note = SCALE_NOTE + ' A pick in the next draft is priced at its projected slot from current standings with no year discount; later drafts are mid-round, less 12% a year.';
             return out;
+    }
+
+    AT.register({
+        name: 'evaluate_trade',
+        description: 'Grade a proposed trade. Read `verdict` first: one decision (offer / counter / pass) that already reconciles the headliner rule, what this partner wants, and value. Also: DHQ value of every player and pick on both sides, the value-only grade, the chance the other owner accepts, their mode, DNA and posture, roster fit and psychology. Picks read like "2027 1st" or "2026 1.03". To BUILD an offer, use trade_plan.',
+        parameters: {
+            type: 'object',
+            properties: {
+                give: { type: 'array', items: { type: 'string' }, description: 'Players or picks I give.' },
+                get: { type: 'array', items: { type: 'string' }, description: 'Players or picks I get.' },
+                partner: { type: 'string', description: 'The other team (default: whoever owns what I get).' },
+            },
+            required: ['give', 'get'],
         },
+        run(a) { return evaluateTrade(a, ownerIntent); },
     });
+
+    // ── Many deals at once (the Trade Finder's list) ───────────────
+    // evaluateDeals([{ give, get, partner }, ...]) → one evaluate_trade
+    // result per deal, in order ({ error } for a deal it can't read). Same
+    // code path as the tool (evaluateTrade); the only difference is that
+    // each partner's ownerIntent (the trade-block fetch + this season's
+    // trades) is read ONCE for the whole batch. Yields to the page every
+    // few deals so a long list never blocks it.
+    async function evaluateDeals(list, opts) {
+        const deals = Array.isArray(list) ? list : [];
+        const every = Math.max(1, Number(opts && opts.yieldEvery) || 8);
+        const intents = new Map();
+        const intentFor = r => {
+            const k = String(r.roster_id);
+            if (!intents.has(k)) intents.set(k, ownerIntent(r));
+            return intents.get(k);
+        };
+        const out = [];
+        for (let i = 0; i < deals.length; i++) {
+            try { out.push(await evaluateTrade(deals[i] || {}, intentFor)); } catch (e) { out.push({ error: String((e && e.message) || e) }); }
+            if (i % every === every - 1 && i < deals.length - 1) await new Promise(r => setTimeout(r, 0));
+        }
+        return out;
+    }
+    AT.evaluateDeals = evaluateDeals;
+
+    // ── Sorting a candidate list by the shared call (pure) ─────────
+    // The Trade Finder generates candidates; this decides which survive and
+    // in what order, from each candidate's evaluate_trade `verdict`:
+    //   - decision 'pass' (an ownership problem) or no verdict: dropped.
+    //   - 'offer' at or above the member's acceptance bar: actionable.
+    //   - any other 'offer', and a 'counter' at or above the moonshot line:
+    //     a moonshot.
+    //   - a 'counter' below the line: dropped (the call itself says the
+    //     owner is unlikely to take it).
+    // Order: shared acceptance (high first), then the caller's own
+    // tie-break (its fit/value ranking), then input order.
+    // MOONSHOT_LINE is reconcile's "unlikely to take it" threshold (20%).
+    const MOONSHOT_LINE = 20;
+    function triageByVerdict(items, opts) {
+        const o = opts || {};
+        const bar = Number.isFinite(Number(o.bar)) ? Number(o.bar) : 75;
+        const line = Number.isFinite(Number(o.moonshotLine)) ? Number(o.moonshotLine) : MOONSHOT_LINE;
+        const verdictOf = typeof o.verdictOf === 'function' ? o.verdictOf : x => (x && x.verdict) || null;
+        const tie = typeof o.tieBreak === 'function' ? o.tieBreak : () => 0;
+        const actionable = [], moonshots = [], dropped = [];
+        (items || []).forEach((item, idx) => {
+            const v = verdictOf(item);
+            const acc = v && Number.isFinite(Number(v.accept_chance_pct)) ? Number(v.accept_chance_pct) : null;
+            const row = { item, idx, acc: acc == null ? -1 : acc };
+            if (!v || !v.decision || v.decision === 'pass') { dropped.push(Object.assign(row, { reason: v ? 'pass' : 'no verdict' })); return; }
+            if (v.decision === 'offer' && acc != null && acc >= bar) { actionable.push(row); return; }
+            if (v.decision === 'offer' || (v.decision === 'counter' && acc != null && acc >= line)) { moonshots.push(row); return; }
+            dropped.push(Object.assign(row, { reason: 'counter below ' + line + '%' }));
+        });
+        const order = (p, q) => q.acc - p.acc || tie(p.item, q.item) || p.idx - q.idx;
+        actionable.sort(order); moonshots.sort(order);
+        const pick = rows => rows.map(r => r.item);
+        return { actionable: pick(actionable), moonshots: pick(moonshots), dropped: dropped.map(r => ({ item: r.item, reason: r.reason })), bar, moonshotLine: line };
+    }
+    AT.triageByVerdict = triageByVerdict;
 
     // ── trade_plan (verdict first) ─────────────────────────────────
     // One coherent answer for "how do I get X" / "what can I do with Y":
@@ -887,6 +954,11 @@
     // evaluate_trade (shared helpers above), so the two never disagree.
     const pieceKey = x => x.kind === 'pick' ? 'pk:' + x.year + ':' + x.round + ':' + x.from : 'pl:' + x.pid;
     const pieceName = x => x.kind === 'pick' ? x.label : x.label + ' (' + x.pos + ', ' + (x.age || '?') + ')';
+    // Ids for an offer's pieces, for app callers (the Trade Finder loads
+    // offers into its own deal shape). Non-enumerable, so the tool's answer
+    // to the AI reads exactly as before.
+    const pieceId = x => x.kind === 'pick' ? { kind: 'pick', year: x.year, round: x.round, from: x.from } : x.kind === 'faab' ? { kind: 'faab', dollars: x.dollars } : { kind: 'player', pid: x.pid };
+    const withPieceIds = (out, give, get) => Object.defineProperty(out, 'piece_ids', { value: { give: give.map(pieceId), get: get.map(pieceId) }, enumerable: false });
     async function comparablesFor(target, partner) {
         try {
             const tx = await AT.run('get_transactions', { type: 'trade', season: curSeason(), limit: 50 });
@@ -1034,13 +1106,13 @@
                 const v = reconcile({ ownIssues: [], headliner: hl ? { ok: hl.ok, rule: rule.rule } : null, pv, mode, tg: rawGive, tt: target.value, accept: acc, partnerName: label(partner) });
                 return {
                     tag, pieces, pv, hl, acc, rawGive,
-                    out: {
+                    out: withPieceIds({
                         give: pieces.map(pieceName), get: [target.label],
                         accept_chance_pct: acc, headliner_met: hl ? hl.ok : undefined, market_label: v.market_label,
                         value_you_send: rawGive, value_you_get: target.value, worth_to_them: pv.toThem, their_price: pv.theirCost,
                         why: tag + '. Worth about ' + pv.toThem + ' to a ' + MODE_WORD[mode] + ' owner against ' + pv.theirCost + ' for ' + target.label + ' as they see him. ' + pv.priced.map(p => p.piece + ': ' + (p.why || 'full value')).join('; ') + '.',
                         balance,
-                    },
+                    }, pieces, [target]),
                 };
             };
             const fill = basePieces => {
@@ -1430,5 +1502,5 @@
     });
 
     // Test hooks.
-    AT._moves = { parsePick, pickValue, computeDNA, blockCache, nextDraftYear, projectedSlot, appealFor, isVet, vetAge, postureFor, costToOwner, headlinerRuleFor, headlinerMet, ownerIntent, SCALE };
+    AT._moves = { parsePick, pickValue, computeDNA, blockCache, nextDraftYear, projectedSlot, appealFor, isVet, vetAge, postureFor, costToOwner, headlinerRuleFor, headlinerMet, ownerIntent, evaluateTrade, MOONSHOT_LINE, SCALE };
 })(typeof window !== 'undefined' ? window : globalThis);

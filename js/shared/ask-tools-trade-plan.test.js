@@ -315,3 +315,102 @@ test('FAAB is a trade piece at the Trade Room rate (1 FAAB dollar = 2 value)', a
     const plain = await run('evaluate_trade', { give: ['2029 1st'], get: ['Jordan Love'] });
     assert.ok(e.verdict && plain.verdict);
 });
+
+// ── The Trade Finder's list: evaluateDeals (batch) + triageByVerdict ──
+// The finder passes pieces the way trade-calc.js tcCallArgs writes them:
+// Sleeper player ids, picks as "2029 1st from 13", FAAB as "$N FAAB".
+const strip = r => JSON.parse(JSON.stringify(r));
+
+test('evaluateDeals gives exactly what evaluate_trade gives, reading each partner once', async () => {
+    const deals = [
+        { give: ['2029 1st from 13'], get: ['love'], partner: '5' },
+        { give: ['stafford', 'andrews'], get: ['love'], partner: '5' },
+        { give: ['2029 1st from 13', '2027 2nd from 4'], get: ['lawrence'], partner: '9' },
+        { give: ['jwill'], get: ['pittman'], partner: '5' },
+        { give: ['2029 1st from 13', '$100 FAAB'], get: ['love'], partner: '5' },
+    ];
+    const one = [];
+    for (const d of deals) one.push(strip(await run('evaluate_trade', d)));
+    const realRun = T.run;
+    let txReads = 0;
+    T.run = (n, a) => { if (n === 'get_transactions' && a && a.team != null) txReads++; return realRun(n, a); };
+    let batch;
+    try { batch = (await T.evaluateDeals(deals, { yieldEvery: 2 })).map(strip); } finally { T.run = realRun; }
+    assert.equal(batch.length, deals.length);
+    batch.forEach((b, i) => assert.deepEqual(b, one[i], 'deal ' + i));
+    assert.equal(txReads, 2, 'ownerIntent read once per partner (bwit13, DJAlexB)');
+});
+
+test('evaluateDeals: a deal it cannot read is an { error } row and the rest still score', async () => {
+    const out = await T.evaluateDeals([{ give: [], get: ['love'] }, { give: ['nobody-xyz'], get: ['love'], partner: '5' }, { give: ['2029 1st from 13', '2027 2nd from 4'], get: ['lawrence'], partner: '9' }]);
+    assert.ok(out[0].error && out[1].error, JSON.stringify(out.slice(0, 2)));
+    assert.equal(out[2].verdict.decision, 'offer');
+    assert.deepEqual(await T.evaluateDeals(null), []);
+});
+
+test('trade_plan offers carry the ids of what they send (hidden from the AI\'s JSON); evaluated, they are never a pass', async () => {
+    const r = await run('trade_plan', { target: 'Trevor Lawrence' });
+    assert.ok(!r.error, r.error);
+    assert.ok(r.offers.length >= 1, JSON.stringify(r).slice(0, 400));
+    const own = globalThis.buildPicksByOwner(S.rosters, S.leagues[0], S.tradedPicks)[13];
+    const evals = await T.evaluateDeals(r.offers.map(o => {
+        assert.ok(o.piece_ids && !Object.keys(o).includes('piece_ids'), 'non-enumerable');
+        assert.ok(!JSON.stringify(o).includes('piece_ids'));
+        assert.deepEqual(o.piece_ids.get, [{ kind: 'player', pid: 'lawrence' }]);
+        o.piece_ids.give.forEach(p => {
+            if (p.kind === 'player') assert.ok(S.rosters[0].players.includes(p.pid), p.pid + ' is mine');
+            else assert.ok(own.some(x => x.year === p.year && x.round === p.round && x.originalOwnerRid === p.from), JSON.stringify(p) + ' is mine');
+        });
+        const txt = p => p.kind === 'player' ? p.pid : p.year + ' ' + ({ 1: '1st', 2: '2nd', 3: '3rd' }[p.round]) + ' from ' + p.from;
+        return { give: o.piece_ids.give.map(txt), get: ['lawrence'], partner: '9' };
+    }));
+    evals.forEach((e, i) => {
+        assert.notEqual(e.verdict.decision, 'pass', JSON.stringify(e.verdict));
+        assert.equal(e.headliner.offer_has_it, true);
+        assert.equal(e.verdict.accept_chance_pct, r.offers[i].accept_chance_pct, 'the plan and the evaluator agree on the chance');
+    });
+});
+
+test('triageByVerdict: pass dropped, offer >= bar actionable, the rest moonshots or dropped at the line; ranked by shared accept then tie-break', () => {
+    const v = (decision, accept_chance_pct) => ({ verdict: { decision, accept_chance_pct } });
+    const items = [
+        Object.assign(v('offer', 80), { id: 'a', fit: 1 }),
+        Object.assign(v('offer', 92), { id: 'b', fit: 1 }),
+        Object.assign(v('offer', 80), { id: 'c', fit: 9 }),
+        Object.assign(v('pass', 95), { id: 'own' }),            // ownership problem: never listed
+        Object.assign(v('counter', 90), { id: 'hl' }),          // missing headliner at a high raw chance: a moonshot, not actionable
+        Object.assign(v('offer', 60), { id: 'low' }),           // offer under the bar
+        Object.assign(v('counter', 10), { id: 'dead' }),        // below the line
+        Object.assign(v('counter', 20), { id: 'edge' }),        // at the line
+        { id: 'nov' },                                          // no verdict
+        Object.assign(v('offer', null), { id: 'nopct' }),
+    ];
+    const t = T.triageByVerdict(items, { bar: 75, tieBreak: (p, q) => q.fit - p.fit });
+    assert.deepEqual(t.actionable.map(x => x.id), ['b', 'c', 'a']);
+    assert.deepEqual(t.moonshots.map(x => x.id), ['hl', 'low', 'edge', 'nopct']);
+    assert.deepEqual(t.dropped.map(x => x.item.id).sort(), ['dead', 'nov', 'own']);
+    assert.equal(t.moonshotLine, T._moves.MOONSHOT_LINE);
+    // The member's bar moves the split; nothing below it is ever actionable.
+    const hi = T.triageByVerdict(items, { bar: 90 });
+    assert.deepEqual(hi.actionable.map(x => x.id), ['b']);
+    hi.actionable.forEach(x => assert.ok(x.verdict.accept_chance_pct >= 90));
+    // A custom verdict reader (the finder keeps verdicts beside its deals).
+    const side = new Map(items.map(x => [x.id, x.verdict]));
+    const c = T.triageByVerdict(items.map(x => ({ id: x.id })), { bar: 75, verdictOf: x => side.get(x.id) });
+    assert.deepEqual(c.actionable.map(x => x.id), ['b', 'a', 'c']);
+});
+
+test('finder end to end on the Psycho fixture: rule breakers never list as actionable', async () => {
+    const cands = [
+        { id: 'far1st', give: ['2029 1st from 13'], get: ['love'], partner: '5' },                // far-off 1st headlining a young SF QB
+        { id: 'vets', give: ['stafford', 'andrews', 'jt'], get: ['love'], partner: '5' },          // vets to a rebuilder
+        { id: 'unowned', give: ['2027 1st from 13'], get: ['love'], partner: '5' },               // TWhy123 holds it
+        { id: 'lawrence', give: ['2029 1st from 13', '2027 2nd from 4'], get: ['lawrence'], partner: '9' },
+    ];
+    const evals = await T.evaluateDeals(cands);
+    const t = T.triageByVerdict(cands.map((c, i) => Object.assign({}, c, { verdict: evals[i].verdict })), { bar: 55 });
+    assert.ok(t.dropped.some(d => d.item.id === 'unowned'), 'unowned pick: pass, dropped');
+    assert.ok(!t.actionable.some(x => /far1st|vets|unowned/.test(x.id)), t.actionable.map(x => x.id).join());
+    t.actionable.forEach(x => { assert.equal(x.verdict.decision, 'offer'); assert.ok(x.verdict.accept_chance_pct >= 55); });
+    assert.ok(t.actionable.concat(t.moonshots).some(x => x.id === 'lawrence'));
+});

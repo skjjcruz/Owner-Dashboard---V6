@@ -438,12 +438,21 @@
         }, [key]);
         return call && call.key === key ? call : null;
     }
+    // A finder deal's evaluate_trade arguments ({ give, get, partner }).
+    function tcDealArgs(deal) {
+        const partnerRid = deal.partnerRosterId ?? (window.S?.rosters || []).find(r => String(r.owner_id) === String(deal.partnerOwnerId))?.roster_id;
+        return Object.assign({
+            give: tcCallArgs((deal.givePlayers || []).map(p => p.pid || p.id), (deal.givePicks || []).map(p => p.id), deal.giveFaab || 0),
+            get: tcCallArgs((deal.receivePlayers || []).map(p => p.pid || p.id), (deal.receivePicks || []).map(p => p.id), deal.receiveFaab || 0),
+        }, partnerRid != null ? { partner: String(partnerRid) } : {});
+    }
+    // The finder list scores every deal with the shared evaluator already
+    // (deal.sharedCall); a card reuses that call instead of asking again.
     function useTcDealCall(deal) {
-        const partnerRid = (window.S?.rosters || []).find(r => String(r.owner_id) === String(deal.partnerOwnerId))?.roster_id;
-        return useTcSharedCall(
-            tcCallArgs((deal.givePlayers || []).map(p => p.pid || p.id), (deal.givePicks || []).map(p => p.id), deal.giveFaab || 0),
-            tcCallArgs((deal.receivePlayers || []).map(p => p.pid || p.id), (deal.receivePicks || []).map(p => p.id), deal.receiveFaab || 0),
-            partnerRid);
+        const pre = deal.sharedCall && deal.sharedCall.verdict ? deal.sharedCall : null;
+        const a = pre ? { give: [], get: [] } : tcDealArgs(deal);
+        const live = useTcSharedCall(a.give, a.get, a.partner);
+        return pre || live;
     }
     // Phone finder card pieces (that card is a plain render function, so the
     // shared call lives in these two small components).
@@ -2627,7 +2636,11 @@
             // LAB21: DNA taxes land at full designation strength on the FINAL
             // number — "the Fleecer tax alone would kill the deal."
             const labDnaTaxTotal = labDnaTaxes.reduce((s, t) => s + (Number(t.impact) || 0), 0);
-            const likelihood = Math.round(Math.max(3, Math.min(95, Math.max(5, Math.min(95, baseLikelihood + (behaviorFit?.acceptanceDelta || 0))) + labDnaTaxTotal)));
+            const modelLikelihood = Math.round(Math.max(3, Math.min(95, Math.max(5, Math.min(95, baseLikelihood + (behaviorFit?.acceptanceDelta || 0))) + labDnaTaxTotal)));
+            // Finder list (owner ask 2026-10-10): once the shared evaluator has
+            // scored a candidate, its accept_chance_pct IS the likelihood, so
+            // confidence, cautions, rank and the Why all read the same number.
+            const likelihood = Number.isFinite(input.likelihoodOverride) ? Math.round(input.likelihoodOverride) : modelLikelihood;
             const fit = myAssessment ? calcComplementarity(myAssessment, partner) : 0;
             const valueScore = Math.max(0, Math.min(100, 50 + (userGain / Math.max(give.total, receive.total, 1)) * 120));
             const confidenceScore = Math.round(Math.max(0, Math.min(100, likelihood * 0.45 + fit * 0.25 + valueScore * 0.30 + (behaviorFit?.scoreDelta || 0))));
@@ -2753,6 +2766,7 @@
                 totals: { give, receive },
                 userGain,
                 likelihood,
+                likelihoodModel: modelLikelihood,
                 grade: gradeRaw.grade,
                 gradeLabel: gradeRaw.label,
                 gradeColor: gradeRaw.color || gradeRaw.col || 'var(--gold)',
@@ -2873,6 +2887,12 @@
             if (eliteSkillRules && eliteSkillRules.violates(input)) return;
             const deal = buildDeal(partner, input);
             if (!deal) return;
+            const { sig, core, id } = dealKeys(deal);
+            if (candidates.some(d => d._sig === sig)) return;
+            candidates.push({ ...deal, id, _sig: sig, _core: core });
+        }
+
+        function dealKeys(deal) {
             // _core — the deal's IDEA identity (owner ruling: the board kept
             // showing the same trade over and over with only the payment
             // shuffled — "Oluokun → Hines-Allen" three times with R6/R7/FAAB
@@ -2896,10 +2916,9 @@
                 deal.giveFaab,
                 deal.receiveFaab,
             ]);
-            if (candidates.some(d => d._sig === sig)) return;
             let hash = 0;
             for (let i = 0; i < sig.length; i++) hash = ((hash << 5) - hash + sig.charCodeAt(i)) | 0;
-            candidates.push({ ...deal, id: `deal_${Math.abs(hash).toString(36)}`, _sig: sig, _core: core });
+            return { sig, core, id: `deal_${Math.abs(hash).toString(36)}` };
         }
 
         // ── Finder-query resolution seam (Phase 4a) ──
@@ -4090,7 +4109,6 @@
             let cancelled = false;
             const partners = partnerBoard;
             const modes = finderDualBest ? ['fillNeed', 'sellSurplus'] : [effMode];
-            const minPartners = finderDualBest ? Math.min(6, partners.length) : partners.length;
             const pooled = [];
             const seen = new Set();
             let idx = 0;
@@ -4120,8 +4138,10 @@
                     }
                 }
                 idx += 1;
-                const enough = idx >= minPartners && pooled.filter(d => d.likelihood >= finderActionFloor).length >= 8;
-                const done = idx >= partners.length || (finderDualBest && enough);
+                // The scan used to stop early once 8 deals cleared the bar on the
+                // engine's own likelihood. The list is now decided by the shared
+                // evaluator after the scan, so every partner is scanned.
+                const done = idx >= partners.length;
                 setFinderPool({ key: finderLoopKey, deals: pooled.slice(), scanned: idx, total: partners.length, done });
                 if (!done) schedule(step);
             };
@@ -4129,42 +4149,205 @@
             return () => { cancelled = true; };
         }, [finderLoopKey]);
         const finderPoolOn = finderLoopKey != null;
-        // Pooled ranking: per-deal recommendation score (likelihood/fit/value, GM-band
-        // penalized) + a small partner-board term, grade letter then accept % as ties.
         const FINDER_GRADE_RANK = { 'A+': 7, 'A': 6, 'B+': 5, 'B': 4, 'C': 3, 'D': 2, 'F': 1 };
-        const finderDeals = useMemo(() => {
+        // The finder's own order (recommendation rank + a small partner-board
+        // term, then grade letter, then roster fit). Since the shared list
+        // (below) it only breaks ties inside one shared acceptance level.
+        const finderTieBreak = (a, b) => ((b.rank || 0) + (b.partnerScore || 0) * 0.2) - ((a.rank || 0) + (a.partnerScore || 0) * 0.2)
+            || (FINDER_GRADE_RANK[b.grade] || 0) - (FINDER_GRADE_RANK[a.grade] || 0)
+            || (b.fit || 0) - (a.fit || 0);
+        // Candidates: everything the generator produced for this query, still
+        // carrying _sig/_core for dedupe.
+        const finderCandidates = useMemo(() => {
             if (!finderActive) return [];
-            if (finderPoolOn) {
-                // Sort first, THEN core-dedupe: dual-mode scans (fillNeed +
-                // sellSurplus) can produce the same trade idea for one partner;
-                // the best-ranked variant is the one that survives.
-                const seenCore = new Set();
-                return finderPool.deals
-                    .slice()
-                    .sort((a, b) => (b.rank + (b.partnerScore || 0) * 0.2) - (a.rank + (a.partnerScore || 0) * 0.2)
-                        || (FINDER_GRADE_RANK[b.grade] || 0) - (FINDER_GRADE_RANK[a.grade] || 0)
-                        || b.likelihood - a.likelihood)
-                    .filter(deal => {
-                        if (!deal._core) return true;
-                        if (seenCore.has(deal._core)) return false;
-                        seenCore.add(deal._core);
-                        return true;
-                    })
-                    .map(({ _sig, _core, ...deal }) => deal)
-                    .slice(0, 24);
-            }
+            if (finderPoolOn) return finderPool.deals;
             if (!selectedPartner) return [];
-            return evalPartnerDeals(selectedPartner, effMode, focusPlayerPid, focusPickR).map(({ _sig, _core, ...deal }) => deal);
+            return evalPartnerDeals(selectedPartner, effMode, focusPlayerPid, focusPickR);
         }, [finderActive, finderPoolOn, finderPool, selectedPartner, effMode, focusPlayerPid, focusPickR?.id, finderDataEpoch, finderTuningHash]);
-        const finderActionable = finderDeals.filter(deal => deal.likelihood >= finderActionFloor);
+        const finderScoreKey = finderActive && (!finderPoolOn || finderPool.done)
+            ? JSON.stringify([finderPoolOn ? finderLoopKey : [selectedPartner?.ownerId ?? null, effMode, focusPlayerPid ?? null, focusPickR?.id ?? null, finderDataEpoch, finderTuningHash], finderActionFloor])
+            : null;
+
+        // ── The finder list runs on the shared trade evaluator (owner ask
+        // 2026-10-10). Every candidate (generated, plus rule-built offers from
+        // trade_plan) is scored by App.AskTools.evaluateDeals, the same code
+        // path as evaluate_trade (ownership > headliner > what the partner
+        // wants > raw value). 'pass' is dropped; actionable = an 'offer' at or
+        // above the member's acceptance bar; other offers, and counters at or
+        // above the moonshot line, are moonshots; the shown likelihood is the
+        // shared accept_chance_pct (App.AskTools.triageByVerdict).
+        // Rule-built candidates: for partners with clear targets (the player
+        // the owner focused, players the finder already targets, the
+        // partner's trade block), trade_plan's offers, built only from what
+        // the member verifiably owns. Buy-side intents only.
+        async function finderRuleBuiltCandidates(cands, isLive) {
+            const AT = window.App?.AskTools;
+            if (typeof AT?.run !== 'function' || !myAssessment) return [];
+            if (focusPickR || !(finderDualBest || effMode === 'acquire' || effMode === 'fillNeed')) return [];
+            const myRosterObj = allRosters.find(r => String(r.roster_id) === String(myRosterId));
+            const mine = new Set([...(myRosterObj?.players || []), ...(myRosterObj?.reserve || []), ...(myRosterObj?.taxi || [])].map(String));
+            const myPicks = pickAssetsForOwner(myAssessment.ownerId);
+            const byRid = rid => assessments.find(a => String(a.rosterId) === String(rid)) || null;
+            const pinned = effPartnerId != null ? (assessments.find(a => String(a.ownerId) === String(effPartnerId)) || null) : null;
+            const inScope = a => !!a && String(a.rosterId) !== String(myRosterId) && (!pinned || String(a.rosterId) === String(pinned.rosterId));
+            const seenAsk = new Set();
+            const ask = (a, pid, list, cap) => {
+                if (!inScope(a) || list.length >= cap) return;
+                const k = a.rosterId + '|' + (pid ?? '');
+                if (seenAsk.has(k)) return;
+                seenAsk.add(k);
+                list.push({ a, pid: pid != null ? String(pid) : null });
+            };
+            const focusAsk = [], targetAsks = [], blockAsks = [];
+            if (effMode === 'acquire' && focusPlayerPid != null && focusR?.rosterId != null) ask(byRid(focusR.rosterId), focusPlayerPid, focusAsk, 1);
+            cands.slice().sort((a, b) => (b.rank || 0) - (a.rank || 0))
+                .forEach(d => (d.receivePlayers || []).forEach(p => ask(byRid(d.partnerRosterId), p.pid, targetAsks, 8)));
+            (pinned ? [pinned] : partnerBoard.map(i => i.assessment)).forEach(a => ask(a, null, blockAsks, 8));
+            const out = [];
+            for (const q of [...focusAsk, ...targetAsks, ...blockAsks]) {
+                if (!isLive()) return [];
+                let r = null;
+                try { r = await AT.run('trade_plan', q.pid ? { target: q.pid, partner: String(q.a.rosterId) } : { partner: String(q.a.rosterId) }); } catch (e) { r = null; }
+                if (!r || r.error || !Array.isArray(r.offers)) continue;
+                const score = partnerBoard.find(i => String(i.assessment.rosterId) === String(q.a.rosterId))?.score || 0;
+                r.offers.forEach(o => {
+                    const ids = o.piece_ids;
+                    if (!ids) return;
+                    const givePlayers = [], givePicks = [], receivePlayers = [];
+                    let ok = true;
+                    ids.give.forEach(x => {
+                        if (x.kind === 'player') {
+                            const as = mine.has(String(x.pid)) ? playerAsset(x.pid) : null;
+                            if (!as || isUntouchableAsset(as, finderTuning)) ok = false; else givePlayers.push(as);
+                        } else if (x.kind === 'pick') {
+                            // Only a pick the finder's own ownership map also gives me.
+                            const pk = myPicks.find(m => Number(m.year) === Number(x.year) && Number(m.round) === Number(x.round) && String(m.fromRosterId) === String(x.from));
+                            if (!pk) ok = false; else givePicks.push(pk);
+                        } else ok = false;
+                    });
+                    ids.get.forEach(x => { const as = x.kind === 'player' ? playerAsset(x.pid) : null; if (!as) ok = false; else receivePlayers.push(as); });
+                    if (!ok || !receivePlayers.length || (!givePlayers.length && !givePicks.length)) return;
+                    let deal = null;
+                    try {
+                        deal = buildDeal(q.a, { mode: effMode, type: 'Rule-built', givePlayers, givePicks, receivePlayers, receivePicks: [], giveFaab: 0, receiveFaab: 0, whyAccept: o.why });
+                    } catch (e) { deal = null; }
+                    if (!deal) return;
+                    const { sig, core, id } = dealKeys(deal);
+                    out.push({ ...deal, id, _sig: sig, _core: core, partnerScore: score, ruleBuilt: true });
+                });
+            }
+            return out;
+        }
+        // One scored row: the deal rebuilt with the shared acceptance as its
+        // likelihood (confidence, cautions, rank and the Why follow it), the
+        // shared call attached for the card, and its viability.
+        function finderSharedDeal(deal, ev, actionable) {
+            const v = ev.verdict;
+            const acc = Number.isFinite(Number(v.accept_chance_pct)) && v.accept_chance_pct != null ? Number(v.accept_chance_pct) : 0;
+            const partner = assessments.find(a => String(a.rosterId) === String(deal.partnerRosterId)) || null;
+            let rebuilt = null;
+            try {
+                rebuilt = partner ? buildDeal(partner, {
+                    id: deal.id, mode: deal.mode, type: deal.type,
+                    givePlayers: deal.givePlayers, givePicks: deal.givePicks, receivePlayers: deal.receivePlayers, receivePicks: deal.receivePicks,
+                    giveFaab: deal.giveFaab, receiveFaab: deal.receiveFaab,
+                    whyAccept: deal.whyAccept, whyYou: deal.whyYou, createdAt: deal.createdAt, status: deal.status,
+                    likelihoodOverride: acc,
+                }) : null;
+            } catch (e) { rebuilt = null; }
+            const { _sig, _core, ...base } = rebuilt || { ...deal, likelihood: acc };
+            const out = {
+                ...base,
+                id: deal.id,
+                partnerScore: deal.partnerScore,
+                ruleBuilt: !!deal.ruleBuilt,
+                likelihoodModel: deal.likelihoodModel ?? deal.likelihood,
+                sharedCall: { verdict: v, headliner: ev.headliner || null },
+            };
+            out.rank = scoreDealRecommendation(out, finderTuning);
+            out.recommendationScore = out.rank;
+            out.viability = actionable ? dealViability(out, finderTuning) : 'Moonshot';
+            return out;
+        }
+        // The pre-shared list (old engine likelihood), used only when the
+        // shared evaluator isn't on the page or fails.
+        function finderLegacyList(cands) {
+            const seenCore = new Set();
+            const deals = (finderPoolOn ? cands.slice().sort((a, b) => finderTieBreak(a, b) || b.likelihood - a.likelihood) : cands.slice())
+                .filter(deal => {
+                    if (!deal._core) return true;
+                    if (seenCore.has(deal._core)) return false;
+                    seenCore.add(deal._core);
+                    return true;
+                })
+                .map(({ _sig, _core, ...deal }) => deal)
+                .slice(0, finderPoolOn ? 24 : undefined);
+            return { deals, actionable: deals.filter(deal => deal.likelihood >= finderActionFloor) };
+        }
+        const [finderShared, setFinderShared] = useState({ key: null, status: 'idle', deals: [], actionableCount: 0, dropped: 0, planned: 0 });
+        useEffect(() => {
+            if (!finderScoreKey) return undefined;
+            const AT = window.App?.AskTools;
+            if (typeof AT?.evaluateDeals !== 'function' || typeof AT?.triageByVerdict !== 'function') {
+                setFinderShared({ key: finderScoreKey, status: 'fallback', deals: [], actionableCount: 0, dropped: 0, planned: 0 });
+                return undefined;
+            }
+            let live = true;
+            const cands = finderCandidates.slice();
+            setFinderShared({ key: finderScoreKey, status: 'scoring', deals: [], actionableCount: 0, dropped: 0, planned: 0 });
+            const t0 = Date.now();
+            (async () => {
+                const planned = await finderRuleBuiltCandidates(cands, () => live);
+                if (!live) return;
+                const seen = new Set(cands.map(d => d._sig).filter(Boolean));
+                const extra = planned.filter(d => { if (seen.has(d._sig)) return false; seen.add(d._sig); return true; });
+                const all = cands.concat(extra);
+                const evals = await AT.evaluateDeals(all.map(tcDealArgs));
+                if (!live) return;
+                const t = AT.triageByVerdict(all.map((deal, i) => ({ deal, ev: evals[i] || {} })), {
+                    bar: finderActionFloor,
+                    verdictOf: x => (x.ev && x.ev.verdict) || null,
+                    tieBreak: (p, q) => finderTieBreak(p.deal, q.deal),
+                });
+                // One row per trade idea: the best variant survives (an
+                // actionable one before any moonshot).
+                const seenCore = new Set();
+                const firstOfIdea = x => { const c = x.deal._core; if (!c) return true; if (seenCore.has(c)) return false; seenCore.add(c); return true; };
+                const act = t.actionable.filter(firstOfIdea).map(x => finderSharedDeal(x.deal, x.ev, true));
+                const moon = t.moonshots.filter(firstOfIdea).map(x => finderSharedDeal(x.deal, x.ev, false));
+                const deals = act.concat(moon).slice(0, finderPoolOn ? 24 : undefined);
+                const actionableCount = Math.min(act.length, deals.length);
+                try {
+                    window._labDbg = window._labDbg || {};
+                    window._labDbg.finderShared = {
+                        candidates: cands.length, ruleBuilt: extra.length, scored: all.length, actionable: actionableCount, moonshots: deals.length - actionableCount, dropped: t.dropped.length, bar: finderActionFloor, moonshotLine: t.moonshotLine,
+                        ideas: { actionable: act.length, moonshots: moon.length }, ms: Date.now() - t0,
+                        rows: deals.map((d, i) => ({ actionable: i < actionableCount, partner: d.partnerName, args: tcDealArgs(d), decision: d.sharedCall.verdict.decision, accept: d.sharedCall.verdict.accept_chance_pct, modelLikelihood: d.likelihoodModel, ruleBuilt: d.ruleBuilt })),
+                    };
+                } catch (e) { /* debug tap only */ }
+                setFinderShared({ key: finderScoreKey, status: 'done', deals, actionableCount, dropped: t.dropped.length, planned: extra.length });
+            })().catch(err => {
+                if (window.wrLog) window.wrLog('trade.finderShared', err);
+                if (live) setFinderShared({ key: finderScoreKey, status: 'fallback', deals: [], actionableCount: 0, dropped: 0, planned: 0 });
+            });
+            return () => { live = false; };
+        }, [finderScoreKey]);
+        const finderSharedOn = finderShared.key === finderScoreKey && finderShared.status === 'done';
+        const finderLegacy = finderShared.key === finderScoreKey && finderShared.status === 'fallback' ? finderLegacyList(finderCandidates) : null;
+        // Scanning the league or scoring the candidates: nothing lists yet,
+        // so no package shows on the old math first.
+        const finderScoring = finderActive && !finderSharedOn && !finderLegacy;
+        const finderDeals = finderSharedOn ? finderShared.deals : finderLegacy ? finderLegacy.deals : [];
+        const finderActionable = finderSharedOn ? finderShared.deals.slice(0, finderShared.actionableCount) : finderLegacy ? finderLegacy.actionable : [];
         const finderMoonshotCount = Math.max(0, finderDeals.length - finderActionable.length);
+        const finderRuledOut = finderSharedOn ? finderShared.dropped : 0;
         // LAB (owner report 2026-09-05): every actionable package renders — the
         // old top-8 cap made "14 actionable" a lie you couldn't scroll to.
         // b105: moonshots render too unless the owner hides them.
         const finderVisibleDeals = showAllDeals ? finderDeals : finderActionable;
         // Alex rec feed — once per finder-result change (pooled scans publish on
         // completion with partner:null), never as a render side effect.
-        const finderPublishKey = finderActive && (!finderPoolOn || finderPool.done)
+        const finderPublishKey = finderActive && !finderScoring
             ? JSON.stringify([finderPoolOn ? null : (selectedPartner?.ownerName || null), finderActionable.map(d => d.id), finderMoonshotCount])
             : null;
         useEffect(() => {
@@ -4614,11 +4797,13 @@
                             </div>
                         ) : <div className="tc-dhq-empty">No tradeable assets to browse for this scope.</div>)}
 
-                        {deals.length
-                            ? <div className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'}${showAllDeals ? '' : ' hidden'}` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
-                            : finderPoolOn && !finderPool.done
-                                ? <div className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
-                                : <div className="tc-dhq-empty">No package found for this intent. Try another partner chip, clear the focus, or open the builder below.</div>}
+                        {finderScoring
+                            ? (finderPoolOn && !finderPool.done
+                                ? <div className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — then every package is checked against the trade rules before it lists.</div>
+                                : <div className="tc-dhq-package-note"><b>Checking</b> each package against the trade rules (ownership, headliner, what the partner wants)…</div>)
+                            : deals.length
+                            ? <div className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'}${showAllDeals ? '' : ' hidden'}` : ''}{finderRuledOut ? ` · ${finderRuledOut} ruled out by the trade rules` : ''}</div>
+                            : <div className="tc-dhq-empty">{finderRuledOut ? `No package passes the trade rules (${finderRuledOut} ruled out). ` : 'No package found for this intent. '}Try another partner chip, clear the focus, or open the builder below.</div>}
                     </div>
                 </section>
 
@@ -5939,14 +6124,14 @@
                         {pillsEl}
                         {finderPanelEl}
                         {_pro && rosterState.isUsable && (
-                            finderDeals.length
+                            finderScoring
+                                ? <div style={{ fontFamily: MONO, fontSize: MICRO, color: 'var(--silver)', opacity: 0.7 }}>{finderPoolOn && !finderPool.done ? `Scanning partner ${finderPool.scanned}/${finderPool.total} — then each package is checked against the trade rules.` : 'Checking each package against the trade rules…'}</div>
+                                : finderDeals.length
                                 ? <React.Fragment>
                                     {goldDiv('Finder rows', finderPoolOn ? 'league-wide' : (selectedPartner ? 'vs ' + selectedPartner.ownerName : null))}
-                                    <div style={{ fontFamily: MONO, fontSize: MICRO, color: 'var(--silver)', opacity: 0.7 }}>{finderActionable.length} actionable · {finderMoonshotCount} moonshot{finderMoonshotCount === 1 ? '' : 's'}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
+                                    <div style={{ fontFamily: MONO, fontSize: MICRO, color: 'var(--silver)', opacity: 0.7 }}>{finderActionable.length} actionable · {finderMoonshotCount} moonshot{finderMoonshotCount === 1 ? '' : 's'}{finderRuledOut ? ` · ${finderRuledOut} ruled out` : ''}</div>
                                 </React.Fragment>
-                                : (finderPoolOn && !finderPool.done
-                                    ? <div style={{ fontFamily: MONO, fontSize: MICRO, color: 'var(--silver)', opacity: 0.7 }}>Scanning partner {finderPool.scanned}/{finderPool.total} — moves appear as the league scan runs.</div>
-                                    : <div className="tc-dhq-empty">No package found for this intent — change the partner or focus in the finder controls.</div>)
+                                : <div className="tc-dhq-empty">{finderRuledOut ? `No package passes the trade rules (${finderRuledOut} ruled out) — ` : 'No package found for this intent — '}change the partner or focus in the finder controls.</div>
                         )}
                         {_pro && rosterState.isUsable && finderVisibleDeals.map(phDealCard)}
                         {_pro && rosterState.isUsable && finderMoonshotCount > 0 && (
