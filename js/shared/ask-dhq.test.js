@@ -279,3 +279,30 @@ test('guests are guests; signed-out counts as a guest for AI', () => {
     assert.equal(typeof A.membersOnly, 'function');
     assert.equal(typeof A.openKeySetup, 'function');
 });
+
+test('answer check: a league player named with no lookup behind him is flagged', async () => {
+    const saved = App.AskTools;
+    App.AskTools = undefined;
+    let issues = await A._checkAnswer('Start Jonathan Taylor over Courtland Sutton.', ['{"player":"Jonathan Taylor","proj":22.6}'], 'who do I start?');
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /Courtland Sutton/);
+    assert.doesNotMatch(issues[0], /Jonathan Taylor/);
+    issues = await A._checkAnswer('Start Jonathan Taylor.', ['{"player":"Jonathan Taylor"}'], 'q');
+    assert.deepEqual(issues, []);
+    // Named in the question counts as known.
+    issues = await A._checkAnswer('Courtland Sutton sits.', [], 'Should I start Courtland Sutton?');
+    assert.deepEqual(issues, []);
+    App.AskTools = saved;
+});
+
+test('answer check: offering a pick the member does not own is flagged; owned picks pass', async () => {
+    const saved = App.AskTools;
+    App.AskTools = { run: async (name, a) => (name === 'get_draft_info' ? { picks: { team: a.team, picks: [{ pick: '2029 1st' }, { pick: '2027 2nd (from TWhy123)' }] } } : {}) };
+    let issues = await A._checkAnswer('Offer your 2027 1st and Courtland Sutton.', ['Courtland Sutton'], 'q');
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /does not own 2027 1st/);
+    assert.match(issues[0], /2029 1st, 2027 2nd/);
+    issues = await A._checkAnswer('Offer your 2029 1st and your 2027 2nd.', [], 'q');
+    assert.deepEqual(issues, []);
+    App.AskTools = saved;
+});

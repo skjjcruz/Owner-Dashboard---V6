@@ -291,7 +291,7 @@
             .sort((a, b) => dhq(b) - dhq(a)).slice(0, 5);
         if (!pool.length) return { intent: 'waivers', title: 'Waivers', text: 'Nothing worth a claim at ' + (want.join('/') || 'that spot') + ' right now.', lines: [], players: [], facts: {} };
         const lines = pool.map(pid => { const w = weekPts(pid); return pname(pid) + ' · ' + ppos(pid) + ' ' + (pl(pid).team || 'FA') + ' · DHQ ' + dhq(pid) + (w.pts != null && w.kind === 'proj' ? ' · ' + f1(w.pts) + ' this week' : '') + (injury(pid) ? ' · ' + injury(pid) : ''); });
-        const text = 'Best available' + (want.length ? ' at ' + want.join('/') : '') + ': ' + pname(pool[0]) + ' (DHQ ' + dhq(pool[0]) + ').' + (mine && mine.faabRemaining != null ? ' You have $' + mine.faabRemaining + ' FAAB left; Free Agency has the bid model.' : '');
+        const text = 'Best available' + (want.length ? ' at ' + want.join('/') : '') + ': ' + pname(pool[0]) + ' (DHQ ' + dhq(pool[0]) + ').' + (mine && mine.faabRemaining != null ? ' You have $' + mine.faabRemaining + ' FAAB left.' : '');
         return { intent: 'waivers', title: 'Waivers', text, lines, players: pool, facts: { want } };
     }
     function help(unmatched) {
@@ -452,7 +452,11 @@
         'For the NFL beyond this league (breaking news, injuries, depth charts, coaching, trades, schedules) use web search when you have it and name the outlet in a few words.',
         'Never tell the member to check another app or site or to paste anything in: look it up. You can\'t make moves for them; tell them exactly what to do.',
         'The league\'s trade block (what owners listed in Sleeper) is a lookup: use it for anything about who\'s for sale, and check it before suggesting a trade, since a listed player is easier to get. Pending trade offers and league chat are private to Sleeper; if asked, say so in one short line and give the closest real answer (the trade block, likely sellers from the trade-partner, team and owner lookups).',
-        'Two kinds of numbers: "value" is long-term dynasty trade value (about 7,000+ elite, 3,000+ solid starter, under 1,000 depth); this week\'s projections and points are for lineup calls. Don\'t mix them. A player whose game has started is locked.',
+        'Two kinds of numbers: "value" is long-term dynasty trade value (about 7,000+ elite, 4,000+ starter, 2,000+ depth, below that a stash); this week\'s projections and points are for lineup calls. Don\'t mix them. A player whose game has started is locked.',
+        // Decision playbooks (owner ask 2026-10-10): every recommendation
+        // starts from the one lookup built for it, so the reasoning is the
+        // same every time and the AI never rebuilds a call from raw numbers.
+        'Decisions start from the lookup built for them, then you add judgment and news:\n- Trades (should I trade, what would it take, who sells X, is this fair): trade_plan first. Lead with its decision and price floor; only offer what is in my_assets; never offer anything in do_not_offer. Use evaluate_trade to grade one exact deal the member names.\n- Start/sit and lineups: get_start_sit. Lead with the changes and points gained. A close call is a close call: say so and give the tiebreak (higher floor when they\'re favored, higher ceiling when they\'re the underdog). Never start someone out, on bye or on IR; flag late-game questionable players with the pivot.\n- Waivers and FAAB: get_waiver_plan. Every add comes with the drop; give an opening bid and a max, sized to their FAAB left and the weeks remaining. Only players at positions this league can start.\n- Roster cuts, IR and taxi: roster_plan. Never cut an injured star stash, a handcuff to their own starter or a young riser just because his number is low right now; say why each cut is safe.\nIf a decision lookup says it can\'t decide (missing data), say what\'s missing in one line and give your best read, labeled as a read.',
         'Think like a real dynasty GM, not a calculator (owner ruling 2026-10-10). Every trade has two owners, and a deal only happens if it makes sense for THEM. Before you suggest or price any trade: look up the other owner (owner profile: what they\'re doing right now and why, from their record, this season\'s trades and their trade block) and their team, then grade the deal and read partner_view. Build the offer around what that owner wants:',
         '- A rebuilding owner (losing, selling veterans for picks, starters on the block) wants draft picks and young, rising players. Veterans past their peak (RB about 27+, WR 29+, TE 30+, QB 33+) are close to worthless to them however well they score this week; never build an offer to a rebuilder out of them. Lead with picks and youth, and remember a seller usually takes less than full value for the veterans they listed.\n- A contending owner wants proven starters who score now and help at their weak spots; picks and long-term projects matter less to them, and they\'ll pay for a veteran who wins games.\n- Value totals that match are not a deal. If what they get isn\'t what they want, say so plainly and rebuild the offer. Use the member\'s own window too: a contender buying from a rebuilder pays in picks and youth they can spare.',
         'Quality over quantity: two or three lesser pieces never buy one star. An owner listing a young starter wants one real headline piece back: a 1st-round pick, or a young player close to his value. A young, front-line starting QB costs a 1st-round pick at minimum, more in superflex and 2QB leagues. Lead every offer for a young starter with that headliner, then balance with smaller pieces (grade the deal and read its headliner check). Paying the headliner for a young starter is the going rate, not an overpay; don\'t try to claw a small value gap back. If a deal does need balancing, a rebuilding seller NEVER gives picks back: they balance by adding a veteran they want gone (their trade block first; the grade lists options). A contender balances with picks or depth. Only offer picks and players the member actually owns: check their picks (draft lookup) before naming one, and remember a rebuilder values a pick next year more than one three years out.',
@@ -465,9 +469,49 @@
         let today = ''; try { today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { /* plain */ }
         return 'Today is ' + today + '. League: ' + ((lg && lg.name) || 'unknown') + ' (' + ((H && H.platform()) || 'sleeper') + ', season ' + ((H && H.season()) || '?') + ', NFL week ' + (wk || '?') + ', ' + rosters().length + ' teams). The member is ' + (me ? teamName(me) : 'not on a team here') + '.';
     }
-    const TOOL_WORDS = { get_team: 'roster', get_matchup: 'matchup', get_lineup_advice: 'lineup', get_league_info: 'league rules', get_standings: 'standings', get_schedule: 'schedule', get_playoff_odds: 'playoff odds', get_league_history: 'league history', get_head_to_head: 'head-to-head', get_player: 'player', compare_players: 'players', search_players: 'player rankings', get_waiver_report: 'waiver wire', get_waiver_bid: 'FAAB', get_news: 'news', get_transactions: 'transactions', evaluate_trade: 'trade', find_trade_partners: 'trade partners', get_owner_profile: 'owner', get_draft_info: 'draft', get_luck: 'luck', get_trade_block: 'trade block' };
+    const TOOL_WORDS = { get_team: 'roster', get_matchup: 'matchup', get_lineup_advice: 'lineup', get_league_info: 'league rules', get_standings: 'standings', get_schedule: 'schedule', get_playoff_odds: 'playoff odds', get_league_history: 'league history', get_head_to_head: 'head-to-head', get_player: 'player', compare_players: 'players', search_players: 'player rankings', get_waiver_report: 'waiver wire', get_waiver_bid: 'FAAB', get_news: 'news', get_transactions: 'transactions', evaluate_trade: 'trade', find_trade_partners: 'trade partners', get_owner_profile: 'owner', get_draft_info: 'draft', get_trade_block: 'trade block', trade_plan: 'trade plan', get_start_sit: 'start/sit', get_waiver_plan: 'waiver plan', roster_plan: 'roster plan' };
     const MAX_STEPS = 8;
-    const clip = o => { let s = ''; try { s = JSON.stringify(o); } catch (e) { s = '{"error":"unreadable"}'; } return s.length > 24000 ? s.slice(0, 24000) + '…(trimmed)' : s; };
+    // ── The answer check (owner ask 2026-10-10: "logical, informed, common
+    // sense recommendations") ─────────────────────────────────────
+    // Before the member reads an answer, check it against what the lookups
+    // actually returned this turn. Two hard rules a wrong answer breaks:
+    // a league player named with no lookup behind him, and a draft pick
+    // offered that the member doesn't own. One repair round, then it ships.
+    async function checkAnswer(text, ledger, question) {
+        const issues = [];
+        const said = ' ' + norm(text) + ' ';
+        const known = norm(ledger.join(' ') + ' ' + question + ' ' + chat.map(t => t.q + ' ' + t.a).join(' '));
+        const rostered = new Set(rosters().flatMap(r => (r.players || []).map(String)));
+        const unseen = [];
+        for (const pid of rostered) {
+            const n = norm(pname(pid));
+            if (n.length < 5 || !n.includes(' ') || said.indexOf(' ' + n + ' ') < 0) continue;
+            if (known.indexOf(n) < 0) unseen.push(pname(pid));
+        }
+        if (unseen.length) issues.push('You named ' + unseen.slice(0, 6).join(', ') + ' but nothing you looked up this turn mentions ' + (unseen.length > 1 ? 'them' : 'him') + '. Look ' + (unseen.length > 1 ? 'them' : 'him') + ' up before using any number, role or roster spot, or leave ' + (unseen.length > 1 ? 'them' : 'him') + ' out.');
+        // Picks the answer tells the member to give.
+        const offers = [...String(text).matchAll(/\b(20\d\d)\s*(1st|2nd|3rd|4th|5th|first|second|third|fourth|fifth)\b/gi)];
+        if (offers.length && /\b(offer|give|send|package|throw in|add)\b/i.test(text) && App.AskTools) {
+            const me = myRoster();
+            try {
+                const r = me ? await App.AskTools.run('get_draft_info', { team: teamName(me), section: 'picks' }) : null;
+                const picks = r && r.picks && Array.isArray(r.picks.picks) ? r.picks.picks.map(x => String(x.pick || '')) : null;
+                if (picks) {
+                    const words = { first: '1st', second: '2nd', third: '3rd', fourth: '4th', fifth: '5th' };
+                    const owned = new Set(picks.map(p => (p.match(/^(20\d\d)\s+(\d\w\w)/) || []).slice(1).join(' ')).filter(Boolean));
+                    const bad = [...new Set(offers.map(m => m[1] + ' ' + (words[m[2].toLowerCase()] || m[2].toLowerCase())))].filter(p => !owned.has(p));
+                    // Only flag a pick the answer puts on the member's side: a pick
+                    // they'd receive is fine. Mention + not owned + "you/your" near it.
+                    const mineSide = bad.filter(p => new RegExp('(your|you|offer|give|send)[^.?!]{0,60}' + p.replace(' ', '\\s*'), 'i').test(text));
+                    if (mineSide.length) ledger.push('member picks: ' + picks.join(', '));
+                    if (mineSide.length) issues.push('The member does not own ' + mineSide.join(', ') + '. Their picks are: ' + (picks.join(', ') || 'none') + '. Rebuild any offer from picks and players they actually own.');
+                }
+            } catch (e) { /* no pick data: skip this check */ }
+        }
+        return issues;
+    }
+    const repairNote = issues => 'Before this goes to the member, fix these and send the full corrected answer (same voice, don\'t mention this check):\n- ' + issues.join('\n- ');
+    const clip = o =>{ let s = ''; try { s = JSON.stringify(o); } catch (e) { s = '{"error":"unreadable"}'; } return s.length > 24000 ? s.slice(0, 24000) + '…(trimmed)' : s; };
     const chat = [];
     const CHAT_TURNS = 6;
     async function askWithKey(question, onStep) {
@@ -479,13 +523,27 @@
         const defs = T ? T.defs() : [];
         const system = PERSONA + '\n\n' + header();
         const model = PROVIDERS[k.provider].model;
+        // Trades and cuts get more thinking: they're the calls members act on
+        // and can't undo.
+        const deep = /\b(trade|offer|deal|sell|buy|package|cut|drop|release|waive)\b/i.test(question);
         const ctl = root.AbortController ? new root.AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), 120000) : null;
         const signal = ctl && ctl.signal;
         const used = [];
         let sources = [], noSearch = false;
         const step = name => { used.push(name); if (onStep) onStep(TOOL_WORDS[name] || name.replace(/^get_/, '').replace(/_/g, ' ')); };
-        const runTool = async (name, args) => { step(name); return T ? T.run(name, args) : { error: 'Lookups are not available.' }; };
+        const ledger = [];
+        const runTool = async (name, args) => { step(name); const r = T ? await T.run(name, args) : { error: 'Lookups are not available.' }; ledger.push(clip(r)); return r; };
+        // One repair round when the answer check finds a problem: the AI
+        // gets three more steps to look things up and fix it.
+        let repaired = false, limit = MAX_STEPS;
+        const needsRepair = async t => {
+            if (repaired || !String(t || '').trim()) return null;
+            const issues = await checkAnswer(t, ledger, question).catch(() => []);
+            if (!issues.length) return null;
+            repaired = true; limit += 3; step('double-check');
+            return repairNote(issues);
+        };
         const fail = (r, j) => {
             const detail = (j && j.error && (j.error.message || (typeof j.error === 'string' ? j.error : ''))) || '';
             // Owner test 2026-10-09: only a 401 means the key itself is bad.
@@ -501,20 +559,25 @@
                 const search = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }];
                 const messages = chat.flatMap(t => [{ role: 'user', content: t.q }, { role: 'assistant', content: t.a }]).concat([{ role: 'user', content: question }]);
                 let withSearch = true;
-                for (let i = 0; i <= MAX_STEPS; i++) {
-                    const body = { model, max_tokens: 4000, output_config: { effort: 'low' }, system, messages, tools: withSearch ? tools.concat(search) : tools };
-                    if (i === MAX_STEPS) delete body.tools;   // last round: answer with what you have
+                for (let i = 0; i <= limit; i++) {
+                    const body = { model, max_tokens: 6000, output_config: { effort: deep ? 'medium' : 'low' }, system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }], messages, tools: withSearch ? tools.concat(search) : tools };
+                    if (i === limit) delete body.tools;   // last round: answer with what you have
                     let r = await post('https://api.anthropic.com/v1/messages', H, body);
                     let j = await r.json().catch(() => ({}));
                     // Web search not allowed on this account: carry on without it.
                     if (!r.ok && r.status === 400 && withSearch && /web.?search|tool/i.test(JSON.stringify(j))) { withSearch = false; noSearch = true; i--; continue; }
                     if (!r.ok) return fail(r, j);
                     const blocks = j.content || [];
-                    blocks.forEach(c => { if (c.type === 'web_search_tool_result' && Array.isArray(c.content)) c.content.forEach(x => x.url && sources.push({ url: x.url, title: x.title })); if (c.type === 'server_tool_use') step('web search'); });
+                    blocks.forEach(c => { if (c.type === 'web_search_tool_result' && Array.isArray(c.content)) c.content.forEach(x => { if (x.url) sources.push({ url: x.url, title: x.title }); if (x.title) ledger.push(x.title); }); if (c.type === 'server_tool_use') step('web search'); });
                     messages.push({ role: 'assistant', content: blocks });
                     if (j.stop_reason === 'pause_turn') continue;
                     const calls = blocks.filter(c => c.type === 'tool_use');
-                    if (j.stop_reason !== 'tool_use' || !calls.length) { text = blocks.filter(c => c.type === 'text').map(c => c.text || '').join(''); break; }
+                    if (j.stop_reason !== 'tool_use' || !calls.length) {
+                        text = blocks.filter(c => c.type === 'text').map(c => c.text || '').join('');
+                        const fix = await needsRepair(text);
+                        if (fix) { messages.push({ role: 'user', content: fix }); continue; }
+                        break;
+                    }
                     const results = await Promise.all(calls.map(async c => ({ type: 'tool_result', tool_use_id: c.id, content: clip(await runTool(c.name, c.input)) })));
                     messages.push({ role: 'user', content: results });
                 }
@@ -532,11 +595,13 @@
                     const j = await r.json().catch(() => ({}));
                     const cand = (j.candidates || [])[0] || {};
                     (((cand.groundingMetadata || {}).groundingChunks) || []).forEach(g => g.web && g.web.uri && sources.push({ url: g.web.uri, title: g.web.title }));
-                    return r.ok ? { summary: ((cand.content || {}).parts || []).map(p => p.text || '').join('') } : { error: 'search unavailable' };
+                    const summary = ((cand.content || {}).parts || []).map(p => p.text || '').join('');
+                    if (r.ok) ledger.push(summary);
+                    return r.ok ? { summary } : { error: 'search unavailable' };
                 };
-                for (let i = 0; i <= MAX_STEPS; i++) {
+                for (let i = 0; i <= limit; i++) {
                     const body = { systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { maxOutputTokens: 4000 } };
-                    if (i < MAX_STEPS) body.tools = [{ functionDeclarations: decl }];
+                    if (i < limit) body.tools = [{ functionDeclarations: decl }];
                     const r = await post(url, H, body);
                     const j = await r.json().catch(() => ({}));
                     if (!r.ok) return fail(r, j);
@@ -544,7 +609,12 @@
                     const parts = content.parts || [];
                     contents.push({ role: 'model', parts });
                     const calls = parts.filter(p => p.functionCall);
-                    if (!calls.length) { text = parts.map(p => p.text || '').join(''); break; }
+                    if (!calls.length) {
+                        text = parts.map(p => p.text || '').join('');
+                        const fix = await needsRepair(text);
+                        if (fix) { contents.push({ role: 'user', parts: [{ text: fix }] }); continue; }
+                        break;
+                    }
                     const replies = await Promise.all(calls.map(async p => ({ functionResponse: { name: p.functionCall.name, response: { result: p.functionCall.name === 'web_search' ? await googleSearch((p.functionCall.args || {}).query || '') : JSON.parse(clip(await runTool(p.functionCall.name, p.functionCall.args || {}))) } } })));
                     contents.push({ role: 'user', parts: replies });
                 }
@@ -553,18 +623,23 @@
                 const tools = defs.map(d => ({ type: 'function', name: d.name, description: d.description, parameters: d.parameters }));
                 let input = chat.flatMap(t => [{ role: 'user', content: t.q }, { role: 'assistant', content: t.a }]).concat([{ role: 'user', content: question }]);
                 let prev = null, withSearch = true;
-                for (let i = 0; i <= MAX_STEPS; i++) {
+                for (let i = 0; i <= limit; i++) {
                     const body = { model, instructions: system, input, max_output_tokens: 4000 };
                     if (prev) body.previous_response_id = prev;
-                    if (i < MAX_STEPS) body.tools = withSearch ? tools.concat([{ type: 'web_search' }]) : tools;
+                    if (i < limit) body.tools = withSearch ? tools.concat([{ type: 'web_search' }]) : tools;
                     const r = await post('https://api.openai.com/v1/responses', H, body);
                     const j = await r.json().catch(() => ({}));
                     if (!r.ok && r.status === 400 && withSearch && /web_search/i.test(JSON.stringify(j))) { withSearch = false; noSearch = true; i--; continue; }
                     if (!r.ok) return fail(r, j);
                     const out = j.output || [];
-                    out.forEach(o => { if (o.type === 'web_search_call') step('web search'); (o.content || []).forEach(c => (c.annotations || []).forEach(a => a.url && sources.push({ url: a.url, title: a.title }))); });
+                    out.forEach(o => { if (o.type === 'web_search_call') step('web search'); (o.content || []).forEach(c => (c.annotations || []).forEach(a => { if (a.url) sources.push({ url: a.url, title: a.title }); if (a.title) ledger.push(a.title); })); });
                     const calls = out.filter(o => o.type === 'function_call');
-                    if (!calls.length) { text = typeof j.output_text === 'string' && j.output_text ? j.output_text : out.flatMap(o => (o.content || []).filter(c => c.type === 'output_text').map(c => c.text || '')).join(''); break; }
+                    if (!calls.length) {
+                        text = typeof j.output_text === 'string' && j.output_text ? j.output_text : out.flatMap(o => (o.content || []).filter(c => c.type === 'output_text').map(c => c.text || '')).join('');
+                        const fix = await needsRepair(text);
+                        if (fix) { prev = j.id; input = [{ role: 'user', content: fix }]; continue; }
+                        break;
+                    }
                     prev = j.id;
                     input = await Promise.all(calls.map(async c => { let args = {}; try { args = JSON.parse(c.arguments || '{}'); } catch (e) { /* none */ } return { type: 'function_call_output', call_id: c.call_id, output: clip(await runTool(c.name, args)) }; }));
                 }
@@ -941,7 +1016,7 @@
         }, 1500);
     }
 
-    App.AskDHQ = App.AskDHQ || { isMember, isGuest, membersOnly, openKeySetup, answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help };
+    App.AskDHQ = App.AskDHQ || { isMember, isGuest, membersOnly, openKeySetup, answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help, _checkAnswer: checkAnswer };
     // Every AI request in the app funnels through OD.callAI or callClaude.
     // For a guest, one the guest started with a tap shows the members-only
     // card; background ones fail quietly as before. Members are untouched.

@@ -1,7 +1,7 @@
 // Ask-your-AI coverage check (owner ruling 2026-10-10): opens a real league
 // in the live Lab as a guest and runs every lookup the member's AI can use.
 // Needs playwright-core (NODE_PATH) and the pre-installed Chromium.
-//   NODE_PATH=<dir with playwright-core>/node_modules node scripts/ask-coverage.cjs
+//   LAB_KEY=<lab gate key> NODE_PATH=<dir with playwright-core>/node_modules node scripts/ask-coverage.cjs
 // Coverage check: open a real league in the Lab as a guest and run every AI
 // lookup with real arguments. Prints ok/empty/error per call.
 const { chromium } = require('playwright-core');
@@ -19,7 +19,7 @@ const CALLS = [
 (async () => {
   const b = await chromium.launch({ args: ['--ignore-certificate-errors-spki-list=PS48cX347wDVcRynzq+DFqswl2PLNE1sG6uQvxMCOS0='], executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const c = await b.newContext({ viewport: { width: 1440, height: 900 } });
-  await c.addInitScript(() => { try { localStorage.setItem('dhq_lab_key_v2', 'd017d4b5086e39a4f4b065301f1e6eefac302734df8b82fa196a6d588637b6bd'); } catch (e) {} });
+  await c.addInitScript(k => { try { if (k) localStorage.setItem('dhq_lab_key_v2', k); } catch (e) {} }, process.env.LAB_KEY || '');
   const p = await c.newPage();
   const errs = []; p.on('pageerror', e => errs.push(String(e.message).slice(0, 160)));
   await p.goto('https://skjjcruz.github.io/DHQ-Web-Page/', { waitUntil: 'domcontentloaded' });
