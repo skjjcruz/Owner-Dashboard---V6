@@ -546,7 +546,8 @@
             let headliner = null;
             if (anchors.length) {
                 const top = anchors.sort((x, y) => y.value - x.value)[0];
-                const firsts = give.filter(x => x.kind === 'pick' && x.round === 1);
+                // Only 1sts the member actually owns count.
+                const firsts = give.filter(x => x.kind === 'pick' && x.round === 1 && (x.holder == null || String(x.holder) === String(me.roster_id)));
                 const bigPlayer = give.filter(x => x.kind === 'player').sort((x, y) => y.value - x.value)[0];
                 const qb = top.pos === 'QB';
                 const needFirsts = qb && sfLeague && top.value >= 5000 ? 2 : 1;
