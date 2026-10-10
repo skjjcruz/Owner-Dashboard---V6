@@ -126,9 +126,15 @@ test('scenario 7–9: Hendrickson (out), Fitzgerald (bye), Carr (no team) never 
     await boot();
     const out = await T.run('get_start_sit', {});
     const why = n => (out.do_not_start.find(x => x.player === n) || {}).reason;
-    assert.equal(why('Trey Hendrickson'), 'out');
-    assert.equal(why('Ryan Fitzgerald'), 'bye', 'a bye, not a low projection');
-    assert.equal(why('Derek Carr'), 'no NFL team');
+    // Owner test 2026-10-10: they're already on the bench, so they're not
+    // listed ("bench Carr and Hendrickson" was noise)...
+    for (const n of ['Trey Hendrickson', 'Ryan Fitzgerald', 'Derek Carr']) assert.equal(why(n), undefined, n);
+    // ...but asked about by name, each one says why he sits.
+    const asked = await T.run('get_start_sit', { players: ['Trey Hendrickson', 'Ryan Fitzgerald', 'Derek Carr'] });
+    const why2 = n => (asked.do_not_start.find(x => x.player === n) || {}).reason;
+    assert.equal(why2('Trey Hendrickson'), 'out');
+    assert.equal(why2('Ryan Fitzgerald'), 'bye', 'a bye, not a low projection');
+    assert.equal(why2('Derek Carr'), 'no NFL team');
     assert.ok(why('George Pickens') == null, 'a locked STARTER is not a do-not-start');
     const lineup = out.optimal_lineup.map(x => x.player);
     for (const n of ['Trey Hendrickson', 'Ryan Fitzgerald', 'Derek Carr', 'Will Levis']) assert.ok(!lineup.includes(n), n);
@@ -267,7 +273,7 @@ test('a sit who is out is never a coin flip, and locks not loaded means low conf
 test('a locked player is never moved, even if handed a swap', () => {
     const out = call(base({ a: P('Bench Lock', 20, { locked: true }), b: P('Starter', 5, { roster_slot: 'starter' }) }));
     assert.equal(out.changes.length, 0);
-    assert.deepEqual(out.do_not_start, [{ player: 'Bench Lock', reason: 'locked: his game has started, he can\'t come off the bench' }]);
+    assert.deepEqual(out.do_not_start, [], 'a benched player is already benched: nothing to say');
 });
 
 test('swaps chain through a starter who only changes slots', () => {
