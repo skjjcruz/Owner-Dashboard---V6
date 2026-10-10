@@ -551,6 +551,114 @@
         }
         return { week: Number(wk), byRoster, myWinPct, stamp: stamp() };
     }
+    // ── Weeks ahead on DHQ's numbers (owner ruling 2026-10-10) ────────
+    // "Our weekly projections should be based on DHQ scoring": the season
+    // schedule, projected record and playoff odds used Sleeper-based season
+    // averages for every week after this one (a flat 261.7 a week against
+    // DHQ's 236.9 this week). The same engine now projects any later week:
+    // that week's opponent, Vegas line when posted, byes, form from the
+    // completed weeks. Short injury tags (questionable, doubtful) don't carry
+    // past next week; out carries one week; IR, PUP and suspensions carry.
+    // Both sides play their best lineup (later lineups aren't set yet).
+    const fut = { key: '', weeks: {} };
+    function wppFor(shared, lg) {
+        if (!shared.wpp[lg.id] && App.calcRawPts) {
+            const wpp = {};
+            shared.weekly.forEach(({ week: w, rows }) => { const m = wpp[w] = {}; Object.keys(rows).forEach(pid => { if (pid.indexOf('TEAM_') !== 0 && rows[pid]) m[pid] = +App.calcRawPts(rows[pid], lg.scoring).toFixed(2); }); });
+            shared.wpp[lg.id] = wpp;
+        }
+        return shared.wpp[lg.id] || null;
+    }
+    async function projectWeek(pids, wk) {
+        const lg = league(), cur = week();
+        wk = Number(wk);
+        if (!lg || !cur || !(wk > cur)) return {};
+        await loadDeps();
+        const MI = App.MatchupInputs;
+        if (!MI || !MI.prepare || !MI.project) return {};
+        const k = lg.id + '|' + cur;
+        if (fut.key !== k) { fut.key = k; fut.weeks = {}; }
+        const yr = season();
+        const W = fut.weeks[wk] = fut.weeks[wk] || { results: {}, ready: null };
+        if (!W.ready) {
+            W.ready = (async () => {
+                const shared = await sharedFor(yr, cur);
+                const players = {};
+                const LONG = /^(IR|PUP|SUS|NFI|COV|NA|INJURED RESERVE|SUSPENDED)/i;
+                Object.keys(shared.players).forEach(pid => {
+                    const p = shared.players[pid];
+                    const tag = p && String(p.injury_status || '');
+                    const keep = !tag || LONG.test(tag) || (/^out$/i.test(tag) && wk === cur + 1);
+                    players[pid] = keep ? p : Object.assign({}, p, { injury_status: null });
+                });
+                const opts = { playersData: players, statsData: shared.statsCur, priorData: shared.statsPrior, scoring: lg.scoring, season: yr, baselineMode: 'dhq', weeklyPoints: wppFor(shared, lg) };
+                try { if (App.NflContext && App.NflContext.load) await App.NflContext.load([wk], yr); } catch (e) { /* neutral */ }
+                const teams = [...new Set(Object.values(players).map(p => p && p.team).filter(Boolean))];
+                const ctx = await MI.prepare(teams, wk, opts);
+                // Form comes from the completed weeks, not the ones in between.
+                if (st.ctx && st.ctx.recentWeeks && st.ctx.recentWeeks.length) {
+                    const have = new Set((ctx.recentWeeks || []).map(x => x.week));
+                    ctx.recentWeeks = (ctx.recentWeeks || []).concat(st.ctx.recentWeeks.filter(x => !have.has(x.week)));
+                }
+                return { ctx, opts };
+            })();
+            W.ready.catch(() => { W.ready = null; });
+        }
+        const { ctx, opts } = await W.ready;
+        const out = {};
+        let n = 0;
+        for (const pid0 of (pids || [])) {
+            const pid = String(pid0 || '');
+            if (!pid) continue;
+            if (!(pid in W.results)) {
+                let res = null;
+                if (eligible(pid)) {
+                    try {
+                        const p = MI.project(pid, wk, opts, ctx);
+                        if (p && p.points && Number.isFinite(Number(p.points.median))) {
+                            const off = p.available === false;
+                            res = { median: off ? 0 : +Number(p.points.median).toFixed(1), mean: off ? 0 : +Number(p.points.mean != null ? p.points.mean : p.points.median).toFixed(1), floor: off ? 0 : +Number(p.points.floor || 0).toFixed(1), ceiling: off ? 0 : +Number(p.points.ceiling || 0).toFixed(1), why: whyText(p.why) };
+                        }
+                    } catch (e) { res = null; }
+                }
+                W.results[pid] = res;
+                if (++n % 25 === 0) await new Promise(r => setTimeout(r, 0));   // let the page breathe
+            }
+            out[pid] = W.results[pid];
+        }
+        return out;
+    }
+    // A roster's best lineup from a points map (no locks: the week hasn't started).
+    function optimalFrom(roster, rosterPositions, pts) {
+        const SS = App.StartSit;
+        if (!SS || !SS.optimalLineupWeekly || !roster) return null;
+        const skip = new Set([].concat(roster.reserve || [], roster.taxi || []).map(String));
+        const players = S().players || {};
+        const list = (roster.players || []).map(String).filter(pid => pid && !skip.has(pid)).map(pid => {
+            const r = pts[pid], p = players[pid] || {};
+            const pos = String((App.normPos && App.normPos(p.position)) || p.position || '').toUpperCase();
+            return { pid, pos, positions: (p.fantasy_positions || []).concat([pos]), available: avg(r) > 0, pts: avg(r) };
+        });
+        return SS.optimalLineupWeekly(list, rosterPositions || []);
+    }
+    // One later week's game on DHQ's numbers: { fc, mine, theirs } or null.
+    async function futureMatchup(myRoster, oppRoster, rosterPositions, wk) {
+        const M = App.Matchup;
+        if (!M || !M.dist || !M.forecast || !myRoster || !oppRoster) return null;
+        const pts = await projectWeek([].concat(myRoster.players || [], oppRoster.players || []), wk);
+        if (!Object.keys(pts).length) return null;
+        const a = optimalFrom(myRoster, rosterPositions, pts), b = optimalFrom(oppRoster, rosterPositions, pts);
+        if (!a || !b || !(a.total > 0) || !(b.total > 0)) return null;
+        const map = {};
+        Object.keys(pts).forEach(pid => {
+            const r = pts[pid]; if (!r) return;
+            const med = avg(r);
+            map[pid] = { available: med > 0, points: { median: med, floor: r.floor != null ? Number(r.floor) : med * 0.7, ceiling: r.ceiling != null ? Number(r.ceiling) : med * 1.35 } };
+        });
+        const ids = x => x.starters.map(s => String(s.pid)).filter(pid => map[pid]);
+        const fc = M.forecast(M.dist(ids(a), map, 'median'), M.dist(ids(b), map, 'median'));
+        return fc && fc.winPct != null ? { fc, mine: a, theirs: b } : null;
+    }
     // ── Putting a lineup into slots with the fewest moves ─────────────
     // The optimizer picks WHO starts; this decides WHERE, keeping every
     // starter who can stay in his current slot there (owner report
@@ -690,7 +798,7 @@
         root.addEventListener && root.addEventListener('wr:proj-updated', (e) => { if (!(e && e.detail && e.detail.source === 'dhq')) { loadPlatform(); setTimeout(warmLeague, 500); } });
     }
 
-    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, avgOf, ptsOf, dataStatus, cols: COLS, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
+    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, projectWeek, futureMatchup, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, avgOf, ptsOf, dataStatus, cols: COLS, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
     if (typeof document !== 'undefined') boot();
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.DhqProj;

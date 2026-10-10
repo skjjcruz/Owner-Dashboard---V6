@@ -17,7 +17,9 @@
 // DHQ's numbers (App.DhqProj.matchup: the lineup you have set against the
 // lineup they have set) once they are in, so the Season panel and the
 // This Week matchup box tell the same story (owner ruling 2026-09-24).
-// DHQ projects one week at a time; later weeks stay on Sleeper's lines.
+// Later weeks run on DHQ's engine too (App.DhqProj.futureMatchup: both
+// sides' best lineups for that week's opponents and byes); a week DHQ can't
+// price stays on Sleeper's lines.
 // Each row carries source: 'dhq' | 'sleeper'; completed weeks use actual scores when the
 // platform exposes them. Bye watch = which of the user's ideal starters are on
 // bye each week (+ whether a full lineup can still be fielded) — works with or
@@ -116,6 +118,20 @@
 
         let futureWins = 0, futureLosses = 0, futurePF = 0, winPctSum = 0, winPctCount = 0;
 
+        // Weeks after this one on DHQ's numbers too (owner ruling 2026-10-10:
+        // "our weekly projections should be based on DHQ scoring"); a week
+        // DHQ can't price falls back to Sleeper's lines below.
+        const dhqFuture = {};
+        if (D && D.futureMatchup) {
+            for (const w of weeks) {
+                const entry = oppMap[w];
+                const oppRoster = entry ? rostersById[String(entry.oppRosterId)] : null;
+                if (w <= curWk || !oppRoster) continue;
+                try { const fm = await D.futureMatchup(myRoster, oppRoster, league.roster_positions || [], w); if (fm && fm.fc) dhqFuture[w] = fm.fc; }
+                catch (e) { if (root.wrLog) root.wrLog('schedule.dhqFuture', e); }
+            }
+        }
+
         const rows = weeks.map(w => {
             const entry = oppMap[w];
             const noOpp = !entry;                                 // no matchup scheduled this week
@@ -139,13 +155,14 @@
                     result = entry.myPts > entry.oppPts ? 'W' : entry.myPts < entry.oppPts ? 'L' : 'T';
                     myProj = Math.round(entry.myPts * 10) / 10;
                     oppProj = Math.round(entry.oppPts * 10) / 10;
-                } else if (mine || (isCurrent && dhqOn)) {
+                } else if (mine || (isCurrent && dhqOn) || dhqFuture[w]) {
                     try {
                         let fc = null;
                         if (isCurrent && dhqOn) {
                             const dq = D.matchup(myStarters, oppRoster, league.roster_positions || []);
                             if (dq && dq.fc && dq.fc.winPct != null) { fc = dq.fc; source = 'dhq'; }
                         }
+                        if (!fc && dhqFuture[w]) { fc = dhqFuture[w]; source = 'dhq'; }
                         if (!fc && mine) {
                             const theirs = WP.optimalForRoster(oppRoster, league, { ...projOpts, week: w });
                             const myDist = M.dist(mine.optimal.starters.map(s => s.pid), mine.projections, 'median');
