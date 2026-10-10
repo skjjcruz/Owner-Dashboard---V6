@@ -168,49 +168,54 @@ test('the AI company is read from the key itself', () => {
     assert.equal(A.providerOf('hello'), null);
 });
 
-test('a saved key answers in the app; it goes only to its own AI company', async () => {
-    const seen = [];
+// Owner ruling 2026-10-10: no fixed bundle of facts, no pre-decided answer.
+// The member's AI looks things up through App.AskTools as it needs them.
+require('./ask-tools.js');
+
+test('each AI company gets the lookups, runs them, and answers in its own words', async () => {
     const realFetch = globalThis.fetch;
+    const seen = [];
+    let round = 0;
     globalThis.fetch = async (url, opts) => {
-        seen.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
-        if (/anthropic/.test(url)) return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: 'Start Sutton.' }] }) };
-        if (/googleapis/.test(url)) return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Start Sutton.' }] } }] }) };
-        return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'Start Sutton.' } }] }) };
+        const body = JSON.parse(opts.body); seen.push({ url, body }); round++;
+        const first = round % 2 === 1;
+        if (/anthropic/.test(url)) return { ok: true, status: 200, json: async () => first
+            ? { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'get_team', input: { team: 'me' } }] }
+            : { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Your squad is Dirty Mike, and Taylor carries it.' }] } };
+        if (/googleapis/.test(url)) return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: first ? [{ functionCall: { name: 'get_team', args: { team: 'me' } } }] : [{ text: 'Your squad is Dirty Mike, and Taylor carries it.' }] } }] }) };
+        return { ok: true, status: 200, json: async () => first
+            ? { id: 'r1', output: [{ type: 'function_call', call_id: 'c1', name: 'get_team', arguments: '{"team":"me"}' }] }
+            : { id: 'r2', output_text: 'Your squad is Dirty Mike, and Taylor carries it.', output: [] } };
     };
-    const ans = A.answer('Who should I start, Chig Okonkwo or Courtland Sutton?');
     for (const [key, host] of [['sk-ant-api03-abcdefghijklmnop', 'api.anthropic.com'], ['AIzaSyD-abcdefghijklmnopqrstu', 'generativelanguage.googleapis.com'], ['sk-proj-abcdefghijklmnopqrst', 'api.openai.com']]) {
         assert.ok(A.saveKey(key));
-        assert.equal(await A.brain(), 'key');
-        const r = await A.askWithKey('Who should I start?', ans);
-        assert.equal(r.ok, true); assert.equal(r.text, 'Start Sutton.');
-        const call = seen[seen.length - 1];
-        assert.ok(call.url.includes(host), call.url);
-        assert.ok(JSON.stringify(call.body).includes('Start Courtland Sutton over Chig Okonkwo'), 'DHQ\'s facts go with the question');
+        const steps = [];
+        const r = await A.askWithKey('How does my team look?', w => steps.push(w));
+        assert.equal(r.ok, true, JSON.stringify(r)); assert.match(r.text, /Taylor carries it/);
+        assert.deepEqual(r.used, ['get_team'], 'the AI chose to look up the team, and the app ran it');
+        assert.deepEqual(steps, ['roster']);
+        const last = seen[seen.length - 1];
+        assert.ok(last.url.includes(host), last.url);
+        const sent = JSON.stringify(last.body);
+        assert.match(sent, /Jonathan Taylor/, 'the lookup result went back to the AI');
+        assert.match(sent, /The Psycho League/, 'it knows which league');
+        assert.ok(!/Recommendation:/.test(sent), 'no pre-decided answer is pushed on it');
+        A.forgetKey();
     }
     assert.ok(seen.every(c => !/dhqfootball|supabase|sleeper/.test(c.url)), 'the key never goes anywhere but the AI company');
-    // Owner ask 2026-10-09: up-to-date news. Every company gets its own web search tool.
-    assert.ok(seen.every(c => Array.isArray(c.body.tools) && c.body.tools.length === 1), 'web search goes with each question');
-    assert.ok(seen.some(c => /\/v1\/responses$/.test(c.url)), 'OpenAI asks through the API that can search');
-    // Owner ask 2026-10-09: the AI answers in its own voice, never "DHQ's call".
-    assert.ok(seen.every(c => !/\bDHQ\b/.test(JSON.stringify((c.body.messages || c.body.contents || c.body.input).filter(m => m.role !== 'system')))), 'nothing sent asks the AI to talk about DHQ');
     globalThis.fetch = realFetch;
 });
 
-test('owner test 2026-10-09: plural "waivers" is a waiver question, and the AI gets the whole league', async () => {
+test('follow-ups carry the conversation; "waivers" still reads as a waiver question', async () => {
     assert.equal(A.intentOf("Who's the best RB available on waivers", []), 'waivers');
-    assert.equal(A.intentOf('Who the best waiver wire RB available', []), 'waivers');
     const realFetch = globalThis.fetch; let body = null;
-    globalThis.fetch = async (url, opts) => { body = JSON.parse(opts.body); return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: 'ok' }] }) }; };
+    globalThis.fetch = async (url, opts) => { body = JSON.parse(opts.body); return { ok: true, status: 200, json: async () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }] }) }; };
     A.saveKey('sk-ant-api03-abcdefghijklmnop');
-    await A.askWithKey('Anything odd?', A.answer('Anything odd?'));
-    const sent = JSON.stringify(body);
-    assert.match(sent, /League facts/); assert.match(sent, /My player: /);
-    // Owner test 2026-10-10: the opponent question. Standings always go along.
-    assert.match(sent, /Standings 1: /);
+    await A.askWithKey('Who should I pick up?');
+    await A.askWithKey('And at WR?');
+    assert.ok(body.messages.some(m => m.role === 'assistant' && m.content === 'ok'), 'the last turn goes along');
+    assert.ok(body.tools.some(t => t.name === 'get_matchup') && body.tools.some(t => t.type === 'web_search_20250305'), 'app lookups and web search are both on offer');
     assert.ok(body.max_tokens >= 2000, 'room for the model to think and still answer');
-    // Purely conversational: the next question carries the last turn.
-    await A.askWithKey('And at WR?', A.answer('And at WR?'));
-    assert.ok(body.messages.length >= 3 && body.messages.some(m => m.role === 'assistant' && m.content === 'ok'), 'follow-ups carry the conversation');
     A.forgetKey(); globalThis.fetch = realFetch;
 });
 
@@ -228,9 +233,9 @@ test('owner report 2026-10-09: the key survives the shared client wiping device 
 
 test('an account that cannot search still gets an answer, without the search', async () => {
     const realFetch = globalThis.fetch; const bodies = [];
-    globalThis.fetch = async (url, opts) => { const b = JSON.parse(opts.body); bodies.push(b); return b.tools ? { ok: false, status: 400, json: async () => ({ error: { message: 'web search is not enabled' } }) } : { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: 'Start Sutton.' }] }) }; };
+    globalThis.fetch = async (url, opts) => { const b = JSON.parse(opts.body); bodies.push(b); return (b.tools || []).some(t => t.type === 'web_search_20250305') ? { ok: false, status: 400, json: async () => ({ error: { message: 'web search is not enabled' } }) } : { ok: true, status: 200, json: async () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'Start Sutton.' }] }) }; };
     A.saveKey('sk-ant-api03-abcdefghijklmnop');
-    const r = await A.askWithKey('Who calls plays for Denver?', A.answer('Who calls plays for Denver?'));
+    const r = await A.askWithKey('Who calls plays for Denver?');
     assert.equal(r.ok, true); assert.equal(r.noSearch, true); assert.equal(bodies.length, 2);
     A.forgetKey(); globalThis.fetch = realFetch;
 });

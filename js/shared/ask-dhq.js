@@ -336,34 +336,6 @@
                 .catch(() => 'engine');
         return _brain;
     }
-    // Everything a member's own AI needs to answer any question about this
-    // league, not just the ones DHQ recognises (owner test 2026-10-09:
-    // "Who's the best RB available on waivers" got the examples back).
-    function briefing() {
-        const lg = league(), me = myRoster(), a = me ? assessOf(me.roster_id) : null;
-        const out = [];
-        if (lg) out.push('League: ' + (lg.name || '') + ' · ' + (lg.total_rosters || rosters().length) + ' teams · season ' + (lg.season || '') + ' · week ' + ((App.WeeklyProj && App.WeeklyProj.currentWeek && App.WeeklyProj.currentWeek()) || S().currentWeek || '?'));
-        if (lg && lg.roster_positions) out.push('Lineup slots: ' + lg.roster_positions.filter(x => x !== 'BN').join(', '));
-        if (lg && lg.scoring_settings) out.push('Scoring: ' + (lg.scoring_settings.rec === 1 ? 'PPR' : lg.scoring_settings.rec === 0.5 ? 'half-PPR' : 'standard') + (lg.scoring_settings.bonus_rec_te ? ', TE premium' : ''));
-        if (me) {
-            out.push('My team: ' + teamName(me) + (a ? ' · ' + String(a.tier || '').toLowerCase() + ' · window ' + String(a.window || '').toLowerCase() + ' · holes ' + ((a.needs || []).map(n => n.pos).join(', ') || 'none') + ' · surplus ' + ((a.strengths || []).join(', ') || 'none') + (a.faabRemaining != null ? ' · $' + a.faabRemaining + ' FAAB left' : '') : ''));
-            const starters = new Set((me.starters || []).map(String));
-            (me.players || []).map(String).sort((x, y) => dhq(y) - dhq(x)).forEach(pid => {
-                const w = weekPts(pid), g = lock(pid);
-                out.push('My player: ' + pname(pid) + ' · ' + ppos(pid) + ' ' + (pl(pid).team || 'FA') + ' · DHQ ' + dhq(pid) + (starters.has(pid) ? ' · starting' : ' · bench') + (w.pts != null ? ' · ' + f1(w.pts) + (w.kind === 'proj' ? ' projected this week' : ' scored this week (' + w.kind + ')') : '') + (g && g.status === 'bye' ? ' · bye' : '') + (injury(pid) ? ' · ' + injury(pid) : ''));
-            });
-        }
-        const rostered = new Set(rosters().flatMap(r => (r.players || []).map(String)));
-        ['QB', 'RB', 'WR', 'TE'].forEach(pos => {
-            Object.keys(LI().playerScores || {}).filter(pid => !rostered.has(pid) && pl(pid).team && ppos(pid) === pos).sort((x, y) => dhq(y) - dhq(x)).slice(0, 4).forEach(pid => {
-                const w = weekPts(pid);
-                out.push('Free agent: ' + pname(pid) + ' · ' + pos + ' ' + pl(pid).team + ' · DHQ ' + dhq(pid) + (w.pts != null && w.kind === 'proj' ? ' · ' + f1(w.pts) + ' projected this week' : '') + (injury(pid) ? ' · ' + injury(pid) : ''));
-            });
-        });
-        return out;
-    }
-    // Owner ask 2026-10-09: answer in its own voice; never "DHQ's call".
-    const SYSTEM_KEY = 'You are the member\'s own AI, answering a question about their fantasy football league. Talk like a sharp GM to a friend: lead with the answer, then two to four plain sentences with the key numbers. When a recommendation is given, that is your answer: state it as your own and never contradict it. Never mention DHQ, Dynasty HQ, "the call", "the data" or where the league facts came from; just answer. Call a player\'s value his "dynasty value". Rosters, lineups, values, projections and free agents come ONLY from the league facts given: never add or change them. For anything else, especially news, injuries, depth charts, coaching and play-calling, trades and signings, use web search when you have it, prefer the last two weeks, and name the outlet in a few words (for example "per ESPN"). Never invent news. Never tell the member to check another app, site or page, or to paste anything in; if the facts and search can\'t answer it, say in one sentence that you don\'t have it yet. Dynasty value: higher is better (7,000+ elite, 3,000+ solid starter, under 1,000 depth). No headings.';
     const SYSTEM = 'You are a sharp, friendly fantasy football GM. You are given a question and the recommendation with its facts. Answer in two to four plain sentences, as a GM talking to a friend, stating the recommendation as your own. Lead with the answer. Never mention DHQ, Dynasty HQ, "the call" or where the facts came from. Use ONLY the facts given: never add a player, number, injury or news that is not in them, and never change the recommendation. No lists, no headings.';
     let _session = null;
     async function narrate(question, ans, onText, onProgress) {
@@ -467,147 +439,140 @@
     function forgetKey() { try { [MEMBER_KEY, KEY_NAME, PROVIDER_NAME].forEach(k => root.localStorage.removeItem(k)); } catch (e) { /* nothing saved */ } _brain = null; keyChanged(); }
     // The leagues page hides its "New: Ask your AI" card once a key is in.
     function keyChanged() { try { if (root.dispatchEvent && root.CustomEvent) root.dispatchEvent(new root.CustomEvent('dhq:ai-key-changed')); } catch (e) { /* no listeners */ } }
-    // Owner test 2026-10-10: "Who is my opponent this week" got "the facts
-    // don't include the schedule" and a referral to another site. The AI now
-    // gets what the league page shows: this week's matchup (opponent, both
-    // lineups, projected totals, win chance, live points), the standings and
-    // the league's settings.
-    const wl = r => { const st = (r && r.settings) || {}; return (st.wins || 0) + '-' + (st.losses || 0) + (st.ties ? '-' + st.ties : ''); };
-    const pf = r => { const st = (r && r.settings) || {}; return Math.round(((st.fpts || 0) + (st.fpts_decimal || 0) / 100) * 10) / 10; };
-    async function leagueContext() {
-        const out = [];
-        const lg = league(), me = myRoster();
-        if (!lg) return out;
-        const st = lg.settings || {};
-        const wk = Number((App.WeeklyProj && App.WeeklyProj.currentWeek && App.WeeklyProj.currentWeek()) || S().currentWeek || 0);
-        const bits = [];
-        if (st.playoff_teams) bits.push(st.playoff_teams + ' teams make the playoffs' + (st.playoff_week_start ? ', starting week ' + st.playoff_week_start : ''));
-        if (st.trade_deadline) bits.push('trade deadline week ' + st.trade_deadline);
-        if (st.waiver_budget) bits.push('FAAB budget $' + st.waiver_budget);
-        if (bits.length) out.push('League settings: ' + bits.join(' · '));
-        // Standings, best record first (Sleeper's order: wins, then points for).
-        const table = rosters().slice().sort((a, b) => ((b.settings || {}).wins || 0) - ((a.settings || {}).wins || 0) || pf(b) - pf(a));
-        table.forEach((r, i) => out.push('Standings ' + (i + 1) + ': ' + teamName(r) + (me && r.roster_id === me.roster_id ? ' (me)' : '') + ' · ' + wl(r) + ' · ' + pf(r) + ' points for'));
-        if (!me || !wk) return out;
-        // This week's matchup.
-        let oppRid = null;
-        try { if (App.Matchup && App.Matchup.resolveOpponentRosterId) oppRid = await Promise.race([App.Matchup.resolveOpponentRosterId({ league: lg, myRosterId: me.roster_id, week: wk }), new Promise(r => setTimeout(() => r(null), 4000))]); } catch (e) { oppRid = null; }
-        const opp = oppRid != null ? rosters().find(r => String(r.roster_id) === String(oppRid)) : null;
-        if (!opp) { out.push('Week ' + wk + ' matchup: no head-to-head opponent this week (bye, playoffs or a league without matchups).'); return out; }
-        let line = 'Week ' + wk + ' matchup: me (' + teamName(me) + ', ' + wl(me) + ') vs ' + teamName(opp) + ' (' + wl(opp) + ', ' + pf(opp) + ' points for)';
-        try {
-            const m = App.DhqProj && App.DhqProj.matchup ? App.DhqProj.matchup((me.starters || []).filter(x => x && x !== '0'), opp, lg.roster_positions || []) : null;
-            if (m && m.fc) line += ' · projected ' + f1(m.fc.projMe) + ' to ' + f1(m.fc.projOpp) + (m.fc.winPct != null ? ' · my win chance ' + m.fc.winPct + '%' : '') + (m.oppIdeal && m.oppIdeal > m.oppCur + 0.5 ? ' · their best possible lineup ' + f1(m.oppIdeal) : '');
-        } catch (e) { /* totals are a bonus */ }
-        out.push(line);
-        (opp.starters || []).filter(x => x && x !== '0').forEach(pid => {
-            const w = weekPts(pid), g = lock(pid);
-            out.push('Opponent starter: ' + pname(pid) + ' · ' + ppos(pid) + ' ' + (pl(pid).team || 'FA') + (w.pts != null ? ' · ' + f1(w.pts) + (w.kind === 'proj' ? ' projected' : ' scored (' + w.kind + ')') : '') + (g && g.status === 'bye' ? ' · bye' : '') + (injury(pid) ? ' · ' + injury(pid) : ''));
-        });
-        return out;
+    // ── The member's own AI, with tools (owner ruling 2026-10-10) ──────
+    // No pre-built bundle of facts and no pre-decided answer: the AI reads
+    // the question, looks up what it needs through App.AskTools (the app's
+    // own data: rosters, matchups, standings, schedule, history, trades,
+    // waivers, values, news) and searches the web for anything else, as
+    // many steps as it needs, then answers in its own words.
+    const PERSONA = [
+        'You are the member\'s own fantasy football sidekick, living inside their league app. You know ball and you are fun to talk to: sharp, quick, a little funny, honest. Think the smartest friend in their league chat. Light trash talk about rivals is fine; never at the member\'s expense. When they\'re about to get fleeced, say so.',
+        'Talk like a person, not a report: answer first, then the why with the key numbers. Short paragraphs; a quick list only when it really helps. Match the question: a quick question gets a quick answer, a big one gets depth. Follow-ups are welcome.',
+        'Facts come from your tools. For anything about this league (rosters, lineups, matchups, standings, schedule, playoff odds, history, champions, trades, waivers, FAAB, draft picks, owners, player values and projections, linked news) call the tools, as many as you need, and chain them (look up the opponent, then their roster, then the waiver wire). Never guess a player, number, score, record or roster: if no tool or search told you, you don\'t know it, and you say so in a sentence.',
+        'For the NFL beyond this league (breaking news, injuries, depth charts, coaching, trades, schedules) use web search when you have it and name the outlet in a few words.',
+        'Never tell the member to check another app or site or to paste anything in: look it up. You can\'t make moves for them; tell them exactly what to do.',
+        'Two kinds of numbers: "value" is long-term dynasty trade value (about 7,000+ elite, 3,000+ solid starter, under 1,000 depth); this week\'s projections and points are for lineup calls. Don\'t mix them. A player whose game has started is locked.',
+        'Don\'t mention tools, DHQ, "the data" or how you looked things up. Just answer.',
+    ].join('\n\n');
+    function header() {
+        const lg = league(), me = myRoster(), H = App.AskTools && App.AskTools.h;
+        const wk = H ? H.week() : 0;
+        let today = ''; try { today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { /* plain */ }
+        return 'Today is ' + today + '. League: ' + ((lg && lg.name) || 'unknown') + ' (' + ((H && H.platform()) || 'sleeper') + ', season ' + ((H && H.season()) || '?') + ', NFL week ' + (wk || '?') + ', ' + rosters().length + ' teams). The member is ' + (me ? teamName(me) : 'not on a team here') + '.';
     }
-    async function newsFor(pids) {
-        const PN = App.PlayerNews;
-        if (!PN || !pids.length) return [];
-        let map = {};
-        try { map = await Promise.race([PN.get(pids), new Promise(r => setTimeout(() => r({}), 4000))]); } catch (e) { return []; }
-        const lines = [];
-        const seenTeamStory = new Set();
-        [...new Set(pids.map(String))].forEach(pid => {
-            (map[pid] || []).slice(0, 3).forEach(it => {
-                // One team story once, not once per teammate.
-                if (it.link === 'team') { const k = (it.why || '') + it.headline; if (seenTeamStory.has(k)) return; seenTeamStory.add(k); }
-                const who = it.link === 'team' ? (it.why || 'team') : pname(pid);
-                lines.push(who + ': ' + PN.label(it) + ' · ' + it.headline + (it.summary && it.link !== 'report' ? ' (' + String(it.summary).slice(0, 180) + ')' : '') + (it.source ? ' [' + it.source + ']' : ''));
-            });
-        });
-        return lines.slice(0, 60);
-    }
-    // Owner ask 2026-10-09: purely conversational. The last few turns go
-    // with each question so follow-ups ("what about him?") work.
+    const TOOL_WORDS = { get_team: 'roster', get_matchup: 'matchup', get_lineup_advice: 'lineup', get_league_info: 'league rules', get_standings: 'standings', get_schedule: 'schedule', get_playoff_odds: 'playoff odds', get_league_history: 'league history', get_head_to_head: 'head-to-head', get_player: 'player', compare_players: 'players', search_players: 'player rankings', get_waiver_report: 'waiver wire', get_waiver_bid: 'FAAB', get_news: 'news', get_transactions: 'transactions', evaluate_trade: 'trade', find_trade_partners: 'trade partners', get_owner_profile: 'owner', get_draft_info: 'draft', get_luck: 'luck' };
+    const MAX_STEPS = 8;
+    const clip = o => { let s = ''; try { s = JSON.stringify(o); } catch (e) { s = '{"error":"unreadable"}'; } return s.length > 24000 ? s.slice(0, 24000) + '…(trimmed)' : s; };
     const chat = [];
     const CHAT_TURNS = 6;
-    async function askWithKey(question, ans) {
+    async function askWithKey(question, onStep) {
         const k = savedKey();
         if (!k) return { ok: false, error: 'no key' };
-        // A new league starts a new conversation.
         const lid = String(S().currentLeagueId || '');
         if (chat.league !== lid) { chat.length = 0; chat.league = lid; }
-        const call = ans && ans.intent !== 'help' ? '\nRecommendation: ' + ans.text + ((ans.lines || []).length ? '\nFacts behind it:\n- ' + ans.lines.join('\n- ') : '') : '';
-        // Player news (owner ask 2026-10-09): the stories linked to my players
-        // and the ones in the question, so the AI knows without a search.
-        const newsLines = await newsFor(((myRoster() || {}).players || []).map(String).concat((ans && ans.players) || []));
-        // The facts say "value", not "DHQ", so the AI has no brand to repeat.
-        const ctxLines = await leagueContext().catch(() => []);
-        const user = ('Question: ' + question + call + '\nLeague facts:\n- ' + briefing().concat(ctxLines).join('\n- ') + (newsLines.length ? '\nRecent NFL news (last 14 days; "via" means team news that affects him):\n- ' + newsLines.join('\n- ') : '')).replace(/\bDHQ\b(?!')/g, 'value').replace(/\bDHQ's\s*/g, '');
+        const T = App.AskTools;
+        const defs = T ? T.defs() : [];
+        const system = PERSONA + '\n\n' + header();
         const model = PROVIDERS[k.provider].model;
         const ctl = root.AbortController ? new root.AbortController() : null;
-        // A web search can take a while; give it a minute.
-        const timer = ctl ? setTimeout(() => ctl.abort(), 60000) : null;
+        const timer = ctl ? setTimeout(() => ctl.abort(), 120000) : null;
         const signal = ctl && ctl.signal;
-        const hist = chat.flatMap(t => [{ role: 'user', content: t.q }, { role: 'assistant', content: t.a }]);
-        // Owner ask 2026-10-09: up-to-date NFL news. Each company's own web
-        // search runs on the member's key (DHQ pays nothing, sees nothing).
-        // If their account can't search, the question is asked without it.
-        async function send(search) {
-            let r, j, text = '', sources = [];
-            if (k.provider === 'anthropic') {
-                const body = { model, max_tokens: 4000, output_config: { effort: 'low' }, system: SYSTEM_KEY, messages: hist.concat([{ role: 'user', content: user }]) };
-                if (search) body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }];
-                r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify(body) });
-                j = await r.json().catch(() => ({}));
-                // A long search can pause mid-turn; let it finish once.
-                if (r.ok && j.stop_reason === 'pause_turn') {
-                    body.messages = body.messages.concat([{ role: 'assistant', content: j.content }]);
-                    const r2 = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify(body) });
-                    const j2 = await r2.json().catch(() => ({}));
-                    if (r2.ok) j = Object.assign({}, j2, { content: (j.content || []).concat(j2.content || []) });
-                }
-                const blocks = j.content || [];
-                text = blocks.filter(c => c.type === 'text').map(c => c.text || '').join('');
-                blocks.forEach(c => { if (c.type === 'web_search_tool_result' && Array.isArray(c.content)) c.content.forEach(x => x.url && sources.push({ url: x.url, title: x.title })); (c.citations || []).forEach(x => x.url && sources.unshift({ url: x.url, title: x.title })); });
-            } else if (k.provider === 'gemini') {
-                const body = { systemInstruction: { parts: [{ text: SYSTEM_KEY }] }, contents: hist.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })).concat([{ role: 'user', parts: [{ text: user }] }]), generationConfig: { maxOutputTokens: 4000 } };
-                if (search) body.tools = [{ google_search: {} }];
-                r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.key }, body: JSON.stringify(body) });
-                j = await r.json().catch(() => ({}));
-                const cand = (j.candidates || [])[0] || {};
-                text = ((cand.content || {}).parts || []).map(p => p.text || '').join('');
-                (((cand.groundingMetadata || {}).groundingChunks) || []).forEach(g => g.web && g.web.uri && sources.push({ url: g.web.uri, title: g.web.title }));
-            } else if (search) {
-                const body = { model, instructions: SYSTEM_KEY, input: hist.concat([{ role: 'user', content: user }]), tools: [{ type: 'web_search' }], max_output_tokens: 4000 };
-                r = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + k.key }, body: JSON.stringify(body) });
-                j = await r.json().catch(() => ({}));
-                if (typeof j.output_text === 'string') text = j.output_text;
-                (j.output || []).forEach(o => (o.content || []).forEach(c => { if (c.type === 'output_text') { if (!j.output_text) text += c.text || ''; (c.annotations || []).forEach(a => a.url && sources.push({ url: a.url, title: a.title })); } }));
-                if (!text && j.choices) text = (((j.choices[0] || {}).message) || {}).content || '';
-            } else {
-                r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + k.key }, body: JSON.stringify({ model, max_completion_tokens: 4000, messages: [{ role: 'system', content: SYSTEM_KEY }].concat(hist, [{ role: 'user', content: user }]) }) });
-                j = await r.json().catch(() => ({}));
-                text = (((j.choices || [])[0] || {}).message || {}).content || '';
-            }
-            const seen = new Set();
-            sources = sources.filter(x => { const key = String(x.url).split('#')[0]; if (seen.has(key)) return false; seen.add(key); return true; }).slice(0, 4);
-            return { r, j, text, sources };
-        }
+        const used = [];
+        let sources = [], noSearch = false;
+        const step = name => { used.push(name); if (onStep) onStep(TOOL_WORDS[name] || name.replace(/^get_/, '').replace(/_/g, ' ')); };
+        const runTool = async (name, args) => { step(name); return T ? T.run(name, args) : { error: 'Lookups are not available.' }; };
+        const fail = (r, j) => {
+            const detail = (j && j.error && (j.error.message || (typeof j.error === 'string' ? j.error : ''))) || '';
+            // Owner test 2026-10-09: only a 401 means the key itself is bad.
+            if (r.status === 401) return { ok: false, badKey: true, error: PROVIDERS[k.provider].label + ' turned that key down' + (detail ? ' (' + String(detail).slice(0, 160) + ')' : '') + '. Paste a new one and your question is asked again.' };
+            return { ok: false, retry: r.status === 429 || r.status >= 500, error: (r.status === 429 ? PROVIDERS[k.provider].label + ' says this key is out of quota or busy right now' : PROVIDERS[k.provider].label + ' had a problem (' + r.status + ')') + (detail ? ': ' + String(detail).slice(0, 200) : '') + '.' };
+        };
+        const post = (url, headers, body) => fetch(url, { method: 'POST', signal, headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify(body) });
+        let text = '';
         try {
-            let out = await send(true);
-            // Search not available on this account or model: ask without it.
-            if (!out.r.ok && out.r.status === 400) { const plain = await send(false); if (plain.r.ok) out = Object.assign(plain, { noSearch: true }); }
-            const { r, j, text, sources } = out;
-            if (!r.ok) {
-                const detail = (j && j.error && (j.error.message || (typeof j.error === 'string' ? j.error : ''))) || '';
-                // Owner test 2026-10-09: a working key was sent back to the
-                // paste box twice. Only a 401 means the key itself is bad;
-                // anything else keeps the key and shows the company's reason.
-                if (r.status === 401) return { ok: false, badKey: true, error: PROVIDERS[k.provider].label + ' turned that key down' + (detail ? ' (' + String(detail).slice(0, 160) + ')' : '') + '. Paste a new one and your question is asked again.' };
-                return { ok: false, retry: r.status === 429 || r.status >= 500, error: (r.status === 429 ? PROVIDERS[k.provider].label + ' says this key is out of quota or busy right now' : PROVIDERS[k.provider].label + ' had a problem (' + r.status + ')') + (detail ? ': ' + String(detail).slice(0, 200) : '') + '.' };
+            if (k.provider === 'anthropic') {
+                const H = { 'x-api-key': k.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
+                const tools = defs.map(d => ({ name: d.name, description: d.description, input_schema: d.parameters }));
+                const search = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }];
+                const messages = chat.flatMap(t => [{ role: 'user', content: t.q }, { role: 'assistant', content: t.a }]).concat([{ role: 'user', content: question }]);
+                let withSearch = true;
+                for (let i = 0; i <= MAX_STEPS; i++) {
+                    const body = { model, max_tokens: 4000, output_config: { effort: 'low' }, system, messages, tools: withSearch ? tools.concat(search) : tools };
+                    if (i === MAX_STEPS) delete body.tools;   // last round: answer with what you have
+                    let r = await post('https://api.anthropic.com/v1/messages', H, body);
+                    let j = await r.json().catch(() => ({}));
+                    // Web search not allowed on this account: carry on without it.
+                    if (!r.ok && r.status === 400 && withSearch && /web.?search|tool/i.test(JSON.stringify(j))) { withSearch = false; noSearch = true; i--; continue; }
+                    if (!r.ok) return fail(r, j);
+                    const blocks = j.content || [];
+                    blocks.forEach(c => { if (c.type === 'web_search_tool_result' && Array.isArray(c.content)) c.content.forEach(x => x.url && sources.push({ url: x.url, title: x.title })); if (c.type === 'server_tool_use') step('web search'); });
+                    messages.push({ role: 'assistant', content: blocks });
+                    if (j.stop_reason === 'pause_turn') continue;
+                    const calls = blocks.filter(c => c.type === 'tool_use');
+                    if (j.stop_reason !== 'tool_use' || !calls.length) { text = blocks.filter(c => c.type === 'text').map(c => c.text || '').join(''); break; }
+                    const results = await Promise.all(calls.map(async c => ({ type: 'tool_result', tool_use_id: c.id, content: clip(await runTool(c.name, c.input)) })));
+                    messages.push({ role: 'user', content: results });
+                }
+            } else if (k.provider === 'gemini') {
+                // Gemini can't mix Google Search with app lookups in one call,
+                // so its web search is offered as one of the lookups.
+                const decl = defs.map(d => ({ name: d.name, description: d.description, parameters: d.parameters }));
+                decl.push({ name: 'web_search', description: 'Search the web for current NFL news, injuries, coaching, depth charts or anything outside this league.', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } });
+                const contents = chat.flatMap(t => [{ role: 'user', parts: [{ text: t.q }] }, { role: 'model', parts: [{ text: t.a }] }]).concat([{ role: 'user', parts: [{ text: question }] }]);
+                const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
+                const H = { 'x-goog-api-key': k.key };
+                const googleSearch = async q => {
+                    step('web search');
+                    const r = await post(url, H, { contents: [{ role: 'user', parts: [{ text: 'Search the web and summarize the most recent, relevant facts with outlet names and dates: ' + q }] }], tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 1500 } });
+                    const j = await r.json().catch(() => ({}));
+                    const cand = (j.candidates || [])[0] || {};
+                    (((cand.groundingMetadata || {}).groundingChunks) || []).forEach(g => g.web && g.web.uri && sources.push({ url: g.web.uri, title: g.web.title }));
+                    return r.ok ? { summary: ((cand.content || {}).parts || []).map(p => p.text || '').join('') } : { error: 'search unavailable' };
+                };
+                for (let i = 0; i <= MAX_STEPS; i++) {
+                    const body = { systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { maxOutputTokens: 4000 } };
+                    if (i < MAX_STEPS) body.tools = [{ functionDeclarations: decl }];
+                    const r = await post(url, H, body);
+                    const j = await r.json().catch(() => ({}));
+                    if (!r.ok) return fail(r, j);
+                    const content = ((j.candidates || [])[0] || {}).content || { role: 'model', parts: [] };
+                    const parts = content.parts || [];
+                    contents.push({ role: 'model', parts });
+                    const calls = parts.filter(p => p.functionCall);
+                    if (!calls.length) { text = parts.map(p => p.text || '').join(''); break; }
+                    const replies = await Promise.all(calls.map(async p => ({ functionResponse: { name: p.functionCall.name, response: { result: p.functionCall.name === 'web_search' ? await googleSearch((p.functionCall.args || {}).query || '') : JSON.parse(clip(await runTool(p.functionCall.name, p.functionCall.args || {}))) } } })));
+                    contents.push({ role: 'user', parts: replies });
+                }
+            } else {
+                const H = { Authorization: 'Bearer ' + k.key };
+                const tools = defs.map(d => ({ type: 'function', name: d.name, description: d.description, parameters: d.parameters }));
+                let input = chat.flatMap(t => [{ role: 'user', content: t.q }, { role: 'assistant', content: t.a }]).concat([{ role: 'user', content: question }]);
+                let prev = null, withSearch = true;
+                for (let i = 0; i <= MAX_STEPS; i++) {
+                    const body = { model, instructions: system, input, max_output_tokens: 4000 };
+                    if (prev) body.previous_response_id = prev;
+                    if (i < MAX_STEPS) body.tools = withSearch ? tools.concat([{ type: 'web_search' }]) : tools;
+                    const r = await post('https://api.openai.com/v1/responses', H, body);
+                    const j = await r.json().catch(() => ({}));
+                    if (!r.ok && r.status === 400 && withSearch && /web_search/i.test(JSON.stringify(j))) { withSearch = false; noSearch = true; i--; continue; }
+                    if (!r.ok) return fail(r, j);
+                    const out = j.output || [];
+                    out.forEach(o => { if (o.type === 'web_search_call') step('web search'); (o.content || []).forEach(c => (c.annotations || []).forEach(a => a.url && sources.push({ url: a.url, title: a.title }))); });
+                    const calls = out.filter(o => o.type === 'function_call');
+                    if (!calls.length) { text = typeof j.output_text === 'string' && j.output_text ? j.output_text : out.flatMap(o => (o.content || []).filter(c => c.type === 'output_text').map(c => c.text || '')).join(''); break; }
+                    prev = j.id;
+                    input = await Promise.all(calls.map(async c => { let args = {}; try { args = JSON.parse(c.arguments || '{}'); } catch (e) { /* none */ } return { type: 'function_call_output', call_id: c.call_id, output: clip(await runTool(c.name, args)) }; }));
+                }
             }
-            if (text.trim()) { chat.push({ q: question, a: text.trim() }); if (chat.length > CHAT_TURNS) chat.shift(); }
-            return text.trim() ? { ok: true, text: text.trim(), provider: k.provider, sources, noSearch: !!out.noSearch } : { ok: false, error: PROVIDERS[k.provider].label + ' sent back an empty answer.' };
         } catch (e) {
             return { ok: false, retry: true, error: 'Couldn\'t reach ' + PROVIDERS[k.provider].label + '. Check your connection.' };
         } finally { if (timer) clearTimeout(timer); }
+        const seen = new Set();
+        sources = sources.filter(x => { const key = String(x.url).split('#')[0]; if (seen.has(key)) return false; seen.add(key); return true; }).slice(0, 4);
+        text = String(text || '').trim();
+        if (!text) return { ok: false, error: PROVIDERS[k.provider].label + ' sent back an empty answer.' };
+        chat.push({ q: question, a: text }); if (chat.length > CHAT_TURNS) chat.shift();
+        return { ok: true, text, provider: k.provider, sources, noSearch, used };
     }
 
     // The question, sent to the member's own AI with DHQ connected.
@@ -754,8 +719,9 @@
             ui.log.appendChild(box); ui.log.scrollTop = ui.log.scrollHeight;
             return;
         }
-        const ans = answer(q);
         const b = await brain();
+        // The engine's own quick reading is only for members without a key.
+        const ans = b === 'key' ? { intent: 'ai' } : answer(q);
         // With the member's own key, every question goes to their AI with the
         // league facts; the examples only come back without one.
         if (ans.intent === 'help' && b !== 'key') { ui.log.appendChild(handoff(q)); ui.log.scrollTop = ui.log.scrollHeight; return; }
@@ -769,20 +735,20 @@
             const src = el('div', 'askdhq-src', '');
             box.appendChild(src);
             ui.log.appendChild(box); ui.log.scrollTop = ui.log.scrollHeight;
-            let res = await askWithKey(q, ans);
+            // Show what it's looking at while it works ("Checking standings…").
+            const looked = [];
+            const onStep = w => { if (!looked.includes(w)) looked.push(w); p.textContent = 'Checking ' + looked.slice(-3).join(', ') + '…'; };
+            let res = await askWithKey(q, onStep);
             // One quiet retry for a blip (busy, timeout, dropped connection).
-            if (!res.ok && res.retry) { await new Promise(rs => setTimeout(rs, 1500)); res = await askWithKey(q, ans); }
+            if (!res.ok && res.retry) { await new Promise(rs => setTimeout(rs, 1500)); res = await askWithKey(q, onStep); }
             if (res.ok) {
                 p.textContent = res.text;
+                p.style.whiteSpace = 'pre-wrap';
                 src.textContent = 'Answered by your ' + PROVIDERS[k.provider].label + '. Your key stays on this device.' + (res.noSearch ? ' (Web search isn\'t turned on for this key, so no news lookups.)' : '');
                 if (res.sources && res.sources.length) {
                     const row = el('div', 'askdhq-more');
                     res.sources.forEach(x => { let host = ''; try { host = new URL(x.url).hostname.replace(/^www\./, ''); } catch (e) { return; } const a = el('a', 'askdhq-chip', host); a.href = x.url; a.target = '_blank'; a.rel = 'noopener'; if (x.title) a.title = x.title; row.appendChild(a); });
                     if (row.childNodes.length) box.insertBefore(row, src);
-                }
-                if (ans.lines && ans.lines.length) {
-                    const d = el('details'); const sm = el('summary', null, 'The numbers'); sm.style.cursor = 'pointer'; d.appendChild(sm);
-                    const ul = el('ul'); ans.lines.forEach(t => ul.appendChild(el('li', null, t))); d.appendChild(ul); box.insertBefore(d, src);
                 }
             } else {
                 if (res.badKey) { box.replaceWith(keyCard(res.error, q)); }
