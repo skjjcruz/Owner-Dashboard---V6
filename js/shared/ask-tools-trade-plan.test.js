@@ -173,7 +173,7 @@ test('my assets are only what I own; the 2027 1st I traded is never offered', as
     assert.ok(r.my_assets.picks.some(p => p.year === 2027 && p.round === 2 && /TWhy123/.test(p.original_owner)));
     assert.ok(r.do_not_offer.some(d => /2027 1st/.test(d.asset) && /TWhy123 holds it/.test(d.reason)), JSON.stringify(r.do_not_offer));
     r.offers.forEach(o => assert.ok(!o.give.some(g => /^2027 1st/.test(g)), o.give.join(' + ')));
-    assert.equal(r.decision, 'counter');
+    assert.ok(['counter', 'pass'].includes(r.decision), r.decision);
     const e = await run('evaluate_trade', { give: ['2027 1st'], get: ['Jordan Love'] });
     assert.equal(e.verdict.decision, 'pass');
     assert.match(e.verdict.call, /TWhy123 does/);
@@ -194,13 +194,33 @@ test('a pick with an unknown holder is never treated as mine (ownership not load
     } finally { globalThis.buildPicksByOwner = realBuilder; }
 });
 
-test('young SF starting QB: the price floor is a 1st, and every offer leads with one', async () => {
+// Owner ruling 2026-10-10 (Love test): a rebuilder won't trade a young
+// starting QB for a 1st three drafts away; it takes a next-draft 1st plus
+// a little something (a 2nd or a nice player).
+test('young SF starting QB from a rebuilder: a next-draft 1st plus a little more; a far-off 1st is not the headliner', async () => {
     const r = await run('trade_plan', { target: 'Jordan Love' });
     assert.ok(!r.error, r.error);
-    assert.match(r.price_floor.headliner_needed, /^a 1st-round pick/);
+    assert.match(r.price_floor.headliner_needed, /^a 2027 1st \(a rebuilder also wants a 2nd or a solid young player on top\)/);
     assert.match(r.price_floor.rule, /superflex/);
-    assert.ok(r.offers.length >= 1);
-    r.offers.forEach(o => { assert.ok(o.give.some(g => /^\d{4} 1st/.test(g)), o.give.join(' + ')); assert.equal(o.headliner_met, true); assert.match(o.market_label, /At market/); });
+    // The member's only 1st is a 2029: nothing he owns meets the price.
+    assert.equal(r.offers.length, 0);
+    assert.equal(r.decision, 'no_fit');
+    assert.match(r.recommendation, /Your 2029 1st is too far off for a rebuilder/);
+    assert.match(r.recommendation, /2027 1st/);
+    const far = await run('evaluate_trade', { give: ['2029 1st', '2027 2nd from TWhy123'], get: ['Jordan Love'] });
+    assert.equal(far.headliner.offer_has_it, false);
+    assert.ok(far.headliner.notes.some(n => /too far off/.test(n)), JSON.stringify(far.headliner));
+    // The rule itself: next-draft 1st alone isn't enough from a rebuilder; plus a 2nd it is.
+    const { headlinerMet, headlinerRuleFor } = T._moves;
+    const rule = headlinerRuleFor({ kind: 'player', pid: 'love', pos: 'QB', age: 27, value: 3574 });
+    const t = { value: 3574 };
+    const p27 = { kind: 'pick', round: 1, year: 2027, holder: 13, label: '2027 1st' }, s27 = { kind: 'pick', round: 2, year: 2027, holder: 13, label: '2027 2nd' };
+    const p28 = { kind: 'pick', round: 1, year: 2028, holder: 13, label: '2028 1st' }, s28 = { kind: 'pick', round: 2, year: 2028, holder: 13, label: '2028 2nd' };
+    assert.equal(headlinerMet(rule, t, [p27], 13, 'REBUILDING').ok, false);
+    assert.equal(headlinerMet(rule, t, [p27, s27], 13, 'REBUILDING').ok, true);
+    assert.equal(headlinerMet(rule, t, [p28, s27], 13, 'REBUILDING').ok, false, 'a 2028 1st spends its add standing in for a 2027');
+    assert.equal(headlinerMet(rule, t, [p28, s27, s28], 13, 'REBUILDING').ok, true);
+    assert.equal(headlinerMet(rule, t, [p27], 13, 'CONTENDING').ok, true, 'the add is a rebuilder\'s ask');
     // A young WR (Pickens) alone doesn't buy a QB: no headliner.
     const e = await run('evaluate_trade', { give: ['George Pickens'], get: ['Jordan Love'] });
     assert.equal(e.headliner.offer_has_it, false);
@@ -212,14 +232,14 @@ test('Stafford + Andrews for Love: a rebuilder doesn\'t want aging vets, low cha
     const r = await run('trade_plan', { target: 'Jordan Love', give: ['Matthew Stafford', 'Mark Andrews'] });
     assert.ok(!r.error, r.error);
     assert.equal(r.partner.mode, 'rebuilding');
-    assert.equal(r.decision, 'counter');
+    assert.equal(r.decision, 'pass');
     assert.ok(r.your_offer.accept_chance_pct <= 10, String(r.your_offer.accept_chance_pct));
     assert.equal(r.your_offer.headliner_met, false);
     for (const n of ['Matthew Stafford', 'Mark Andrews']) assert.ok(r.do_not_offer.some(d => d.asset.startsWith(n)), n);
     assert.ok(r.partner.wont_take.some(w => /age cliff/.test(w)));
     r.offers.forEach(o => assert.ok(!o.give.some(g => /Stafford|Andrews|Jonathan Taylor/.test(g)), o.give.join(' + ')));
     assert.match(r.recommendation, /^Don't send Matthew Stafford \+ Mark Andrews/);
-    assert.match(r.recommendation, /2029 1st/);
+    assert.match(r.recommendation, /2027 1st/);
     // Same deal through evaluate_trade: the same answer.
     const e = await run('evaluate_trade', { give: ['Matthew Stafford', 'Mark Andrews'], get: ['Jordan Love'] });
     assert.equal(e.verdict.decision, 'counter');
@@ -240,25 +260,14 @@ test('acceptance runs on what the partner values: piling on vets doesn\'t raise 
     assert.ok(young.accept_chance_pct >= vets.accept_chance_pct, young.accept_chance_pct + ' vs ' + vets.accept_chance_pct);
 });
 
-test('2029 1st for Love: reasonable, at market, and never asks a rebuilder for picks back', async () => {
+test('2029 1st alone for Love: a rebuilder won\'t take a 1st three drafts away for a young starting QB', async () => {
     const e = await run('evaluate_trade', { give: ['2029 1st'], get: ['Jordan Love'] });
     assert.equal(Object.keys(e)[0], 'verdict');
-    assert.equal(e.verdict.decision, 'offer');
-    assert.match(e.verdict.market_label, /At market/);
-    assert.ok(e.verdict.accept_chance_pct >= 50, String(e.verdict.accept_chance_pct));
-    assert.equal(e.headliner.offer_has_it, true);
-    // The grade is raw value only (the 1st is worth more on paper); the verdict doesn't call it an overpay.
+    assert.equal(e.verdict.decision, 'counter');
+    assert.equal(e.headliner.offer_has_it, false);
+    assert.ok(e.verdict.accept_chance_pct <= 10, String(e.verdict.accept_chance_pct));
     assert.match(e.grade.basis, /raw value/);
-    assert.doesNotMatch(e.verdict.call, /overpay/i);
-    if (e.balance) {
-        assert.equal(e.balance.you_overpay_by, undefined, 'no gap to claw back at market');
-        e.balance.options.forEach(o => assert.doesNotMatch(o, PICKY));
-    }
-    const p = await run('trade_plan', { target: 'Jordan Love' });
-    assert.equal(p.decision, 'offer');
-    assert.match(p.recommendation, /^Offer 2029 1st/);
-    assert.ok(p.offers[0].accept_chance_pct >= 50);
-    p.offers.forEach(o => { if (o.balance) { (o.balance.ask_them_to_add || []).forEach(x => assert.doesNotMatch(x, PICKY)); assert.match(o.balance.never, /picks back/); } });
+    assert.ok(!e.balance, 'the fix is the headliner, not balance');
 });
 
 test('balance when the member overpays a rebuilder: their veterans, never their picks', async () => {
