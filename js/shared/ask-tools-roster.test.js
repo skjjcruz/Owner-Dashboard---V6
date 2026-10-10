@@ -249,3 +249,16 @@ test('get_waiver_bid: offseason claims are excluded from the bid history', async
     assert.deepEqual(r.recent_winning_bids_at_position.map(c => c.player), ['Mike Robertson', 'Zyon McCollum', 'Will Lee', "L'Jarius Sneed"]);
     assert.match(r.based_on, /in-season/);
 });
+
+// Owner ruling 2026-10-10: "Davis is a keeper, Breece Hall is out this week, he's up as an RB2."
+test('roster_plan: next man up is never a cut (Breece Hall out, Isaiah Davis moves up)', async () => {
+    S.players.breece = P('Breece Hall', 'RB', 'NYJ', { depth_chart_order: 1, age: 25, injury_status: 'Out' });
+    S.players = Object.assign({}, S.players);   // new object: the depth index rebuilds
+    try {
+        const r = await AT.run('roster_plan', {});
+        assert.ok(!r.cut_candidates.some(c => c.player === 'Isaiah Davis'), 'Davis must not be a cut');
+        const k = r.keep_despite_low_value.find(x => x.player === 'Isaiah Davis');
+        assert.ok(k, JSON.stringify(r.keep_despite_low_value.map(x => x.player)));
+        assert.match(k.reason, /Next man up: Breece Hall \(Out\) is out, so he moves up to NYJ RB1/);
+    } finally { delete S.players.breece; S.players = Object.assign({}, S.players); }
+});

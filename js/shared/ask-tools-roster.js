@@ -174,6 +174,39 @@
         return out;
     }
 
+    // ── Next man up (owner ruling 2026-10-10: "Davis is a keeper, Breece
+    // Hall is out this week, he's up as an RB2"). A backup whose NFL team's
+    // starter at his position is out moves up the depth chart: he's not a cut.
+    const NEXT_UP_DEPTH = { QB: 1, RB: 2, WR: 3, TE: 1 };
+    let _teamPos = null;
+    function teamPosIndex() {
+        const players = S().players || {};
+        if (_teamPos && _teamPos.src === players) return _teamPos.map;
+        const map = {};
+        for (const pid in players) {
+            const p = players[pid];
+            if (!p || !p.team || p.depth_chart_order == null) continue;
+            const pos = h.ppos(pid);
+            if (!NEXT_UP_DEPTH[pos]) continue;
+            (map[p.team + '|' + pos] = map[p.team + '|' + pos] || []).push(pid);
+        }
+        Object.values(map).forEach(list => list.sort((a, b) => Number(players[a].depth_chart_order) - Number(players[b].depth_chart_order)));
+        _teamPos = { src: players, map };
+        return map;
+    }
+    function nextManUp(pid) {
+        const p = h.pl(pid), pos = h.ppos(pid);
+        if (!p.team || !NEXT_UP_DEPTH[pos] || INJ_OUT.has(injOf(pid))) return null;
+        const list = teamPosIndex()[p.team + '|' + pos] || [];
+        const at = list.indexOf(String(pid));
+        if (at <= 0) return null;
+        const outAbove = list.slice(0, at).filter(x => INJ_OUT.has(injOf(x)));
+        if (!outAbove.length) return null;
+        const healthyRank = list.slice(0, at + 1).filter(x => !INJ_OUT.has(injOf(x))).length;
+        if (healthyRank > NEXT_UP_DEPTH[pos]) return null;
+        return { out: outAbove.map(x => h.pname(x) + ' (' + (h.pl(x).injury_status || 'out') + ')'), role: pos + healthyRank };
+    }
+
     // ── The one drop list ──────────────────────────────────────────
     function keepScore(pid, vr) {
         const proj = Number(projOf(pid)) || 0;
@@ -227,6 +260,8 @@
             if (vr.value_source === 'unscored' && (Number(p.depth_chart_order) === 1 || (proj != null && proj >= 3))) {
                 return keepIf('No engine value, but he has an NFL role (' + p.team + (p.depth_chart_order != null ? ' depth #' + p.depth_chart_order : '') + (proj != null ? ', projects ' + round1(proj) : '') + '). Unknown value is not zero.');
             }
+            const nmu = nextManUp(pid);
+            if (nmu) return keepIf('Next man up: ' + nmu.out.join(' and ') + ' ' + (nmu.out.length > 1 ? 'are' : 'is') + ' out, so he moves up to ' + p.team + ' ' + nmu.role + '.');
             if (youngRiser(pid)) return keepIf('Young upside (age ' + (p.age || '?') + ', ' + (p.years_exp != null ? p.years_exp + ' yrs in the NFL' : 'rookie') + ').');
             if (INJ_OUT.has(inj) && (vr.value || 0) >= STASH_VALUE) return keepIf('Injured (' + p.injury_status + ') but worth ' + vr.value + ': hold him through it' + (irEligibility(pid).eligible === false ? ' (' + irEligibility(pid).why + ').' : '.'));
             const pos = h.ppos(pid);
