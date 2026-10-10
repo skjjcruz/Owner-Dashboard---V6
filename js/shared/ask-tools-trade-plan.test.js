@@ -71,7 +71,7 @@ const A = {
     9: { tier: 'CROSSROADS', window: 'CROSSROADS', panic: 1, needs: [], strengths: [], posAssessment: {} },
 };
 globalThis.assessTeamFromGlobal = rid => A[String(rid)] || { tier: 'CROSSROADS', window: 'CROSSROADS', panic: 1, needs: [], strengths: [], posAssessment: {} };
-globalThis.assessAllTeamsFromGlobal = () => S.rosters.map(r => Object.assign({ rosterId: r.roster_id }, assessTeamFromGlobal(r.roster_id)));
+globalThis.assessAllTeamsFromGlobal = () => S.rosters.map(r => Object.assign({ rosterId: r.roster_id }, globalThis.assessTeamFromGlobal(r.roster_id)));
 // The shared assessor's builder (team-assess.js buildPicksByOwner), same
 // logic: 2027-2029 (the 2026 draft is done), rounds 1-3.
 const realBuilder = (rosters, lg, tp) => {
