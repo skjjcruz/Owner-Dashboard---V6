@@ -241,7 +241,7 @@
     // Tier split (Phase 2, owner ruling): grade/label/diff/side totals + raw roster-impact
     // values stay free; acceptance %, psych taxes, posture/DNA/behavior chips are Pro
     // (wrIsPro() only — never canAccess).
-    function TcVerdictPanel({ leagueHasPicks, valueLabel, verdictColor, diffDisplay, grade, totalA, totalB, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, FAAB_RATE, likelihoodColor, likelihood, netTaxTotal, manualBehaviorFit, otherOwnerId, theirPosture, otherDnaKey, otherDna, manualBehaviorProfile, psychTaxes, grudgeTax, gmFloor, gmModeLabel, gmViability, gmWarnings }) {
+    function TcVerdictPanel({ dhqVerdict, dhqHeadliner, leagueHasPicks, valueLabel, verdictColor, diffDisplay, grade, totalA, totalB, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, FAAB_RATE, likelihoodColor, likelihood, netTaxTotal, manualBehaviorFit, otherOwnerId, theirPosture, otherDnaKey, otherDna, manualBehaviorProfile, psychTaxes, grudgeTax, gmFloor, gmModeLabel, gmViability, gmWarnings }) {
         const _pro = typeof window.wrIsPro === 'function' ? window.wrIsPro() : true;
         // Owner ruling (restored): the 8-factor psych-tax table + approach line render
         // ALWAYS-VISIBLE at the bottom of the panel — the old collapsed 'Why? ▾'
@@ -251,7 +251,23 @@
         return (
             <div className="tc-ta-verdict tc-ta-sticky-summary" id="wr-export-trade">
                 <div className="tc-section-hdr" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>TRADE ANALYSIS<button onClick={() => window.wrExport?.capture(document.getElementById('wr-export-trade'), 'trade-analysis')} style={{ background:'none', border:'1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius:'4px', padding:'2px 8px', color:'var(--gold)', fontSize:'var(--text-micro, 0.6875rem)', cursor:'pointer', fontFamily: 'var(--font-body)', minHeight:'44px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>Snapshot</button></div>
+                {dhqVerdict && (() => {
+                    const col = dhqVerdict.decision === 'offer' ? 'var(--win-green)' : dhqVerdict.decision === 'counter' ? 'var(--warn)' : 'var(--loss-red)';
+                    const word = dhqVerdict.decision === 'offer' ? 'SEND IT' : dhqVerdict.decision === 'counter' ? 'COUNTER' : 'PASS';
+                    return (
+                        <div className="tc-dhq-call" style={{ border:'1px solid ' + col, borderRadius:'var(--card-radius-sm, 8px)', padding:'0.55rem 0.7rem', margin:'0.35rem 0 0.55rem', background:'rgba(255,255,255,0.02)' }}>
+                            <div style={{ display:'flex', alignItems:'baseline', gap:'0.55rem', flexWrap:'wrap' }}>
+                                <span style={{ fontFamily:'var(--font-title)', fontSize:'1.05rem', fontWeight:700, color: col, letterSpacing:'0.04em' }}>{word}</span>
+                                {dhqVerdict.market_label && <span style={{ fontSize:'0.78rem', color:'var(--silver)' }}>{dhqVerdict.market_label}</span>}
+                                {dhqVerdict.accept_chance_pct != null && <span style={{ marginLeft:'auto', fontFamily:'var(--font-mono)', fontSize:'0.85rem', color: col }}>{dhqVerdict.accept_chance_pct}% to accept</span>}
+                            </div>
+                            <div style={{ fontSize:'0.82rem', lineHeight:1.45, color:'var(--white, #F5F2EA)', marginTop:'0.25rem' }}>{dhqVerdict.call}</div>
+                            {(dhqHeadliner?.notes || []).map((n, i) => <div key={i} style={{ fontSize:'0.76rem', color:'var(--silver)', marginTop:'0.2rem' }}>{n}</div>)}
+                        </div>
+                    );
+                })()}
                 <div style={{ display:'flex', alignItems:'baseline', gap:'0.6rem', flexWrap:'wrap' }}>
+                    {dhqVerdict && <span style={{ fontSize:'0.68rem', color:'var(--silver)', opacity:0.7, textTransform:'uppercase', letterSpacing:'0.06em' }}>Value only</span>}
                     <span className="tc-verdict-diff" style={{ color: verdictColor }}>{grade?.grade || '--'}</span>
                     <span style={{ fontFamily:'var(--font-title)', fontSize:'1.1rem', color: verdictColor }}>{(grade?.label || '').toUpperCase()}</span>
                     <span style={{ fontFamily:'var(--font-mono)', fontSize:'1.05rem', fontWeight:600, color: verdictColor }}>{diffDisplay}</span>
@@ -280,7 +296,7 @@
                         <div style={leagueHasPicks === false ? { gridColumn: 'span 2' } : undefined}>
                             <span>Acceptance</span>
                             <strong style={{ color: likelihoodColor }}>{likelihood}%</strong>
-                            <em>{netTaxTotal >= 0 ? '+' : ''}{netTaxTotal}% psych · {manualBehaviorFit ? `${manualBehaviorFit.acceptanceDelta >= 0 ? '+' : ''}${manualBehaviorFit.acceptanceDelta}% behavior` : '0% behavior'}</em>
+                            <em>{dhqVerdict ? 'the same call Ask your AI gives' : <>{netTaxTotal >= 0 ? '+' : ''}{netTaxTotal}% psych · {manualBehaviorFit ? `${manualBehaviorFit.acceptanceDelta >= 0 ? '+' : ''}${manualBehaviorFit.acceptanceDelta}% behavior` : '0% behavior'}</>}</em>
                         </div>
                     ) : (
                         <div style={leagueHasPicks === false ? { gridColumn: 'span 2' } : undefined}>
@@ -1252,6 +1268,38 @@
 
         const allRosters = currentLeague.rosters || [];
         const leagueUsers = currentLeague.users || [];
+        // ── One trade call everywhere (owner ask 2026-10-10: "when an owner
+        // punches something into the trade builder, the message remains
+        // consistent"). The builder asks the same evaluator the member's AI
+        // uses (App.AskTools evaluate_trade: ownership > headliner > what the
+        // partner wants > raw value) and shows its call and acceptance, so
+        // the builder, Ask your AI and the connector never disagree.
+        const [dhqCall, setDhqCall] = useState(null);
+        const dhqCallKey = [tradeOwner.A, tradeOwner.B, tradeIds.A.join(','), tradeIds.B.join(','), tradePickIds.A.join(','), tradePickIds.B.join(','), tradeFaab.A, tradeFaab.B].join('|');
+        useEffect(() => {
+            const T = window.App?.AskTools;
+            const meRid = myRoster?.roster_id;
+            const rosterOfOwner = oid => allRosters.find(r => String(r.owner_id) === String(oid)) || null;
+            const sideA = tradeOwner.A ? rosterOfOwner(tradeOwner.A) : null;
+            // The call is from the member's seat: side A must be their team.
+            const mineA = !tradeOwner.A || (sideA && String(sideA.roster_id) === String(meRid));
+            const hasA = tradeIds.A.length || tradePickIds.A.length, hasB = tradeIds.B.length || tradePickIds.B.length;
+            if (!T || !meRid || !mineA || !hasA || !hasB || tradeFaab.A > 0 || tradeFaab.B > 0) { setDhqCall(null); return undefined; }
+            // PICK-<year>-<round>-<fromRosterId>[-s<slot>] → "2027 1st from 5" / "2027 1.04 from 5".
+            const ORD = { 1: '1st', 2: '2nd', 3: '3rd' };
+            const pickText = id => { const p = String(id).split('-'); const sl = (p[4] || '').charAt(0) === 's' ? Number(p[4].slice(1)) : null; return p[1] + ' ' + (sl ? p[2] + '.' + String(sl).padStart(2, '0') : (ORD[p[2]] || p[2] + 'th')) + ' from ' + p[3]; };
+            const give = tradeIds.A.map(String).concat(tradePickIds.A.map(pickText));
+            const get = tradeIds.B.map(String).concat(tradePickIds.B.map(pickText));
+            const partner = tradeOwner.B ? rosterOfOwner(tradeOwner.B) : null;
+            const key = dhqCallKey;
+            let live = true;
+            const t = setTimeout(() => {
+                T.run('evaluate_trade', Object.assign({ give, get }, partner ? { partner: String(partner.roster_id) } : {}))
+                    .then(r => { if (live) setDhqCall(r && r.verdict ? { key, verdict: r.verdict, headliner: r.headliner || null } : null); })
+                    .catch(() => { if (live) setDhqCall(null); });
+            }, 250);
+            return () => { live = false; clearTimeout(t); };
+        }, [dhqCallKey, myRoster?.roster_id, allRosters.length]);
         const leagueId = currentLeague.id || currentLeague.league_id;
         const WR_KEYS = window.App?.WR_KEYS || window.WR_KEYS || {};
         const WrStorage = window.App?.WrStorage || window.WrStorage || null;
@@ -4804,7 +4852,7 @@
                             <div className="tc-dhq-panel-head">
                                 <span>Trade Builder</span>
                                 <em>{_verdict.hasTrade
-                                    ? `${_verdict.verdictText} ${_verdict.diffDisplay} · gave ${_verdict.totalA.toLocaleString()} / got ${_verdict.totalB.toLocaleString()}${_pro ? ` · ${_verdict.likelihood}% accept` : ''}`
+                                    ? `${_verdict.callWord ? _verdict.callWord + ' · ' : ''}${_verdict.verdictText} ${_verdict.diffDisplay} · gave ${_verdict.totalA.toLocaleString()} / got ${_verdict.totalB.toLocaleString()}${_pro ? ` · ${_verdict.likelihood}% accept` : ''}`
                                     : 'Build or tweak a trade without leaving this view.'}</em>
                                 <div className="tc-dhq-actions" style={{ flex: '0 0 auto' }}>
                                     <button type="button" onClick={() => setBuilderExpanded(false)}>Close ▴</button>
@@ -4904,6 +4952,11 @@
                 })
                 : null;
             if (manualBehaviorFit) likelihood = Math.round(Math.max(5, Math.min(95, likelihood + (manualBehaviorFit.acceptanceDelta || 0))));
+            // The shared call (see dhqCall) owns acceptance when it's in: one number everywhere.
+            const dhqVerdict = dhqCall && dhqCall.key === dhqCallKey ? dhqCall.verdict : null;
+            const dhqHeadliner = dhqVerdict ? dhqCall.headliner : null;
+            if (dhqVerdict && dhqVerdict.accept_chance_pct != null) likelihood = dhqVerdict.accept_chance_pct;
+            const callWord = dhqVerdict ? (dhqVerdict.decision === 'offer' ? 'Send it' : dhqVerdict.decision === 'counter' ? 'Counter' : 'Pass') : '';
             const likelihoodColor = likelihood >= 70 ? 'var(--win-green)' : likelihood >= 45 ? 'var(--warn)' : 'var(--loss-red)';
             // Letter grade + label + numeric diff are FREE (Scout parity) — no gate on these fields.
             const verdictColor = grade.color || grade.col || 'var(--gold)';
@@ -4937,7 +4990,7 @@
                     .filter(p => _gmTuning.sellPositions?.has(p))
                     .forEach(p => gmWarnings.push({ type: 'sell', text: `Buying ${p} — your strategy says SELL` }));
             }
-            return { totalA, totalB, hasTrade, grade, userGain, otherOwnerId, otherDnaKey, otherDna, theirPosture, psychTaxes, grudgeTax, netTaxTotal, likelihood, manualBehaviorProfile, manualBehaviorFit, likelihoodColor, verdictColor, verdictText, diffDisplay, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, gmFloor, gmModeLabel, gmViability, gmWarnings };
+            return { dhqVerdict, dhqHeadliner, callWord, totalA, totalB, hasTrade, grade, userGain, otherOwnerId, otherDnaKey, otherDna, theirPosture, psychTaxes, grudgeTax, netTaxTotal, likelihood, manualBehaviorProfile, manualBehaviorFit, likelihoodColor, verdictColor, verdictText, diffDisplay, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, gmFloor, gmModeLabel, gmViability, gmWarnings };
         }
 
         // ── Alex second opinion on the builder deal ──────────────────────────
@@ -4982,6 +5035,7 @@
                 iSend: dealSide('A'),
                 iReceive: dealSide('B'),
                 verdict: {
+                    call: v.dhqVerdict ? (v.dhqVerdict.decision + ': ' + v.dhqVerdict.call) : undefined,
                     verdictText: v.verdictText,
                     diffDisplay: v.diffDisplay,
                     likelihood: `${v.likelihood}%`,
@@ -5602,7 +5656,7 @@
             if (_verdict.hasTrade) {
                 heroEl = (
                     <HeroCard kicker={liveDealPartner ? 'Live deal · vs ' + liveDealPartner.ownerName : 'Live deal'}
-                        headline={_verdict.verdictText + ' · ' + _verdict.diffDisplay}
+                        headline={(_verdict.callWord ? _verdict.callWord + ' · ' : '') + _verdict.verdictText + ' · ' + _verdict.diffDisplay}
                         facts={'gave ' + _verdict.totalA.toLocaleString() + ' / received ' + _verdict.totalB.toLocaleString() + (_pro ? ' · accept ' + _verdict.likelihood + '%' : '')}
                         cta="BUILDER" onCta={() => setPhBuilderOpen(true)} />
                 );
@@ -5765,7 +5819,7 @@
                             {_verdict.hasTrade
                                 ? <button type="button" onClick={() => { try { document.getElementById('tc-builder-verdict')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {} }}
                                     style={{ marginLeft: 'auto', minHeight: '36px', padding: '4px 10px', background: 'transparent', border: '1px solid ' + (_verdict.verdictColor || 'var(--gold)'), borderRadius: 'var(--card-radius-sm, 8px)', color: _verdict.verdictColor || 'var(--gold)', fontFamily: MONO, fontSize: MICRO, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}>
-                                    {(_verdict.grade?.grade || '--') + ' ' + (_verdict.diffDisplay || '') + ' ▾'}
+                                    {(_verdict.callWord ? _verdict.callWord + ' · ' : '') + (_verdict.grade?.grade || '--') + ' ' + (_verdict.diffDisplay || '') + ' ▾'}
                                 </button>
                                 : <span style={{ marginLeft: 'auto', color: 'var(--text-muted, #8B8B96)', whiteSpace: 'nowrap' }}>No deal yet</span>}
                         </div>
@@ -5791,7 +5845,7 @@
             const actionBarEl = (
                 <ActionBar visible={active === 'desk'}
                     label={_verdict.hasTrade ? 'LIVE DEAL' : 'TRADE BUILDER'}
-                    value={_verdict.hasTrade ? `${_verdict.grade?.grade || '--'} ${_verdict.diffDisplay}` : 'No live deal'}
+                    value={_verdict.hasTrade ? `${_verdict.callWord ? _verdict.callWord + ' · ' : ''}${_verdict.grade?.grade || '--'} ${_verdict.diffDisplay}` : 'No live deal'}
                     tone={_verdict.hasTrade ? (_verdict.userGain > 0 ? 'good' : _verdict.userGain < 0 ? 'bad' : 'gold') : 'mute'}
                     actionLabel="BUILDER"
                     onAction={() => setPhBuilderOpen(true)}
