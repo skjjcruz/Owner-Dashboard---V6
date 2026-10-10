@@ -1059,7 +1059,14 @@
       const password = document.getElementById('acctPassword').value;
       const btn = document.getElementById('btnJoin');
       const signup = authMode === 'signup';
-      if (!email || !password) { showAlert('error', 'Email and password are required.'); return; }
+      // Owner ask 2026-10-10: a new visitor who typed only their league name
+      // and hit Create account gets told plainly how to finish.
+      const labLeagueTyped = signup && LAB_SIGNUP && !!(document.getElementById('authLeagueKey') || {}).value;
+      if (!email || !password) {
+        showAlert('error', labLeagueTyped ? 'Sign-up isn\u2019t finished yet. Continue with Google or Apple, or enter your email and a password, then tap Create account.' : 'Email and password are required.');
+        (document.getElementById(!email ? 'acctEmail' : 'acctPassword') || {}).focus?.();
+        return;
+      }
       if (signup && password.length < 8) { showAlert('error', 'Password must be at least 8 characters.'); return; }
       // Lab: a new visitor's league account is checked before the account
       // is made (a typo is fixed here, not after).
