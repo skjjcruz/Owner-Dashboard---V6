@@ -535,7 +535,35 @@
                     };
                 }
             }
+            // The headliner rule (owner ruling 2026-10-10): "when people put
+            // young, front-line QBs up for trade, they'll always want a 1st
+            // rounder minimum." Quantity doesn't buy quality: for a young
+            // starter, the offer needs one real headline piece back, a 1st-
+            // round pick or a single player near his value. Young starting
+            // QBs need a 1st at least (more in superflex / 2QB).
+            const sfLeague = ((h.league() || {}).roster_positions || []).some(x => /SUPER_FLEX|SUPERFLEX/i.test(x)) || ((h.league() || {}).roster_positions || []).filter(x => x === 'QB').length >= 2;
+            const anchors = get.filter(x => x.kind === 'player' && x.value >= 3000 && (Number(x.age) || 99) <= 28);
+            let headliner = null;
+            if (anchors.length) {
+                const top = anchors.sort((x, y) => y.value - x.value)[0];
+                const firsts = give.filter(x => x.kind === 'pick' && x.round === 1);
+                const bigPlayer = give.filter(x => x.kind === 'player').sort((x, y) => y.value - x.value)[0];
+                const qb = top.pos === 'QB';
+                const needFirsts = qb && sfLeague && top.value >= 5000 ? 2 : 1;
+                const playerOk = bigPlayer && bigPlayer.value >= top.value * 0.7 && (Number(bigPlayer.age) || 99) <= 28;
+                const ok = firsts.length >= needFirsts || (playerOk && (!qb || firsts.length >= 1 || (bigPlayer.pos === 'QB')));
+                headliner = {
+                    target: top.label + ' (' + top.pos + ', ' + (top.age || '?') + ', value ' + top.value + ')',
+                    rule: qb ? 'A young starting QB costs at least ' + (needFirsts === 2 ? 'two 1st-round picks' : 'a 1st-round pick') + (sfLeague ? ' in a superflex league' : '') + ', or a young QB of similar standing.' : 'A young starter costs one real headline piece: a 1st-round pick or a young player worth about 70%+ of him. Several lesser pieces don\'t add up to one.',
+                    offer_has_it: ok,
+                };
+                if (!ok) {
+                    if (acceptPct != null) acceptPct = Math.min(acceptPct, 10);
+                    warnings.push('No headliner: ' + headliner.rule + ' This offer won\'t start the conversation.');
+                }
+            }
             const out = {
+                headliner: headliner || undefined,
                 you_give: give.map(pieceOut), you_get: get.map(pieceOut),
                 totals: { give: tg, get: tt, net_for_you: net, net_pct: round1(net / Math.max(tg, tt, 1) * 100) },
                 grade: fair ? { grade: fair.grade, label: fair.label } : null,
