@@ -532,6 +532,10 @@
             }
             const pk = x.peak_years_left, age = Number(x.age) || 0;
             if (age && age <= 24) return { mult: 1.15, why: 'young (' + age + ')' };
+            // Owner ruling 2026-10-10: "Jonathan Taylor still has lots of life."
+            // A starter-level player (4,000+) with peak years left isn't a relic
+            // to a rebuilder just because he crossed the age line.
+            if (isVet(x.pos, age) && x.value >= SCALE.STARTER && (pk == null || pk >= 1)) return { mult: 0.8, why: x.pos + ' at ' + age + ': past the usual age line, but still a top player with good years left' };
             if (isVet(x.pos, age)) {
                 // Past the cliff: even with peak years on paper, little use to a rebuild.
                 if (pk != null && pk >= 1) return { mult: 0.55, why: x.pos + ' at ' + age + ', past the age cliff (' + vetAge(x.pos) + '+); only ' + pk + ' peak year' + (pk === 1 ? '' : 's') + ' left' };
@@ -683,7 +687,10 @@
         const plus = mode === 'REBUILDING' ? (rule.plus || 0) : 0;
         const picksOk = credit >= rule.firsts && spare >= plus;
         const big = give.filter(x => x.kind === 'player').sort((p, q) => q.value - p.value)[0];
-        const playerOk = !!big && big.value >= target.value * 0.7 && (Number(big.age) || 99) <= 28 && (!rule.qb || big.pos === 'QB');
+        // For a QB: a young QB of similar standing, or (owner ruling 2026-10-10)
+        // one of the member's top players worth at least as much, with a pick.
+        const topSwap = rule.qb && !!big && big.pos !== 'QB' && big.value >= target.value && (Number(big.age) || 99) <= 28 && give.some(mine);
+        const playerOk = !!big && (Number(big.age) || 99) <= 28 && ((big.value >= target.value * 0.7 && (!rule.qb || big.pos === 'QB')) || topSwap);
         const ok = picksOk || playerOk;
         const notes = [];
         if (tooFar.length) notes.push(tooFar.map(x => x.label).join(' + ') + ' is too far off for a rebuilder to count as the headliner; it takes a ' + nd + ' 1st.');
@@ -976,7 +983,7 @@
     }
     AT.register({
         name: 'trade_plan',
-        description: 'START HERE before proposing any trade. One verdict for getting a player (or dealing with a team): decision (offer / counter / pass / no_fit) and one plain recommendation; the partner\'s real mode (rebuilding / contending / middle) with evidence, what they want and won\'t take; the going rate for the target; up to 3 offers built ONLY from what I own, each with its acceptance chance; and what not to offer and why. Optionally pass a package I\'m considering to check and improve it.',
+        description: 'START HERE before proposing any trade. One verdict for getting a player (or dealing with a team): decision (offer / tough / counter / pass / no_fit; tough = possible but costly or a stretch) and one plain recommendation; the partner\'s likely mode (rebuilding / contending / middle), read from their moves, with evidence, what they want and won\'t take; the going rate for the target; up to 3 offers built ONLY from what I own, each with its acceptance chance; and what not to offer and why. Optionally pass a package I\'m considering to check and improve it.',
         parameters: {
             type: 'object',
             properties: {
@@ -1147,6 +1154,11 @@
                 }
                 const heads = pool.filter(x => x.kind === 'player' && x.value >= target.value * 0.7 && (Number(x.age) || 99) <= 28 && (!rule.qb || x.pos === 'QB')).sort((p, q) => p.value - q.value);
                 if (heads[0]) bases.push({ tag: 'Leads with a young ' + heads[0].pos + ' of similar standing', base: [heads[0]] });
+                if (rule.qb) {
+                    const nearPick = pool.filter(x => x.kind === 'pick').sort((p, q) => (Number(p.year) || 9999) - (Number(q.year) || 9999) || q.to_them - p.to_them)[0];
+                    pool.filter(x => x.kind === 'player' && x.pos !== 'QB' && x.value >= target.value && (Number(x.age) || 99) <= 28).sort((p, q) => p.value - q.value).slice(0, 2)
+                        .forEach(tp => { if (nearPick) bases.push({ tag: 'One of your top players plus a pick', base: [tp, nearPick] }); });
+                }
             } else {
                 const single = pool.filter(x => x.to_them >= tCost.cost).sort((p, q) => p.value - q.value)[0];
                 if (single) bases.push({ tag: 'One piece that covers his price', base: [single] });
@@ -1176,34 +1188,45 @@
                 else { const s = score(userGive, 'Your package'); yourOffer = Object.assign({ valid: true }, s.out); yourOffer._s = s; }
             }
             const who = label(partner), mw = MODE_WORD[mode];
-            const leadWith = mode === 'REBUILDING' ? ' They\'re rebuilding, so lead with picks and young players, not veterans.' : mode === 'CONTENDING' ? ' They\'re contending, so proven starters move them more than picks.' : '';
+            // Owner ruling 2026-10-10: the partner's mode is a read, not a fact.
+            const leadWith = mode === 'REBUILDING' ? ' Based on their recent moves, ' + who + ' looks to be rebuilding, likely after picks and younger players.' : mode === 'CONTENDING' ? ' Based on their recent moves, ' + who + ' looks to be contending, so proven starters likely move them more than picks.' : '';
+            // A package that takes one of the member's starters costs them lineup strength: say so.
+            const meRoster = rosterById(meRid) || {};
+            const starterSet = new Set((meRoster.starters || []).map(String));
+            const keyPieces = o => (o ? o.pieces : []).filter(x => x.kind === 'player' && (starterSet.has(String(x.pid)) || x.value >= SCALE.STARTER)).map(x => x.label);
+            scored.forEach(s => { const k = keyPieces(s); if (k.length) s.out.lineup_cost = 'You\'d be giving up ' + k.join(' and ') + ', a key piece of your lineup.'; });
             let decision, recommendation;
             const ys = yourOffer && yourOffer._s;
             if (ys && (!rule || ys.hl.ok) && ys.acc >= 40 && ys.pv.ratio >= 0.95) {
                 decision = 'offer';
                 recommendation = 'Send your package (' + yourOffer.give.join(' + ') + ') for ' + target.label + ': about ' + ys.acc + '% to be accepted.' + leadWith;
             } else if (!best) {
-                decision = yourOffer ? 'pass' : 'no_fit';
+                decision = yourOffer ? 'pass' : 'tough';
                 const myFirsts = assets.filter(x => x.kind === 'pick' && x.round === 1).map(x => String(x.label).replace(/\s*\(own\)$/, ''));
                 const dont = yourOffer ? 'Don\'t send ' + [].concat(a.give).join(' + ') + (ys && rule && !ys.hl.ok ? ' (no headliner)' : '') + '. ' : '';
-                recommendation = dont + 'Nothing you own meets the price for ' + target.label + ': ' + (rule ? 'it takes ' + rule.needed + (picksLoaded ? '' : ', and your picks aren\'t loaded') : 'nothing you own is worth enough to a ' + mw + ' owner') + '.'
-                    + (rule && myFirsts.length ? ' Your ' + myFirsts.join(' and ') + ' ' + (myFirsts.length > 1 ? 'are' : 'is') + ' too far off for ' + (mode === 'REBUILDING' ? 'a rebuilder' : 'this') + ' to headline the deal. To get him you\'d first need a ' + rule.next_draft + ' 1st (buy one from a contender) or a young QB to lead with.' : '');
+                // Owner ruling 2026-10-10: never "I can't put a deal together";
+                // say it'll be a tough one and why.
+                recommendation = dont + 'This will be a tough deal to pull off for ' + target.label + '. ' + (rule ? 'The going rate is ' + rule.needed + (picksLoaded ? '' : ', and your picks aren\'t loaded') : 'What you could spare is worth less to a ' + mw + ' owner than what he costs') + '.'
+                    + (rule && myFirsts.length ? ' Your ' + myFirsts.join(' and ') + ' ' + (myFirsts.length > 1 ? 'are' : 'is') + ' probably too far off to lead the deal' + (mode === 'REBUILDING' ? ' for a rebuilding team' : '') + '. The likely paths: pick up a ' + rule.next_draft + ' 1st first (contenders sometimes sell theirs), or build it around one of your top players.' : '') + leadWith;
             } else if (yourOffer) {
                 decision = 'counter';
                 const whyNot = !yourOffer.valid ? yourOffer.problems.join('; ') : (rule && !ys.hl.ok) ? 'no headliner: it takes ' + rule.needed : ys.pv.ratio < 0.95 ? 'worth only about ' + ys.pv.toThem + ' to ' + who + ' against ' + ys.pv.theirCost : 'too little appeal';
-                recommendation = 'Don\'t send ' + [].concat(a.give).join(' + ') + ' (' + whyNot + (yourOffer.valid ? '; about ' + ys.acc + '% to be accepted' : '') + '). Offer ' + best.out.give.join(' + ') + ' instead: about ' + best.acc + '% to be accepted.' + leadWith;
+                recommendation = 'Don\'t send ' + [].concat(a.give).join(' + ') + ' (' + whyNot + (yourOffer.valid ? '; about ' + ys.acc + '% to be accepted' : '') + ').' + (best.out.lineup_cost ? ' This will be a tough one: ' + who + ' may consider ' + best.out.give.join(' + ') + ' (about ' + best.acc + '%), but ' + best.out.lineup_cost.replace(/^You'd/, 'you\'d') : ' Offer ' + best.out.give.join(' + ') + ' instead: about ' + best.acc + '% to be accepted.') + leadWith;
             } else if (best.acc < 20) {
                 decision = 'pass';
                 recommendation = 'The best you can build is ' + best.out.give.join(' + ') + ' at about ' + best.acc + '%: not worth chasing ' + target.label + ' right now.';
             } else if (!rule && best.rawGive > target.value * 1.5) {
                 decision = 'pass';
                 recommendation = 'It would cost you about ' + best.rawGive + ' in value for ' + target.label + ' (worth ' + target.value + '): too steep.';
+            } else if (best.out.lineup_cost) {
+                decision = 'tough';
+                recommendation = 'This will be a tough deal to pull off. ' + who + ' may consider ' + best.out.give.join(' + ') + ' for ' + target.label + ' (about ' + best.acc + '%), but ' + best.out.lineup_cost.replace(/^You'd/, 'you\'d') + leadWith;
             } else {
                 decision = 'offer';
                 recommendation = 'Offer ' + best.out.give.join(' + ') + ' for ' + target.label + ': about ' + best.acc + '% to be accepted.' + leadWith;
             }
             if (yourOffer) delete yourOffer._s;
-            const confidence = !picksLoaded ? 'low' : (mode === 'NEUTRAL' || !TE() || decision === 'no_fit') ? 'medium' : best && best.acc >= 50 ? 'high' : 'medium';
+            const confidence = !picksLoaded ? 'low' : (mode === 'NEUTRAL' || !TE() || decision === 'no_fit' || decision === 'tough') ? 'medium' : best && best.acc >= 50 ? 'high' : 'medium';
             return Object.assign({ decision, confidence, recommendation }, base, {
                 price_floor: priceFloor,
                 offers: scored.map(s => s.out),

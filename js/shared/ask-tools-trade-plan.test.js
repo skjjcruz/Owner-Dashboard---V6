@@ -189,7 +189,7 @@ test('a pick with an unknown holder is never treated as mine (ownership not load
         const p = await run('trade_plan', { target: 'Jordan Love' });
         assert.deepEqual(p.my_assets.picks, []);
         assert.equal(p.offers.length, 0);
-        assert.equal(p.decision, 'no_fit');
+        assert.equal(p.decision, 'tough');
         assert.equal(p.confidence, 'low');
     } finally { globalThis.buildPicksByOwner = realBuilder; }
 });
@@ -202,11 +202,16 @@ test('young SF starting QB from a rebuilder: a next-draft 1st plus a little more
     assert.ok(!r.error, r.error);
     assert.match(r.price_floor.headliner_needed, /^a 2027 1st \(a rebuilder also wants a 2nd or a solid young player on top\)/);
     assert.match(r.price_floor.rule, /superflex/);
-    // The member's only 1st is a 2029: nothing he owns meets the price.
-    assert.equal(r.offers.length, 0);
-    assert.equal(r.decision, 'no_fit');
-    assert.match(r.recommendation, /Your 2029 1st is too far off for a rebuilder/);
-    assert.match(r.recommendation, /2027 1st/);
+    // The member's only 1st is a 2029: no pick-led deal. Owner ruling: the
+    // realistic path is one of his top players plus a pick, said as a tough
+    // deal that costs a key piece of the lineup, never "can't be done".
+    assert.ok(r.offers.length >= 1);
+    r.offers.forEach(o => { assert.ok(o.give.some(g => /George Pickens|Jonathan Taylor/.test(g)), o.give.join(' + ')); assert.match(o.lineup_cost, /key piece of your lineup/); assert.ok(!o.give.some(g => /^2029 1st/.test(g))); });
+    assert.equal(r.decision, 'tough');
+    assert.match(r.recommendation, /^This will be a tough deal to pull off/);
+    assert.match(r.recommendation, /may consider/);
+    assert.match(r.recommendation, /looks to be rebuilding/);
+    assert.doesNotMatch(r.recommendation, /Nothing you own|can't/i);
     const far = await run('evaluate_trade', { give: ['2029 1st', '2027 2nd from TWhy123'], get: ['Jordan Love'] });
     assert.equal(far.headliner.offer_has_it, false);
     assert.ok(far.headliner.notes.some(n => /too far off/.test(n)), JSON.stringify(far.headliner));
@@ -232,14 +237,14 @@ test('Stafford + Andrews for Love: a rebuilder doesn\'t want aging vets, low cha
     const r = await run('trade_plan', { target: 'Jordan Love', give: ['Matthew Stafford', 'Mark Andrews'] });
     assert.ok(!r.error, r.error);
     assert.equal(r.partner.mode, 'rebuilding');
-    assert.equal(r.decision, 'pass');
+    assert.equal(r.decision, 'counter');
     assert.ok(r.your_offer.accept_chance_pct <= 10, String(r.your_offer.accept_chance_pct));
     assert.equal(r.your_offer.headliner_met, false);
     for (const n of ['Matthew Stafford', 'Mark Andrews']) assert.ok(r.do_not_offer.some(d => d.asset.startsWith(n)), n);
     assert.ok(r.partner.wont_take.some(w => /age cliff/.test(w)));
-    r.offers.forEach(o => assert.ok(!o.give.some(g => /Stafford|Andrews|Jonathan Taylor/.test(g)), o.give.join(' + ')));
+    r.offers.forEach(o => assert.ok(!o.give.some(g => /Stafford|Andrews/.test(g)), o.give.join(' + ')));
     assert.match(r.recommendation, /^Don't send Matthew Stafford \+ Mark Andrews/);
-    assert.match(r.recommendation, /2027 1st/);
+    assert.match(r.recommendation, /tough one/);
     // Same deal through evaluate_trade: the same answer.
     const e = await run('evaluate_trade', { give: ['Matthew Stafford', 'Mark Andrews'], get: ['Jordan Love'] });
     assert.equal(e.verdict.decision, 'counter');
