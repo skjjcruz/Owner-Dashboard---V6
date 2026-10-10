@@ -123,8 +123,12 @@ test('evaluate_trade: values, grade, acceptance, DNA and plain-English psycholog
     const r = await run('evaluate_trade', { give: ['Malik Nabers'], get: ['Trey McBride', '2027 1st'] });
     assert.equal(r.partner.includes('GasMan612'), true);
     assert.equal(r.totals.give, 6500);
-    assert.equal(r.totals.get, 2881 + Math.round(6000 * 0.88));
-    assert.equal(r.grade.grade, 'B'); // 8161 / 6500 = 1.26 in the stand-in's bands
+    // 2027 is the NEXT draft (the builder's first year), so no year
+    // discount any more (was 6000 * 0.88 while the engine counted from 2026).
+    assert.equal(r.totals.get, 2881 + 6000);
+    assert.equal(r.grade.grade, 'A+'); // 8881 / 6500 = 1.37 in the stand-in's bands
+    assert.ok(r.verdict && r.verdict.decision, 'verdict comes first');
+    assert.equal(Object.keys(r)[0], 'verdict');
     // The engine's value-only read stays visible; the headline chance now
     // accounts for what this partner wants (owner ruling 2026-10-10).
     assert.equal(r.accept_chance_on_value_only_pct != null ? r.accept_chance_on_value_only_pct : r.accept_chance_pct, 42);
@@ -175,7 +179,7 @@ test('get_draft_info: picks owned, values, results, hit rates, prospects', async
     const me = r.picks_by_team.find(t => /Dirty Mike/.test(t.team));
     assert.equal(me.count, 3);
     assert.ok(me.picks.some(p => /2027 1st \(from GasMan612/.test(p)));
-    assert.equal(r.pick_values.by_round[0].mid, Math.round(6000 * 0.88));
+    assert.equal(r.pick_values.by_round[0].mid, 6000);   // next draft: no year discount
     assert.equal(r.draft_results.rows[0].season, '2025');
     assert.equal(r.draft_results.rows.find(x => x.player === 'Malik Nabers').result, 'hit (elite season)');
     assert.equal(r.hit_rates_by_round[0].starter_rate_pct, 50);
@@ -208,4 +212,86 @@ test('get_trade_block lists what owners put on the block, by team', async () => 
     assert.equal(out.listings, 1);
     assert.equal(out.teams[0].players[0].listed, '2026-10-09');
     assert.equal(out.stale_listings_dropped, 1);
+});
+
+// ── Bug fixes 2026-10-10 (trade research, reports/trades.md) ──────────
+const M = () => App.AskTools._moves;
+
+test('vet cutoffs are position-aware (RB 27+, WR 29+, TE 29+, QB 32+), not a flat 26+', () => {
+    const { isVet } = M();
+    assert.equal(isVet('QB', 27), false);   // Jordan Love is not a veteran
+    assert.equal(isVet('QB', 32), true);
+    assert.equal(isVet('RB', 27), true);
+    assert.equal(isVet('WR', 28), false);
+    assert.equal(isVet('WR', 29), true);
+    assert.equal(isVet('TE', 29), true);
+    assert.equal(isVet('TE', 26), false);
+});
+
+test('theirCost: a listed player costs his owner LESS (Math.min), never more', () => {
+    const { costToOwner } = M();
+    const henry = { kind: 'player', pid: 'henry', label: 'Derrick Henry', pos: 'RB', age: 32, value: 2096, peak_years_left: 0 };
+    const unlisted = costToOwner('REBUILDING', henry, false), listed = costToOwner('REBUILDING', henry, true);
+    assert.ok(listed.cost < unlisted.cost, 'listed vet cheaper than unlisted');
+    assert.ok(listed.cost < Math.round(2096 * 0.85), 'the old Math.max raised him to 0.85');
+    const young = { kind: 'player', pid: 'nabers', label: 'Malik Nabers', pos: 'WR', age: 23, value: 6500 };
+    assert.ok(costToOwner('REBUILDING', young, true).cost < costToOwner('REBUILDING', young, false).cost, 'a listed young player is discounted too');
+    assert.ok(costToOwner('NEUTRAL', young, true).cost < 6500);
+});
+
+test('headliner: a 1st with an unknown holder does not count as mine', () => {
+    const { headlinerMet } = M();
+    const rule = { qb: true, firsts: 1, rule: 'x' };
+    const target = { kind: 'player', value: 3574, pos: 'QB' };
+    assert.equal(headlinerMet(rule, target, [{ kind: 'pick', round: 1, holder: null, label: '2029 1st' }], 13).ok, false);
+    assert.equal(headlinerMet(rule, target, [{ kind: 'pick', round: 1, holder: '2', label: '2029 1st' }], 13).ok, false);
+    assert.equal(headlinerMet(rule, target, [{ kind: 'pick', round: 1, holder: '13', label: '2029 1st' }], 13).ok, true);
+});
+
+test('posture: a rebuild read wins over panic; a middling team is not a "buyer"', () => {
+    const E = App.TradeEngine, keep = E.calcOwnerPosture;
+    try {
+        E.calcOwnerPosture = () => ({ key: 'DESPERATE', label: 'Desperate', desc: 'Panic-mode' });
+        assert.equal(M().postureFor({ panic: 4 }, 'NONE', { mode: 'REBUILDING' }).key, 'SELLER');
+        assert.equal(M().postureFor({ panic: 4 }, 'NONE', { mode: 'CONTENDING' }).key, 'DESPERATE');
+        E.calcOwnerPosture = () => ({ key: 'BUYER', label: 'Active Buyer', desc: 'Contender upgrading' });
+        assert.equal(M().postureFor({ panic: 2, tier: 'CROSSROADS' }, 'NONE', { mode: 'NEUTRAL' }).key, 'NEUTRAL');
+        assert.equal(M().postureFor({ panic: 2 }, 'NONE', { mode: 'CONTENDING' }).key, 'BUYER');
+    } finally { E.calcOwnerPosture = keep; }
+});
+
+test('pick slots: next draft projected from standings (worst team picks 1st); later drafts mid', () => {
+    const { nextDraftYear, projectedSlot } = M();
+    assert.equal(nextDraftYear(), 2027);       // the builder's first year: the 2026 draft is done
+    assert.equal(projectedSlot(2027, 2), 1);   // Gas is 1-4
+    assert.equal(projectedSlot(2027, 13), 2);  // I'm 4-1
+    assert.equal(projectedSlot(2028, 2), null);
+});
+
+test('rebuilder: nearer picks are worth more to them; aging vets almost nothing', () => {
+    const { appealFor } = M();
+    const near = appealFor('REBUILDING', { kind: 'pick', year: 2027 }).mult, next = appealFor('REBUILDING', { kind: 'pick', year: 2028 }).mult, far = appealFor('REBUILDING', { kind: 'pick', year: 2029 }).mult;
+    assert.ok(near > next && next > far);
+    assert.ok(appealFor('REBUILDING', { kind: 'player', pos: 'QB', age: 38 }).mult <= 0.2, 'no peak data, far past the cliff');
+    assert.equal(appealFor('REBUILDING', { kind: 'player', pos: 'QB', age: 27, peak_years_left: 5 }).mult, 1);
+});
+
+test('one value scale: 7,000 elite / 4,000 starter / 2,000 depth, and the note says so', async () => {
+    assert.deepEqual(M().SCALE, { ELITE: 7000, STARTER: 4000, DEPTH: 2000 });
+    const r = await run('evaluate_trade', { give: ['Malik Nabers'], get: ['Trey McBride'] });
+    assert.match(r.values_note, /7,000\+ elite, 4,000\+ starter, 2,000\+ depth, below that a stash/);
+    // McBride (2,881) is under the 4,000 starter line: no headliner rule (it used to start at 3,000).
+    assert.equal(r.headliner, undefined);
+});
+
+test('trade_plan is registered with the verdict-first shape', async () => {
+    assert.ok(T.defs().some(d => d.name === 'trade_plan'));
+    const r = await run('trade_plan', { target: 'Trey McBride' });
+    assert.ok(!r.error, r.error);
+    assert.deepEqual(Object.keys(r).slice(0, 3), ['decision', 'confidence', 'recommendation']);
+    for (const k of ['partner', 'my_assets', 'price_floor', 'offers', 'do_not_offer', 'comparables', 'evidence', 'rules_applied', 'method']) assert.ok(k in r, k);
+    assert.ok(['rebuilding', 'contending', 'middle'].includes(r.partner.mode));
+    // Only what I own: my roster and the picks the builder gives me.
+    const mine = new Set(['Jonathan Taylor', 'Courtland Sutton', 'Dak Prescott', 'Malik Nabers']);
+    r.offers.forEach(o => o.give.forEach(g => assert.ok(/^\d{4} /.test(g) ? r.my_assets.picks.some(p => p.pick === g) : mine.has(g.replace(/ \(.*$/, '')), g)));
 });

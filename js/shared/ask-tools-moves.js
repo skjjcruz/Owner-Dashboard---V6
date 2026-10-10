@@ -2,9 +2,11 @@
 // js/shared/ask-tools-moves.js — Ask tools: moves, trades, owners, draft
 //
 // Registers on window.App.AskTools (js/shared/ask-tools.js, which must load
-// first). Five tools the member's own AI can call:
+// first). Tools the member's own AI can call:
 //   get_transactions     league moves (trades, waivers, free agents)
-//   evaluate_trade       grade a proposed deal with DHQ's trade engine
+//   trade_plan           verdict first: who, what they want, the going rate,
+//                        up to 3 offers from what I own (start here)
+//   evaluate_trade       grade a proposed deal; `verdict` reconciles it all
 //   find_trade_partners  who to call, for a position or in general
 //   get_owner_profile    one owner's trading DNA, record and activity
 //   get_draft_info       picks owned, pick values, past drafts, hit rates,
@@ -43,28 +45,94 @@
     } : null;
     const TE = () => App.TradeEngine || null;
 
+    // ── One value scale (owner ruling 2026-10-10) ──────────────────
+    // The same bands the server connector states: 7,000+ elite, 4,000+
+    // starter, 2,000+ depth, below that a stash. Every threshold in this
+    // file reads from here (the headliner rule used to start at 3,000).
+    const SCALE = { ELITE: 7000, STARTER: 4000, DEPTH: 2000 };
+    const SCALE_NOTE = 'Values are DHQ dynasty values: 7,000+ elite, 4,000+ starter, 2,000+ depth, below that a stash.';
+    // ── Who counts as a veteran (position-aware age cliffs) ────────
+    // Chosen cutoffs: RB 27+, WR 29+, TE 29+, QB 32+; anything else
+    // (K, IDP) 30+. A flat "26+" used to call a 27-year-old QB a veteran.
+    const VET_AGE = { QB: 32, RB: 27, WR: 29, TE: 29 };
+    const vetAge = pos => VET_AGE[String(pos || '').toUpperCase()] || 30;
+    const isVet = (pos, age) => Number(age) > 0 && Number(age) >= vetAge(pos);
+    const VET_RULE = 'veterans past their age cliff (RB 27+, WR 29+, TE 29+, QB 32+)';
+    const isSF = () => { const rp = (h.league() || {}).roster_positions || []; return rp.some(x => /SUPER_FLEX|SUPERFLEX/i.test(x)) || rp.filter(x => x === 'QB').length >= 2; };
+
     // ── Pick values ────────────────────────────────────────────────
     // Same order of preference as the Trade Room (trade-calc.js
     // pickValueForParts → PlayerValue.getPickValue): the league-calibrated
     // DHQ curve, then the shared industry pick-value model, then a fixed
-    // round table. Future years carry the engine's 12%/year discount.
-    function pickValue(year, round, slot) {
-        const teams = totalTeams(), rounds = draftRounds();
-        round = Number(round); slot = slot != null ? Number(slot) : null;
+    // round table. Read at the current season so no engine year discount
+    // applies; pickValue adds the discount itself (below).
+    function rawPickValue(round, slot) {
+        const teams = totalTeams(), rounds = draftRounds(), yr = season();
+        const s = slot || Math.ceil(teams / 2);
         try {
             const PV = App.PlayerValue;
-            if (PV && typeof PV.getPickValue === 'function') { const v = PV.getPickValue(year, round, teams, slot, rounds); if (v > 0) return Math.round(v); }
+            if (PV && typeof PV.getPickValue === 'function') { const v = PV.getPickValue(yr, round, teams, s, rounds); if (v > 0) return v; }
         } catch (e) { /* fall through */ }
         try {
             const fn = LI().dhqPickValueFn;
-            if (typeof fn === 'function') { const v = fn(year, round, slot || Math.ceil(teams / 2)); if (v > 0) return Math.round(v); }
+            if (typeof fn === 'function') { const v = fn(yr, round, s); if (v > 0) return v; }
         } catch (e) { /* fall through */ }
-        const ahead = Math.max(0, (parseInt(year, 10) || 0) - (parseInt(season(), 10) || 0));
-        const disc = Math.pow(0.88, ahead);
         try {
-            if (typeof root.getPickValueBySlot === 'function') { const v = root.getPickValueBySlot(round, slot || Math.ceil(teams / 2), teams, rounds); if (v > 0) return Math.round(v * disc); }
+            if (typeof root.getPickValueBySlot === 'function') { const v = root.getPickValueBySlot(round, s, teams, rounds); if (v > 0) return v; }
         } catch (e) { /* fall through */ }
-        return Math.round(({ 1: 7000, 2: 3500, 3: 1800, 4: 800 }[round] || 400) * disc);
+        return ({ 1: 7000, 2: 3500, 3: 1800, 4: 800 }[round] || 400);
+    }
+    // The next draft still to be held. The engine discounted from the
+    // current season, so in October 2026 (2026 draft done) the 2027 pick,
+    // six months out, took a full year's 12% cut. Taken from the pick
+    // ownership builder (which already rolls past a finished draft), else
+    // from the drafts / league status / week.
+    let ndyMemo = null;
+    function nextDraftYear() {
+        const s = S(), key = [rosters(), s.tradedPicks, season(), s.drafts];
+        if (ndyMemo && ndyMemo.key.every((k, i) => k === key[i])) return ndyMemo.v;
+        let v = null;
+        const own = picksByOwner();
+        if (own) { const ys = Object.values(own).flat().map(x => Number(x.year)).filter(Boolean); if (ys.length) v = Math.min(...ys); }
+        if (v == null) {
+            const yr = parseInt(season(), 10) || new Date().getFullYear();
+            const ds = (s.drafts || []).filter(d => String(d.season) === String(yr));
+            const st = String((league() || {}).status || '');
+            if (ds.length) v = ds.every(d => String(d.status || '').toLowerCase() === 'complete') ? yr + 1 : yr;
+            else if (/^(pre_draft|drafting)$/.test(st)) v = yr;
+            else v = (week() >= 1 || /^(in_season|post_season|complete)$/.test(st)) ? yr + 1 : yr;
+        }
+        ndyMemo = { key, v };
+        return v;
+    }
+    // Current standings, worst team first (win %, then fewest points for).
+    // Null before anyone has played.
+    function standingsWorstFirst() {
+        const rs = rosters().slice();
+        const g = r => { const st = r.settings || {}; return (st.wins || 0) + (st.losses || 0) + (st.ties || 0); };
+        if (!rs.some(r => g(r) > 0)) return null;
+        const pct = r => { const st = r.settings || {}; return g(r) ? ((st.wins || 0) + 0.5 * (st.ties || 0)) / g(r) : 0.5; };
+        const pf = r => { const st = r.settings || {}; return (st.fpts || 0) + (st.fpts_decimal || 0) / 100; };
+        return rs.sort((a, b) => pct(a) - pct(b) || pf(a) - pf(b)).map(r => String(r.roster_id));
+    }
+    // Projected slot of a team's pick in the NEXT draft from today's
+    // standings (worst team picks 1st). Later drafts are too far to call:
+    // they stay mid-round. Null when unknown.
+    function projectedSlot(year, origRid) {
+        if (origRid == null || Number(year) !== nextDraftYear()) return null;
+        const order = standingsWorstFirst();
+        if (!order) return null;
+        const i = order.indexOf(String(origRid));
+        return i < 0 ? null : i + 1;
+    }
+    // A pick's value: slot (given, else projected from standings for the
+    // next draft, else mid), no discount for the next draft, 12% a year
+    // for each draft after it.
+    function pickValue(year, round, slot, fromRid) {
+        round = Number(round);
+        const s = slot != null ? Number(slot) : projectedSlot(year, fromRid);
+        const ahead = Math.max(0, (parseInt(year, 10) || 0) - nextDraftYear());
+        return Math.round(rawPickValue(round, s) * Math.pow(0.88, ahead));
     }
     // Picks owned by each roster: { rid: [{ year, round, originalOwnerRid }] }
     // from the shared team assessor's builder (rosters + Sleeper's traded
@@ -97,7 +165,7 @@
         if (/\bearly\b/.test(t) && slot == null) slot = 2;
         else if (/\blate\b/.test(t) && slot == null) slot = Math.max(1, totalTeams() - 1);
         // Whatever is left may name the original owner ("from Gas", "Gas 2027 1st").
-        const rest = t.replace(/\b20\d\d\b|\b[1-7]\.\d{1,2}\b|\b[1-7](st|nd|rd|th)\b|\bround\s*[1-7]\b|\b(r|rd)\s?[1-7]\b|\b(first|second|third|fourth|fifth|sixth|seventh)\b|\b(pick|picks|rounder|round|from|via|the|a|an|next|year|early|mid|middle|late|my|own|their|his)\b/g, ' ').replace(/\s+/g, ' ').trim();
+        const rest = t.replace(/\b20\d\d\b|\b[1-7]\.\d{1,2}\b|\b[1-7](st|nd|rd|th)\b|\bround\s*[1-7]\b|\b(r|rd)\s?[1-7]\b|\b(first|second|third|fourth|fifth|sixth|seventh)\b|\b(pick|picks|rounder|round|from|via|the|a|an|next|year|early|mid|middle|late|my|own|their|his|projected)\b/g, ' ').replace(/\s+/g, ' ').trim();
         let from = null;
         if (rest && rest.length >= 2) { const r = /^(me|mine|i)$/.test(rest) ? myRoster() : findTeam(rest); if (r) from = r.roster_id; }
         if (/\bmy\b|\bmine\b|\bown\b/.test(t) && from == null) { const me = myRoster(); if (me) from = me.roster_id; }
@@ -185,21 +253,60 @@
     };
     const psychLines = taxes => (taxes || []).slice(0, 6).map(x => ({ factor: x.name, effect: (Number(x.impact) || 0) > 0 ? 'helps' : 'hurts', impact: Number(x.impact) || 0, means: PLAIN[x.name] || x.desc || String(x.name).toLowerCase() }));
 
+    // Owner posture, with the rebuild read first. The engine's
+    // calcOwnerPosture checks panic >= 4 before a rebuild, so a 1-3 team
+    // selling vets for picks read "Desperate: will overpay for immediate
+    // help" (and got the Panic Premium on acceptance), and a middling team
+    // with panic >= 2 read "Active Buyer". Here: a rebuilding owner is a
+    // seller whatever his panic; "buyer" needs a contending read.
+    const POSTURE = {
+        SELLER: { key: 'SELLER', label: 'Active Seller', desc: 'Moving assets for futures. Buy at a discount.' },
+        NEUTRAL: { key: 'NEUTRAL', label: 'Neutral', desc: 'No strong directional push. Fair offers only.' },
+    };
+    function postureFor(theirA, dnaKey, intent) {
+        const E = TE();
+        if (intent && intent.mode === 'REBUILDING') return POSTURE.SELLER;
+        let p = null;
+        try { p = E && E.calcOwnerPosture ? E.calcOwnerPosture(theirA, dnaKey) : null; } catch (e) { p = null; }
+        if (p && p.key === 'BUYER' && !(intent && intent.mode === 'CONTENDING')) return POSTURE.NEUTRAL;
+        if (p && p.key === 'SELLER' && intent && intent.mode === 'CONTENDING') return POSTURE.NEUTRAL;
+        return p;
+    }
     // Acceptance chance + posture for a deal (give = my side's total).
-    function dealRead(me, partner, giveTotal, getTotal, pieces) {
-        const out = { posture: null, accept_pct: null, psychology: [], dna: null };
+    // `intent` (ownerIntent) corrects the posture, and a rebuilder's panic
+    // is not a reason to pay for immediate help (no Panic Premium).
+    function dealRead(me, partner, giveTotal, getTotal, pieces, intent) {
+        const out = { posture: null, accept_pct: null, psychology: [], dna: null, _taxes: [], _mineA: null, _theirA: null };
         if (!partner) return out;
         out.dna = dnaBrief(partner.roster_id);
         const E = TE(), mineA = me ? assess(me.roster_id) : null, theirA = assess(partner.roster_id);
+        out._mineA = mineA; out._theirA = theirA;
         if (!E || !mineA || !theirA) return out;
         try {
-            const posture = E.calcOwnerPosture ? E.calcOwnerPosture(theirA, out.dna.key) : null;
-            const taxes = E.calcPsychTaxes ? (E.calcPsychTaxes(mineA, theirA, out.dna.key, posture) || []) : [];
+            const posture = postureFor(theirA, out.dna.key, intent);
+            let taxes = E.calcPsychTaxes ? (E.calcPsychTaxes(mineA, theirA, out.dna.key, posture) || []) : [];
+            if (intent && intent.mode === 'REBUILDING') taxes = taxes.filter(t => t.name !== 'Panic Premium');
+            out._taxes = taxes;
             out.posture = posture ? { key: posture.key, label: posture.label, means: posture.desc } : null;
             out.psychology = psychLines(taxes);
             if (E.calcAcceptanceLikelihood) out.accept_pct = E.calcAcceptanceLikelihood(giveTotal, getTotal, out.dna.key, taxes, mineA, theirA, { totalPieces: pieces });
         } catch (e) { /* acceptance is a bonus */ }
         return out;
+    }
+    // Acceptance on what the partner VALUES (owner ruling 2026-10-10): the
+    // engine's curve runs on worth-to-them against their cost as they see
+    // it, so sending more of what they don't want (aging vets to a
+    // rebuilder) no longer raises the chance. Each extra player they must
+    // roster costs 8 points (a roster spot). Same 5-95 curve as the engine
+    // when it isn't loaded.
+    function acceptFor(read, toThem, theirCost, pieces, extraPlayers) {
+        const E = TE();
+        let pct = null;
+        try {
+            if (E && E.calcAcceptanceLikelihood && read && read._mineA && read._theirA) pct = E.calcAcceptanceLikelihood(toThem, theirCost, (read.dna || {}).key || 'NONE', read._taxes || [], read._mineA, read._theirA, { totalPieces: pieces });
+        } catch (e) { pct = null; }
+        if (pct == null) { const mx = Math.max(toThem, theirCost, 1); pct = Math.max(5, Math.min(95, 50 + Math.round((toThem - theirCost) / mx * 200))); }
+        return Math.max(1, Math.round(pct - 8 * Math.max(0, extraPlayers || 0)));
     }
 
     // ── Transactions ───────────────────────────────────────────────
@@ -270,7 +377,7 @@
         Object.entries(t.adds || {}).forEach(([pid, rid]) => { if (sides[rid]) sides[rid].players.push(pid); });
         (t.draft_picks || []).forEach(pk => { const s = sides[String(pk.owner_id)]; if (s) s.picks.push({ season: pk.season, round: pk.round, from: pk.roster_id }); });
         (t.waiver_budget || []).forEach(b => { const s = sides[String(b.receiver)]; if (s) s.faab += Number(b.amount) || 0; });
-        rids.forEach(rid => { const s = sides[rid]; s.totalValue = s.players.reduce((a, pid) => a + value(pid), 0) + s.picks.reduce((a, pk) => a + pickValue(pk.season, pk.round), 0); if (!s.faab) delete s.faab; });
+        rids.forEach(rid => { const s = sides[rid]; s.totalValue = s.players.reduce((a, pid) => a + value(pid), 0) + s.picks.reduce((a, pk) => a + pickValue(pk.season, pk.round, null, pk.from), 0); if (!s.faab) delete s.faab; });
         const g = gradeTrade(rids, sides);
         return histTradeRow(Object.assign({ season: t.season || season(), week: txnWeek(t), ts: t.status_updated || t.created, roster_ids: rids, sides }, g));
     }
@@ -390,30 +497,46 @@
             const rows = lg ? await h.withTimeout(leaguePlayers(lg.league_id || lg.id), 8000, null) : null;
             listed = (rows || []).filter(x => x && x.settings && x.settings.otb && !String(x.player_id).includes(',') && String((rosterOf(String(x.player_id)) || {}).roster_id) === rid).map(x => String(x.player_id));
         } catch (e) { listed = []; }
-        const vetsListed = listed.filter(pid => (pl(pid).age || 0) >= 26 && value(pid) >= 800);
-        if (listed.length) ev.push(listed.length + ' on the trade block (' + listed.slice(0, 6).map(pid => pname(pid) + ' ' + (pl(pid).age || '?')).join(', ') + ')');
-        ev.push('record ' + wins + '-' + losses + (A.powerRank ? ', power rank ' + A.powerRank : '') + (A.window ? ', app window ' + String(A.window).toLowerCase() : ''));
-        // Mode.
+        // A veteran by the position-aware cliffs (VET_AGE), not a flat 26+.
+        const vetsListed = listed.filter(pid => isVet(h.ppos(pid), pl(pid).age) && value(pid) >= 800);
+        if (listed.length) ev.push(listed.length + ' on the trade block (' + listed.slice(0, 6).map(pid => pname(pid) + ' ' + (pl(pid).age || '?')).join(', ') + ')' + (vetsListed.length ? '; veterans among them: ' + vetsListed.slice(0, 4).map(pname).join(', ') : ''));
+        ev.push('record ' + wins + '-' + losses + (A.powerRank ? ', power rank ' + A.powerRank : '') + (A.window ? ', app window ' + String(A.window).toLowerCase() : '') + (A.panic != null ? ', panic ' + A.panic + '/5' : ''));
+        // Mode. The rebuild evidence (selling players for picks, listing
+        // veterans, losing) is read first and wins over panic: a losing team
+        // that sells is rebuilding, not desperate (see postureFor).
         let mode = 'NEUTRAL';
-        const sellingSignals = (picksIn >= 3 && valOut > valIn ? 2 : 0) + (vetsListed.length >= 3 ? 1 : 0) + (A.window === 'REBUILDING' ? 1 : 0) + (losses > wins + 1 ? 1 : 0);
+        const sellingSignals = (picksIn >= 3 && valOut > valIn ? 2 : 0) + (vetsListed.length >= 2 ? 1 : 0) + (A.window === 'REBUILDING' ? 1 : 0) + (losses > wins + 1 ? 1 : 0);
         const buyingSignals = (picksOut >= 2 && valIn > valOut ? 2 : 0) + (A.window === 'CONTENDING' ? 1 : 0) + (wins > losses ? 1 : 0);
         if (sellingSignals >= 2 && sellingSignals > buyingSignals) mode = 'REBUILDING';
         else if (buyingSignals >= 2 && buyingSignals > sellingSignals) mode = 'CONTENDING';
         const wants = mode === 'REBUILDING' ? ['draft picks (the nearer the better)', 'young players (about 24 or under) and rising players with 3+ peak years left']
             : mode === 'CONTENDING' ? ['proven starters who score now', 'help at their weak spots: ' + ((A.needs || []).map(n => n.pos).join(', ') || 'none')]
             : ['fair value', 'help at their weak spots: ' + ((A.needs || []).map(n => n.pos).join(', ') || 'none')];
-        const avoids = mode === 'REBUILDING' ? ['veterans past their peak (RB about 27+, WR 29+, TE 30+, QB 33+): little to no use to them, however good this week']
+        const avoids = mode === 'REBUILDING' ? [VET_RULE + ': little to no use to them, however good this week']
             : mode === 'CONTENDING' ? ['far-off picks and long-term projects that don\'t score this season'] : [];
-        return { team: label(r), mode, evidence: ev, wants, avoids, _listed: listed };
+        return { team: label(r), mode, evidence: ev, wants, avoids, signals: { selling: sellingSignals, buying: buyingSignals }, _listed: listed, _vetsListed: vetsListed };
     }
     // How much one piece is worth TO a team in that mode, as a share of its
-    // value: a rebuilder pays up for picks and youth and pays almost nothing
-    // for a veteran past his peak; a contender is the reverse.
+    // value: a rebuilder pays up for near picks and youth and pays almost
+    // nothing for a veteran past his age cliff; a contender is the reverse.
     function appealFor(mode, x) {
         if (mode === 'REBUILDING') {
-            if (x.kind === 'pick') return { mult: 1.15, why: 'a pick is exactly what a rebuild wants' };
+            if (x.kind === 'pick') {
+                // Nearer picks matter more to a rebuild: next draft x1.15,
+                // the one after x1.0, anything later x0.85.
+                const ahead = (Number(x.year) || 0) - nextDraftYear();
+                if (ahead <= 0) return { mult: 1.15, why: 'a pick in the next draft is exactly what a rebuild wants' };
+                if (ahead === 1) return { mult: 1, why: 'a pick a year further out' };
+                return { mult: 0.85, why: 'a far-off pick: a rebuild wants nearer ones' };
+            }
             const pk = x.peak_years_left, age = Number(x.age) || 0;
             if (age && age <= 24) return { mult: 1.15, why: 'young (' + age + ')' };
+            if (isVet(x.pos, age)) {
+                // Past the cliff: even with peak years on paper, little use to a rebuild.
+                if (pk != null && pk >= 1) return { mult: 0.55, why: x.pos + ' at ' + age + ', past the age cliff (' + vetAge(x.pos) + '+); only ' + pk + ' peak year' + (pk === 1 ? '' : 's') + ' left' };
+                if (pk == null && age < vetAge(x.pos) + 3) return { mult: 0.55, why: x.pos + ' at ' + age + ', past the age cliff (' + vetAge(x.pos) + '+)' };
+                return { mult: 0.2, why: 'past his peak at ' + age + ': little use to a rebuild' };
+            }
             if (pk == null || pk >= 3) return { mult: 1, why: 'still has peak years' };
             if (pk >= 1) return { mult: 0.55, why: 'only ' + pk + ' peak year' + (pk === 1 ? '' : 's') + ' left' };
             return { mult: 0.2, why: 'past his peak at ' + (age || '?') + ': little use to a rebuild' };
@@ -442,15 +565,32 @@
                 // they already dealt away is flagged below.
                 from = (mineOrig || any || {}).originalOwnerRid != null ? (mineOrig || any).originalOwnerRid : holderHint.roster_id;
             }
-            const v = pickValue(year, pk.round, pk.slot);
-            let holder = null;
-            if (own && from != null) { for (const rid in own) if ((own[rid] || []).some(x => x.year === year && x.round === pk.round && String(x.originalOwnerRid) === String(from))) { holder = rid; break; } }
-            return { kind: 'pick', label: year + ' ' + roundName(pk.round) + (pk.slot ? ' (' + pk.round + '.' + String(pk.slot).padStart(2, '0') + ')' : '') + (from != null ? ' (' + teamLabel(from) + '\'s)' : ''), value: v, year, round: pk.round, from, holder };
+            return pickAsset(year, pk.round, from, own, pk.slot);
         }
         const f = findPlayer(text);
         if (!f) return null;
-        const pid = String(f.pid), m = meta(pid), r = rosterOf(pid);
-        return { kind: 'player', pid, label: pname(pid), value: value(pid), pos: ppos(pid), age: pl(pid).age || null, peak_years_left: m.peakYrsLeft != null ? m.peakYrsLeft : undefined, injury: h.injury(pid) || undefined, owner_rid: r ? String(r.roster_id) : null, alternatives: f.alternatives };
+        return Object.assign(playerAsset(f.pid), { alternatives: f.alternatives });
+    }
+    // One pick as a trade piece. holder = the roster that verifiably holds
+    // it in the ownership builder; null when ownership isn't loaded or the
+    // pick isn't found (never assumed to be anyone's).
+    function pickAsset(year, round, from, own, slot) {
+        own = own === undefined ? picksByOwner() : own;
+        const projected = slot == null ? projectedSlot(year, from) : null;
+        const v = pickValue(year, round, slot != null ? slot : null, from);
+        let holder = null;
+        if (own && from != null) { for (const rid in own) if ((own[rid] || []).some(x => Number(x.year) === Number(year) && Number(x.round) === Number(round) && String(x.originalOwnerRid) === String(from))) { holder = rid; break; } }
+        const sl = slot != null ? slot : projected;
+        return {
+            kind: 'pick', label: year + ' ' + roundName(round) + (sl ? ' (' + (slot != null ? '' : 'projected ') + round + '.' + String(sl).padStart(2, '0') + ')' : '') + (from == null ? '' : isMe(rosterById(from)) ? ' (own)' : ' (' + teamLabel(from) + '\'s)'),
+            value: v, year: Number(year), round: Number(round), from, holder,
+            slot_basis: slot != null ? 'slot given' : projected ? 'projected from current standings' : Number(year) === nextDraftYear() ? 'mid-round (no standings yet)' : 'mid-round (later draft)',
+        };
+    }
+    function playerAsset(pid) {
+        pid = String(pid);
+        const m = meta(pid), r = rosterOf(pid);
+        return { kind: 'player', pid, label: pname(pid), value: value(pid), pos: ppos(pid), age: pl(pid).age || null, peak_years_left: m.peakYrsLeft != null ? m.peakYrsLeft : undefined, injury: h.injury(pid) || undefined, owner_rid: r ? String(r.roster_id) : null };
     }
     const pieceOut = x => x.kind === 'player'
         ? { player: x.label, pos: x.pos, age: x.age, value: x.value, peak_years_left: x.peak_years_left, injury: x.injury, owner: x.owner_rid ? teamLabel(x.owner_rid) : 'free agent', also_matched: x.alternatives && x.alternatives.length ? x.alternatives : undefined }
@@ -475,9 +615,94 @@
         return lines;
     }
 
+    // ── Shared trade logic (evaluate_trade and trade_plan) ─────────
+    // The headliner rule (owner ruling 2026-10-10): "when people put young,
+    // front-line QBs up for trade, they'll always want a 1st rounder
+    // minimum." Quantity doesn't buy quality: a young starter costs one real
+    // headline piece back. Who counts, on the one value scale (SCALE):
+    //   - any player aged 28 or under worth 4,000+ (a starter), or
+    //   - in superflex / 2QB, a QB aged 29 or under who starts for his NFL
+    //     team (Sleeper depth chart #1) or is worth 4,000+.
+    // A QB costs a 1st at minimum (two 1sts when elite, 7,000+, in
+    // superflex; the old cut was 5,000, off the scale). Anyone else: a 1st,
+    // or one young player (28 or under) worth 70%+ of him.
+    function headlinerRuleFor(x) {
+        if (!x || x.kind !== 'player') return null;
+        const age = Number(x.age) || 99, sf = isSF(), qb = x.pos === 'QB';
+        const nflStarter = Number(pl(x.pid).depth_chart_order) === 1;
+        const anchor = (x.value >= SCALE.STARTER && age <= 28) || (qb && sf && age <= 29 && (nflStarter || x.value >= SCALE.STARTER));
+        if (!anchor) return null;
+        const firsts = qb && sf && x.value >= SCALE.ELITE ? 2 : 1;
+        return {
+            qb, sf, firsts, young_player_min_value: Math.round(x.value * 0.7),
+            needed: (firsts === 2 ? 'two 1st-round picks' : 'a 1st-round pick') + (qb ? ', or a young QB of similar standing' : ', or one young player (28 or under) worth ' + Math.round(x.value * 0.7) + '+'),
+            rule: qb ? 'A young starting QB costs at least ' + (firsts === 2 ? 'two 1st-round picks' : 'a 1st-round pick') + (sf ? ' in a superflex league' : '') + ', or a young QB of similar standing.'
+                : 'A young starter costs one real headline piece: a 1st-round pick or a young player worth about 70%+ of him. Several lesser pieces don\'t add up to one.',
+        };
+    }
+    // Does a package meet that rule? Only 1sts the member verifiably holds
+    // count: a pick whose holder is unknown (null) is NOT the member's.
+    function headlinerMet(rule, target, give, meRid) {
+        const firsts = give.filter(x => x.kind === 'pick' && x.round === 1 && x.holder != null && String(x.holder) === String(meRid));
+        const big = give.filter(x => x.kind === 'player').sort((p, q) => q.value - p.value)[0];
+        const playerOk = !!big && big.value >= target.value * 0.7 && (Number(big.age) || 99) <= 28;
+        const ok = firsts.length >= rule.firsts || (playerOk && (!rule.qb || firsts.length >= 1 || big.pos === 'QB'));
+        return { ok, firsts: firsts.length, via: firsts.length >= rule.firsts ? firsts.map(x => x.label).join(' + ') : ok ? big.label : null };
+    }
+    // What one piece the partner gives up costs THEM, as they see it.
+    // Bug fix 2026-10-10: a listed player is worth LESS to the owner who
+    // listed him. The old Math.max(mult, 0.85) raised a listed veteran
+    // from 0.2 to 0.85. Now Math.min: a listed piece takes 15% off, and a
+    // listed veteran counts at most half his value.
+    const LISTED_DISCOUNT = 0.85, LISTED_VET_CAP = 0.5;
+    function costToOwner(mode, x, listed) {
+        const ap = mode === 'REBUILDING' ? appealFor('REBUILDING', x) : { mult: 1, why: '' };
+        const vet = x.kind === 'player' && isVet(x.pos, x.age);
+        const mult = listed ? Math.min(ap.mult * LISTED_DISCOUNT, vet ? LISTED_VET_CAP : Infinity) : ap.mult;
+        return { cost: Math.round(x.value * mult), mult: Math.round(mult * 100) / 100, why: [ap.why, listed ? 'on their trade block, so they want him moved' : ''].filter(Boolean).join('; ') };
+    }
+    // Both sides of a deal priced the way the partner sees them.
+    function priceDeal(intent, give, get) {
+        const mode = intent ? intent.mode : 'NEUTRAL', listed = new Set(intent ? intent._listed : []);
+        const priced = give.map(x => { const ap = appealFor(mode, x); return { piece: x.label, value: x.value, worth_to_them: Math.round(x.value * ap.mult), why: ap.why || undefined }; });
+        const toThem = priced.reduce((n, x) => n + x.worth_to_them, 0);
+        const theirCost = get.reduce((n, x) => n + costToOwner(mode, x, !!x.pid && listed.has(x.pid)).cost, 0);
+        return { priced, toThem, theirCost, ratio: theirCost > 0 ? toThem / theirCost : 1 };
+    }
+    // A rebuilder balances by adding veterans it wants gone (its trade
+    // block first), never picks.
+    function theirVetsToShed(partner, intent, exclude, gap) {
+        const listedSet = new Set(intent ? intent._listed : []);
+        return (partner.players || []).map(String).filter(pid => !exclude.has(pid))
+            .filter(pid => { const m = meta(pid); return value(pid) > 0 && ((m.peakYrsLeft != null && m.peakYrsLeft <= 1) || isVet(ppos(pid), pl(pid).age)); })
+            .map(pid => ({ pid, v: value(pid), listed: listedSet.has(pid) }))
+            .sort((x, y) => (y.listed - x.listed) || Math.abs(x.v - gap) - Math.abs(y.v - gap)).slice(0, 4)
+            .map(x => pname(x.pid) + ' (' + ppos(x.pid) + ', ' + (pl(x.pid).age || '?') + ', value ' + x.v + (x.listed ? ', on their block' : '') + ')');
+    }
+    const MODE_WORD = { REBUILDING: 'rebuilding', CONTENDING: 'contending', NEUTRAL: 'middle' };
+    // One verdict out of the signals, in a fixed order of precedence:
+    // ownership > headliner > what the partner wants > raw value. The raw
+    // value grade can never overrule the headliner ("not an overpay").
+    function reconcile(o) {
+        const r = o.tt / Math.max(o.tg, 1);
+        let decision, call;
+        let market = o.headliner && o.headliner.ok ? 'At market: the headliner is the going rate, not an overpay'
+            : r >= 1.15 ? 'You win on value' : r >= 0.95 ? 'Fair value' : r >= 0.85 ? 'Slight overpay' : 'Overpay';
+        const who = o.partnerName || 'them';
+        if (o.ownIssues.length) { decision = 'pass'; call = 'You can\'t send this as written: ' + o.ownIssues.join(' '); }
+        else if (o.headliner && !o.headliner.ok) { decision = 'counter'; market = 'Below the going rate'; call = 'Missing the headliner. ' + o.headliner.rule + ' Lead with that piece, then balance.'; }
+        else if (o.pv && o.pv.ratio < 0.8) { decision = 'counter'; call = 'Not appealing to ' + who + ' (' + MODE_WORD[o.mode] + '): your side is worth about ' + o.pv.toThem + ' to them against ' + o.pv.theirCost + ' for what they give up. Rebuild it around what they want.'; }
+        else if (!o.headliner && r < 0.85) { decision = 'counter'; call = 'You give up more than you get (' + o.tg + ' for ' + o.tt + '). Trim what you send.'; }
+        else if (o.pv && o.pv.ratio < 0.95) { decision = 'offer'; call = 'Close: send it, and be ready to add a small piece of the kind ' + who + ' values.'; }
+        else { decision = 'offer'; call = o.headliner ? 'Send it: it meets the going rate for a young starter.' : 'Send it: it works for both sides.'; }
+        if (decision === 'offer' && o.accept != null && o.accept < 20) { decision = 'counter'; call = 'The value works on paper, but the chance is low (' + o.accept + '%). ' + call; }
+        return { decision, call, market_label: market };
+    }
+    const confidenceOf = o => (!o.partnerKnown || o.unknownHolders) ? 'low' : (o.mode === 'NEUTRAL' || !o.engine || !o.picksLoaded) ? 'medium' : 'high';
+
     AT.register({
         name: 'evaluate_trade',
-        description: 'Grade a proposed trade: DHQ value of every player and pick on both sides, the fairness grade, the chance the other owner accepts, their trading DNA and posture, roster fit and psychology. Picks read like "2027 1st" or "2026 1.03".',
+        description: 'Grade a proposed trade. Read `verdict` first: one decision (offer / counter / pass) that already reconciles the headliner rule, what this partner wants, and value. Also: DHQ value of every player and pick on both sides, the value-only grade, the chance the other owner accepts, their mode, DNA and posture, roster fit and psychology. Picks read like "2027 1st" or "2026 1.03". To BUILD an offer, use trade_plan.',
         parameters: {
             type: 'object',
             properties: {
@@ -509,59 +734,49 @@
             const tg = give.reduce((s, x) => s + x.value, 0), tt = get.reduce((s, x) => s + x.value, 0);
             const E = TE();
             const fair = E && E.fairnessGrade ? E.fairnessGrade(tg, tt) : null;
-            const read = dealRead(me, partner, tg, tt, give.length + get.length);
-            const mineA = assess(me.roster_id), theirA = partner ? assess(partner.roster_id) : null;
-            const warnings = [];
-            give.forEach(x => { if (x.kind === 'player' && x.owner_rid !== String(me.roster_id)) warnings.push('You don\'t own ' + x.label + '.'); if (x.kind === 'pick' && x.holder != null && String(x.holder) !== String(me.roster_id)) warnings.push('You don\'t own ' + x.label + '; ' + teamLabel(x.holder) + ' does.'); });
+            // ONE reading of the other owner (ownerIntent) feeds the mode,
+            // the posture, the pricing and the windows line; the app's
+            // window is part of its evidence, not a second opinion.
+            const intent = partner ? await ownerIntent(partner) : null;
+            const read = dealRead(me, partner, tg, tt, give.length + get.length, intent);
+            const mineA = read._mineA || assess(me.roster_id), theirA = partner ? (read._theirA || assess(partner.roster_id)) : null;
+            const warnings = [], ownIssues = [];
+            let unknownHolders = false;
+            give.forEach(x => {
+                if (x.kind === 'player' && x.owner_rid !== String(me.roster_id)) ownIssues.push('You don\'t own ' + x.label + '.');
+                if (x.kind === 'pick' && x.holder != null && String(x.holder) !== String(me.roster_id)) ownIssues.push('You don\'t own ' + x.label + '; ' + teamLabel(x.holder) + ' does.');
+                if (x.kind === 'pick' && x.holder == null) { unknownHolders = true; warnings.push('Couldn\'t confirm you own ' + x.label + ' (pick ownership not loaded, or no such pick); it does not count as yours.'); }
+            });
+            warnings.push(...ownIssues);
             if (partner) get.forEach(x => { if (x.kind === 'player' && x.owner_rid !== String(partner.roster_id)) warnings.push(x.label + ' is not on ' + label(partner) + ' (' + (x.owner_rid ? teamLabel(x.owner_rid) : 'free agent') + ').'); if (x.kind === 'pick' && x.holder != null && String(x.holder) !== String(partner.roster_id)) warnings.push(x.label + ' belongs to ' + teamLabel(x.holder) + ', not ' + label(partner) + '.'); });
             const net = tt - tg;
             // The other owner's side of it: their mode, and what my package
-            // is worth to them (owner ruling 2026-10-10).
-            let partnerView = null, acceptPct = read.accept_pct;
-            if (partner) {
-                const intent = await ownerIntent(partner);
-                if (intent) {
-                    const priced = give.map(x => { const ap = appealFor(intent.mode, x); return { piece: x.label, value: x.value, worth_to_them: Math.round(x.value * ap.mult), why: ap.why || undefined }; });
-                    const toThem = priced.reduce((n, x) => n + x.worth_to_them, 0);
-                    // What they give up, as they see it (a seller discounts the vets it wants gone).
-                    const theirCost = get.reduce((n, x) => { const ap = intent.mode === 'REBUILDING' ? appealFor('REBUILDING', x) : { mult: 1 }; return n + Math.round(x.value * Math.max(ap.mult, intent._listed.includes(x.pid) ? 0.85 : ap.mult)); }, 0);
-                    const ratio = theirCost > 0 ? toThem / theirCost : 1;
-                    if (acceptPct != null && ratio < 0.95) acceptPct = Math.max(1, Math.round(acceptPct * Math.pow(Math.max(ratio, 0.05), 1.6)));
-                    partnerView = {
-                        their_mode: intent.mode, evidence: intent.evidence, they_want: intent.wants, they_avoid: intent.avoids.length ? intent.avoids : undefined,
-                        your_package_to_them: priced, worth_to_them: toThem, what_they_give_up_as_they_see_it: theirCost,
-                        verdict: ratio >= 1 ? 'appealing to them' : ratio >= 0.8 ? 'close, they may want a sweetener of the kind they value' : 'not appealing to them: rebuild the offer around what they want',
-                        listed_by_them: get.filter(x => x.pid && intent._listed.includes(x.pid)).map(x => x.label + ' is on their trade block') || undefined,
-                        listed_ids: intent._listed,
-                    };
-                }
+            // is worth to them (owner ruling 2026-10-10). Acceptance runs on
+            // those numbers, so overpaying in pieces they don't want doesn't
+            // raise it.
+            let partnerView = null, acceptPct = read.accept_pct, pv = null;
+            if (partner && intent) {
+                pv = priceDeal(intent, give, get);
+                const extraPlayers = Math.max(0, give.filter(x => x.kind === 'player').length - get.filter(x => x.kind === 'player').length);
+                acceptPct = acceptFor(read, pv.toThem, pv.theirCost, give.length + get.length, extraPlayers);
+                partnerView = {
+                    their_mode: intent.mode, evidence: intent.evidence, they_want: intent.wants, they_avoid: intent.avoids.length ? intent.avoids : undefined,
+                    your_package_to_them: pv.priced, worth_to_them: pv.toThem, what_they_give_up_as_they_see_it: pv.theirCost,
+                    verdict: pv.ratio >= 1 ? 'appealing to them' : pv.ratio >= 0.8 ? 'close, they may want a sweetener of the kind they value' : 'not appealing to them: rebuild the offer around what they want',
+                    listed_by_them: get.filter(x => x.pid && intent._listed.includes(x.pid)).map(x => x.label + ' is on their trade block'),
+                };
+                if (!partnerView.listed_by_them.length) delete partnerView.listed_by_them;
             }
-            // The headliner rule (owner ruling 2026-10-10): "when people put
-            // young, front-line QBs up for trade, they'll always want a 1st
-            // rounder minimum." Quantity doesn't buy quality: for a young
-            // starter, the offer needs one real headline piece back, a 1st-
-            // round pick or a single player near his value. Young starting
-            // QBs need a 1st at least (more in superflex / 2QB).
-            const sfLeague = ((h.league() || {}).roster_positions || []).some(x => /SUPER_FLEX|SUPERFLEX/i.test(x)) || ((h.league() || {}).roster_positions || []).filter(x => x === 'QB').length >= 2;
-            const anchors = get.filter(x => x.kind === 'player' && x.value >= 3000 && (Number(x.age) || 99) <= 28);
+            // The headliner rule (see headlinerRuleFor).
+            const anchors = get.map(x => ({ x, rule: headlinerRuleFor(x) })).filter(o => o.rule).sort((p, q) => q.x.value - p.x.value);
             let headliner = null;
             if (anchors.length) {
-                const top = anchors.sort((x, y) => y.value - x.value)[0];
-                // Only 1sts the member actually owns count.
-                const firsts = give.filter(x => x.kind === 'pick' && x.round === 1 && (x.holder == null || String(x.holder) === String(me.roster_id)));
-                const bigPlayer = give.filter(x => x.kind === 'player').sort((x, y) => y.value - x.value)[0];
-                const qb = top.pos === 'QB';
-                const needFirsts = qb && sfLeague && top.value >= 5000 ? 2 : 1;
-                const playerOk = bigPlayer && bigPlayer.value >= top.value * 0.7 && (Number(bigPlayer.age) || 99) <= 28;
-                const ok = firsts.length >= needFirsts || (playerOk && (!qb || firsts.length >= 1 || (bigPlayer.pos === 'QB')));
-                headliner = {
-                    target: top.label + ' (' + top.pos + ', ' + (top.age || '?') + ', value ' + top.value + ')',
-                    rule: qb ? 'A young starting QB costs at least ' + (needFirsts === 2 ? 'two 1st-round picks' : 'a 1st-round pick') + (sfLeague ? ' in a superflex league' : '') + ', or a young QB of similar standing.' : 'A young starter costs one real headline piece: a 1st-round pick or a young player worth about 70%+ of him. Several lesser pieces don\'t add up to one.',
-                    offer_has_it: ok,
-                };
-                if (!ok) {
+                const top = anchors[0].x, rule = anchors[0].rule;
+                const met = headlinerMet(rule, top, give, me.roster_id);
+                headliner = { target: top.label + ' (' + top.pos + ', ' + (top.age || '?') + ', value ' + top.value + ')', rule: rule.rule, offer_has_it: met.ok, via: met.via || undefined };
+                if (!met.ok) {
                     if (acceptPct != null) acceptPct = Math.min(acceptPct, 10);
-                    warnings.push('No headliner: ' + headliner.rule + ' This offer won\'t start the conversation.');
+                    warnings.push('No headliner: ' + rule.rule + ' This offer won\'t start the conversation.');
                 } else {
                     // Owner test 2026-10-10: a 1st for a young starting QB was
                     // called "a slight overpay" because the pick's number is a
@@ -573,30 +788,36 @@
             // rebuilder to "add one of their own picks" back). A rebuilding
             // seller never gives picks back; they balance by adding veterans
             // they want gone (their trade block first). A contender balances
-            // with picks or depth.
+            // with picks or depth. When the headliner is met there is no gap
+            // to claw back (only an optional throw-in); when it is missing,
+            // the fix is the headliner, not balance.
             let balance = null;
-            if (partner && partnerView && net < 0) {
+            if (partner && partnerView && net < 0 && !(headliner && !headliner.offer_has_it)) {
                 const gap = Math.abs(net);
-                const intent2 = partnerView.their_mode;
-                if (intent2 === 'REBUILDING') {
-                    const pool = (partner.players || []).map(String).filter(pid => !get.some(x => x.pid === pid))
-                        .filter(pid => { const m = meta(pid), age = Number(pl(pid).age) || 0; return value(pid) > 0 && ((m.peakYrsLeft != null && m.peakYrsLeft <= 1) || age >= 28); });
-                    const listedSet = new Set((partnerView.listed_ids || []));
-                    const pick = pool.map(pid => ({ pid, v: value(pid), listed: listedSet.has(pid) }))
-                        .sort((x, y) => (y.listed - x.listed) || Math.abs(x.v - gap) - Math.abs(y.v - gap)).slice(0, 4)
-                        .map(x => pname(x.pid) + ' (' + ppos(x.pid) + ', ' + (pl(x.pid).age || '?') + ', value ' + x.v + (x.listed ? ', on their block' : '') + ')');
-                    balance = { you_overpay_by: gap, how: 'A rebuilder won\'t give picks back. Ask them to add a veteran they want gone, ideally one from their trade block:', options: pick };
+                const rebuilding = intent.mode === 'REBUILDING';
+                const exclude = new Set(get.map(x => x.pid).filter(Boolean));
+                if (headliner && headliner.offer_has_it) {
+                    const opts = rebuilding ? theirVetsToShed(partner, intent, exclude, gap) : [];
+                    if (opts.length) balance = { optional: true, how: 'At market: no gap to claw back. If you want a throw-in, the only thing to ask a rebuilder for is a veteran they want gone:', options: opts };
+                } else if (rebuilding) {
+                    balance = { you_overpay_by: gap, how: 'A rebuilder won\'t give picks back. Ask them to add a veteran they want gone, ideally one from their trade block:', options: theirVetsToShed(partner, intent, exclude, gap) };
                 } else {
                     balance = { you_overpay_by: gap, how: 'Ask for a pick or a depth player back, or trim what you send.' };
                 }
             }
-            if (partnerView) delete partnerView.listed_ids;
+            const v = reconcile({ ownIssues, headliner: headliner ? { ok: headliner.offer_has_it, rule: headliner.rule } : null, pv, mode: intent ? intent.mode : 'NEUTRAL', tg, tt, accept: acceptPct, partnerName: partner ? label(partner) : null });
             const out = {
+                verdict: {
+                    decision: v.decision, confidence: confidenceOf({ partnerKnown: !!partner, unknownHolders, mode: intent ? intent.mode : 'NEUTRAL', engine: !!E, picksLoaded: !!picksByOwner() }),
+                    call: v.call, market_label: v.market_label, accept_chance_pct: acceptPct,
+                    partner_mode: intent ? MODE_WORD[intent.mode] : null,
+                    precedence: 'ownership > headliner > what the partner wants > raw value. The grade below is raw value only and never overrules this.',
+                },
                 headliner: headliner || undefined,
                 balance: balance || undefined,
                 you_give: give.map(pieceOut), you_get: get.map(pieceOut),
                 totals: { give: tg, get: tt, net_for_you: net, net_pct: round1(net / Math.max(tg, tt, 1) * 100) },
-                grade: fair ? { grade: fair.grade, label: fair.label } : null,
+                grade: fair ? { grade: fair.grade, label: fair.label, basis: 'raw value totals only; see verdict' } : null,
                 partner: partner ? label(partner) : null,
                 accept_chance_pct: acceptPct,
                 accept_chance_on_value_only_pct: acceptPct !== read.accept_pct ? read.accept_pct : undefined,
@@ -606,12 +827,263 @@
                 fit: { for_me: fitFor(mineA, get, give), for_them: theirA ? fitFor(theirA, give, get) : null },
                 psychology: read.psychology,
             };
-            if (mineA && theirA) out.windows = (mineA.window === 'CONTENDING' && theirA.window === 'REBUILDING') || (mineA.window === 'REBUILDING' && theirA.window === 'CONTENDING') ? 'opposite windows: a natural fit' : mineA.window === theirA.window ? 'same window: less natural motivation' : 'mixed';
+            if (mineA && intent) out.windows = (mineA.window === 'CONTENDING' && intent.mode === 'REBUILDING') || (mineA.window === 'REBUILDING' && intent.mode === 'CONTENDING') ? 'opposite windows: a natural fit' : mineA.window === intent.mode ? 'same window: less natural motivation' : 'mixed';
             if (warnings.length) out.warnings = warnings;
             if (notFound.length) out.not_found = notFound;
-            if (!E) out.note = 'The trade engine is still loading, so there is no grade or acceptance chance yet.';
-            out.values_note = 'Values are DHQ dynasty values (roughly 7,000+ elite, 4,000+ starter, 2,000+ depth). Pick values without a known slot assume mid-round.';
+            if (!E) out.note = 'The trade engine is still loading, so there is no grade yet; the acceptance chance uses the plain value curve.';
+            out.values_note = SCALE_NOTE + ' A pick in the next draft is priced at its projected slot from current standings with no year discount; later drafts are mid-round, less 12% a year.';
             return out;
+        },
+    });
+
+    // ── trade_plan (verdict first) ─────────────────────────────────
+    // One coherent answer for "how do I get X" / "what can I do with Y":
+    // the partner's mode with evidence, what I own (and only that), the
+    // going rate, up to three offers built from my assets and priced the
+    // way the partner sees them, and what not to offer. Same rules as
+    // evaluate_trade (shared helpers above), so the two never disagree.
+    const pieceKey = x => x.kind === 'pick' ? 'pk:' + x.year + ':' + x.round + ':' + x.from : 'pl:' + x.pid;
+    const pieceName = x => x.kind === 'pick' ? x.label : x.label + ' (' + x.pos + ', ' + (x.age || '?') + ')';
+    async function comparablesFor(target, partner) {
+        try {
+            const tx = await AT.run('get_transactions', { type: 'trade', season: curSeason(), limit: 50 });
+            const pLabel = label(partner);
+            const near = row => target && target.kind === 'player' && (row.sides || []).some(s => (s.got_players || []).some(p => p.pos === target.pos && p.value >= target.value * 0.6 && p.value <= target.value * 1.4));
+            return (tx.rows || []).filter(r => near(r) || (r.teams || []).includes(pLabel)).slice(0, 3)
+                .map(r => ({ date: r.date, sides: (r.sides || []).map(s => ({ team: s.team, got: [...(s.got_players || []).map(p => p.name + ' (' + p.pos + ', ' + p.value + ')'), ...(s.got_picks || [])] })) }));
+        } catch (e) { return []; }
+    }
+    AT.register({
+        name: 'trade_plan',
+        description: 'START HERE before proposing any trade. One verdict for getting a player (or dealing with a team): decision (offer / counter / pass / no_fit) and one plain recommendation; the partner\'s real mode (rebuilding / contending / middle) with evidence, what they want and won\'t take; the going rate for the target; up to 3 offers built ONLY from what I own, each with its acceptance chance; and what not to offer and why. Optionally pass a package I\'m considering to check and improve it.',
+        parameters: {
+            type: 'object',
+            properties: {
+                target: { type: 'string', description: 'The player (or pick) I want, e.g. "Jordan Love". Default: the best player on the partner\'s trade block.' },
+                partner: { type: 'string', description: 'The other team or owner (default: whoever has the target).' },
+                give: { type: 'array', items: { type: 'string' }, description: 'Optional: a package I\'m thinking of sending, to check it.' },
+            },
+        },
+        timeoutMs: 20000,
+        async run(a) {
+            const me = myRoster();
+            if (!me) throw new Error('League not loaded yet.');
+            const meRid = String(me.roster_id);
+            let partner = a.partner ? findTeam(a.partner) : null;
+            if (a.partner && !partner) throw new Error('No team in this league matches "' + a.partner + '".');
+            if (partner && isMe(partner)) throw new Error('That\'s your own team; name the other owner.');
+            // The target, and from it the partner.
+            let target = null;
+            if (a.target) {
+                target = resolvePiece(a.target, partner);
+                if (!target) throw new Error('No player or pick matches "' + a.target + '".');
+                if (target.kind === 'player') {
+                    if (target.owner_rid === meRid) throw new Error(target.label + ' is already yours.');
+                    if (!target.owner_rid) throw new Error(target.label + ' is a free agent: no trade needed.');
+                    if (partner && String(partner.roster_id) !== target.owner_rid) throw new Error(target.label + ' is on ' + teamLabel(target.owner_rid) + ', not ' + label(partner) + '.');
+                    partner = partner || rosterById(target.owner_rid);
+                } else {
+                    if (target.holder == null) throw new Error('Couldn\'t confirm who holds ' + target.label + ' (pick ownership not loaded).');
+                    if (String(target.holder) === meRid) throw new Error('You already hold ' + target.label + '.');
+                    if (partner && String(partner.roster_id) !== String(target.holder)) throw new Error(target.label + ' belongs to ' + teamLabel(target.holder) + ', not ' + label(partner) + '.');
+                    partner = partner || rosterById(target.holder);
+                }
+            }
+            if (!partner) throw new Error('Name the player you want (target) or the team to deal with (partner).');
+            const intent = await ownerIntent(partner);
+            const mode = intent.mode, listed = new Set(intent._listed);
+            const read = dealRead(me, partner, 0, 0, 0, intent);
+            const evidence = [];
+            if (!target) {
+                const best = (partner.players || []).map(String).filter(pid => listed.has(pid)).map(playerAsset).filter(x => x.value > 0).sort((p, q) => q.value - p.value)[0];
+                if (best) { target = best; evidence.push('No target named: using ' + best.label + ', the most valuable player on ' + label(partner) + '\'s trade block.'); }
+            }
+
+            // What I own: roster players, and picks the ownership builder
+            // says I hold. Nothing else is ever offered.
+            const own = picksByOwner();
+            const picksLoaded = !!own;
+            const withAppeal = x => { const ap = appealFor(mode, x); return Object.assign({}, x, { to_them: Math.round(x.value * ap.mult), mult: ap.mult, why: ap.why }); };
+            const myPlayers = (me.players || []).map(String).map(playerAsset).filter(x => x.value > 0);
+            const myPicks = own ? (own[me.roster_id] || own[meRid] || []).map(p => pickAsset(p.year, p.round, p.originalOwnerRid, own)).filter(p => String(p.holder) === meRid) : [];
+            const assets = [...myPlayers, ...myPicks].map(withAppeal);
+            const myFirstsAll = assets.filter(x => x.kind === 'pick' && x.round === 1);
+            evidence.push(...intent.evidence);
+            if (target && target.pid && listed.has(target.pid)) evidence.push(target.label + ' is on their trade block.');
+            evidence.push(picksLoaded ? 'You hold ' + myFirstsAll.length + ' 1st-round pick' + (myFirstsAll.length === 1 ? '' : 's') + (myFirstsAll.length ? ': ' + myFirstsAll.map(x => x.label).join(', ') : '') + '.' : 'Pick ownership is not loaded, so no picks are offered.');
+
+            // What not to offer.
+            const doNot = [], dnoKeys = new Set();
+            const addDno = (key, asset, reason) => { if (dnoKeys.has(key)) return; dnoKeys.add(key); doNot.push({ asset, reason }); };
+            const relic = x => mode === 'REBUILDING' && x.mult <= 0.55;
+            const lowLiquidity = x => x.kind === 'player' && /^(K|DEF)$/.test(x.pos);
+            let userGive = null;
+            const userIssues = [];
+            if ([].concat(a.give || []).filter(Boolean).length) {
+                userGive = [];
+                [].concat(a.give).map(String).filter(Boolean).forEach(t => {
+                    const x = resolvePiece(t, me);
+                    if (!x) { addDno('t:' + t, t, 'couldn\'t match it to a player or pick'); userIssues.push(t + ' (not found)'); return; }
+                    if (x.kind === 'player' && x.owner_rid !== meRid) { addDno(pieceKey(x), x.label, 'not yours' + (x.owner_rid ? ': ' + teamLabel(x.owner_rid) + ' has him' : ': a free agent')); userIssues.push(x.label + ' is not yours'); return; }
+                    if (x.kind === 'pick' && (x.holder == null || String(x.holder) !== meRid)) { addDno(pieceKey(x), x.label, x.holder == null ? 'can\'t confirm you own it (pick ownership not loaded, or no such pick)' : 'not yours: ' + teamLabel(x.holder) + ' holds it'); userIssues.push(x.label + ' is not yours'); return; }
+                    const w = withAppeal(x);
+                    if (relic(w)) addDno(pieceKey(w), pieceName(w), w.why + ' (worth about ' + w.to_them + ' to them, not ' + w.value + ')');
+                    if (lowLiquidity(w)) addDno(pieceKey(w), pieceName(w), 'kickers and defenses don\'t move trades');
+                    userGive.push(w);
+                });
+            }
+            assets.filter(x => relic(x) && x.value >= SCALE.DEPTH / 2).sort((p, q) => q.value - p.value).slice(0, 6)
+                .forEach(x => addDno(pieceKey(x), pieceName(x), x.why + ' (worth about ' + x.to_them + ' to them, not ' + x.value + ')'));
+
+            const partnerOut = {
+                name: label(partner), mode: MODE_WORD[mode], why: intent.evidence, wants: intent.wants,
+                wont_take: [...intent.avoids, ...assets.filter(x => relic(x) && x.value >= SCALE.DEPTH / 2).sort((p, q) => q.value - p.value).slice(0, 4).map(x => 'your ' + pieceName(x))],
+                posture: read.posture ? read.posture.label : undefined, dna: read.dna ? read.dna.label : undefined,
+            };
+            const myAssetsOut = {
+                picks: myPicks.map(withAppeal).sort((p, q) => p.year - q.year || p.round - q.round).map(x => ({ pick: x.label, year: x.year, round: x.round, original_owner: x.from != null ? teamLabel(x.from) : null, value: x.value, value_to_them: x.to_them, slot_basis: x.slot_basis })),
+                players: myPlayers.map(withAppeal).sort((p, q) => q.value - p.value).slice(0, 15).map(x => ({ player: x.label, pos: x.pos, age: x.age, value: x.value, value_to_them: x.to_them, why: x.why || undefined })),
+                more_players: Math.max(0, myPlayers.length - 15) || undefined,
+                picks_note: picksLoaded ? undefined : 'Pick ownership is not loaded yet; no picks are listed or offered.',
+            };
+            const rulesApplied = [
+                'Partner mode read once (record, this season\'s trades, trade block); the app window is evidence only. A rebuild read wins over panic.',
+                'Only assets you verifiably own are listed or offered; a pick with an unknown holder is not yours.',
+                'Pieces priced as the partner sees them. A rebuilder: next-draft picks x1.15, the draft after x1.0, later x0.85; players 24 or under x1.15; ' + VET_RULE + ' x0.55 or x0.2.',
+                'A listed player costs his owner 15% less; a listed veteran at most half his value.',
+                'Next draft: slot projected from current standings (worst team picks 1st), no year discount; later drafts mid-round, less 12% a year.',
+                'Acceptance is estimated on value to them, minus 8 points per extra player they must roster; capped at 10% without the headliner.',
+                'A rebuilder never gives picks back: balance with veterans they want gone.',
+            ];
+            const method = 'Read the partner, price each of your assets the way they see it, set the going rate for the target (headliner rule), build offers only from what you own, estimate acceptance on what they value. Precedence: ownership > headliner > what the partner wants > raw value.';
+            const base = { partner: partnerOut, my_assets: myAssetsOut };
+
+            if (!target) {
+                return Object.assign({ decision: 'no_fit', confidence: 'medium', recommendation: label(partner) + ' has nothing on their trade block; name the player you want from them.' }, base, { price_floor: null, offers: [], do_not_offer: doNot, comparables: await comparablesFor(null, partner), evidence, rules_applied: rulesApplied, method, values_note: SCALE_NOTE });
+            }
+
+            // The going rate.
+            const rule = headlinerRuleFor(target);
+            const tCost = costToOwner(mode, target, !!target.pid && listed.has(target.pid));
+            const priceFloor = {
+                target: target.label + (target.kind === 'player' ? ' (' + target.pos + ', ' + (target.age || '?') + ', value ' + target.value + ')' : ' (value ' + target.value + ')'),
+                headliner_needed: rule ? rule.needed : 'none: not a young front-line starter',
+                rule: rule ? rule.rule : 'Not a young front-line starter: match what he is worth to them.',
+                their_price: tCost.cost, their_price_why: tCost.why || undefined,
+                note: rule ? 'Meeting the headliner is the going rate, not an overpay.' : undefined,
+            };
+            if (rule) rulesApplied.unshift(rule.rule);
+
+            // Offers, from my assets only.
+            const pool = assets.filter(x => !relic(x) && !lowLiquidity(x) && x.to_them >= 150);
+            const score = (pieces, tag) => {
+                const pv = priceDeal(intent, pieces, [target]);
+                const hl = rule ? headlinerMet(rule, target, pieces, meRid) : null;
+                const extra = Math.max(0, pieces.filter(p => p.kind === 'player').length - (target.kind === 'player' ? 1 : 0));
+                let acc = acceptFor(read, pv.toThem, pv.theirCost, pieces.length + 1, extra);
+                if (hl && !hl.ok) acc = Math.min(acc, 10);
+                const rawGive = pieces.reduce((n, x) => n + x.value, 0);
+                let balance;
+                if (pv.toThem > pv.theirCost * 1.15) {
+                    if (mode === 'REBUILDING') { const opts = theirVetsToShed(partner, intent, new Set([target.pid].filter(Boolean)), pv.toThem - pv.theirCost); if (opts.length) balance = { optional: true, ask_them_to_add: opts, never: 'Don\'t ask a rebuilder for picks back.' }; }
+                    else balance = { optional: true, ask_for: 'a pick or a depth player back, or trim what you send' };
+                }
+                const v = reconcile({ ownIssues: [], headliner: hl ? { ok: hl.ok, rule: rule.rule } : null, pv, mode, tg: rawGive, tt: target.value, accept: acc, partnerName: label(partner) });
+                return {
+                    tag, pieces, pv, hl, acc, rawGive,
+                    out: {
+                        give: pieces.map(pieceName), get: [target.label],
+                        accept_chance_pct: acc, headliner_met: hl ? hl.ok : undefined, market_label: v.market_label,
+                        value_you_send: rawGive, value_you_get: target.value, worth_to_them: pv.toThem, their_price: pv.theirCost,
+                        why: tag + '. Worth about ' + pv.toThem + ' to a ' + MODE_WORD[mode] + ' owner against ' + pv.theirCost + ' for ' + target.label + ' as they see him. ' + pv.priced.map(p => p.piece + ': ' + (p.why || 'full value')).join('; ') + '.',
+                        balance,
+                    },
+                };
+            };
+            const fill = basePieces => {
+                const pieces = basePieces.slice(), used = new Set(pieces.map(pieceKey));
+                const gap = () => tCost.cost - pieces.reduce((n, x) => n + x.to_them, 0);
+                while (gap() > 0 && pieces.length < 3) {
+                    const cands = pool.filter(x => !used.has(pieceKey(x)));
+                    if (!cands.length) break;
+                    const g = gap();
+                    const next = cands.filter(x => x.to_them >= g).sort((p, q) => p.to_them - q.to_them)[0] || cands.sort((p, q) => q.to_them - p.to_them)[0];
+                    pieces.push(next); used.add(pieceKey(next));
+                }
+                return pieces;
+            };
+            const bases = [];
+            if (rule) {
+                // A rebuilder wants the nearest 1st; anyone else, the cheapest that does the job.
+                const firsts = pool.filter(x => x.kind === 'pick' && x.round === 1).sort(mode === 'REBUILDING' ? (p, q) => q.to_them - p.to_them : (p, q) => p.value - q.value);
+                if (firsts.length >= rule.firsts) {
+                    bases.push({ tag: 'Leads with ' + (rule.firsts === 2 ? 'two 1sts' : 'a 1st') + ', the headliner ' + (rule.qb ? 'a young starting QB needs' : 'a young starter needs'), base: firsts.slice(0, rule.firsts) });
+                    if (firsts.length > rule.firsts) bases.push({ tag: 'Leads with a different 1st', base: firsts.slice(1, 1 + rule.firsts) });
+                }
+                const heads = pool.filter(x => x.kind === 'player' && x.value >= target.value * 0.7 && (Number(x.age) || 99) <= 28 && (!rule.qb || x.pos === 'QB')).sort((p, q) => p.value - q.value);
+                if (heads[0]) bases.push({ tag: 'Leads with a young ' + heads[0].pos + ' of similar standing', base: [heads[0]] });
+            } else {
+                const single = pool.filter(x => x.to_them >= tCost.cost).sort((p, q) => p.value - q.value)[0];
+                if (single) bases.push({ tag: 'One piece that covers his price', base: [single] });
+                const pk = pool.filter(x => x.kind === 'pick' && x !== single).sort((p, q) => Math.abs(p.to_them - tCost.cost) - Math.abs(q.to_them - tCost.cost))[0];
+                if (pk) bases.push({ tag: 'Pick-led', base: [pk] });
+                const yp = pool.filter(x => x.kind === 'player' && x !== single).sort((p, q) => Math.abs(p.to_them - tCost.cost) - Math.abs(q.to_them - tCost.cost))[0];
+                if (yp) bases.push({ tag: 'Player-led', base: [yp] });
+            }
+            let scored = bases.map(b => score(fill(b.base), b.tag));
+            // A lone headliner with a modest chance also gets a sweetened version.
+            scored.slice().forEach(s => {
+                if (s.pieces.length === 1 && s.acc < 60) {
+                    const add = pool.filter(x => pieceKey(x) !== pieceKey(s.pieces[0]) && !(x.kind === 'pick' && x.round === 1)).sort((p, q) => p.to_them - q.to_them).find(x => x.to_them >= 300);
+                    if (add) scored.push(score([s.pieces[0], add], s.tag + ', plus a sweetener'));
+                }
+            });
+            const seen = new Set();
+            scored = scored.filter(s => { const k = s.pieces.map(pieceKey).sort().join('|'); if (seen.has(k)) return false; seen.add(k); return true; })
+                .filter(s => !rule || s.hl.ok)
+                .sort((p, q) => q.acc - p.acc || p.rawGive - q.rawGive).slice(0, 3);
+            const best = scored[0] || null;
+
+            // Their own package, if they named one.
+            let yourOffer;
+            if (userGive) {
+                if (userIssues.length || !userGive.length) yourOffer = { give: [].concat(a.give).map(String), valid: false, problems: userIssues };
+                else { const s = score(userGive, 'Your package'); yourOffer = Object.assign({ valid: true }, s.out); yourOffer._s = s; }
+            }
+            const who = label(partner), mw = MODE_WORD[mode];
+            const leadWith = mode === 'REBUILDING' ? ' They\'re rebuilding, so lead with picks and young players, not veterans.' : mode === 'CONTENDING' ? ' They\'re contending, so proven starters move them more than picks.' : '';
+            let decision, recommendation;
+            const ys = yourOffer && yourOffer._s;
+            if (ys && (!rule || ys.hl.ok) && ys.acc >= 40 && ys.pv.ratio >= 0.95) {
+                decision = 'offer';
+                recommendation = 'Send your package (' + yourOffer.give.join(' + ') + ') for ' + target.label + ': about ' + ys.acc + '% to be accepted.' + leadWith;
+            } else if (!best) {
+                decision = 'no_fit';
+                recommendation = 'Nothing you own meets the price for ' + target.label + ': ' + (rule ? 'it takes ' + rule.needed + (picksLoaded ? '' : ', and your picks aren\'t loaded') : 'nothing you own is worth enough to a ' + mw + ' owner') + '.';
+            } else if (yourOffer) {
+                decision = 'counter';
+                const whyNot = !yourOffer.valid ? yourOffer.problems.join('; ') : (rule && !ys.hl.ok) ? 'no headliner: it takes ' + rule.needed : ys.pv.ratio < 0.95 ? 'worth only about ' + ys.pv.toThem + ' to ' + who + ' against ' + ys.pv.theirCost : 'too little appeal';
+                recommendation = 'Don\'t send ' + [].concat(a.give).join(' + ') + ' (' + whyNot + (yourOffer.valid ? '; about ' + ys.acc + '% to be accepted' : '') + '). Offer ' + best.out.give.join(' + ') + ' instead: about ' + best.acc + '% to be accepted.' + leadWith;
+            } else if (best.acc < 20) {
+                decision = 'pass';
+                recommendation = 'The best you can build is ' + best.out.give.join(' + ') + ' at about ' + best.acc + '%: not worth chasing ' + target.label + ' right now.';
+            } else if (!rule && best.rawGive > target.value * 1.5) {
+                decision = 'pass';
+                recommendation = 'It would cost you about ' + best.rawGive + ' in value for ' + target.label + ' (worth ' + target.value + '): too steep.';
+            } else {
+                decision = 'offer';
+                recommendation = 'Offer ' + best.out.give.join(' + ') + ' for ' + target.label + ': about ' + best.acc + '% to be accepted.' + leadWith;
+            }
+            if (yourOffer) delete yourOffer._s;
+            const confidence = !picksLoaded ? 'low' : (mode === 'NEUTRAL' || !TE() || decision === 'no_fit') ? 'medium' : best && best.acc >= 50 ? 'high' : 'medium';
+            return Object.assign({ decision, confidence, recommendation }, base, {
+                price_floor: priceFloor,
+                offers: scored.map(s => s.out),
+                your_offer: yourOffer,
+                do_not_offer: doNot,
+                comparables: await comparablesFor(target, partner),
+                evidence, rules_applied: rulesApplied, method, values_note: SCALE_NOTE,
+            });
         },
     });
 
@@ -777,10 +1249,10 @@
                 const own = picksByOwner();
                 if (!own) notes.push('Pick ownership is not loaded yet' + (platform() !== 'sleeper' ? ' (only read for Sleeper leagues)' : '') + '.');
                 else {
-                    const one = rid => (own[rid] || []).filter(x => !rd || x.round === rd).map(x => ({ pick: pickLabel(x.year, x.round, x.originalOwnerRid, rid), value: pickValue(x.year, x.round) }));
+                    const one = rid => (own[rid] || []).filter(x => !rd || x.round === rd).map(x => ({ pick: pickLabel(x.year, x.round, x.originalOwnerRid, rid), value: pickValue(x.year, x.round, null, x.originalOwnerRid) }));
                     if (team) { const list = one(team.roster_id); out.picks = { team: label(team), count: list.length, total_value: list.reduce((s, x) => s + x.value, 0), picks: list.slice(0, 40) }; }
                     else out.picks_by_team = rosters().map(r => { const list = one(r.roster_id); return { team: label(r), count: list.length, total_value: list.reduce((s, x) => s + x.value, 0), picks: list.map(x => x.pick).slice(0, 30) }; }).sort((x, y) => y.total_value - x.total_value);
-                    notes.push('Pick values without a known draft slot assume mid-round; future years carry a 12% per-year discount.');
+                    notes.push('Picks in the next draft are valued at their projected slot from current standings (worst team picks 1st), with no year discount; later drafts assume mid-round, less 12% a year.');
                 }
             }
             if (want('values')) {
@@ -908,5 +1380,5 @@
     });
 
     // Test hooks.
-    AT._moves = { parsePick, pickValue, computeDNA, blockCache };
+    AT._moves = { parsePick, pickValue, computeDNA, blockCache, nextDraftYear, projectedSlot, appealFor, isVet, vetAge, postureFor, costToOwner, headlinerRuleFor, headlinerMet, ownerIntent, SCALE };
 })(typeof window !== 'undefined' ? window : globalThis);
