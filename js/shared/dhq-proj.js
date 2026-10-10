@@ -659,6 +659,67 @@
         const fc = M.forecast(M.dist(ids(a), map, 'median'), M.dist(ids(b), map, 'median'));
         return fc && fc.winPct != null ? { fc, mine: a, theirs: b } : null;
     }
+    // Every team, every remaining week, on DHQ's numbers (owner ruling
+    // 2026-10-10), for the playoff simulator. Running the full engine for 16
+    // rosters × 10 weeks would take minutes, so each team keeps DHQ's number
+    // for every player (this week's projection, already warmed league-wide)
+    // and re-picks its best lineup each week with that week's byes zeroed.
+    // A player out this week on a short injury tag counts his DHQ points per
+    // game in later weeks; IR, PUP and suspensions stay at zero. Null until
+    // every rostered player has a DHQ number (callers keep the fitted model).
+    const LONG_OUT = /^(IR|PUP|SUS|NFI|COV|NA|INJURED RESERVE|SUSPENDED)/i;
+    const seasonCtx = { key: '', loaded: null };
+    function byeOn(team, w) {
+        const bt = App.WeeklyProj && App.WeeklyProj._ctx && App.WeeklyProj._ctx.byTeamWeek;
+        if (!bt || !team) return false;
+        const T = String(team).toUpperCase();
+        if (bt[T + '|' + w] && bt[T + '|' + w].opp) return false;
+        return Object.keys(bt).filter(k => k.slice(k.indexOf('|') + 1) === String(w)).length >= 20;
+    }
+    async function seasonDists(lg, pairsByWeek, fromWeek) {
+        const M = App.Matchup;
+        if (!M || !M.dist || !lg || !pairsByWeek || !resetIfMoved()) return null;
+        const rosters = lg.rosters || S().rosters || [];
+        const all = []; rosters.forEach(r => (r.players || []).forEach(pid => all.push(String(pid))));
+        const missing = all.filter(pid => !(pid in st.results));
+        if (missing.length) { request(missing); return null; }
+        const weeks = Object.keys(pairsByWeek).map(Number).filter(w => w > Number(fromWeek)).sort((a, b) => a - b);
+        if (!weeks.length) return {};
+        const yr = season(), k = (st.key || '') + '|' + weeks.join(',');
+        if (seasonCtx.key !== k) { seasonCtx.key = k; seasonCtx.loaded = App.NflContext && App.NflContext.load ? App.NflContext.load(weeks, yr).catch(() => null) : Promise.resolve(null); }
+        await seasonCtx.loaded;
+        const players = S().players || {}, metaOf = pid => (((App.LI || {}).playerMeta) || {})[pid] || {};
+        const base = {};
+        all.forEach(pid => {
+            const r = st.results[pid], p = players[pid] || {};
+            let med = avg(r);
+            const tag = String(p.injury_status || '');
+            if (!(med > 0) && tag && !LONG_OUT.test(tag)) med = Number(metaOf(pid).ppg) || 0;   // short injury: back later
+            if (LONG_OUT.test(tag)) med = 0;
+            base[pid] = { med, floor: r && r.floor != null && avg(r) > 0 ? Number(r.floor) : med * 0.7, ceiling: r && r.ceiling != null && avg(r) > 0 ? Number(r.ceiling) : med * 1.35, team: p.team };
+        });
+        const rp = lg.roster_positions || ((S().leagues || []).find(l => String(l.league_id || l.id) === String(S().currentLeagueId)) || {}).roster_positions || [];
+        const out = {};
+        for (const w of weeks) {
+            const byRoster = {};
+            rosters.forEach(r => {
+                const pts = {}, map = {};
+                (r.players || []).map(String).forEach(pid => {
+                    const b = base[pid]; if (!b) return;
+                    const m = byeOn(b.team, w) ? 0 : b.med;
+                    pts[pid] = { mean: m, median: m };
+                    map[pid] = { available: m > 0, points: { median: m, floor: m > 0 ? b.floor : 0, ceiling: m > 0 ? b.ceiling : 0 } };
+                });
+                const opt = optimalFrom(r, rp, pts);
+                if (!opt || !(opt.total > 0)) return;
+                const d = M.dist(opt.starters.map(x => String(x.pid)).filter(pid => map[pid]), map, 'median');
+                if (d && d.n > 0) byRoster[String(r.roster_id)] = { mean: d.mean, sd: d.sd };
+            });
+            out[w] = { week: w, byRoster };
+            await new Promise(res => setTimeout(res, 0));
+        }
+        return out;
+    }
     // ── Putting a lineup into slots with the fewest moves ─────────────
     // The optimizer picks WHO starts; this decides WHERE, keeping every
     // starter who can stay in his current slot there (owner report
@@ -798,7 +859,7 @@
         root.addEventListener && root.addEventListener('wr:proj-updated', (e) => { if (!(e && e.detail && e.detail.source === 'dhq')) { loadPlatform(); setTimeout(warmLeague, 500); } });
     }
 
-    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, projectWeek, futureMatchup, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, avgOf, ptsOf, dataStatus, cols: COLS, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
+    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, projectWeek, futureMatchup, seasonDists, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, avgOf, ptsOf, dataStatus, cols: COLS, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
     if (typeof document !== 'undefined') boot();
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.DhqProj;

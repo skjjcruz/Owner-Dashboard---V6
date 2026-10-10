@@ -360,7 +360,10 @@
             const me = h.myRoster();
             let weekDists = null;
             try { const DQ = App.DhqProj; if (DQ && DQ.weekDists) weekDists = DQ.weekDists(lg, pairs[cur] || [], cur, me && me.roster_id, null) || null; } catch (e) { weekDists = null; }
-            const sim = PO.simulate({ league: lg, ledger, futurePairs: pairs, myRosterId: me && me.roster_id, sims: 10000, weekDists });
+            // Later weeks on DHQ's projections (owner ruling 2026-10-10).
+            let futureDists = null;
+            try { const DQ = App.DhqProj; if (DQ && DQ.seasonDists) futureDists = await h.withTimeout(DQ.seasonDists(Object.assign({ rosters: h.rosters() }, lg), pairs, cur), 12000, null); } catch (e) { futureDists = null; }
+            const sim = PO.simulate({ league: lg, ledger, futurePairs: pairs, myRosterId: me && me.roster_id, sims: 10000, weekDists, futureDists });
             if (!sim) { out.note = 'Not enough teams with scores to simulate.'; return out; }
             out.simulations = sim.simCount;
             out.weeks_played = played;

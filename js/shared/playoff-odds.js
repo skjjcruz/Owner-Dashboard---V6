@@ -8,6 +8,8 @@
 //       full-season pairings up front, so future weeks resolve pre-game)
 //
 //   simulate({ league, ledger, futurePairs, myRosterId, sims, seed, weekDists })
+//     futureDists (optional): { [week]: { byRoster } } — later weeks on DHQ's
+//       projections (owner ruling 2026-10-10); missing entries keep the fit.
 //     weekDists (optional): { week, byRoster: { rosterId: { mean, sd } } }
 //       — that week's games are drawn from these instead of the fitted
 //       season distributions (the Lab passes DHQ's projected lineups for the
@@ -172,7 +174,11 @@
 
         const dists = fitDists(rows);
         const wd = opts && opts.weekDists && opts.weekDists.byRoster ? opts.weekDists : null;
-        const distFor = (id, w) => (wd && Number(wd.week) === w && wd.byRoster[id]) || dists[id];
+        // futureDists (optional): { [week]: { byRoster } } for the weeks after
+        // this one, on DHQ's projections (App.DhqProj.seasonDists); a team or
+        // week it doesn't cover keeps the fitted distribution.
+        const fd = (opts && opts.futureDists) || null;
+        const distFor = (id, w) => (wd && Number(wd.week) === w && wd.byRoster[id]) || (fd && fd[w] && fd[w].byRoster && fd[w].byRoster[id]) || dists[id];
         const futureWeeks = Object.keys(futurePairs).map(Number).sort((a, b) => a - b);
         const curWeek = futureWeeks.length ? futureWeeks[0] : null;
 
