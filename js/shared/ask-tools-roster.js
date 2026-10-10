@@ -56,7 +56,11 @@
     const ids = r => ((r && r.players) || []).map(String);
     const inList = (list, pid) => (list || []).map(String).includes(String(pid));
     const injOf = pid => String(h.pl(pid).injury_status || '').toUpperCase();
-    const projOf = pid => { const t = h.thisWeek(pid); return t.scored != null ? t.scored : t.proj != null ? t.proj : null; };
+    // Owner test 2026-10-10: Ryan Fitzgerald was a cut "because he projects
+    // zero this week" when he was on a bye. A bye week says nothing about a
+    // player: use his season points per game instead.
+    const onBye = pid => { const g = h.lock(pid); if (g && g.status === 'bye') return true; const z = App.AskTools && App.AskTools._zeroReason; try { return !!z && z(pid) === 'bye'; } catch (e) { return false; } };
+    const projOf = pid => { const t = h.thisWeek(pid); if (t.scored != null) return t.scored; if (onBye(pid)) { const m = h.meta(pid); return m.ppg != null ? Number(m.ppg) : null; } return t.proj != null ? t.proj : null; };
     const tagOf = pid => { try { const t = root._playerTags && root._playerTags[String(pid)]; return t ? String(t).toLowerCase() : null; } catch (e) { return null; } };
     const isDynasty = () => { const t = Number((h.settings() || {}).type); return !(t === 0); };   // Sleeper: 0 redraft, 1 keeper, 2 dynasty
 
@@ -230,7 +234,8 @@
             const why = [];
             if (vr.value_source === 'unscored') why.push('no engine value and no NFL role');
             else why.push('value ' + (vr.value || 0));
-            why.push(proj != null ? 'projects ' + round1(proj) + ' this week' : 'no projection this week');
+            why.push(onBye(pid) ? 'on bye this week' + (proj != null ? ' (averages ' + round1(proj) + ' a game)' : '') : proj != null ? 'projects ' + round1(proj) + ' this week' : 'no projection this week');
+            if (pos === 'K' && (healthyAt.K || 0) > (slots.K || 1)) why.push('a backup kicker: you start ' + (slots.K || 1));
             if (Number(h.meta(pid).trend) <= -30) why.push('trend ' + h.meta(pid).trend + '%');
             if (inj) why.push(p.injury_status);
             candidates.push(Object.assign({ pid, rank_key: 0 }, row(pid, { why: why.join(', ') + '.', keep_score: keepScore(pid, vr) })));
