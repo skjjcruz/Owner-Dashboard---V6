@@ -37,6 +37,17 @@
 
         var ref = React.useState(null); var wire = ref[0], setWire = ref[1];
         var ref2 = React.useState(null); var market = ref2[0], setMarket = ref2[1];
+        // Lab (owner ask 2026-10-09): the news linked to this player, his own
+        // and his team's (coaching, quarterback), from the engine's index.
+        var ref3 = React.useState([]); var news = ref3[0], setNews = ref3[1];
+        React.useEffect(function () {
+            setNews([]);
+            var PN = window.DHQ_LAB === true && window.App && window.App.PlayerNews;
+            if (!PN) return undefined;
+            var alive = true;
+            PN.get([pid]).then(function (m) { if (alive) setNews(((m || {})[pid] || []).filter(function (it) { return it.link !== 'report'; }).slice(0, 4)); });
+            return function () { alive = false; };
+        }, [pid]);
         React.useEffect(function () {
             setWire(null); setMarket(null);
             var PW = window.WR && window.WR.PlayerWire;
@@ -120,7 +131,20 @@
                 subhead('The Wire · ' + wire.source + (wire.dateLabel ? ' · ' + wire.dateLabel : '')),
                 para(wire.story), divider));
         }
-        if (alexText || wire) kids.push(h('div', { key: 'dhql' }, subhead('DHQ Read')));
+        if (news.length) {
+            var PN = window.App.PlayerNews;
+            kids.push(h('div', { key: 'news' },
+                subhead('Latest news'),
+                news.map(function (it, i) {
+                    var title = it.url
+                        ? h('a', { href: it.url, target: '_blank', rel: 'noopener', style: { color: 'var(--k-d0d0d0, #d0d0d0)', textDecoration: 'underline', textDecorationColor: 'var(--ov-4, rgba(255,255,255,0.2))' } }, it.headline)
+                        : it.headline;
+                    return h('div', { key: i, style: { marginBottom: '6px' } },
+                        h('div', { style: { fontSize: '0.66rem', color: it.link === 'direct' ? 'var(--gold, #d4af37)' : 'var(--silver, #9aa4b2)', letterSpacing: '0.02em' } }, PN.label(it)),
+                        h('div', { style: { fontSize: '0.86rem', color: 'var(--k-d0d0d0, #d0d0d0)', lineHeight: 1.4 } }, title));
+                }), divider));
+        }
+        if (alexText || wire || news.length) kids.push(h('div', { key: 'dhql' }, subhead('DHQ Read')));
         kids.push(h('div', { key: 'dhq' }, para(brief)));
 
         return h('div', {

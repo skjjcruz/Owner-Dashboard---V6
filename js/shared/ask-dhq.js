@@ -467,6 +467,23 @@
     function forgetKey() { try { [MEMBER_KEY, KEY_NAME, PROVIDER_NAME].forEach(k => root.localStorage.removeItem(k)); } catch (e) { /* nothing saved */ } _brain = null; keyChanged(); }
     // The leagues page hides its "New: Ask your AI" card once a key is in.
     function keyChanged() { try { if (root.dispatchEvent && root.CustomEvent) root.dispatchEvent(new root.CustomEvent('dhq:ai-key-changed')); } catch (e) { /* no listeners */ } }
+    async function newsFor(pids) {
+        const PN = App.PlayerNews;
+        if (!PN || !pids.length) return [];
+        let map = {};
+        try { map = await Promise.race([PN.get(pids), new Promise(r => setTimeout(() => r({}), 4000))]); } catch (e) { return []; }
+        const lines = [];
+        const seenTeamStory = new Set();
+        [...new Set(pids.map(String))].forEach(pid => {
+            (map[pid] || []).slice(0, 3).forEach(it => {
+                // One team story once, not once per teammate.
+                if (it.link === 'team') { const k = (it.why || '') + it.headline; if (seenTeamStory.has(k)) return; seenTeamStory.add(k); }
+                const who = it.link === 'team' ? (it.why || 'team') : pname(pid);
+                lines.push(who + ': ' + PN.label(it) + ' · ' + it.headline + (it.summary && it.link !== 'report' ? ' (' + String(it.summary).slice(0, 180) + ')' : '') + (it.source ? ' [' + it.source + ']' : ''));
+            });
+        });
+        return lines.slice(0, 60);
+    }
     // Owner ask 2026-10-09: purely conversational. The last few turns go
     // with each question so follow-ups ("what about him?") work.
     const chat = [];
@@ -478,8 +495,11 @@
         const lid = String(S().currentLeagueId || '');
         if (chat.league !== lid) { chat.length = 0; chat.league = lid; }
         const call = ans && ans.intent !== 'help' ? '\nRecommendation: ' + ans.text + ((ans.lines || []).length ? '\nFacts behind it:\n- ' + ans.lines.join('\n- ') : '') : '';
+        // Player news (owner ask 2026-10-09): the stories linked to my players
+        // and the ones in the question, so the AI knows without a search.
+        const newsLines = await newsFor(((myRoster() || {}).players || []).map(String).concat((ans && ans.players) || []));
         // The facts say "value", not "DHQ", so the AI has no brand to repeat.
-        const user = ('Question: ' + question + call + '\nLeague facts:\n- ' + briefing().join('\n- ')).replace(/\bDHQ\b(?!')/g, 'value').replace(/\bDHQ's\s*/g, '');
+        const user = ('Question: ' + question + call + '\nLeague facts:\n- ' + briefing().join('\n- ') + (newsLines.length ? '\nRecent NFL news (last 14 days; "via" means team news that affects him):\n- ' + newsLines.join('\n- ') : '')).replace(/\bDHQ\b(?!')/g, 'value').replace(/\bDHQ's\s*/g, '');
         const model = PROVIDERS[k.provider].model;
         const ctl = root.AbortController ? new root.AbortController() : null;
         // A web search can take a while; give it a minute.
