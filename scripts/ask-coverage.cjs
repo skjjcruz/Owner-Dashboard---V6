@@ -15,6 +15,10 @@ const CALLS = [
   ['get_transactions', { type: 'trade', limit: 5 }], ['get_transactions', { team: 'me', limit: 5 }],
   ['evaluate_trade', { give: ['Jonathan Taylor'], get: ['Puka Nacua'] }], ['find_trade_partners', {}], ['get_owner_profile', { team: 'mwitkowski' }],
   ['get_draft_info', {}],
+  ['get_start_sit', {}], ['get_start_sit', { players: 'Sutton or Holani' }],
+  ['trade_plan', { partner: 'bwit13', target: 'Jordan Love' }], ['trade_plan', { partner: 'bwit13', target: 'Jordan Love', give: ['Matthew Stafford', 'Mark Andrews'] }],
+  ['evaluate_trade', { give: ['Matthew Stafford', 'Mark Andrews'], get: ['Jordan Love'] }],
+  ['get_waiver_plan', {}], ['get_waiver_plan', { position: 'DEF' }], ['get_waiver_bid', { player: 'Parrish' }], ['roster_plan', {}],
 ];
 (async () => {
   const b = await chromium.launch({ args: ['--ignore-certificate-errors-spki-list=PS48cX347wDVcRynzq+DFqswl2PLNE1sG6uQvxMCOS0='], executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
