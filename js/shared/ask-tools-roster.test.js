@@ -138,7 +138,10 @@ test('roster_plan: full roster, Carr first, IR and taxi never cut, value gaps ke
     assert.match(r.recommendation, /Derek Carr/);
     const cuts = r.cut_candidates.map(c => c.player);
     assert.equal(cuts[0], 'Derek Carr');
-    assert.deepEqual(cuts.slice(1, 4), ['Ryan Fitzgerald', 'Zonovan Knight', 'Isaiah Davis']);   // backup K (Santos starts), then the low-upside RBs
+    // Owner ruling: never cut the backup kicker (two kickers for bye weeks).
+    assert.ok(!cuts.includes('Ryan Fitzgerald'), 'backup K is never a cut');
+    assert.match(r.keep_despite_low_value.find(k => k.player === 'Ryan Fitzgerald').reason, /backup kicker/);
+    assert.deepEqual(cuts.slice(1, 3), ['Zonovan Knight', 'Isaiah Davis']);   // then the low-upside RBs
     for (const never of ['Myles Garrett', 'James Conner', 'Aaron Donald', 'Will Levis', 'Jacardia Wright', "D'Angelo Ponds", 'Justice Hill', 'Genesis Smith', 'Trey Hendrickson', 'Dak Prescott', 'Cairo Santos']) assert.ok(!cuts.includes(never), never + ' must not be a cut');
     const keep = Object.fromEntries(r.keep_despite_low_value.map(k => [k.player, k]));
     assert.equal(keep['Myles Garrett'].value_source, 'ir_fallback');

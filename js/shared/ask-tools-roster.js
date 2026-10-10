@@ -264,6 +264,9 @@
             if (vr.value_source === 'unscored' && (Number(p.depth_chart_order) === 1 || (proj != null && proj >= 3))) {
                 return keepIf('No engine value, but he has an NFL role (' + p.team + (p.depth_chart_order != null ? ' depth #' + p.depth_chart_order : '') + (proj != null ? ', projects ' + round1(proj) : '') + '). Unknown value is not zero.');
             }
+            // Owner ruling 2026-10-10: "we never cut backup kickers, you need two
+            // on the roster, you have bye weeks." Keep one more than the K slots (at least 2).
+            if (h.ppos(pid) === 'K' && (healthyAt.K || 0) <= Math.max(2, (slots.K || 1) + 1)) return keepIf('Your backup kicker: you need ' + Math.max(2, (slots.K || 1) + 1) + ' kickers to cover bye weeks.');
             const nmu = nextManUp(pid);
             if (nmu) return keepIf('Next man up: ' + nmu.out.join(' and ') + ' ' + (nmu.out.length > 1 ? 'are' : 'is') + ' out, so he moves up to ' + p.team + ' ' + nmu.role + '.');
             if (youngRiser(pid)) return keepIf('Young upside (age ' + (p.age || '?') + ', ' + (p.years_exp != null ? p.years_exp + ' yrs in the NFL' : 'rookie') + ').');
@@ -274,7 +277,7 @@
             if (vr.value_source === 'unscored') why.push('no engine value and no NFL role');
             else why.push('value ' + (vr.value || 0));
             why.push(onBye(pid) ? 'on bye this week' + (proj != null ? ' (averages ' + round1(proj) + ' a game)' : '') : proj != null ? 'projects ' + round1(proj) + ' this week' : 'no projection this week');
-            if (pos === 'K' && (healthyAt.K || 0) > (slots.K || 1)) why.push('a backup kicker: you start ' + (slots.K || 1));
+            if (pos === 'K') why.push('a third kicker: you only need ' + Math.max(2, (slots.K || 1) + 1));
             if (Number(h.meta(pid).trend) <= -30) why.push('trend ' + h.meta(pid).trend + '%');
             if (inj) why.push(p.injury_status);
             candidates.push(Object.assign({ pid, rank_key: 0 }, row(pid, { why: why.join(', ') + '.', keep_score: keepScore(pid, vr) })));
