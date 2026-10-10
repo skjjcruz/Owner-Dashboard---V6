@@ -200,7 +200,11 @@
         const list = teamPosIndex()[p.team + '|' + pos] || [];
         const at = list.indexOf(String(pid));
         if (at <= 0) return null;
-        const outAbove = list.slice(0, at).filter(x => INJ_OUT.has(injOf(x)));
+        // Sleeper moves an injured starter DOWN its depth chart (live: Breece
+        // Hall sits at NYJ depth 5 while out), so "above him" also means a
+        // teammate who is clearly the bigger player (worth more).
+        const v = x => Number(valueRead(x).value) || 0;
+        const outAbove = list.filter((x, i) => x !== String(pid) && INJ_OUT.has(injOf(x)) && (i < at || v(x) > Math.max(v(pid), 500)));
         if (!outAbove.length) return null;
         const healthyRank = list.slice(0, at + 1).filter(x => !INJ_OUT.has(injOf(x))).length;
         if (healthyRank > NEXT_UP_DEPTH[pos]) return null;
