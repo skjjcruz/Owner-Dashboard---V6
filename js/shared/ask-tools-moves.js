@@ -532,6 +532,7 @@
                         your_package_to_them: priced, worth_to_them: toThem, what_they_give_up_as_they_see_it: theirCost,
                         verdict: ratio >= 1 ? 'appealing to them' : ratio >= 0.8 ? 'close, they may want a sweetener of the kind they value' : 'not appealing to them: rebuild the offer around what they want',
                         listed_by_them: get.filter(x => x.pid && intent._listed.includes(x.pid)).map(x => x.label + ' is on their trade block') || undefined,
+                        listed_ids: intent._listed,
                     };
                 }
             }
@@ -561,10 +562,38 @@
                 if (!ok) {
                     if (acceptPct != null) acceptPct = Math.min(acceptPct, 10);
                     warnings.push('No headliner: ' + headliner.rule + ' This offer won\'t start the conversation.');
+                } else {
+                    // Owner test 2026-10-10: a 1st for a young starting QB was
+                    // called "a slight overpay" because the pick's number is a
+                    // bit higher. The headliner is the market floor, not a premium.
+                    headliner.market = 'This is the going rate: the headliner is the floor for a young starter. A value gap of this size is not an overpay to be clawed back.';
                 }
             }
+            // How a deal gets balanced (owner test 2026-10-10: the AI asked a
+            // rebuilder to "add one of their own picks" back). A rebuilding
+            // seller never gives picks back; they balance by adding veterans
+            // they want gone (their trade block first). A contender balances
+            // with picks or depth.
+            let balance = null;
+            if (partner && partnerView && net < 0) {
+                const gap = Math.abs(net);
+                const intent2 = partnerView.their_mode;
+                if (intent2 === 'REBUILDING') {
+                    const pool = (partner.players || []).map(String).filter(pid => !get.some(x => x.pid === pid))
+                        .filter(pid => { const m = meta(pid), age = Number(pl(pid).age) || 0; return value(pid) > 0 && ((m.peakYrsLeft != null && m.peakYrsLeft <= 1) || age >= 28); });
+                    const listedSet = new Set((partnerView.listed_ids || []));
+                    const pick = pool.map(pid => ({ pid, v: value(pid), listed: listedSet.has(pid) }))
+                        .sort((x, y) => (y.listed - x.listed) || Math.abs(x.v - gap) - Math.abs(y.v - gap)).slice(0, 4)
+                        .map(x => pname(x.pid) + ' (' + ppos(x.pid) + ', ' + (pl(x.pid).age || '?') + ', value ' + x.v + (x.listed ? ', on their block' : '') + ')');
+                    balance = { you_overpay_by: gap, how: 'A rebuilder won\'t give picks back. Ask them to add a veteran they want gone, ideally one from their trade block:', options: pick };
+                } else {
+                    balance = { you_overpay_by: gap, how: 'Ask for a pick or a depth player back, or trim what you send.' };
+                }
+            }
+            if (partnerView) delete partnerView.listed_ids;
             const out = {
                 headliner: headliner || undefined,
+                balance: balance || undefined,
                 you_give: give.map(pieceOut), you_get: get.map(pieceOut),
                 totals: { give: tg, get: tt, net_for_you: net, net_pct: round1(net / Math.max(tg, tt, 1) * 100) },
                 grade: fair ? { grade: fair.grade, label: fair.label } : null,
