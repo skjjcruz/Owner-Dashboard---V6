@@ -270,6 +270,7 @@
 
     // ── get_schedule ───────────────────────────────────────────────
     register({
+        timeoutMs: 45000,
         name: 'get_schedule',
         description: 'One team\'s regular-season schedule (default: mine): every week\'s opponent, the result and score for weeks played, the win chance for weeks ahead, the projected final record, and weeks where bye weeks leave the lineup thin.',
         parameters: { type: 'object', properties: { team: { type: 'string', description: TEAM_ARG + ' (default: me).' } } },
@@ -282,7 +283,7 @@
             let data = null;
             if (Sch && Sch.buildSeason) {
                 try {
-                    data = await h.withTimeout(Sch.buildSeason({ league: lg, myRoster: r, playersData: h.S().players || {}, statsData: root._wrStatsData || {}, stats2025Data: undefined }), 9000, null);
+                    data = await h.withTimeout(Sch.buildSeason({ league: lg, myRoster: r, playersData: h.S().players || {}, statsData: root._wrStatsData || {}, stats2025Data: undefined }), 40000, null);   // DHQ projects every later week (about 25 s cold; warmed in the background)
                 } catch (e) { data = null; }
             }
             if (data && data.weeks) {

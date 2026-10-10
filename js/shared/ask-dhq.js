@@ -872,6 +872,17 @@
         try { root.sessionStorage.removeItem(PENDING); } catch (e) { /* once is enough */ }
         open(); ask(q);
     }
+    // The season schedule on DHQ's numbers takes ~25 s to project; start it
+    // quietly once per league for members with a key, so "am I making the
+    // playoffs?" doesn't wait on it.
+    let warmed = '';
+    function warmSeason() {
+        const lid = String(S().currentLeagueId || '');
+        if (!lid || warmed === lid || !leagueReady() || !savedKey() || !isMember() || !App.AskTools) return;
+        warmed = lid;
+        const go = () => { App.AskTools.run('get_schedule', {}).catch(() => {}); };
+        if (root.requestIdleCallback) root.requestIdleCallback(go, { timeout: 8000 }); else setTimeout(go, 4000);
+    }
     function mount() {
         const d = root.document;
         if (!d || !d.body || d.querySelector('.askdhq-btn')) return;
@@ -903,6 +914,7 @@
             if (!ui || ui.panel.style.display === 'none' || btn.classList.contains('askdhq-btn--top')) btn.style.display = on ? '' : 'none';
             else if (!isMember()) { ui.panel.style.display = 'none'; btn.style.display = on ? '' : 'none'; }
             askPending();
+            warmSeason();
         }, 1500);
     }
 

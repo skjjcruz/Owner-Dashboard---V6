@@ -156,7 +156,7 @@
         const t = tools.get(name);
         if (!t) return { error: 'No tool named ' + name + '.' };
         try {
-            const out = await withTimeout(t.run(args || {}, h), 15000, { error: name + ' took too long.' });
+            const out = await withTimeout(t.run(args || {}, h), t.timeoutMs || 15000, { error: name + ' took too long.' });
             return out == null ? { error: 'Nothing found.' } : out;
         } catch (e) { return { error: String((e && e.message) || e) }; }
     }

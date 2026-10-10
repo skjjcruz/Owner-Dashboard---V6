@@ -622,7 +622,7 @@
                     } catch (e) { res = null; }
                 }
                 W.results[pid] = res;
-                if (++n % 25 === 0) await new Promise(r => setTimeout(r, 0));   // let the page breathe
+                if (++n % 3 === 0) await new Promise(r => setTimeout(r, 0));   // ~50 ms a player: yield often so the page stays smooth
             }
             out[pid] = W.results[pid];
         }
