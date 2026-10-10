@@ -29,12 +29,14 @@ globalThis.S = {
         fa1: { full_name: 'Michael Carter', position: 'RB', team: 'TEN', age: 27, active: true },
         fa2: { full_name: 'Tyler Badie', position: 'RB', team: 'DEN', age: 26, active: true, injury_status: 'Questionable', injury_body_part: 'Ankle' },
         fa3: { full_name: 'Troy Franklin', position: 'WR', team: 'DEN', age: 22, active: true },
+        cle: { full_name: 'Cleveland Browns', position: 'DEF', team: 'CLE', active: true },
+        k1: { full_name: 'Free Kicker', position: 'K', team: 'NYG', active: true },
     },
     weeklyPlayerPoints: { 1: { sutton: 12.4, jt: 20 }, 2: { sutton: 8.1 }, 3: { sutton: 0 } },
     playerStats: { sutton: { gp: 5, rec: 22, rec_yd: 301, rec_td: 2, rush_yd: 0 } },
 };
 App.LI = {
-    playerScores: { sutton: 938, jt: 4288, dak: 4019, puka: 7091, fa1: 333, fa2: 410, fa3: 1500 },
+    playerScores: { sutton: 938, jt: 4288, dak: 4019, puka: 7091, fa1: 333, fa2: 410, fa3: 1500, cle: 900, k1: 800 },
     playerMeta: { sutton: { ppg: 11.23, peakYrsLeft: 0, trend: -68, ageCurvePhase: 'decline', lastYearPPG: 13.1, careerPPG: 12.2, roleLabel: 'WR1', fcValue: 2100.4, fcRank: 120 } },
     tradeHistory: [{ season: '2025', week: 4, ts: 2, roster_ids: [13, 2], sides: { 13: { players: ['sutton'], picks: [] }, 2: { players: [], picks: [{ season: '2026', round: 2 }] } } }],
     faabByPos: { RB: { count: 9, avg: 12.333, median: 10, p75: 18 } },
@@ -54,15 +56,16 @@ App.PlayerNews = {
     label: () => '',
 };
 globalThis.WR = { PlayerWire: { fetchRead: async () => ({ story: 'Sutton caught 5 of 7 targets.', headline: 'Sutton steady', published: daysAgo(2), source: 'Rotowire via ESPN' }) } };
-globalThis.Sleeper = { fetchTrending: async type => (type === 'add' ? [{ player_id: 'fa3', count: 9000 }, { player_id: 'puka', count: 10 }] : [{ player_id: 'fa1', count: 400 }]) };
+globalThis.Sleeper = { fetchTrending: async type => (type === 'add' ? [{ player_id: 'cle', count: 50000 }, { player_id: 'fa3', count: 9000 }, { player_id: 'puka', count: 10 }] : [{ player_id: 'fa1', count: 400 }]) };
 globalThis.assessTeamFromGlobal = () => null;
 require('./faab-engine.js');
 const AT = require('./ask-tools.js');
 require('./ask-tools-players.js');
+require('./ask-tools-roster.js');
 
 test('registers the six player tools with descriptions and schemas', () => {
     const names = AT.defs().map(d => d.name);
-    for (const n of ['get_player', 'compare_players', 'search_players', 'get_waiver_report', 'get_waiver_bid', 'get_news']) assert.ok(names.includes(n), n);
+    for (const n of ['get_player', 'compare_players', 'search_players', 'get_waiver_report', 'get_waiver_bid', 'get_waiver_plan', 'get_news']) assert.ok(names.includes(n), n);
     AT.defs().forEach(d => { assert.ok(d.description.length > 20); assert.equal(d.parameters.type, 'object'); });
 });
 
@@ -155,4 +158,39 @@ test('get_news: team news deduped across teammates, old stories dropped, newest 
     const p = await AT.run('get_news', { players: ['Puka Nacua'] });
     assert.equal(p.items.length, 0);
     assert.ok(p.note);
+});
+
+test('free-agent lists only show positions this league can start (no DEF or K slot here)', async () => {
+    const rep = await AT.run('get_waiver_report', {});
+    assert.ok(!rep.trending_adds.some(x => x.pos === 'DEF'), 'trending DEF filtered');
+    assert.ok(!rep.best_available.DEF && !rep.best_available.K);
+    const def = await AT.run('get_waiver_report', { position: 'DEF' });
+    assert.match(def.note, /no DEF slot/);
+    const fa = await AT.run('search_players', { availability: 'free_agents', limit: 40 });
+    assert.ok(!fa.players.some(p => p.pos === 'DEF' || p.pos === 'K'), fa.players.map(p => p.pos).join(','));
+    const sDef = await AT.run('search_players', { position: 'DEF', availability: 'free_agents' });
+    assert.equal(sDef.matches, 0);
+    assert.match(sDef.note, /no DEF slot/);
+    const all = await AT.run('search_players', { sort: 'value', limit: 40 });
+    assert.ok(all.players.some(p => p.pos === 'DEF'), 'league-wide rankings still list everyone');
+    const plan = await AT.run('get_waiver_plan', { position: 'DEF' });
+    assert.equal(plan.decision, 'no_slot');
+});
+
+test('get_waiver_bid: offseason claims never price an in-season bid', async () => {
+    const saved = globalThis.WrTxns;
+    S.nflState = { season: '2026', season_type: 'regular', season_start_date: '2026-09-09' };
+    const w = (bid, leg, created, status) => ({ type: 'waiver', status: status || 'complete', leg, created, roster_ids: [2], adds: { fa1: 2 }, settings: { waiver_bid: bid } });
+    const tx = [];
+    for (let i = 0; i < 20; i++) tx.push(w(1, 1, Date.UTC(2026, 3, 1 + i)));        // April claims, filed under leg 1
+    tx.push(w(1, 1, undefined));                                                      // no timestamp, leg 1: offseason
+    tx.push(w(30, 2, Date.UTC(2026, 8, 16)), w(40, 3, Date.UTC(2026, 8, 23)), w(50, 4, undefined), w(20, 4, Date.UTC(2026, 8, 30), 'failed'));
+    globalThis.WrTxns = { getCached: () => tx.filter(t => t.status !== 'failed'), getFailedWaivers: () => tx.filter(t => t.status === 'failed') };
+    try {
+        const r = await AT.run('get_waiver_bid', { player: 'Tyler Badie' });
+        assert.equal(r.error, undefined, r.error);
+        assert.equal(r.in_season_bids.offseason_claims_excluded, 21);
+        assert.equal(r.in_season_bids.count, 4);
+        assert.deepEqual(r.recent_winning_bids_at_position.map(c => c.bid), [40, 30, 50]);
+    } finally { globalThis.WrTxns = saved; delete S.nflState; }
 });

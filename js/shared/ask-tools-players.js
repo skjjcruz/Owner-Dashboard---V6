@@ -8,7 +8,16 @@
 //   search_players    league-wide rankings / filters (position, availability…)
 //   get_waiver_report free agents, trending adds/drops, FAAB, waiver order
 //   get_waiver_bid    the FAAB model's bid for one player (App.Faab.estimate)
+//   get_waiver_plan   the waiver decision: adds, each paired with a drop
+//                     (App.AskRoster's one drop list), bids, FAAB pacing
 //   get_news          linked news for players or an NFL team (last 14 days)
+//
+// Bid history is IN-SEASON only (2026-10-10): Sleeper files every
+// March–September offseason claim under leg 1 (437 of 504 bids in the Psycho
+// League, 210 of them at the $13 minimum), which dragged the league's p50/
+// p75/p90 to $15/$35/$75 against an in-season $30/$61/$129 (claims made on
+// or after the regular-season start). Free-agent lists only show positions
+// this league can start (no DEF without a DEF slot).
 //
 // Same rules as ask-tools.js: every value comes from the app's own data or
 // engines, nothing here calls an AI, lists are capped, network reads are
@@ -28,7 +37,7 @@
     const NEWS_MS = 4000;
     const DAY = 864e5;
     const POS_ALL = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
-    const FLEX = { FLEX: ['RB', 'WR', 'TE'], SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'], SUPERFLEX: ['QB', 'RB', 'WR', 'TE'], REC_FLEX: ['WR', 'TE'], IDP_FLEX: ['DL', 'LB', 'DB'], IDP: ['DL', 'LB', 'DB'] };
+    const FLEX = { FLEX: ['RB', 'WR', 'TE'], SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'], SUPERFLEX: ['QB', 'RB', 'WR', 'TE'], REC_FLEX: ['WR', 'TE'], WRRB_FLEX: ['RB', 'WR'], IDP_FLEX: ['DL', 'LB', 'DB'], IDP: ['DL', 'LB', 'DB'] };
     const posSet = q => { const p = String(q || '').toUpperCase().replace(/[\s-]/g, '_'); return FLEX[p] || (p === 'DST' || p === 'D_ST' ? ['DEF'] : p ? [p] : null); };
 
     // ── Small reads ────────────────────────────────────────────────
@@ -260,9 +269,18 @@
             },
         },
         async run(a) {
-            const want = posSet(a.position);
+            let want = posSet(a.position);
             if (want && !want.every(p => POS_ALL.includes(p))) throw new Error('Unknown position "' + a.position + '". Use QB, RB, WR, TE, K, DEF, DL, LB, DB or FLEX.');
             const avail = String(a.availability || 'all').toLowerCase().replace(/[\s-]/g, '_');
+            // Free agents: only positions this league can start.
+            if (avail === 'free_agents') {
+                const startable = leaguePositions();
+                if (want) {
+                    const ok = want.filter(p => startable.includes(p));
+                    if (!ok.length) return { matches: 0, players: [], note: 'This league has no ' + want.join('/') + ' slot, so a free agent there can\'t score for you. It starts: ' + startable.join(', ') + '.' };
+                    want = ok;
+                } else want = startable;
+            }
             const sort = String(a.sort || 'value').toLowerCase();
             const team = (a.nfl_team || a.team) ? String(a.nfl_team || a.team).toUpperCase().trim() : null;
             const limit = Math.max(1, Math.min(40, Number(a.limit) || 15));
@@ -330,6 +348,10 @@
         }
         return Array.isArray(list) ? list : null;
     }
+    function isFreeAgent(pid, rostered) {
+        const p = (S().players || {})[pid];
+        return !!(p && p.team && !(rostered || rosteredSet()).has(String(pid)) && p.active !== false && p.status !== 'Retired');
+    }
     function leaguePositions() {
         const lg = h.league() || {};
         const set = new Set();
@@ -349,8 +371,11 @@
             if (!lg || !h.rosters().length) throw new Error('League not loaded yet.');
             const players = S().players || {};
             const rostered = rosteredSet();
-            const positions = a.position ? (posSet(a.position) || []) : leaguePositions();
-            const isFA = pid => { const p = players[pid]; return !!(p && p.team && !rostered.has(String(pid)) && p.active !== false && p.status !== 'Retired'); };
+            const startable = leaguePositions();
+            const asked = a.position ? (posSet(a.position) || []) : null;
+            const positions = asked ? asked.filter(p => startable.includes(p)) : startable;
+            if (asked && !positions.length) return { week: h.week(), best_available: {}, note: 'This league has no ' + (asked.join('/') || String(a.position)) + ' slot, so a free agent there can\'t score for you. It starts: ' + startable.join(', ') + '.' };
+            const isFA = pid => isFreeAgent(pid, rostered);
             const fas = Object.keys(players).filter(isFA);
             const best = {};
             positions.forEach(pos => {
@@ -361,7 +386,9 @@
                 if (byValue.length || byWeek.length) best[pos] = noUndef({ by_value: byValue.length ? byValue : undefined, by_this_week: byWeek.length ? byWeek : undefined });
             });
             const [adds, drops] = await Promise.all([trending('add'), trending('drop')]);
-            const trend = list => (list || []).filter(x => x && x.player_id && players[x.player_id]).slice(0, 15).map(x => {
+            // Trending lists: only positions this league starts (Sleeper's
+            // trending is mostly team DEFs, useless without a DEF slot).
+            const trend = list => (list || []).filter(x => x && x.player_id && players[x.player_id] && startable.includes(h.ppos(x.player_id))).slice(0, 15).map(x => {
                 const pid = String(x.player_id), r = h.rosterOf(pid);
                 return noUndef({ name: h.pname(pid), pos: h.ppos(pid), nfl_team: h.pl(pid).team || 'FA', count_24h: x.count, here: r ? h.label(r) : 'available', value: h.value(pid) || undefined });
             });
@@ -392,14 +419,75 @@
         if (!T || !T.getCached) return [];
         try { return (T.getCached(id) || []).concat(T.getFailedWaivers ? (T.getFailedWaivers(id) || []) : []); } catch (e) { return []; }
     }
+    async function loadTxns(id) {
+        let txns = txnsFor(id);
+        if (!txns.length && root.WrTxns && root.WrTxns.fetchLeagueTxns) {
+            await h.withTimeout(Promise.resolve(root.WrTxns.fetchLeagueTxns(id)).catch(() => null), 5000, null);
+            txns = txnsFor(id);
+        }
+        return txns;
+    }
     const valueOf = pid => {
         const PV = App.PlayerValue;
         if (PV && PV.getValue) { try { const v = Number(PV.getValue(pid, {})); if (v > 0) return v; } catch (e) { /* fall through */ } }
         return Number(scores()[pid]) || 0;
     };
+    // The regular season's first day. Sleeper's nflState.season_start_date
+    // is the regular-season start once season_type is regular/post (verified
+    // live 2026-10-10: '2026-09-09'); in August it can be the preseason, so
+    // otherwise use the Wednesday after Labor Day.
+    function seasonStartMs() {
+        const ns = S().nflState || {};
+        const yr = Number(h.season()) || new Date().getUTCFullYear();
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ns.season_start_date || ''));
+        if (m && (ns.season_type === 'regular' || ns.season_type === 'post') && Number(m[1]) === yr) return Date.UTC(yr, Number(m[2]) - 1, Number(m[3]));
+        const dow = new Date(Date.UTC(yr, 8, 1)).getUTCDay();
+        return Date.UTC(yr, 8, 1 + ((8 - dow) % 7) + 2);
+    }
+    // Waiver bids made on or after the season start; offseason claims out.
+    // A bid with no timestamp counts only from week 2 on (Sleeper files the
+    // offseason under week 1).
+    function inSeason(txns) {
+        const start = seasonStartMs();
+        let excluded = 0;
+        const kept = (txns || []).filter(t => {
+            if (!t || t.type !== 'waiver' || !(Number(t.settings && t.settings.waiver_bid) > 0)) return true;
+            const ok = Number(t.created) > 0 ? Number(t.created) >= start : Number(t.leg) >= 2;
+            if (!ok) excluded++;
+            return ok;
+        });
+        return { txns: kept, excluded, start: new Date(start).toISOString().slice(0, 10) };
+    }
+    const quant = (sorted, p) => (App.Faab && App.Faab.quantile ? App.Faab.quantile(sorted, p) : sorted[Math.round((sorted.length - 1) * p)]);
+    function bidStats(txns) {
+        const bids = (txns || []).filter(t => t && t.type === 'waiver' && Number(t.settings && t.settings.waiver_bid) > 0).map(t => Number(t.settings.waiver_bid)).sort((x, y) => x - y);
+        if (!bids.length) return { count: 0 };
+        return { count: bids.length, p50: Math.round(quant(bids, 0.5)), p75: Math.round(quant(bids, 0.75)), p90: Math.round(quant(bids, 0.9)) };
+    }
+    // In-season WINNING bids at one position, newest first.
+    function posComps(txns, pos, limit) {
+        return (txns || []).filter(t => t && t.type === 'waiver' && t.status !== 'failed' && Number(t.settings && t.settings.waiver_bid) > 0 && t.adds && h.ppos(Object.keys(t.adds)[0]) === pos)
+            .sort((x, y) => (Number(y.created) || 0) - (Number(x.created) || 0))
+            .slice(0, limit || 6)
+            .map(t => ({ player: h.pname(Object.keys(t.adds)[0]), bid: Number(t.settings.waiver_bid), week: Number(t.leg) || undefined }));
+    }
+    function compSummary(comps) {
+        const b = (comps || []).map(c => c.bid).sort((x, y) => x - y);
+        return b.length ? { wins: b.length, median: Math.round(quant(b, 0.5)), p75: Math.round(quant(b, 0.75)), max: b[b.length - 1] } : undefined;
+    }
+    function estimateFor(pid, txns, lg, me) {
+        const id = lid();
+        const league = Object.assign({}, lg, { rosters: h.rosters(), users: h.users() });
+        let gm = {};
+        try { gm = (root.WR && root.WR.GmMode && root.WR.GmMode.effects && root.WR.GmMode.effects(id)) || {}; } catch (e) { gm = {}; }
+        let horizonWeeks = null;
+        try { horizonWeeks = (App.ChopOdds && App.ChopOdds.horizonFor && App.ChopOdds.horizonFor(id, null)) || null; } catch (e) { horizonWeeks = null; }
+        const opts = { league, myRosterId: me.roster_id, txns, playersData: S().players || {}, minBidOverride: gm.faabMinBid || undefined, targetPid: pid, targetPos: h.ppos(pid), dhq: valueOf(pid), playerValue: valueOf, horizonWeeks };
+        return { est: App.Faab.estimate(opts), limits: App.Faab.limits ? App.Faab.limits(opts) : null };
+    }
     AT.register({
         name: 'get_waiver_bid',
-        description: 'How much FAAB to bid on a free agent: the app\'s bid model (this league\'s bid history and rivals\' needs and budgets) gives the suggested bid, a range, the win chance, which teams are likely to bid against me, and my FAAB left.',
+        description: 'How much FAAB to bid on a free agent: the app\'s bid model (this league\'s in-season bid history and rivals\' needs and budgets) gives the suggested bid, a range, the win chance, which teams are likely to bid against me, recent winning bids at his position, and my FAAB left.',
         parameters: { type: 'object', properties: { player: { type: 'string', description: 'Player name or id.' } }, required: ['player'] },
         async run(a) {
             const Faab = App.Faab;
@@ -412,25 +500,9 @@
             const pid = f.pid;
             const holder = h.rosterOf(pid);
             if (holder) throw new Error(h.pname(pid) + ' is not a free agent: ' + h.label(holder) + ' rosters him.');
-            const id = lid();
-            let txns = txnsFor(id);
-            if (!txns.length && root.WrTxns && root.WrTxns.fetchLeagueTxns) {
-                await h.withTimeout(Promise.resolve(root.WrTxns.fetchLeagueTxns(id)).catch(() => null), 5000, null);
-                txns = txnsFor(id);
-            }
-            const league = Object.assign({}, lg, { rosters: h.rosters(), users: h.users() });
-            let gm = {};
-            try { gm = (root.WR && root.WR.GmMode && root.WR.GmMode.effects && root.WR.GmMode.effects(id)) || {}; } catch (e) { gm = {}; }
-            let horizonWeeks = null;
-            try { horizonWeeks = (App.ChopOdds && App.ChopOdds.horizonFor && App.ChopOdds.horizonFor(id, null)) || null; } catch (e) { horizonWeeks = null; }
-            const dhq = valueOf(pid);
-            const est = Faab.estimate({
-                league, myRosterId: me.roster_id, txns, playersData: S().players || {},
-                minBidOverride: gm.faabMinBid || undefined,
-                targetPid: pid, targetPos: h.ppos(pid), dhq, playerValue: valueOf, horizonWeeks,
-            });
+            const ins = inSeason(await loadTxns(lid()));
+            const { est, limits: lim } = estimateFor(pid, ins.txns, lg, me);
             if (!est) {
-                const lim = Faab.limits ? Faab.limits({ league, myRosterId: me.roster_id, minBidOverride: gm.faabMinBid || undefined }) : null;
                 if (lim && lim.exhausted) throw new Error('No legal bid left: $' + lim.myLeft + ' FAAB left, the minimum bid is $' + lim.minBid + '.');
                 throw new Error('No bid estimate for this league.');
             }
@@ -445,11 +517,205 @@
                 my_faab: { left: est.myLeft, budget: est.budget, min_bid: est.minBid },
                 rivals: (an.rivals || []).filter(r => r.engaged).slice(0, 5).map(r => ({ team: r.name, need: r.need, faab_left: r.faabLeft, est_bid: r.estBid })),
                 league_market_bid: an.marketBid, league_median_bid: an.medianBid,
-                based_on: est.coldStart ? 'Only ' + est.sampleSize + ' bids in this league so far: league-typical defaults, not per-rival reads.' : est.sampleSize + ' FAAB bids from this league (winning and losing).',
+                in_season_bids: Object.assign(bidStats(ins.txns), { since: ins.start, offseason_claims_excluded: ins.excluded }),
+                based_on: est.coldStart ? 'Only ' + est.sampleSize + ' in-season bids in this league so far: league-typical defaults, not per-rival reads.' : est.sampleSize + ' in-season FAAB bids from this league (winning and losing; offseason claims left out).',
             };
-            if ((an.comps || []).length) out.recent_winning_bids = an.comps.slice(0, 5).map(c => noUndef({ week: c.week, player: c.pid ? h.pname(c.pid) : undefined, bid: c.bid }));
+            const allComps = posComps(ins.txns, h.ppos(pid), 999);
+            const comps = allComps.slice(0, 5);
+            if (comps.length) { out.recent_winning_bids_at_position = comps; out.position_in_season_wins = compSummary(allComps); }
+            else if ((an.comps || []).length) out.recent_winning_bids = an.comps.slice(0, 5).map(c => noUndef({ week: c.week, player: c.pid ? h.pname(c.pid) : undefined, bid: c.bid }));
             if (f.alternatives && f.alternatives.length) out.alternatives = f.alternatives;
             return noUndef(out);
+        },
+    });
+
+    // ── get_waiver_plan ────────────────────────────────────────────
+    // The waiver DECISION, verdict first. Adds are ranked by need-weighted
+    // value (value × 1.6 deficit / 1.3 thin / 0.6 surplus at his position —
+    // a need counts only if he'd start there, i.e. projects above my weakest
+    // starter at that position — + 35 × this week's projection); free-agent
+    // backups to my own starting RB/QB go first. Every add is paired with a
+    // drop from App.AskRoster's one drop list (active roster only), and only
+    // when the add's keep score (need-weighted) beats that drop's by
+    // ADD_MARGIN (a no-NFL-team or "cut"-tagged drop always qualifies). Open
+    // active spots are used before any drop.
+    const FIT = { deficit: 1.6, thin: 1.3, surplus: 0.6 };
+    const ADD_MARGIN = 100, CUFF_BONUS = 300, STASH_BID_VALUE = 500, MAX_ADDS = 5;
+    const PLAN_METHOD = 'Waiver plan: (1) only free agents at positions this league starts; (2) rank by need: value x 1.6 at a deficit, 1.3 thin (only if he would start there), 0.6 surplus, plus 35 x this week\'s projection; backups to your own starting RB/QB (handcuffs) first; (3) every add names its drop from the one roster drop list (active roster only, never taxi, IR, an injured stash or an engine-gap 0), and only if the add beats that drop; an open active spot is used first; (4) bids from the in-season bid model (offseason claims excluded): open at the model\'s bid, max at the higher of its range top and the in-season winning bids at his position (at the quantile matching his strength), never above the pace cap (FAAB left x 1.5 / weeks left, 15–65%); stash-level adds (value under 500) open at the league minimum, max at the bottom of the model\'s range; (5) a need the wire can\'t fill is a trade, not a claim.';
+    AT.register({
+        name: 'get_waiver_plan',
+        description: 'The waiver decision for my team: who to claim, each paired with who to drop (active roster only, never taxi/IR or an injured stash), an opening bid and a max with in-season comparable bids, handcuffs to my own starters on the wire, FAAB pacing by weeks left, and who not to add. Use for "who should I pick up", "who do I drop", "how much should I bid".',
+        parameters: { type: 'object', properties: {
+            position: { type: 'string', description: 'Limit adds to one position (QB, RB, WR, TE, K, DL, LB, DB, FLEX...). Default: every position this league starts.' },
+            budget_pct: { type: 'number', description: 'Most of my remaining FAAB to put on any one claim, in percent (default: the pace cap).' },
+        } },
+        timeoutMs: 15000,
+        async run(a) {
+            const lg = h.league(), me = h.myRoster();
+            if (!lg || !me) throw new Error('League not loaded yet.');
+            const AR = App.AskRoster;
+            if (!AR || !AR.cutPlan) throw new Error('The roster plan is not loaded on this page.');
+            const startable = leaguePositions();
+            let want = startable;
+            if (a.position) {
+                const ps = posSet(a.position);
+                if (!ps || !ps.every(p => POS_ALL.includes(p))) throw new Error('Unknown position "' + a.position + '". Use QB, RB, WR, TE, K, DL, LB, DB or FLEX.');
+                want = ps.filter(p => startable.includes(p));
+                if (!want.length) return { decision: 'no_slot', confidence: 'high', recommendation: 'Don\'t add a ' + ps.join('/') + ': this league has no ' + ps.join('/') + ' slot, so he can\'t score for you.', adds: [], do_not_add: [{ player: 'any ' + ps.join('/'), why: 'No ' + ps.join('/') + ' slot. This league starts ' + startable.join(', ') + '.' }], rules_applied: ['Only positions this league can start.'], method: PLAN_METHOD };
+            }
+            const st = lg.settings || {};
+            const faabOn = isFaab(lg) && h.platform() === 'sleeper' && !!(App.Faab && App.Faab.estimate);
+            const fa = isFaab(lg) ? myFaab() : null;
+            const wk = h.week();
+            const lastReg = Number(st.playoff_week_start) > 1 ? Number(st.playoff_week_start) - 1 : null;
+            const weeksLeft = lastReg ? Math.max(1, lastReg - wk) : null;
+            const left = fa ? fa.left : 0, minBid = fa ? fa.min_bid : 0;
+            let cap = fa ? Math.max(minBid, Math.round(left * Math.min(0.65, Math.max(0.15, 1.5 / (weeksLeft || 10))))) : 0;
+            const pct = Number(a.budget_pct);
+            if (fa && pct > 0) cap = Math.min(cap, Math.max(minBid, Math.round(left * Math.min(100, pct) / 100)));
+            if (fa) cap = Math.min(cap, left);
+            const ins = faabOn ? inSeason(await loadTxns(lid())) : { txns: [], excluded: 0, start: null };
+            const A = h.assess(me.roster_id) || {};
+            const needOf = {};
+            (A.strengths || []).forEach(p => { needOf[p] = 'surplus'; });
+            (A.needs || []).forEach(n => { needOf[n.pos] = n.urgency; });
+            const contending = /CONTEND/i.test(String(A.window || ''));
+            const rostered = rosteredSet();
+            const players = S().players || {};
+            const projOf = pid => { const t = h.thisWeek(pid); return t.scored != null ? t.scored : t.proj != null ? t.proj : null; };
+            // A need only counts for a player who would start there: his
+            // projection beats my weakest starter's at that position (a TE3
+            // projecting 0.7 doesn't fix a TE deficit; that's a trade).
+            const starterProj = {};
+            (me.starters || []).map(String).filter(x => x && x !== '0').forEach(sid => { const ps = h.ppos(sid); const v = Number(projOf(sid)) || 0; starterProj[ps] = starterProj[ps] == null ? v : Math.min(starterProj[ps], v); });
+            const fitOf = pid => {
+                const pos = h.ppos(pid), need = needOf[pos];
+                if (need === 'surplus') return { mult: FIT.surplus };
+                if (need !== 'deficit' && need !== 'thin') return { mult: 1 };
+                const pr = projOf(pid);
+                if (starterProj[pos] == null || (pr != null && pr > starterProj[pos])) return { mult: FIT[need], fills: need };
+                return { mult: 1, short: need, vs: starterProj[pos], pr };
+            };
+            const addScore = pid => Math.round(h.value(pid) * fitOf(pid).mult + (Number(projOf(pid)) || 0) * 35);
+            const fas = Object.keys(players).filter(pid => isFreeAgent(pid, rostered) && want.includes(h.ppos(pid)) && !/inactive/i.test(String(players[pid].status || '')));
+            const cuffs = AR.handcuffs(me);
+            const cuffFA = cuffs.filter(c => c.owner === 'free agent' && want.includes(c.pos) && fas.includes(c.backup));
+            const cuffOf = {};
+            cuffFA.forEach(c => { cuffOf[c.backup] = c.starter; });
+            const ranked = fas.filter(pid => h.value(pid) > 0 || (Number(projOf(pid)) || 0) > 0).sort((x, y) => addScore(y) - addScore(x)).slice(0, 40);
+            const order = [...new Set(cuffFA.map(c => c.backup).concat(ranked))];
+            const plan = AR.cutPlan(me);
+            const counts = plan.counts;
+            let open = counts.open != null ? Math.max(0, counts.open) : 0;
+            const drops = plan.candidates.slice();
+            const adds = [], do_not_add = [];
+            const coldStarts = [];
+            const filled = new Set();
+            for (const pid of order) {
+                if (adds.length >= MAX_ADDS) break;
+                const vr = AR.valueRead(pid);
+                const isCuff = !!cuffOf[pid];
+                const fit = fitOf(pid);
+                const worth = AR.keepScore(pid, vr) + (vr.value || 0) * (fit.mult - 1) + (isCuff && contending ? CUFF_BONUS : 0);
+                let drop;
+                if (open > 0) { open--; drop = { player: null, why: 'You have an open active spot (' + counts.active + '/' + counts.max + '); no drop needed.' }; }
+                else {
+                    const i = drops.findIndex(d => d.rank_key < 0 || d.keep_score + ADD_MARGIN < worth);
+                    if (i < 0) {
+                        if (adds.length + do_not_add.length < 8) do_not_add.push({ player: h.pname(pid), why: 'Not an upgrade on anyone you can safely drop' + (drops[0] ? ' (lowest safe drop: ' + drops[0].player + ', keep score ' + drops[0].keep_score + ')' : ' (nobody on the active roster is a safe drop)') + '.' });
+                        continue;
+                    }
+                    const d = drops.splice(i, 1)[0];
+                    drop = { player: d.player, why: d.why, value: d.value, value_source: d.value_source };
+                }
+                const p = h.pl(pid);
+                const why = [];
+                if (isCuff) why.push('Handcuff: backs up your starter ' + h.pname(cuffOf[pid]) + ' (' + p.team + ' ' + h.ppos(pid) + '2)');
+                if (fit.fills) filled.add(h.ppos(pid));
+                if (fit.fills) why.push('fills your ' + fit.fills + ' ' + h.ppos(pid) + ' spot');
+                else if (fit.short) why.push(h.ppos(pid) + ' is ' + fit.short + ' for you, but he wouldn\'t start (projects ' + (fit.pr != null ? round1(fit.pr) : 'nothing') + ' vs your starter\'s ' + round1(fit.vs) + ')');
+                why.push('value ' + (vr.value != null ? vr.value : 'unknown'));
+                const pr = projOf(pid);
+                if (pr != null) why.push('projects ' + round1(pr) + ' this week');
+                if (h.injury(pid)) why.push(h.injury(pid));
+                const g = h.lock(pid);
+                if (g && g.locked) why.push('already played this week, so he helps from next week');
+                let bid = null;
+                if (faabOn && fa) {
+                    const { est } = estimateFor(pid, ins.txns, lg, me);
+                    if (est) {
+                        if (est.coldStart) coldStarts.push(pid);
+                        const comps = posComps(ins.txns, h.ppos(pid), 999);
+                        const sum = compSummary(comps);
+                        // The position's in-season winning bids at the same
+                        // quantile the bid model uses for this player's strength.
+                        const qPos = 0.4 + 0.5 * (App.Faab.strengthOf ? App.Faab.strengthOf(vr.value || 0) : 0.5);
+                        const compBids = comps.map(c => c.bid).sort((x, y) => x - y);
+                        const compQ = compBids.length >= 3 ? Math.round(quant(compBids, qPos)) : 0;
+                        const stash = (vr.value || 0) < STASH_BID_VALUE;
+                        let openBid = stash ? minBid : est.sug;
+                        let max = stash ? Math.max(minBid, Math.min(est.lo, cap)) : Math.max(openBid, est.hi, compQ);
+                        max = Math.min(max, cap);
+                        openBid = Math.min(openBid, max);
+                        bid = noUndef({ open: openBid, max, win_chance_pct: est.winPct != null ? Math.round(est.winPct * 100) : undefined, comps: comps.slice(0, 5), comps_summary: sum, basis: stash ? 'stash-level add: open at the league minimum' : 'bid model ' + (est.coldStart ? '(few in-season bids: league defaults)' : '(in-season bids)') + (compQ ? '; in-season ' + h.ppos(pid) + ' wins at his strength: $' + compQ : '') + (max === cap ? '; max held to your pace cap $' + cap : '') });
+                    }
+                }
+                adds.push(noUndef({ player: noUndef({ name: h.pname(pid), pos: h.ppos(pid), nfl_team: p.team, age: p.age || undefined, value: vr.value, value_source: vr.value_source }), handcuff: isCuff || undefined, why: why.join('; ') + '.', bid: bid || (fa ? undefined : { note: 'This league uses ' + (App.FaabLeague && App.FaabLeague.waiverLabel ? App.FaabLeague.waiverLabel(lg) : 'waivers') + ', not bids.' }), drop }));
+            }
+            // Needs the wire can't fill: a trade, not a claim.
+            (A.needs || []).forEach(n => {
+                if (!want.includes(n.pos) || filled.has(n.pos)) return;
+                const best = fas.filter(pid => h.ppos(pid) === n.pos).sort((x, y) => h.value(y) - h.value(x))[0];
+                const why = n.pos + ' is ' + (n.urgency === 'deficit' ? 'a deficit' : n.urgency) + ' for you, but no free agent would start there' + (adds.some(x => x.player.pos === n.pos) ? ' (any ' + n.pos + ' above is a stash, not a fix)' : '') + ': trade for a starter (find_trade_partners).';
+                const added = best && adds.some(x => x.player.name === h.pname(best));
+                const seen = best && !added ? do_not_add.find(d => d.player === h.pname(best)) : null;
+                const who = best && !added ? h.pname(best) + ' (best free-agent ' + n.pos + ', value ' + h.value(best) + ')' : 'a waiver claim as your ' + n.pos + ' fix';
+                if (seen) { seen.player = who; seen.why = why; }
+                else do_not_add.push({ player: who, why });
+            });
+            const ownedCuffs = cuffs.filter(c => c.owner !== 'free agent' && c.owner !== 'me');
+            const rank = fa ? h.rosters().map(r => leftOf(lg, r)).sort((x, y) => y - x).indexOf(left) + 1 : null;
+            const faab = fa ? noUndef({
+                left, budget: fa.budget, min_bid: minBid,
+                rank: rank ? rank + ' of ' + h.rosters().length + ' teams' : undefined,
+                weeks_left: weeksLeft || undefined,
+                per_week: weeksLeft ? Math.round(left / weeksLeft) : undefined,
+                max_single_bid: cap,
+                pace: weeksLeft ? '$' + left + ' over ' + weeksLeft + ' regular-season week' + (weeksLeft > 1 ? 's' : '') + ' (through week ' + lastReg + ') is about $' + Math.round(left / weeksLeft) + ' a week; no single claim above $' + cap + ' unless he changes your lineup for the title run. Unspent FAAB is worth nothing after the season.' : 'Playoff start week not set; no single claim above $' + cap + '.',
+            }) : undefined;
+            const first = adds[0];
+            const recommendation = first
+                ? 'Claim ' + first.player.name + (first.bid && first.bid.open != null ? ' (open $' + first.bid.open + ', max $' + first.bid.max + ')' : '') + (first.drop.player ? ' and drop ' + first.drop.player + '.' : ' into your open spot.')
+                : 'Hold: nobody on the wire' + (a.position ? ' at ' + want.join('/') : '') + ' is an upgrade on a player you can safely drop.';
+            const evidence = [
+                'Active roster ' + counts.active + '/' + (counts.max != null ? counts.max : '?') + ' (taxi ' + counts.taxi + ', IR ' + counts.ir + ' not counted).',
+                'Needs: ' + ((A.needs || []).map(n => n.pos + ' ' + n.urgency).join(', ') || 'none') + (A.window ? '; window ' + A.window : '') + '.',
+                'League starts: ' + startable.join(', ') + '.',
+            ];
+            if (faabOn) {
+                const bs = bidStats(ins.txns);
+                evidence.push(bs.count ? 'In-season bids since ' + ins.start + ': ' + bs.count + ' (median $' + bs.p50 + ', p75 $' + bs.p75 + ', p90 $' + bs.p90 + '); ' + ins.excluded + ' offseason claims left out.' : 'No in-season bids yet; ' + ins.excluded + ' offseason claims left out.');
+            }
+            ownedCuffs.forEach(c => evidence.push(h.pname(c.starter) + '\'s backup ' + h.pname(c.backup) + ' is on ' + c.owner + ': a trade, not a claim.'));
+            cuffs.filter(c => c.owner === 'me').forEach(c => evidence.push(h.pname(c.starter) + '\'s backup ' + h.pname(c.backup) + ' is already yours.'));
+            return noUndef({
+                decision: first ? 'add' : 'hold',
+                confidence: !faabOn ? (fa ? 'low' : 'medium') : coldStarts.length ? 'medium' : 'high',
+                recommendation,
+                adds,
+                faab,
+                do_not_add: do_not_add.length ? do_not_add : undefined,
+                evidence,
+                rules_applied: [
+                    'Only positions this league can start.',
+                    'Every add is paired with a drop from the active roster (never taxi or IR), unless an active spot is open.',
+                    'Drops come from the one roster drop list: no NFL team first, then lowest keep score; starters, handcuffs to your starters, young risers, injured stashes and engine-gap 0s are never drops.',
+                    'An add must beat its drop by ' + ADD_MARGIN + ' keep points (need-weighted' + (contending ? ', +' + CUFF_BONUS + ' for a handcuff while contending' : '') + ').',
+                    'Bid history is in-season only (offseason claims excluded).',
+                    'Max bid never above the pace cap (FAAB left x 1.5 / weeks left, between 15% and 65%)' + (pct > 0 ? ' or your ' + pct + '% limit' : '') + '.',
+                ],
+                method: PLAN_METHOD,
+            });
         },
     });
 
