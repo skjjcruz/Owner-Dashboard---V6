@@ -721,6 +721,15 @@
             // one line so nothing looks unfinished.
             box.replaceChildren(el('p', null, '✓ ' + (ok === 'ok' ? 'Your ' + PROVIDERS[prov].label + ' key is saved and working.' : 'Your ' + PROVIDERS[prov].label + ' key is saved.') + (retryQ ? ' Asking your question again…' : ' Ask away below.')));
             if (retryQ) { box.remove(); const last = ui && ui.log.lastElementChild; if (last && last.classList.contains('askdhq-q') && last.textContent === retryQ) last.remove(); ask(retryQ); return; }
+            // Owner ask 2026-10-11: on the leagues page the box closes once the
+            // key is in; the member finds Ask your AI inside any league.
+            const onLeaguesPage = !!root.document.querySelector('.hv2-shell');
+            if (onLeaguesPage && ui) {
+                box.replaceChildren(el('p', null, '✓ Your ' + PROVIDERS[prov].label + ' key is saved. Open any league and tap the gold "Ask your AI" button at the top.'));
+                const panelNow = ui.panel, btnNow = ui.btn;
+                setTimeout(() => { panelNow.style.display = 'none'; if (btnNow) btnNow.style.display = ''; box.remove(); }, 2200);
+                return;
+            }
             if (ui) ui.input.focus();
         };
         box.appendChild(f); box.appendChild(msg);
