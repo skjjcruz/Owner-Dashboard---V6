@@ -659,7 +659,11 @@ function IntelligenceBriefWidget({
         // and flips to 👀 whenever ANY material change or trade surfaces.
         const lines = [];
         // Line 0 — last week's win (only when it was a win; see lastWin).
-        if (lastWin) {
+        // Owner ask 2026-10-11: only Tuesday and Wednesday (US Eastern), the
+        // days between last week's final game and this week's kickoff. From
+        // Thursday on we're playing again, so the congrats drops off.
+        const _winDays = (() => { try { return /^(Tue|Wed)$/.test(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(new Date())); } catch (e) { return [2, 3].includes(new Date().getDay()); } })();
+        if (lastWin && _winDays) {
             const _f = n => n.toFixed(2);
             lines.push({ key: 'win', icon: '🏆', target: 'lineup', src: 'Game Day',
                 body: ['Nice win in Week ' + lastWin.week + '! You beat ', React.createElement('strong', { key: 'o', style: { color: 'var(--white)' } }, lastWin.oppName), ' ', val(_f(lastWin.my) + '–' + _f(lastWin.opp), 'var(--good, #2ecc71)'), '.'] });
