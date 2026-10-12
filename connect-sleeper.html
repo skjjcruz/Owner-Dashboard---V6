@@ -357,6 +357,15 @@
         }).catch(() => {});
       } catch (e) {}
     }
+    // The team a guest picked on connect: { espnTeamId, espnTeamName } /
+    // { mflFranchiseId, mflTeamName }. Names are clipped; nothing else rides.
+    function connectTeamMeta(platform, teamId, teamName) {
+      if (teamId == null) return {};
+      const name = String(teamName || '').trim().slice(0, 40) || null;
+      return platform === 'espn'
+        ? { espnTeamId: String(teamId), espnTeamName: name }
+        : { mflFranchiseId: String(teamId), mflTeamName: name };
+    }
     trackConnectEvent('connect_viewed', null, {
       referrerHost: (function () {
         try { return document.referrer ? new URL(document.referrer).hostname : null; } catch { return null; }
@@ -593,7 +602,10 @@
       } catch (e) {}
       document.getElementById('mflTeams').hidden = true;
       pushToAccount();
-      trackConnectEvent('mfl_connected', null, { mflLeagueId: mflPending.leagueId, teamPicked: franchiseId != null });
+      // Guest identity for Mission Control (owner ask 2026-10-12): the team
+      // the guest picked, so an MFL guest is listed like a Sleeper guest.
+      // Public league data only (franchise id + name) — never the API key.
+      trackConnectEvent('mfl_connected', null, { mflLeagueId: mflPending.leagueId, teamPicked: franchiseId != null, ...connectTeamMeta('mfl', franchiseId, teamName !== mflPending.leagueName ? teamName : null) });
       markLinked('mfl', teamName || mflPending.leagueName);
       mflPending = null;
       if (mflAutoEnter) enterApp();
@@ -720,7 +732,10 @@
       } catch (e) {}
       document.getElementById('espnTeams').hidden = true;
       pushToAccount();
-      trackConnectEvent('espn_connected', null, { espnLeagueId: espnPending.leagueId, teamPicked: teamId != null });
+      // Guest identity for Mission Control (owner ask 2026-10-12): the team
+      // the guest picked, so an ESPN guest is listed like a Sleeper guest.
+      // Public league data only (team id + name) — never espn_s2 / SWID.
+      trackConnectEvent('espn_connected', null, { espnLeagueId: espnPending.leagueId, teamPicked: teamId != null, ...connectTeamMeta('espn', teamId, teamName) });
       markLinked('espn', teamName || espnPending.leagueName);
       espnPending = null;
       if (espnAutoEnter) enterApp();
