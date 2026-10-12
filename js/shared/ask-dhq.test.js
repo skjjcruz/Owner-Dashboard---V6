@@ -168,6 +168,27 @@ test('the AI company is read from the key itself', () => {
     assert.equal(A.providerOf('hello'), null);
 });
 
+// Apple's rule on outside AI (owner ask 2026-10-12): nothing goes to the
+// member's AI until they agree, and the agreement belongs to one account.
+test('consent: no league data goes to the AI before the member agrees', async () => {
+    const realFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => { calls++; return { ok: true, status: 200, json: async () => ({}) }; };
+    try {
+        assert.equal(A.consentOk(), false);
+        assert.ok(A.saveKey('sk-ant-api03-abcdefghijklmnop'));
+        const r = await A.askWithKey('How does my team look?', () => {});
+        assert.equal(r.ok, false); assert.equal(r.consent, true);
+        assert.equal(calls, 0, 'nothing was sent');
+        assert.ok(A.recordConsent()); assert.equal(A.consentOk(), true);
+        const rec = JSON.parse(localStorage.getItem('dhq_ai_consent_v1'));
+        assert.equal(rec.agreed, true); assert.equal(typeof rec.at, 'number');
+        localStorage.setItem('dhq_ai_consent_v1', JSON.stringify({ ...rec, owner: 'someone-else' }));
+        assert.equal(A.consentOk(), false, 'another account must agree for itself');
+        A.recordConsent();
+    } finally { globalThis.fetch = realFetch; A.forgetKey(); }
+});
+
 // Owner ruling 2026-10-10: no fixed bundle of facts, no pre-decided answer.
 // The member's AI looks things up through App.AskTools as it needs them.
 require('./ask-tools.js');

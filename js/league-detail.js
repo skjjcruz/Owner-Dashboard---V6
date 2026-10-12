@@ -3970,8 +3970,8 @@
                     {/* Lab (owner ask 2026-10-10): the gold "Ask your AI" button
                         sits here, in the open middle of the top bar, so it is
                         easy to see (js/shared/ask-dhq.js moves it in). */}
-                    {window.DHQ_LAB === true && <div id="askdhq-slot" style={{ display: 'flex', alignItems: 'center' }}></div>}
-                    {window.DHQ_LAB === true && <div style={{ marginLeft: 'auto' }}></div>}
+                    {<div id="askdhq-slot" style={{ display: 'flex', alignItems: 'center' }}></div>}
+                    {<div style={{ marginLeft: 'auto' }}></div>}
                     {/* Time mode badge */}
                     <span className="wr-time-mode" style={{
                         fontSize: 'var(--text-label, 0.75rem)', fontWeight: 700, color: timeModeColor,

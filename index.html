@@ -3186,7 +3186,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script src="js/shared/ask-tools-players.js?v=20261010waiver1"></script>
 <script src="js/shared/ask-tools-roster.js?v=20261010roster5"></script>
 <script src="js/shared/ask-tools-moves.js?v=20261010tone2"></script>
-<script src="js/shared/ask-dhq.js?v=20261011close1"></script>
+<script src="js/shared/ask-dhq.js?v=20261012live1"></script>
 <script src="js/shared/dhq-proj.js?v=20261010odds1"></script>
 <script src="js/shared/nfl-context.js?v=20260929proj1"></script>
 <script src="js/shared/matchup.js?v=20260927live2"></script>
@@ -3237,7 +3237,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <!-- Player Brief Phase 2 — the journalism layer: current Rotowire read via ESPN, cached + fail-safe (window.WR.PlayerWire). -->
 <script src="js/shared/player-wire.js?v=20260720pw1"></script>
 <!-- Player Brief shared block — the layered summary box with composed-at stamp, mounted by the player card + My Roster (window.WR.PlayerBriefBlock). -->
-<script src="js/components/player-brief-block.js?v=20261010news1"></script>
+<script src="js/components/player-brief-block.js?v=20261012live1"></script>
 <!-- Alex's Desk — cross-league AI digest card for the hub (window.WR.DashboardDigestCard) -->
 <script src="js/tabs/dashboard-digest.js?v=20260927faab1"></script>
 <!-- 2i. Per-league transaction cache — window.WrTxns — cross-league activity + DNA substrate -->
@@ -3251,7 +3251,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      boot. js/module-loader.js injects executable copies, in DOM order within each
      group, when the owning surface first calls wrLoadModuleGroup('<group>'). -->
 <script src="js/module-loader.js?v=20260927fix3"></script>
-<script type="text/babel" src="js/settings.js?v=20261005avat1"></script>
+<script type="text/babel" src="js/settings.js?v=20261012live1"></script>
 <script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20261010find2"></script>
 <script type="text/babel" src="js/post-draft.js?v=20260907b112"></script>
 <!-- FA waiver tools (C2 wave): stat catalog + stat math, market display helpers, waiver engine (fa group, before free-agency.js) -->
@@ -3308,7 +3308,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      check). Its stylesheet sits in an inert <template> (never fetched) that
      js/hub-v2.js clones in when it renders. Bump both ?v=. -->
 <template id="dhq-hub-v2-css"><link rel="stylesheet" href="js/hub-v2.css?v=20261010join1"></template>
-<script type="text/babel" data-wr-defer="hubv2" src="js/hub-v2.js?v=20261011noav1"></script>
+<script type="text/babel" data-wr-defer="hubv2" src="js/hub-v2.js?v=20261012live1"></script>
 <!-- 4b. Draft Command Center modules — group "draft" (~28 scripts, ~1.26MB),
      loaded on first Draft-tab open. -->
 <script type="text/babel" data-wr-defer="draft" src="js/draft/styles.js?v=20260427font1"></script>
@@ -3381,7 +3381,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      "alex" lazy group — inert at boot, loaded on first GM's Office / Strategy open. -->
 <script type="text/babel" data-wr-defer="alex" src="js/tabs/strategy-editor.js?v=20261001tier1"></script>
 <!-- 7. League detail: coordinator shell, depends on all above -->
-    <script type="text/babel" src="js/league-detail.js?v=20261010ask1"></script>
+    <script type="text/babel" src="js/league-detail.js?v=20261012live1"></script>
 <!-- 8. App: OwnerDashboard + ReactDOM.render (loads last) -->
 <script type="text/babel" src="js/app.js?v=20261005b154"></script>
 

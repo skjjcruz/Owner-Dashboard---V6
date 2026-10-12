@@ -201,7 +201,7 @@
         }, []);
         React.useEffect(() => {
             const A = window.App && window.App.AskDHQ;
-            if (window.DHQ_LAB !== true || guest || !A || !focus) return undefined;
+            if (guest || !A || !focus) return undefined;
             const link = { name: titleOf(focus), open: () => onSelect(focus) };
             A.hubLeague = link;
             return () => { if (A.hubLeague === link) A.hubLeague = null; };
@@ -265,25 +265,23 @@
                 {/* Guests only (owner ask 2026-10-05): the free account pitch. */}
                 {guest && <div className="hv2-signup" role="region" aria-label="Sign up">
                     <div className="hv2-signup-copy">
-                        {/* Owner ask 2026-10-10 (Lab): the founding-member + AI pitch. */}
-                        {window.DHQ_LAB === true
-                            ? <strong>Sign up to become a <em>Founding Member</em> and Bring Your Own AI Agent to the Fight</strong>
-                            : <strong>Sign up for <em>FREE</em> member services</strong>}
+                        {/* Owner ask 2026-10-10: the founding-member + AI pitch (live everywhere 2026-10-12). */}
+                        <strong>Sign up to become a <em>Founding Member</em> and Bring Your Own AI Agent to the Fight</strong>
                         {/* Owner ask 2026-10-10: full width, one short line under the headline. */}
-                        <span>{window.DHQ_LAB === true ? 'Your AI. Your league data. Your competitive edge.' : 'Save your leagues on every device and lock in founding-member status.'}</span>
+                        <span>Your AI. Your league data. Your competitive edge.</span>
                     </div>
                     <div className="hv2-signup-actions">
                         <a className="hv2-signup-btn" href={links.signup}>Sign up free</a>
                         <a className="hv2-signup-signin" href={links.signin}>Already a member? Sign in</a>
                     </div>
                 </div>}
-                {/* Members (Lab, owner ask 2026-10-09): Ask your AI. */}
-                {!guest && !hasKey && window.DHQ_LAB === true && <div className="hv2-signup" role="region" aria-label="Ask your AI">
+                {/* Members (owner ask 2026-10-09; live everywhere 2026-10-12): Ask your AI. */}
+                {!guest && !hasKey && <div className="hv2-signup" role="region" aria-label="Ask your AI">
                     <div className="hv2-signup-copy">
                         {takeJustJoined()
                             ? <strong>You're in, <em>Founding Member</em>. Now add your AI.</strong>
                             : <strong>New: <em>Ask your AI</em></strong>}
-                        <span>Open any league and tap the gold "Ask your AI" button. Ask in plain English and your own AI answers with DHQ's numbers: your computer's built-in AI, your ChatGPT or Claude, or your own key.</span>
+                        <span>Open any league and tap the gold "Ask your AI" button. Ask in plain English and your own AI answers with DHQ's numbers: add your Claude, ChatGPT or Gemini key once and it answers right in the app.</span>
                     </div>
                     <div className="hv2-signup-actions">
                         <button type="button" className="hv2-signup-btn" style={{ border: 0, cursor: 'pointer' }} onClick={() => { if (window.App && window.App.AskDHQ) window.App.AskDHQ.openKeySetup(); }}>Add my AI key</button>

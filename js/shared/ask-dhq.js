@@ -1,5 +1,6 @@
 // ══════════════════════════════════════════════════════════════════
-// js/shared/ask-dhq.js — window.App.AskDHQ   (Lab only: window.DHQ_LAB)
+// js/shared/ask-dhq.js — window.App.AskDHQ   (live everywhere since 2026-10-12;
+// the ChatGPT/Claude connector hand-off stays Lab only: window.DHQ_LAB)
 // "Ask DHQ": ask a question in plain English, inside the app, and get an
 // answer — with nobody paying for AI and nobody setting anything up.
 //
@@ -21,7 +22,7 @@
 //   answer(question) → { intent, title, text, lines[], facts, players[] }
 //   brain() → Promise<'device' | 'device-download' | 'engine'>
 //   narrate(question, ans, onText) → Promise<string|null>   (device AI)
-//   mount() — the floating "Ask DHQ" button + panel (Lab only)
+//   mount() — the floating "Ask DHQ" button + panel
 // ══════════════════════════════════════════════════════════════════
 (function (root) {
     'use strict';
@@ -409,6 +410,17 @@
     // through sign-out, so signing back in finds it; "Remove my key" (🔑)
     // takes it off the device. Anyone else signing in here can't use it.
     const MEMBER_KEY = 'dhq_member_ai_v1';
+    // Apple's rule on outside AI (owner ask 2026-10-12): before any league
+    // data goes to the member's AI, they are told where it goes and agree
+    // once. Recorded per device and per account; asked again for anyone else.
+    const CONSENT = 'dhq_ai_consent_v1';
+    const CONSENT_TEXT = 'Your league data goes to the AI you connected (Claude, ChatGPT or Gemini) when you ask a question.';
+    function consentOk() {
+        try { const c = JSON.parse(root.localStorage.getItem(CONSENT) || 'null'); return !!(c && c.agreed === true && c.owner === ownerNow()); } catch (e) { return false; }
+    }
+    function recordConsent() {
+        try { root.localStorage.setItem(CONSENT, JSON.stringify({ agreed: true, owner: ownerNow(), at: Date.now() })); return true; } catch (e) { return false; }
+    }
     function ownerNow() {
         try { const idn = root.OD && root.OD.identity; return idn && idn.currentOwner ? String(idn.currentOwner() || '') : ''; } catch (e) { return ''; }
     }
@@ -517,6 +529,7 @@
     const chat = [];
     const CHAT_TURNS = 6;
     async function askWithKey(question, onStep) {
+        if (!consentOk()) return { ok: false, error: 'Agree to send your league data to your AI first.', consent: true };
         const k = savedKey();
         if (!k) return { ok: false, error: 'no key' };
         const lid = String(S().currentLeagueId || '');
@@ -705,11 +718,17 @@
         const inp = el('input', 'askdhq-in'); inp.type = 'password'; inp.placeholder = 'sk-…, sk-ant-… or AIza…'; inp.autocomplete = 'off'; inp.setAttribute('aria-label', 'Your AI key');
         const b = el('button', 'askdhq-send', 'Save'); b.type = 'submit';
         f.appendChild(inp); f.appendChild(b);
+        // The consent line (Apple, outside AI): a checkbox on its own row.
+        const agreeRow = el('label', 'askdhq-src'); agreeRow.style.display = 'flex'; agreeRow.style.gap = '8px'; agreeRow.style.alignItems = 'flex-start'; agreeRow.style.cursor = 'pointer'; agreeRow.style.minHeight = '44px'; agreeRow.style.paddingTop = '10px';
+        const agree = root.document.createElement('input'); agree.type = 'checkbox'; agree.checked = consentOk(); agree.style.marginTop = '2px'; agree.style.width = '18px'; agree.style.height = '18px'; agree.style.flex = 'none';
+        agreeRow.appendChild(agree); agreeRow.appendChild(el('span', null, 'I agree. ' + CONSENT_TEXT));
         const msg = el('div', 'askdhq-src', 'Stays on this device. Sent only to the AI company it belongs to, never to DHQ. Usage is billed to your own account.');
         f.onsubmit = async e => {
             e.preventDefault();
             const val = inp.value, prov = providerOf(val);
             if (!prov) { msg.textContent = 'That looks too short to be a key. Copy the whole key and paste it again.'; return; }
+            if (!agree.checked) { msg.textContent = 'Tick the box to agree, then tap Save.'; return; }
+            recordConsent();
             b.disabled = true; msg.textContent = 'Checking your key with ' + PROVIDERS[prov].label + '…';
             const ok = await checkKey(val, prov);
             b.disabled = false;
@@ -732,7 +751,7 @@
             }
             if (ui) ui.input.focus();
         };
-        box.appendChild(f); box.appendChild(msg);
+        box.appendChild(f); box.appendChild(agreeRow); box.appendChild(msg);
         const more = el('div', 'askdhq-more');
         const free = el('a', 'askdhq-chip', 'Get a free Gemini key'); free.href = 'https://aistudio.google.com/apikey'; free.target = '_blank'; free.rel = 'noopener'; more.appendChild(free);
         if (savedKey()) { const rm = el('button', 'askdhq-chip', 'Remove my key'); rm.type = 'button'; rm.onclick = () => { forgetKey(); msg.textContent = 'Removed from this device.'; if (ui) brain().then(x => { ui.brain.textContent = brainLabel(x); }); }; more.appendChild(rm); }
@@ -773,14 +792,17 @@
     function handoff(q, note) {
         const box = el('div', 'askdhq-a');
         box.appendChild(el('h4', null, 'Ask your AI'));
-        box.appendChild(el('p', null, note || 'Your AI answers this with DHQ\'s data. Pick where to ask:'));
+        box.appendChild(el('p', null, note || (root.DHQ_LAB === true ? 'Your AI answers this with DHQ\'s data. Pick where to ask:' : 'Your AI answers this with DHQ\'s data.')));
         const more = el('div', 'askdhq-more');
-        [['chatgpt', 'Ask in ChatGPT'], ['claude', 'Ask in Claude']].forEach(([w, label]) => { const a = el('a', 'askdhq-chip', label); a.href = askElsewhereUrl(w, q); a.target = '_blank'; a.rel = 'noopener'; more.appendChild(a); });
+        // The ChatGPT / Claude hand-off needs the Dynasty HQ connector, which
+        // is not launched yet: Lab only. Everywhere else: the member's key.
+        const connector = root.DHQ_LAB === true;
+        if (connector) [['chatgpt', 'Ask in ChatGPT'], ['claude', 'Ask in Claude']].forEach(([w, label]) => { const a = el('a', 'askdhq-chip', label); a.href = askElsewhereUrl(w, q); a.target = '_blank'; a.rel = 'noopener'; more.appendChild(a); });
         box.appendChild(more);
         const k = el('button', 'askdhq-chip', 'Answer here with my AI key'); k.type = 'button';
         k.onclick = () => { box.replaceWith(keyCard('Paste your key once, then ask again: your AI answers right here.')); };
         more.appendChild(k);
-        box.appendChild(el('div', 'askdhq-src', 'ChatGPT and Claude use your plan with the Dynasty HQ connector. With your own key, or on Chrome for desktop, your AI answers right here.'));
+        box.appendChild(el('div', 'askdhq-src', connector ? 'ChatGPT and Claude use your plan with the Dynasty HQ connector. With your own key, or on Chrome for desktop, your AI answers right here.' : 'Add your Claude, ChatGPT or Gemini key once and your AI answers right here.'));
         return box;
     }
     async function ask(question) {
@@ -817,6 +839,19 @@
         // league facts; the examples only come back without one.
         if (ans.intent === 'help' && b !== 'key') { ui.log.appendChild(handoff(q)); ui.log.scrollTop = ui.log.scrollHeight; return; }
         if (b === 'engine') { ui.log.appendChild(handoff(q)); ui.log.scrollTop = ui.log.scrollHeight; return; }
+        if (b === 'key' && !consentOk()) {
+            const cbox = el('div', 'askdhq-a');
+            cbox.appendChild(el('h4', null, 'Before your AI answers'));
+            cbox.appendChild(el('p', null, CONSENT_TEXT));
+            const more = el('div', 'askdhq-more');
+            const ok = el('button', 'askdhq-send', 'I agree'); ok.type = 'button'; ok.style.padding = '8px 14px';
+            ok.onclick = () => { recordConsent(); cbox.remove(); const last = ui && ui.log.lastElementChild; if (last && last.classList.contains('askdhq-q') && last.textContent === q) last.remove(); ask(q); };
+            const no = el('button', 'askdhq-chip', 'Not now'); no.type = 'button';
+            no.onclick = () => { cbox.replaceChildren(el('p', null, 'Nothing was sent. Ask again whenever you\'re ready.')); };
+            more.appendChild(ok); more.appendChild(no); cbox.appendChild(more);
+            ui.log.appendChild(cbox); ui.log.scrollTop = ui.log.scrollHeight;
+            return;
+        }
         if (b === 'key') {
             const k = savedKey();
             const box = el('div', 'askdhq-a');
@@ -1029,7 +1064,7 @@
         }, 1500);
     }
 
-    App.AskDHQ = App.AskDHQ || { isMember, isGuest, membersOnly, openKeySetup, answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help, _checkAnswer: checkAnswer };
+    App.AskDHQ = App.AskDHQ || { consentOk, recordConsent, isMember, isGuest, membersOnly, openKeySetup, answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help, _checkAnswer: checkAnswer };
     // Every AI request in the app funnels through OD.callAI or callClaude.
     // For a guest, one the guest started with a tap shows the members-only
     // card; background ones fail quietly as before. Members are untouched.
@@ -1057,7 +1092,8 @@
             if (tries > 40) clearInterval(iv);
         }, 500);
     }
-    if (typeof document !== 'undefined' && root.DHQ_LAB === true) {
+    // Live everywhere since 2026-10-12 (was Lab only).
+    if (typeof document !== 'undefined') {
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
         guardAI();
     }

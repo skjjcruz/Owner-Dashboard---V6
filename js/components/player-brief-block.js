@@ -42,7 +42,7 @@
         var ref3 = React.useState([]); var news = ref3[0], setNews = ref3[1];
         React.useEffect(function () {
             setNews([]);
-            var PN = window.DHQ_LAB === true && window.App && window.App.PlayerNews;
+            var PN = window.App && window.App.PlayerNews;
             if (!PN) return undefined;
             var alive = true;
             PN.get([pid]).then(function (m) { if (alive) setNews(((m || {})[pid] || []).filter(function (it) { return it.link !== 'report'; }).slice(0, 4)); });
