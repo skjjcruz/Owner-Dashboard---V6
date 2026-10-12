@@ -241,7 +241,7 @@
     // Tier split (Phase 2, owner ruling): grade/label/diff/side totals + raw roster-impact
     // values stay free; acceptance %, psych taxes, posture/DNA/behavior chips are Pro
     // (wrIsPro() only — never canAccess).
-    function TcVerdictPanel({ leagueHasPicks, valueLabel, verdictColor, diffDisplay, grade, totalA, totalB, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, FAAB_RATE, likelihoodColor, likelihood, netTaxTotal, manualBehaviorFit, otherOwnerId, theirPosture, otherDnaKey, otherDna, manualBehaviorProfile, psychTaxes, grudgeTax, gmFloor, gmModeLabel, gmViability, gmWarnings }) {
+    function TcVerdictPanel({ dhqVerdict, dhqHeadliner, leagueHasPicks, valueLabel, verdictColor, diffDisplay, grade, totalA, totalB, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, FAAB_RATE, likelihoodColor, likelihood, netTaxTotal, manualBehaviorFit, otherOwnerId, theirPosture, otherDnaKey, otherDna, manualBehaviorProfile, psychTaxes, grudgeTax, gmFloor, gmModeLabel, gmViability, gmWarnings }) {
         const _pro = typeof window.wrIsPro === 'function' ? window.wrIsPro() : true;
         // Owner ruling (restored): the 8-factor psych-tax table + approach line render
         // ALWAYS-VISIBLE at the bottom of the panel — the old collapsed 'Why? ▾'
@@ -251,7 +251,23 @@
         return (
             <div className="tc-ta-verdict tc-ta-sticky-summary" id="wr-export-trade">
                 <div className="tc-section-hdr" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>TRADE ANALYSIS<button onClick={() => window.wrExport?.capture(document.getElementById('wr-export-trade'), 'trade-analysis')} style={{ background:'none', border:'1px solid var(--acc-line1, rgba(212,175,55,0.25))', borderRadius:'4px', padding:'2px 8px', color:'var(--gold)', fontSize:'var(--text-micro, 0.6875rem)', cursor:'pointer', fontFamily: 'var(--font-body)', minHeight:'44px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>Snapshot</button></div>
+                {dhqVerdict && (() => {
+                    const col = dhqVerdict.decision === 'offer' ? 'var(--win-green)' : dhqVerdict.decision === 'counter' ? 'var(--warn)' : 'var(--loss-red)';
+                    const word = dhqVerdict.decision === 'offer' ? 'SEND IT' : dhqVerdict.decision === 'counter' ? 'COUNTER' : 'PASS';
+                    return (
+                        <div className="tc-dhq-call" style={{ border:'1px solid ' + col, borderRadius:'var(--card-radius-sm, 8px)', padding:'0.55rem 0.7rem', margin:'0.35rem 0 0.55rem', background:'rgba(255,255,255,0.02)' }}>
+                            <div style={{ display:'flex', alignItems:'baseline', gap:'0.55rem', flexWrap:'wrap' }}>
+                                <span style={{ fontFamily:'var(--font-title)', fontSize:'1.05rem', fontWeight:700, color: col, letterSpacing:'0.04em' }}>{word}</span>
+                                {dhqVerdict.market_label && <span style={{ fontSize:'0.78rem', color:'var(--silver)' }}>{dhqVerdict.market_label}</span>}
+                                {dhqVerdict.accept_chance_pct != null && <span style={{ marginLeft:'auto', fontFamily:'var(--font-mono)', fontSize:'0.85rem', color: col }}>{dhqVerdict.accept_chance_pct}% to accept</span>}
+                            </div>
+                            <div style={{ fontSize:'0.82rem', lineHeight:1.45, color:'var(--white, #F5F2EA)', marginTop:'0.25rem' }}>{TC_CALL.text(dhqVerdict)}</div>
+                            {(dhqHeadliner?.notes || []).map((n, i) => <div key={i} style={{ fontSize:'0.76rem', color:'var(--silver)', marginTop:'0.2rem' }}>{n}</div>)}
+                        </div>
+                    );
+                })()}
                 <div style={{ display:'flex', alignItems:'baseline', gap:'0.6rem', flexWrap:'wrap' }}>
+                    {dhqVerdict && <span style={{ fontSize:'0.68rem', color:'var(--silver)', opacity:0.7, textTransform:'uppercase', letterSpacing:'0.06em' }}>Value only</span>}
                     <span className="tc-verdict-diff" style={{ color: verdictColor }}>{grade?.grade || '--'}</span>
                     <span style={{ fontFamily:'var(--font-title)', fontSize:'1.1rem', color: verdictColor }}>{(grade?.label || '').toUpperCase()}</span>
                     <span style={{ fontFamily:'var(--font-mono)', fontSize:'1.05rem', fontWeight:600, color: verdictColor }}>{diffDisplay}</span>
@@ -280,7 +296,7 @@
                         <div style={leagueHasPicks === false ? { gridColumn: 'span 2' } : undefined}>
                             <span>Acceptance</span>
                             <strong style={{ color: likelihoodColor }}>{likelihood}%</strong>
-                            <em>{netTaxTotal >= 0 ? '+' : ''}{netTaxTotal}% psych · {manualBehaviorFit ? `${manualBehaviorFit.acceptanceDelta >= 0 ? '+' : ''}${manualBehaviorFit.acceptanceDelta}% behavior` : '0% behavior'}</em>
+                            <em>{dhqVerdict ? 'the same call Ask your AI gives' : <>{netTaxTotal >= 0 ? '+' : ''}{netTaxTotal}% psych · {manualBehaviorFit ? `${manualBehaviorFit.acceptanceDelta >= 0 ? '+' : ''}${manualBehaviorFit.acceptanceDelta}% behavior` : '0% behavior'}</>}</em>
                         </div>
                     ) : (
                         <div style={leagueHasPicks === false ? { gridColumn: 'span 2' } : undefined}>
@@ -345,7 +361,7 @@
                         )}
                         <div className="tc-tax-table-row tc-total">
                             <span className="tc-tax-name">NET MODIFIER</span>
-                            <span className="tc-tax-desc">Applied to verdict score & acceptance likelihood</span>
+                            <span className="tc-tax-desc">{dhqVerdict ? 'Background on this owner; the call at the top is the decision' : 'Applied to verdict score & acceptance likelihood'}</span>
                             <span className="tc-tax-val" style={{ color: netTaxTotal > 0 ? 'var(--win-green)' : netTaxTotal < 0 ? 'var(--loss-red)' : 'var(--silver)' }}>{netTaxTotal > 0 ? '+' : ''}{netTaxTotal}%</span>
                         </div>
                     </div>
@@ -396,9 +412,75 @@
     // ── TcDealCard — extracted from renderDealHQ (Step-1 refactor; no behavior change) ──
     // One generated deal package: send/receive summary, decision strip (grade/accept/Δ), and an
     // expandable why-drawer. Closures it used (sideSummary, loadDealIntoBuilder, saveDeal) are props.
+    // ── The shared trade call (owner ask 2026-10-10: one message everywhere) ──
+    // Builder, finder cards, Ask your AI and the connector all read the same
+    // evaluator: App.AskTools evaluate_trade. Pieces go in as Sleeper player
+    // ids, picks as "2027 1st from <rosterId>" (or "2027 1.04 from 5"), FAAB
+    // as "$250 FAAB".
+    const TC_ORD = { 1: '1st', 2: '2nd', 3: '3rd' };
+    function tcPickText(id) { const p = String(id).split('-'); const sl = (p[4] || '').charAt(0) === 's' ? Number(p[4].slice(1)) : null; return p[1] + ' ' + (sl ? p[2] + '.' + String(sl).padStart(2, '0') : (TC_ORD[p[2]] || p[2] + 'th')) + ' from ' + p[3]; }
+    function tcCallArgs(ids, pickIds, faab) { return (ids || []).map(String).concat((pickIds || []).map(tcPickText), faab > 0 ? ['$' + faab + ' FAAB'] : []); }
+    const TC_CALL = {
+        word: v => (v.decision === 'offer' ? 'Send it' : v.decision === 'counter' ? 'Counter' : 'Pass'),
+        // The call text without a repeat of the headline word ("Send it: …").
+        text: v => String(v.call || '').replace(/^(send it|counter|pass)\s*:\s*/i, '').replace(/^./, c => c.toUpperCase()),
+        color: v => (v.decision === 'offer' ? 'var(--good, var(--win-green))' : v.decision === 'counter' ? 'var(--warn)' : 'var(--bad, var(--loss-red))'),
+    };
+    function useTcSharedCall(give, get, partnerRid) {
+        const [call, setCall] = React.useState(null);
+        const key = give.join('|') + '>' + get.join('|') + '@' + (partnerRid || '');
+        React.useEffect(() => {
+            const T = window.App?.AskTools;
+            if (!T || !give.length || !get.length) { setCall(null); return undefined; }
+            let live = true;
+            T.run('evaluate_trade', Object.assign({ give, get }, partnerRid != null ? { partner: String(partnerRid) } : {}))
+                .then(r => { if (live) setCall(r && r.verdict ? { key, verdict: r.verdict, headliner: r.headliner || null } : null); })
+                .catch(() => { if (live) setCall(null); });
+            return () => { live = false; };
+        }, [key]);
+        return call && call.key === key ? call : null;
+    }
+    // A finder deal's evaluate_trade arguments ({ give, get, partner }).
+    function tcDealArgs(deal) {
+        const partnerRid = deal.partnerRosterId ?? (window.S?.rosters || []).find(r => String(r.owner_id) === String(deal.partnerOwnerId))?.roster_id;
+        return Object.assign({
+            give: tcCallArgs((deal.givePlayers || []).map(p => p.pid || p.id), (deal.givePicks || []).map(p => p.id), deal.giveFaab || 0),
+            get: tcCallArgs((deal.receivePlayers || []).map(p => p.pid || p.id), (deal.receivePicks || []).map(p => p.id), deal.receiveFaab || 0),
+        }, partnerRid != null ? { partner: String(partnerRid) } : {});
+    }
+    // The finder list scores every deal with the shared evaluator already
+    // (deal.sharedCall); a card reuses that call instead of asking again.
+    function useTcDealCall(deal) {
+        const pre = deal.sharedCall && deal.sharedCall.verdict ? deal.sharedCall : null;
+        const a = pre ? { give: [], get: [] } : tcDealArgs(deal);
+        const live = useTcSharedCall(a.give, a.get, a.partner);
+        return pre || live;
+    }
+    // Phone finder card pieces (that card is a plain render function, so the
+    // shared call lives in these two small components).
+    function TcPhDealChips({ deal, floor, chip }) {
+        const sc = useTcDealCall(deal), sv = sc && sc.verdict;
+        const lk = sv && sv.accept_chance_pct != null ? sv.accept_chance_pct : deal.likelihood;
+        const likeColor = lk >= floor ? 'var(--good)' : lk >= Math.max(55, floor - 15) ? 'var(--warn)' : 'var(--bad)';
+        const deltaColor = deal.userGain >= 0 ? 'var(--good)' : 'var(--bad)';
+        return <>
+            {sv && chip(TC_CALL.word(sv), TC_CALL.color(sv))}
+            {chip(deal.grade, deal.gradeColor || 'var(--gold)')}
+            {chip(lk + '%', likeColor)}
+            {chip((deal.userGain >= 0 ? '+' : '') + Math.round(deal.userGain).toLocaleString(), deltaColor)}
+        </>;
+    }
+    function TcPhCallLine({ deal }) {
+        const sc = useTcDealCall(deal), sv = sc && sc.verdict;
+        if (!sv) return null;
+        return <div style={{ marginTop: '7px', fontSize: '0.74rem', lineHeight: 1.45, color: 'var(--silver)' }}><b style={{ color: TC_CALL.color(sv) }}>{TC_CALL.word(sv)}:</b> {TC_CALL.text(sv)}</div>;
+    }
     function TcDealCard({ deal, idx, actionFloor, expandedDealId, setExpandedDealId, loadDealIntoBuilder, saveDeal, sideSummary }) {
+                const shared = useTcDealCall(deal);
+                const sv = shared ? shared.verdict : null;
+                const shownLikelihood = sv && sv.accept_chance_pct != null ? sv.accept_chance_pct : deal.likelihood;
                 const deltaColor = deal.userGain >= 0 ? 'var(--good)' : 'var(--bad)';
-                const likelihoodColor2 = deal.likelihood >= actionFloor ? 'var(--good)' : deal.likelihood >= Math.max(55, actionFloor - 15) ? 'var(--warn)' : 'var(--bad)';
+                const likelihoodColor2 = shownLikelihood >= actionFloor ? 'var(--good)' : shownLikelihood >= Math.max(55, actionFloor - 15) ? 'var(--warn)' : 'var(--bad)';
                 const expanded = expandedDealId === deal.id;
                 const whyView = typeof window.App?.Intelligence?.buildWhyView === 'function'
                     ? window.App.Intelligence.buildWhyView(deal.intelligence, { title: 'Why this trade', limit: 4 })
@@ -416,18 +498,21 @@
                             <button onClick={() => saveDeal(deal)}>Save</button>
                         </div>
                     </div>
+                    {sv && <div className="tc-dhq-call" style={{ border:'1px solid ' + TC_CALL.color(sv), borderRadius:'var(--card-radius-sm, 8px)', padding:'0.45rem 0.6rem', margin:'0.35rem 0', fontSize:'0.8rem', lineHeight:1.4 }}>
+                        <strong style={{ color: TC_CALL.color(sv), marginRight:'0.4rem' }}>{TC_CALL.word(sv)}:</strong>{TC_CALL.text(sv)}
+                    </div>}
                     <div className="tc-dhq-deal-grid">
                         {sideSummary('You Send', deal, 'give')}
                         {sideSummary('You Get', deal, 'receive')}
                     </div>
                     <div className="tc-dhq-decision-strip">
                         <div className="tc-dhq-decision">
-                            <span>Grade</span>
+                            <span>{sv ? 'Value grade' : 'Grade'}</span>
                             <strong style={{ color:deal.gradeColor }}>{deal.grade}</strong>
                         </div>
                         <div className="tc-dhq-decision">
                             <span>Accept %</span>
-                            <strong style={{ color:likelihoodColor2 }}>{deal.likelihood}%</strong>
+                            <strong style={{ color:likelihoodColor2 }}>{shownLikelihood}%</strong>
                         </div>
                         <div className="tc-dhq-decision">
                             <span>DHQ Delta</span>
@@ -1252,6 +1337,35 @@
 
         const allRosters = currentLeague.rosters || [];
         const leagueUsers = currentLeague.users || [];
+        // ── One trade call everywhere (owner ask 2026-10-10: "when an owner
+        // punches something into the trade builder, the message remains
+        // consistent"). The builder asks the same evaluator the member's AI
+        // uses (App.AskTools evaluate_trade: ownership > headliner > what the
+        // partner wants > raw value) and shows its call and acceptance, so
+        // the builder, Ask your AI and the connector never disagree.
+        const [dhqCall, setDhqCall] = useState(null);
+        const dhqCallKey = [tradeOwner.A, tradeOwner.B, tradeIds.A.join(','), tradeIds.B.join(','), tradePickIds.A.join(','), tradePickIds.B.join(','), tradeFaab.A, tradeFaab.B].join('|');
+        useEffect(() => {
+            const T = window.App?.AskTools;
+            const meRid = myRoster?.roster_id;
+            const rosterOfOwner = oid => allRosters.find(r => String(r.owner_id) === String(oid)) || null;
+            const sideA = tradeOwner.A ? rosterOfOwner(tradeOwner.A) : null;
+            // The call is from the member's seat: side A must be their team.
+            const mineA = !tradeOwner.A || (sideA && String(sideA.roster_id) === String(meRid));
+            const hasA = tradeIds.A.length || tradePickIds.A.length, hasB = tradeIds.B.length || tradePickIds.B.length;
+            if (!T || !meRid || !mineA || !hasA || !hasB) { setDhqCall(null); return undefined; }
+            const give = tcCallArgs(tradeIds.A, tradePickIds.A, tradeFaab.A);
+            const get = tcCallArgs(tradeIds.B, tradePickIds.B, tradeFaab.B);
+            const partner = tradeOwner.B ? rosterOfOwner(tradeOwner.B) : null;
+            const key = dhqCallKey;
+            let live = true;
+            const t = setTimeout(() => {
+                T.run('evaluate_trade', Object.assign({ give, get }, partner ? { partner: String(partner.roster_id) } : {}))
+                    .then(r => { if (live) setDhqCall(r && r.verdict ? { key, verdict: r.verdict, headliner: r.headliner || null } : null); })
+                    .catch(() => { if (live) setDhqCall(null); });
+            }, 250);
+            return () => { live = false; clearTimeout(t); };
+        }, [dhqCallKey, myRoster?.roster_id, allRosters.length]);
         const leagueId = currentLeague.id || currentLeague.league_id;
         const WR_KEYS = window.App?.WR_KEYS || window.WR_KEYS || {};
         const WrStorage = window.App?.WrStorage || window.WrStorage || null;
@@ -2524,7 +2638,11 @@
             // LAB21: DNA taxes land at full designation strength on the FINAL
             // number — "the Fleecer tax alone would kill the deal."
             const labDnaTaxTotal = labDnaTaxes.reduce((s, t) => s + (Number(t.impact) || 0), 0);
-            const likelihood = Math.round(Math.max(3, Math.min(95, Math.max(5, Math.min(95, baseLikelihood + (behaviorFit?.acceptanceDelta || 0))) + labDnaTaxTotal)));
+            const modelLikelihood = Math.round(Math.max(3, Math.min(95, Math.max(5, Math.min(95, baseLikelihood + (behaviorFit?.acceptanceDelta || 0))) + labDnaTaxTotal)));
+            // Finder list (owner ask 2026-10-10): once the shared evaluator has
+            // scored a candidate, its accept_chance_pct IS the likelihood, so
+            // confidence, cautions, rank and the Why all read the same number.
+            const likelihood = Number.isFinite(input.likelihoodOverride) ? Math.round(input.likelihoodOverride) : modelLikelihood;
             const fit = myAssessment ? calcComplementarity(myAssessment, partner) : 0;
             const valueScore = Math.max(0, Math.min(100, 50 + (userGain / Math.max(give.total, receive.total, 1)) * 120));
             const confidenceScore = Math.round(Math.max(0, Math.min(100, likelihood * 0.45 + fit * 0.25 + valueScore * 0.30 + (behaviorFit?.scoreDelta || 0))));
@@ -2650,6 +2768,7 @@
                 totals: { give, receive },
                 userGain,
                 likelihood,
+                likelihoodModel: modelLikelihood,
                 grade: gradeRaw.grade,
                 gradeLabel: gradeRaw.label,
                 gradeColor: gradeRaw.color || gradeRaw.col || 'var(--gold)',
@@ -2770,6 +2889,12 @@
             if (eliteSkillRules && eliteSkillRules.violates(input)) return;
             const deal = buildDeal(partner, input);
             if (!deal) return;
+            const { sig, core, id } = dealKeys(deal);
+            if (candidates.some(d => d._sig === sig)) return;
+            candidates.push({ ...deal, id, _sig: sig, _core: core });
+        }
+
+        function dealKeys(deal) {
             // _core — the deal's IDEA identity (owner ruling: the board kept
             // showing the same trade over and over with only the payment
             // shuffled — "Oluokun → Hines-Allen" three times with R6/R7/FAAB
@@ -2793,10 +2918,9 @@
                 deal.giveFaab,
                 deal.receiveFaab,
             ]);
-            if (candidates.some(d => d._sig === sig)) return;
             let hash = 0;
             for (let i = 0; i < sig.length; i++) hash = ((hash << 5) - hash + sig.charCodeAt(i)) | 0;
-            candidates.push({ ...deal, id: `deal_${Math.abs(hash).toString(36)}`, _sig: sig, _core: core });
+            return { sig, core, id: `deal_${Math.abs(hash).toString(36)}` };
         }
 
         // ── Finder-query resolution seam (Phase 4a) ──
@@ -3987,7 +4111,6 @@
             let cancelled = false;
             const partners = partnerBoard;
             const modes = finderDualBest ? ['fillNeed', 'sellSurplus'] : [effMode];
-            const minPartners = finderDualBest ? Math.min(6, partners.length) : partners.length;
             const pooled = [];
             const seen = new Set();
             let idx = 0;
@@ -4017,8 +4140,10 @@
                     }
                 }
                 idx += 1;
-                const enough = idx >= minPartners && pooled.filter(d => d.likelihood >= finderActionFloor).length >= 8;
-                const done = idx >= partners.length || (finderDualBest && enough);
+                // The scan used to stop early once 8 deals cleared the bar on the
+                // engine's own likelihood. The list is now decided by the shared
+                // evaluator after the scan, so every partner is scanned.
+                const done = idx >= partners.length;
                 setFinderPool({ key: finderLoopKey, deals: pooled.slice(), scanned: idx, total: partners.length, done });
                 if (!done) schedule(step);
             };
@@ -4026,42 +4151,205 @@
             return () => { cancelled = true; };
         }, [finderLoopKey]);
         const finderPoolOn = finderLoopKey != null;
-        // Pooled ranking: per-deal recommendation score (likelihood/fit/value, GM-band
-        // penalized) + a small partner-board term, grade letter then accept % as ties.
         const FINDER_GRADE_RANK = { 'A+': 7, 'A': 6, 'B+': 5, 'B': 4, 'C': 3, 'D': 2, 'F': 1 };
-        const finderDeals = useMemo(() => {
+        // The finder's own order (recommendation rank + a small partner-board
+        // term, then grade letter, then roster fit). Since the shared list
+        // (below) it only breaks ties inside one shared acceptance level.
+        const finderTieBreak = (a, b) => ((b.rank || 0) + (b.partnerScore || 0) * 0.2) - ((a.rank || 0) + (a.partnerScore || 0) * 0.2)
+            || (FINDER_GRADE_RANK[b.grade] || 0) - (FINDER_GRADE_RANK[a.grade] || 0)
+            || (b.fit || 0) - (a.fit || 0);
+        // Candidates: everything the generator produced for this query, still
+        // carrying _sig/_core for dedupe.
+        const finderCandidates = useMemo(() => {
             if (!finderActive) return [];
-            if (finderPoolOn) {
-                // Sort first, THEN core-dedupe: dual-mode scans (fillNeed +
-                // sellSurplus) can produce the same trade idea for one partner;
-                // the best-ranked variant is the one that survives.
-                const seenCore = new Set();
-                return finderPool.deals
-                    .slice()
-                    .sort((a, b) => (b.rank + (b.partnerScore || 0) * 0.2) - (a.rank + (a.partnerScore || 0) * 0.2)
-                        || (FINDER_GRADE_RANK[b.grade] || 0) - (FINDER_GRADE_RANK[a.grade] || 0)
-                        || b.likelihood - a.likelihood)
-                    .filter(deal => {
-                        if (!deal._core) return true;
-                        if (seenCore.has(deal._core)) return false;
-                        seenCore.add(deal._core);
-                        return true;
-                    })
-                    .map(({ _sig, _core, ...deal }) => deal)
-                    .slice(0, 24);
-            }
+            if (finderPoolOn) return finderPool.deals;
             if (!selectedPartner) return [];
-            return evalPartnerDeals(selectedPartner, effMode, focusPlayerPid, focusPickR).map(({ _sig, _core, ...deal }) => deal);
+            return evalPartnerDeals(selectedPartner, effMode, focusPlayerPid, focusPickR);
         }, [finderActive, finderPoolOn, finderPool, selectedPartner, effMode, focusPlayerPid, focusPickR?.id, finderDataEpoch, finderTuningHash]);
-        const finderActionable = finderDeals.filter(deal => deal.likelihood >= finderActionFloor);
+        const finderScoreKey = finderActive && (!finderPoolOn || finderPool.done)
+            ? JSON.stringify([finderPoolOn ? finderLoopKey : [selectedPartner?.ownerId ?? null, effMode, focusPlayerPid ?? null, focusPickR?.id ?? null, finderDataEpoch, finderTuningHash], finderActionFloor])
+            : null;
+
+        // ── The finder list runs on the shared trade evaluator (owner ask
+        // 2026-10-10). Every candidate (generated, plus rule-built offers from
+        // trade_plan) is scored by App.AskTools.evaluateDeals, the same code
+        // path as evaluate_trade (ownership > headliner > what the partner
+        // wants > raw value). 'pass' is dropped; actionable = an 'offer' at or
+        // above the member's acceptance bar; other offers, and counters at or
+        // above the moonshot line, are moonshots; the shown likelihood is the
+        // shared accept_chance_pct (App.AskTools.triageByVerdict).
+        // Rule-built candidates: for partners with clear targets (the player
+        // the owner focused, players the finder already targets, the
+        // partner's trade block), trade_plan's offers, built only from what
+        // the member verifiably owns. Buy-side intents only.
+        async function finderRuleBuiltCandidates(cands, isLive) {
+            const AT = window.App?.AskTools;
+            if (typeof AT?.run !== 'function' || !myAssessment) return [];
+            if (focusPickR || !(finderDualBest || effMode === 'acquire' || effMode === 'fillNeed')) return [];
+            const myRosterObj = allRosters.find(r => String(r.roster_id) === String(myRosterId));
+            const mine = new Set([...(myRosterObj?.players || []), ...(myRosterObj?.reserve || []), ...(myRosterObj?.taxi || [])].map(String));
+            const myPicks = pickAssetsForOwner(myAssessment.ownerId);
+            const byRid = rid => assessments.find(a => String(a.rosterId) === String(rid)) || null;
+            const pinned = effPartnerId != null ? (assessments.find(a => String(a.ownerId) === String(effPartnerId)) || null) : null;
+            const inScope = a => !!a && String(a.rosterId) !== String(myRosterId) && (!pinned || String(a.rosterId) === String(pinned.rosterId));
+            const seenAsk = new Set();
+            const ask = (a, pid, list, cap) => {
+                if (!inScope(a) || list.length >= cap) return;
+                const k = a.rosterId + '|' + (pid ?? '');
+                if (seenAsk.has(k)) return;
+                seenAsk.add(k);
+                list.push({ a, pid: pid != null ? String(pid) : null });
+            };
+            const focusAsk = [], targetAsks = [], blockAsks = [];
+            if (effMode === 'acquire' && focusPlayerPid != null && focusR?.rosterId != null) ask(byRid(focusR.rosterId), focusPlayerPid, focusAsk, 1);
+            cands.slice().sort((a, b) => (b.rank || 0) - (a.rank || 0))
+                .forEach(d => (d.receivePlayers || []).forEach(p => ask(byRid(d.partnerRosterId), p.pid, targetAsks, 8)));
+            (pinned ? [pinned] : partnerBoard.map(i => i.assessment)).forEach(a => ask(a, null, blockAsks, 8));
+            const out = [];
+            for (const q of [...focusAsk, ...targetAsks, ...blockAsks]) {
+                if (!isLive()) return [];
+                let r = null;
+                try { r = await AT.run('trade_plan', q.pid ? { target: q.pid, partner: String(q.a.rosterId) } : { partner: String(q.a.rosterId) }); } catch (e) { r = null; }
+                if (!r || r.error || !Array.isArray(r.offers)) continue;
+                const score = partnerBoard.find(i => String(i.assessment.rosterId) === String(q.a.rosterId))?.score || 0;
+                r.offers.forEach(o => {
+                    const ids = o.piece_ids;
+                    if (!ids) return;
+                    const givePlayers = [], givePicks = [], receivePlayers = [];
+                    let ok = true;
+                    ids.give.forEach(x => {
+                        if (x.kind === 'player') {
+                            const as = mine.has(String(x.pid)) ? playerAsset(x.pid) : null;
+                            if (!as || isUntouchableAsset(as, finderTuning)) ok = false; else givePlayers.push(as);
+                        } else if (x.kind === 'pick') {
+                            // Only a pick the finder's own ownership map also gives me.
+                            const pk = myPicks.find(m => Number(m.year) === Number(x.year) && Number(m.round) === Number(x.round) && String(m.fromRosterId) === String(x.from));
+                            if (!pk) ok = false; else givePicks.push(pk);
+                        } else ok = false;
+                    });
+                    ids.get.forEach(x => { const as = x.kind === 'player' ? playerAsset(x.pid) : null; if (!as) ok = false; else receivePlayers.push(as); });
+                    if (!ok || !receivePlayers.length || (!givePlayers.length && !givePicks.length)) return;
+                    let deal = null;
+                    try {
+                        deal = buildDeal(q.a, { mode: effMode, type: 'Rule-built', givePlayers, givePicks, receivePlayers, receivePicks: [], giveFaab: 0, receiveFaab: 0, whyAccept: o.why });
+                    } catch (e) { deal = null; }
+                    if (!deal) return;
+                    const { sig, core, id } = dealKeys(deal);
+                    out.push({ ...deal, id, _sig: sig, _core: core, partnerScore: score, ruleBuilt: true });
+                });
+            }
+            return out;
+        }
+        // One scored row: the deal rebuilt with the shared acceptance as its
+        // likelihood (confidence, cautions, rank and the Why follow it), the
+        // shared call attached for the card, and its viability.
+        function finderSharedDeal(deal, ev, actionable) {
+            const v = ev.verdict;
+            const acc = Number.isFinite(Number(v.accept_chance_pct)) && v.accept_chance_pct != null ? Number(v.accept_chance_pct) : 0;
+            const partner = assessments.find(a => String(a.rosterId) === String(deal.partnerRosterId)) || null;
+            let rebuilt = null;
+            try {
+                rebuilt = partner ? buildDeal(partner, {
+                    id: deal.id, mode: deal.mode, type: deal.type,
+                    givePlayers: deal.givePlayers, givePicks: deal.givePicks, receivePlayers: deal.receivePlayers, receivePicks: deal.receivePicks,
+                    giveFaab: deal.giveFaab, receiveFaab: deal.receiveFaab,
+                    whyAccept: deal.whyAccept, whyYou: deal.whyYou, createdAt: deal.createdAt, status: deal.status,
+                    likelihoodOverride: acc,
+                }) : null;
+            } catch (e) { rebuilt = null; }
+            const { _sig, _core, ...base } = rebuilt || { ...deal, likelihood: acc };
+            const out = {
+                ...base,
+                id: deal.id,
+                partnerScore: deal.partnerScore,
+                ruleBuilt: !!deal.ruleBuilt,
+                likelihoodModel: deal.likelihoodModel ?? deal.likelihood,
+                sharedCall: { verdict: v, headliner: ev.headliner || null },
+            };
+            out.rank = scoreDealRecommendation(out, finderTuning);
+            out.recommendationScore = out.rank;
+            out.viability = actionable ? dealViability(out, finderTuning) : 'Moonshot';
+            return out;
+        }
+        // The pre-shared list (old engine likelihood), used only when the
+        // shared evaluator isn't on the page or fails.
+        function finderLegacyList(cands) {
+            const seenCore = new Set();
+            const deals = (finderPoolOn ? cands.slice().sort((a, b) => finderTieBreak(a, b) || b.likelihood - a.likelihood) : cands.slice())
+                .filter(deal => {
+                    if (!deal._core) return true;
+                    if (seenCore.has(deal._core)) return false;
+                    seenCore.add(deal._core);
+                    return true;
+                })
+                .map(({ _sig, _core, ...deal }) => deal)
+                .slice(0, finderPoolOn ? 24 : undefined);
+            return { deals, actionable: deals.filter(deal => deal.likelihood >= finderActionFloor) };
+        }
+        const [finderShared, setFinderShared] = useState({ key: null, status: 'idle', deals: [], actionableCount: 0, dropped: 0, planned: 0 });
+        useEffect(() => {
+            if (!finderScoreKey) return undefined;
+            const AT = window.App?.AskTools;
+            if (typeof AT?.evaluateDeals !== 'function' || typeof AT?.triageByVerdict !== 'function') {
+                setFinderShared({ key: finderScoreKey, status: 'fallback', deals: [], actionableCount: 0, dropped: 0, planned: 0 });
+                return undefined;
+            }
+            let live = true;
+            const cands = finderCandidates.slice();
+            setFinderShared({ key: finderScoreKey, status: 'scoring', deals: [], actionableCount: 0, dropped: 0, planned: 0 });
+            const t0 = Date.now();
+            (async () => {
+                const planned = await finderRuleBuiltCandidates(cands, () => live);
+                if (!live) return;
+                const seen = new Set(cands.map(d => d._sig).filter(Boolean));
+                const extra = planned.filter(d => { if (seen.has(d._sig)) return false; seen.add(d._sig); return true; });
+                const all = cands.concat(extra);
+                const evals = await AT.evaluateDeals(all.map(tcDealArgs));
+                if (!live) return;
+                const t = AT.triageByVerdict(all.map((deal, i) => ({ deal, ev: evals[i] || {} })), {
+                    bar: finderActionFloor,
+                    verdictOf: x => (x.ev && x.ev.verdict) || null,
+                    tieBreak: (p, q) => finderTieBreak(p.deal, q.deal),
+                });
+                // One row per trade idea: the best variant survives (an
+                // actionable one before any moonshot).
+                const seenCore = new Set();
+                const firstOfIdea = x => { const c = x.deal._core; if (!c) return true; if (seenCore.has(c)) return false; seenCore.add(c); return true; };
+                const act = t.actionable.filter(firstOfIdea).map(x => finderSharedDeal(x.deal, x.ev, true));
+                const moon = t.moonshots.filter(firstOfIdea).map(x => finderSharedDeal(x.deal, x.ev, false));
+                const deals = act.concat(moon).slice(0, finderPoolOn ? 24 : undefined);
+                const actionableCount = Math.min(act.length, deals.length);
+                try {
+                    window._labDbg = window._labDbg || {};
+                    window._labDbg.finderShared = {
+                        candidates: cands.length, ruleBuilt: extra.length, scored: all.length, actionable: actionableCount, moonshots: deals.length - actionableCount, dropped: t.dropped.length, bar: finderActionFloor, moonshotLine: t.moonshotLine,
+                        ideas: { actionable: act.length, moonshots: moon.length }, ms: Date.now() - t0,
+                        rows: deals.map((d, i) => ({ actionable: i < actionableCount, partner: d.partnerName, args: tcDealArgs(d), decision: d.sharedCall.verdict.decision, accept: d.sharedCall.verdict.accept_chance_pct, modelLikelihood: d.likelihoodModel, ruleBuilt: d.ruleBuilt })),
+                    };
+                } catch (e) { /* debug tap only */ }
+                setFinderShared({ key: finderScoreKey, status: 'done', deals, actionableCount, dropped: t.dropped.length, planned: extra.length });
+            })().catch(err => {
+                if (window.wrLog) window.wrLog('trade.finderShared', err);
+                if (live) setFinderShared({ key: finderScoreKey, status: 'fallback', deals: [], actionableCount: 0, dropped: 0, planned: 0 });
+            });
+            return () => { live = false; };
+        }, [finderScoreKey]);
+        const finderSharedOn = finderShared.key === finderScoreKey && finderShared.status === 'done';
+        const finderLegacy = finderShared.key === finderScoreKey && finderShared.status === 'fallback' ? finderLegacyList(finderCandidates) : null;
+        // Scanning the league or scoring the candidates: nothing lists yet,
+        // so no package shows on the old math first.
+        const finderScoring = finderActive && !finderSharedOn && !finderLegacy;
+        const finderDeals = finderSharedOn ? finderShared.deals : finderLegacy ? finderLegacy.deals : [];
+        const finderActionable = finderSharedOn ? finderShared.deals.slice(0, finderShared.actionableCount) : finderLegacy ? finderLegacy.actionable : [];
         const finderMoonshotCount = Math.max(0, finderDeals.length - finderActionable.length);
+        const finderRuledOut = finderSharedOn ? finderShared.dropped : 0;
         // LAB (owner report 2026-09-05): every actionable package renders — the
         // old top-8 cap made "14 actionable" a lie you couldn't scroll to.
         // b105: moonshots render too unless the owner hides them.
         const finderVisibleDeals = showAllDeals ? finderDeals : finderActionable;
         // Alex rec feed — once per finder-result change (pooled scans publish on
         // completion with partner:null), never as a render side effect.
-        const finderPublishKey = finderActive && (!finderPoolOn || finderPool.done)
+        const finderPublishKey = finderActive && !finderScoring
             ? JSON.stringify([finderPoolOn ? null : (selectedPartner?.ownerName || null), finderActionable.map(d => d.id), finderMoonshotCount])
             : null;
         useEffect(() => {
@@ -4511,11 +4799,13 @@
                             </div>
                         ) : <div className="tc-dhq-empty">No tradeable assets to browse for this scope.</div>)}
 
-                        {deals.length
-                            ? <div className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'}${showAllDeals ? '' : ' hidden'}` : ''}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
-                            : finderPoolOn && !finderPool.done
-                                ? <div className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — rows appear as the league scan runs.</div>
-                                : <div className="tc-dhq-empty">No package found for this intent. Try another partner chip, clear the focus, or open the builder below.</div>}
+                        {finderScoring
+                            ? (finderPoolOn && !finderPool.done
+                                ? <div className="tc-dhq-package-note"><b>Scanning</b> partner {finderPool.scanned}/{finderPool.total} — then every package is checked against the trade rules before it lists.</div>
+                                : <div className="tc-dhq-package-note"><b>Checking</b> each package against the trade rules (ownership, headliner, what the partner wants)…</div>)
+                            : deals.length
+                            ? <div className="tc-dhq-package-note"><b>{actionableDeals.length ? 'Ready' : 'Moonshots only'}</b> {actionableDeals.length || 0} actionable package{actionableDeals.length === 1 ? '' : 's'}{moonshotCount ? ` · ${moonshotCount} moonshot${moonshotCount === 1 ? '' : 's'}${showAllDeals ? '' : ' hidden'}` : ''}{finderRuledOut ? ` · ${finderRuledOut} ruled out by the trade rules` : ''}</div>
+                            : <div className="tc-dhq-empty">{finderRuledOut ? `No package passes the trade rules (${finderRuledOut} ruled out). ` : 'No package found for this intent. '}Try another partner chip, clear the focus, or open the builder below.</div>}
                     </div>
                 </section>
 
@@ -4804,7 +5094,7 @@
                             <div className="tc-dhq-panel-head">
                                 <span>Trade Builder</span>
                                 <em>{_verdict.hasTrade
-                                    ? `${_verdict.verdictText} ${_verdict.diffDisplay} · gave ${_verdict.totalA.toLocaleString()} / got ${_verdict.totalB.toLocaleString()}${_pro ? ` · ${_verdict.likelihood}% accept` : ''}`
+                                    ? `${_verdict.callWord ? _verdict.callWord + ' · ' : ''}${_verdict.verdictText} ${_verdict.diffDisplay} · gave ${_verdict.totalA.toLocaleString()} / got ${_verdict.totalB.toLocaleString()}${_pro ? ` · ${_verdict.likelihood}% accept` : ''}`
                                     : 'Build or tweak a trade without leaving this view.'}</em>
                                 <div className="tc-dhq-actions" style={{ flex: '0 0 auto' }}>
                                     <button type="button" onClick={() => setBuilderExpanded(false)}>Close ▴</button>
@@ -4904,6 +5194,11 @@
                 })
                 : null;
             if (manualBehaviorFit) likelihood = Math.round(Math.max(5, Math.min(95, likelihood + (manualBehaviorFit.acceptanceDelta || 0))));
+            // The shared call (see dhqCall) owns acceptance when it's in: one number everywhere.
+            const dhqVerdict = dhqCall && dhqCall.key === dhqCallKey ? dhqCall.verdict : null;
+            const dhqHeadliner = dhqVerdict ? dhqCall.headliner : null;
+            if (dhqVerdict && dhqVerdict.accept_chance_pct != null) likelihood = dhqVerdict.accept_chance_pct;
+            const callWord = dhqVerdict ? (dhqVerdict.decision === 'offer' ? 'Send it' : dhqVerdict.decision === 'counter' ? 'Counter' : 'Pass') : '';
             const likelihoodColor = likelihood >= 70 ? 'var(--win-green)' : likelihood >= 45 ? 'var(--warn)' : 'var(--loss-red)';
             // Letter grade + label + numeric diff are FREE (Scout parity) — no gate on these fields.
             const verdictColor = grade.color || grade.col || 'var(--gold)';
@@ -4937,7 +5232,7 @@
                     .filter(p => _gmTuning.sellPositions?.has(p))
                     .forEach(p => gmWarnings.push({ type: 'sell', text: `Buying ${p} — your strategy says SELL` }));
             }
-            return { totalA, totalB, hasTrade, grade, userGain, otherOwnerId, otherDnaKey, otherDna, theirPosture, psychTaxes, grudgeTax, netTaxTotal, likelihood, manualBehaviorProfile, manualBehaviorFit, likelihoodColor, verdictColor, verdictText, diffDisplay, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, gmFloor, gmModeLabel, gmViability, gmWarnings };
+            return { dhqVerdict, dhqHeadliner, callWord, totalA, totalB, hasTrade, grade, userGain, otherOwnerId, otherDnaKey, otherDna, theirPosture, psychTaxes, grudgeTax, netTaxTotal, likelihood, manualBehaviorProfile, manualBehaviorFit, likelihoodColor, verdictColor, verdictText, diffDisplay, rosterImpactLabel, starterValueDelta, pickCapitalDelta, pickQuantityDelta, faabDelta, gmFloor, gmModeLabel, gmViability, gmWarnings };
         }
 
         // ── Alex second opinion on the builder deal ──────────────────────────
@@ -4982,6 +5277,7 @@
                 iSend: dealSide('A'),
                 iReceive: dealSide('B'),
                 verdict: {
+                    call: v.dhqVerdict ? (v.dhqVerdict.decision + ': ' + v.dhqVerdict.call) : undefined,
                     verdictText: v.verdictText,
                     diffDisplay: v.diffDisplay,
                     likelihood: `${v.likelihood}%`,
@@ -5560,17 +5856,14 @@
                 </div>
             );
             const phDealCard = (deal, idx) => {
-                const likeColor = deal.likelihood >= finderActionFloor ? 'var(--good)' : deal.likelihood >= Math.max(55, finderActionFloor - 15) ? 'var(--warn)' : 'var(--bad)';
-                const deltaColor = deal.userGain >= 0 ? 'var(--good)' : 'var(--bad)';
                 const expanded = expandedDealId === deal.id;
                 return (
                     <div key={deal.id} style={{ background: 'var(--black, #121217)', border: '1px solid ' + (idx === 0 ? 'rgba(212,175,55,0.4)' : 'rgba(255,255,255,0.07)'), borderRadius: '9px', padding: '11px 12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             <strong style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--white)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto' }}>{deal.partnerName}</strong>
-                            {chip(deal.grade, deal.gradeColor || 'var(--gold)')}
-                            {chip(deal.likelihood + '%', likeColor)}
-                            {chip((deal.userGain >= 0 ? '+' : '') + Math.round(deal.userGain).toLocaleString(), deltaColor)}
+                            <TcPhDealChips deal={deal} floor={finderActionFloor} chip={chip} />
                         </div>
+                        <TcPhCallLine deal={deal} />
                         <div style={{ display: 'flex', marginTop: '9px' }}>
                             <div style={{ flex: 1, minWidth: 0, paddingRight: '11px' }}>{phDealSide('You get', deal.receivePlayers, deal.receivePicks, deal.receiveFaab, deal.totals.receive.total)}</div>
                             <div style={{ flex: 1, minWidth: 0, paddingLeft: '11px', borderLeft: '1px solid rgba(255,255,255,0.08)' }}>{phDealSide('You send', deal.givePlayers, deal.givePicks, deal.giveFaab, deal.totals.give.total)}</div>
@@ -5602,7 +5895,7 @@
             if (_verdict.hasTrade) {
                 heroEl = (
                     <HeroCard kicker={liveDealPartner ? 'Live deal · vs ' + liveDealPartner.ownerName : 'Live deal'}
-                        headline={_verdict.verdictText + ' · ' + _verdict.diffDisplay}
+                        headline={(_verdict.callWord ? _verdict.callWord + ' · ' : '') + _verdict.verdictText + ' · ' + _verdict.diffDisplay}
                         facts={'gave ' + _verdict.totalA.toLocaleString() + ' / received ' + _verdict.totalB.toLocaleString() + (_pro ? ' · accept ' + _verdict.likelihood + '%' : '')}
                         cta="BUILDER" onCta={() => setPhBuilderOpen(true)} />
                 );
@@ -5765,7 +6058,7 @@
                             {_verdict.hasTrade
                                 ? <button type="button" onClick={() => { try { document.getElementById('tc-builder-verdict')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {} }}
                                     style={{ marginLeft: 'auto', minHeight: '36px', padding: '4px 10px', background: 'transparent', border: '1px solid ' + (_verdict.verdictColor || 'var(--gold)'), borderRadius: 'var(--card-radius-sm, 8px)', color: _verdict.verdictColor || 'var(--gold)', fontFamily: MONO, fontSize: MICRO, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}>
-                                    {(_verdict.grade?.grade || '--') + ' ' + (_verdict.diffDisplay || '') + ' ▾'}
+                                    {(_verdict.callWord ? _verdict.callWord + ' · ' : '') + (_verdict.grade?.grade || '--') + ' ' + (_verdict.diffDisplay || '') + ' ▾'}
                                 </button>
                                 : <span style={{ marginLeft: 'auto', color: 'var(--text-muted, #8B8B96)', whiteSpace: 'nowrap' }}>No deal yet</span>}
                         </div>
@@ -5791,7 +6084,7 @@
             const actionBarEl = (
                 <ActionBar visible={active === 'desk'}
                     label={_verdict.hasTrade ? 'LIVE DEAL' : 'TRADE BUILDER'}
-                    value={_verdict.hasTrade ? `${_verdict.grade?.grade || '--'} ${_verdict.diffDisplay}` : 'No live deal'}
+                    value={_verdict.hasTrade ? `${_verdict.callWord ? _verdict.callWord + ' · ' : ''}${_verdict.grade?.grade || '--'} ${_verdict.diffDisplay}` : 'No live deal'}
                     tone={_verdict.hasTrade ? (_verdict.userGain > 0 ? 'good' : _verdict.userGain < 0 ? 'bad' : 'gold') : 'mute'}
                     actionLabel="BUILDER"
                     onAction={() => setPhBuilderOpen(true)}
@@ -5833,14 +6126,14 @@
                         {pillsEl}
                         {finderPanelEl}
                         {_pro && rosterState.isUsable && (
-                            finderDeals.length
+                            finderScoring
+                                ? <div style={{ fontFamily: MONO, fontSize: MICRO, color: 'var(--silver)', opacity: 0.7 }}>{finderPoolOn && !finderPool.done ? `Scanning partner ${finderPool.scanned}/${finderPool.total} — then each package is checked against the trade rules.` : 'Checking each package against the trade rules…'}</div>
+                                : finderDeals.length
                                 ? <React.Fragment>
                                     {goldDiv('Finder rows', finderPoolOn ? 'league-wide' : (selectedPartner ? 'vs ' + selectedPartner.ownerName : null))}
-                                    <div style={{ fontFamily: MONO, fontSize: MICRO, color: 'var(--silver)', opacity: 0.7 }}>{finderActionable.length} actionable · {finderMoonshotCount} moonshot{finderMoonshotCount === 1 ? '' : 's'}{finderPoolOn && !finderPool.done ? ` · scanning ${finderPool.scanned}/${finderPool.total}` : ''}</div>
+                                    <div style={{ fontFamily: MONO, fontSize: MICRO, color: 'var(--silver)', opacity: 0.7 }}>{finderActionable.length} actionable · {finderMoonshotCount} moonshot{finderMoonshotCount === 1 ? '' : 's'}{finderRuledOut ? ` · ${finderRuledOut} ruled out` : ''}</div>
                                 </React.Fragment>
-                                : (finderPoolOn && !finderPool.done
-                                    ? <div style={{ fontFamily: MONO, fontSize: MICRO, color: 'var(--silver)', opacity: 0.7 }}>Scanning partner {finderPool.scanned}/{finderPool.total} — moves appear as the league scan runs.</div>
-                                    : <div className="tc-dhq-empty">No package found for this intent — change the partner or focus in the finder controls.</div>)
+                                : <div className="tc-dhq-empty">{finderRuledOut ? `No package passes the trade rules (${finderRuledOut} ruled out) — ` : 'No package found for this intent — '}change the partner or focus in the finder controls.</div>
                         )}
                         {_pro && rosterState.isUsable && finderVisibleDeals.map(phDealCard)}
                         {_pro && rosterState.isUsable && finderMoonshotCount > 0 && (

@@ -24,3 +24,17 @@ test('the wire group is complete, ordered, and ships no chronicle data file', ()
     assert(!/league-wire-chronicles-data/.test(html));
     assert(/<script[^>]*src="js\/shared\/league-live-table\.js/.test(html), 'the live engines load at boot, before the group');
 });
+
+test('C2 desks (2026-10-12): engines before their desks, desks before the page, all in the wire group with one stamp', () => {
+    const tagsV = tags('wire');
+    const wire = tagsV.map(s => s.split('?')[0]);
+    const engines = ['calendar', 'identity', 'records', 'trends', 'features', 'draft-history'].map(f => 'js/shared/league-wire-' + f + '.js');
+    const desks = ['records', 'trends', 'features', 'nfl'].map(f => 'js/components/league-wire-' + f + '.js');
+    for (const f of [...engines, ...desks]) assert(wire.includes(f), f + ' is in the wire group');
+    const page = wire.indexOf('js/components/league-wire.js');
+    for (const f of desks) assert(wire.indexOf(f) < page, f + ' loads before the page');
+    for (const f of engines) assert(wire.indexOf(f) > wire.indexOf('js/shared/league-wire-journal.js') && wire.indexOf(f) < page, f + ' loads after the journal, before the page');
+    assert(wire.indexOf('js/shared/league-wire-nfl.js') < wire.indexOf('js/shared/league-wire-calendar.js'));
+    assert(!tags('wire').some(s => /league-wire-analyst/.test(s)), 'the Opinion desk is not shipped');
+    for (const f of [...engines, ...desks]) assert(tagsV.find(s => s.startsWith(f + '?v=')), f + ' carries a ?v= stamp');
+});

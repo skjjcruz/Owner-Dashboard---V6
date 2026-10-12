@@ -105,17 +105,24 @@ function WrSeasonOdds({ active, currentLeague, myRoster, playersData, statsData,
         const App = window.App || {}, PO = App.PlayoffOdds, DQ = App.DhqProj;
         if (!PO || !DQ || !DQ.weekDists) return;
         let live = true;
+        runRef.current.fd = null;   // later weeks are re-priced for this league and lineup
         const run = () => {
             if (!live) return;
             const wk = so.curWk;
             const mine = myStarters && myStarters.length ? myStarters.map(String) : null;
             const weekDists = DQ.weekDists(currentLeague, so.pairs[wk] || [], wk, myRoster && myRoster.roster_id, mine);
             if (!weekDists) return;
+            // Later weeks on DHQ's numbers too (owner ruling 2026-10-10).
+            if (DQ.seasonDists && !runRef.current.fd) {
+                runRef.current.fd = 'loading';
+                DQ.seasonDists(currentLeague, so.pairs, wk).then(fd => { runRef.current.fd = fd && Object.keys(fd).length ? fd : null; runRef.current.dq = null; run(); }).catch(() => { runRef.current.fd = null; });
+            }
+            const futureDists = runRef.current.fd && runRef.current.fd !== 'loading' ? runRef.current.fd : null;
             // Skip the re-sim when nothing it reads has moved.
-            const key = Object.keys(weekDists.byRoster).sort().map(rid => rid + ':' + weekDists.byRoster[rid].mean.toFixed(1)).join(',') + '|' + (mine || []).join(',');
+            const key = Object.keys(weekDists.byRoster).sort().map(rid => rid + ':' + weekDists.byRoster[rid].mean.toFixed(1)).join(',') + '|' + (mine || []).join(',') + '|' + (futureDists ? 'fd' : '');
             if (runRef.current.dq === key) return;
             runRef.current.dq = key;
-            const sim = PO.simulate({ league: currentLeague, ledger: so.ledger, futurePairs: so.pairs, myRosterId: myRoster && myRoster.roster_id, sims: 10000, weekDists });
+            const sim = PO.simulate({ league: currentLeague, ledger: so.ledger, futurePairs: so.pairs, myRosterId: myRoster && myRoster.roster_id, sims: 10000, weekDists, futureDists });
             if (live && sim) setSo(s => (s.status === 'ready' ? { ...s, sim } : s));
         };
         run();

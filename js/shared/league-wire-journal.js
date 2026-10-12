@@ -177,13 +177,13 @@
                 if (w.week < range.start || w.week > range.end) continue;
                 const pairs = inspect(w.rows, s.league);
                 if (!pairs || !played(w.rows)) continue;
-                w.rows.forEach(r => { historicalHigh = collectRecord(points(r), historicalRecords, { season: s.league.season, week: w.week, name: oldName(s.league, r.roster_id), points: points(r) }, historicalHigh); });
-                if (comparable) w.rows.forEach(r => { archiveHigh = collectRecord(points(r), archiveRecords, { season: s.league.season, week: w.week, name: oldName(s.league, r.roster_id), points: points(r) }, archiveHigh); });
+                w.rows.forEach(r => { historicalHigh = collectRecord(points(r), historicalRecords, { season: s.league.season, week: w.week, rosterId: r.roster_id, name: oldName(s.league, r.roster_id), points: points(r) }, historicalHigh); });
+                if (comparable) w.rows.forEach(r => { archiveHigh = collectRecord(points(r), archiveRecords, { season: s.league.season, week: w.week, rosterId: r.roster_id, name: oldName(s.league, r.roster_id), points: points(r) }, archiveHigh); });
                 if (!isH2H(s.league)) continue;
                 pairs.forEach(([a, b]) => {
                     const oa = owner(s.league, a.roster_id), ob = owner(s.league, b.roster_id), gap = round(Math.abs(points(a) - points(b)));
                     const winner = points(a) > points(b) ? a : points(b) > points(a) ? b : null;
-                    if (comparable && gap > 0) archiveMargin = collectRecord(gap, archiveMargins, { season: s.league.season, week: w.week, name: oldName(s.league, winner.roster_id), points: gap }, archiveMargin);
+                    if (comparable && gap > 0) archiveMargin = collectRecord(gap, archiveMargins, { season: s.league.season, week: w.week, rosterId: winner.roster_id, name: oldName(s.league, winner.roster_id), points: gap }, archiveMargin);
                     if (oa && ob && oa !== ob) games.push({ a: oa, b: ob, pa: points(a), pb: points(b), week: w.week, season: String(s.league.season) });
                     const winOwner = winner && owner(s.league, winner.roster_id);
                     if (winOwner) careerWins.set(winOwner, (careerWins.get(winOwner) || 0) + 1);
@@ -223,8 +223,8 @@
                 if (high === null || best > high) records.length = 0;
                 top.forEach(r => records.push({ week, rosterId: r.roster_id, points: best })); high = best;
             }
-            rows.forEach(r => { historicalHigh = collectRecord(points(r), historicalRecords, { season, week, name: nameFor(r.roster_id), points: points(r) }, historicalHigh); });
-            rows.forEach(r => { archiveHigh = collectRecord(points(r), archiveRecords, { season, week, name: nameFor(r.roster_id), points: points(r) }, archiveHigh); });
+            rows.forEach(r => { historicalHigh = collectRecord(points(r), historicalRecords, { season, week, rosterId: r.roster_id, name: nameFor(r.roster_id), points: points(r) }, historicalHigh); });
+            rows.forEach(r => { archiveHigh = collectRecord(points(r), archiveRecords, { season, week, rosterId: r.roster_id, name: nameFor(r.roster_id), points: points(r) }, archiveHigh); });
             add('story', 'Scoring crown', choose([`Top of the scoring pile: ${winners}`, `The weekly scoring crown goes to ${winners}`, `The week belongs to ${winners}`], week, top[0].roster_id), `${top.length > 1 ? 'A share of the weekly crown' : 'The highest score of the week'}: ${fmt(best)} points in a ${field(rows, week)}-team field.${top.length === 1 && sorted[1] ? ` That’s ${fmt(best - points(sorted[1]))} more than the next-best total.` : ''}`, top.map(r => r.roster_id), { weight: 45, metric: fmt(best), metricLabel: 'weekly high' });
             rows.forEach(r => {
                 const rid = id(r.roster_id), old = scoreTotals.get(rid) || 0, total = round(old + points(r));
@@ -306,7 +306,7 @@
             if (biggest && biggest.gap > 0) {
                 if (marginRecord !== null && biggest.gap > marginRecord) add('record', 'Record book', `${nameFor(biggest.a.roster_id)} set the season's biggest winning margin`, `A ${fmt(biggest.gap)}-point victory over ${nameFor(biggest.b.roster_id)} beats the previous mark of ${fmt(marginRecord)}.`, [biggest.a.roster_id], { weight: 80, metric: fmt(biggest.gap), metricLabel: 'point margin' });
                 marginRecord = Math.max(marginRecord || 0, biggest.gap);
-                margins.filter(m => m.gap > 0).forEach(m => { archiveMargin = collectRecord(m.gap, archiveMargins, { season, week, name: nameFor(m.a.roster_id), points: m.gap }, archiveMargin); });
+                margins.filter(m => m.gap > 0).forEach(m => { archiveMargin = collectRecord(m.gap, archiveMargins, { season, week, rosterId: m.a.roster_id, name: nameFor(m.a.roster_id), points: m.gap }, archiveMargin); });
             }
             if (simpleRace && seats < latestTable.length && week >= Math.max(start + 1, lastReg - 5)) {
                 const inside = latestTable[seats - 1], outside = latestTable[seats], remaining = Math.max(0, lastReg - week), separation = round((inside.wins + inside.ties / 2) - (outside.wins + outside.ties / 2));

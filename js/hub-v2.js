@@ -136,6 +136,20 @@
         </svg>;
     }
 
+    // Lab (owner ask 2026-10-10): sign-up (landing.html) leaves a one-time
+    // note so the member who just joined is greeted on arrival, right where
+    // they add their AI key. Read once per page load.
+    let justJoined = null;
+    function takeJustJoined() {
+        if (justJoined !== null) return justJoined;
+        justJoined = false;
+        try {
+            justJoined = window.sessionStorage.getItem('dhq_just_joined_v1') === '1';
+            if (justJoined) window.sessionStorage.removeItem('dhq_just_joined_v1');
+        } catch (e) { justJoined = false; }
+        return justJoined;
+    }
+
     // Props (all supplied by app.js — the hub owns no data of its own):
     //   leagues, sleeperLeagues, sleeperUserId, lastLeagueId, displayName,
     //   syncing, notices [{ key, text, action: { label, onClick | href } }],
@@ -174,6 +188,25 @@
         }
         const AllWire = wire === 'open' ? window.WrAllLeaguesWire : null;
 
+        // Lab (owner ask 2026-10-09): with an AI key saved, a question asked
+        // here opens the last-opened league and is answered there; the
+        // "New: Ask your AI" card goes away once the key is in.
+        const [hasKey, setHasKey] = React.useState(() => !!(window.App && window.App.AskDHQ && window.App.AskDHQ.savedKey && window.App.AskDHQ.savedKey()));
+        React.useEffect(() => {
+            const on = () => setHasKey(!!(window.App && window.App.AskDHQ && window.App.AskDHQ.savedKey && window.App.AskDHQ.savedKey()));
+            window.addEventListener('dhq:ai-key-changed', on);
+            // Sign-in finishes after the first paint: look again shortly.
+            const t1 = setTimeout(on, 1500), t2 = setTimeout(on, 5000);
+            return () => { window.removeEventListener('dhq:ai-key-changed', on); clearTimeout(t1); clearTimeout(t2); };
+        }, []);
+        React.useEffect(() => {
+            const A = window.App && window.App.AskDHQ;
+            if (guest || !A || !focus) return undefined;
+            const link = { name: titleOf(focus), open: () => onSelect(focus) };
+            A.hubLeague = link;
+            return () => { if (A.hubLeague === link) A.hubLeague = null; };
+        }, [focus && focus.id, guest]);
+
         const cards = filtered.map((l, i) => {
             const title = titleOf(l);
             const rec = recordOf(l, sleeperUserId);
@@ -183,6 +216,8 @@
                 className={'hv2-league-card' + (isLast ? ' is-last' : '') + (!q && i >= 3 ? ' hv2-league-overflow' + (showAll ? ' is-expanded' : '') : '')}
                 onClick={() => onSelect(l)}>
                 <span className="hv2-league-card-top">
+                    {/* Owner ask 2026-10-11: no Sleeper avatars on the cards; the
+                        initials badge, same as the website and app. */}
                     <span className="hv2-team-avatar" aria-hidden="true">{initialsFor(title)}</span>
                     <span className="hv2-league-identity"><strong>{title}</strong><span>{sub}</span></span>
                     {isLast && <span className="hv2-last-badge">Last opened</span>}
@@ -230,12 +265,26 @@
                 {/* Guests only (owner ask 2026-10-05): the free account pitch. */}
                 {guest && <div className="hv2-signup" role="region" aria-label="Sign up">
                     <div className="hv2-signup-copy">
-                        <strong>Sign up for <em>FREE</em> member services</strong>
-                        <span>Save your leagues on every device and lock in founding-member status.</span>
+                        {/* Owner ask 2026-10-10: the founding-member + AI pitch (live everywhere 2026-10-12). */}
+                        <strong>Sign up to become a <em>Founding Member</em> and Bring Your Own AI Agent to the Fight</strong>
+                        {/* Owner ask 2026-10-10: full width, one short line under the headline. */}
+                        <span>Your AI. Your league data. Your competitive edge.</span>
                     </div>
                     <div className="hv2-signup-actions">
                         <a className="hv2-signup-btn" href={links.signup}>Sign up free</a>
                         <a className="hv2-signup-signin" href={links.signin}>Already a member? Sign in</a>
+                    </div>
+                </div>}
+                {/* Members (owner ask 2026-10-09; live everywhere 2026-10-12): Ask your AI. */}
+                {!guest && !hasKey && <div className="hv2-signup" role="region" aria-label="Ask your AI">
+                    <div className="hv2-signup-copy">
+                        {takeJustJoined()
+                            ? <strong>You're in, <em>Founding Member</em>. Now add your AI.</strong>
+                            : <strong>New: <em>Ask your AI</em></strong>}
+                        <span>Open any league and tap the gold "Ask your AI" button. Ask in plain English and your own AI answers with DHQ's numbers: add your Claude, ChatGPT or Gemini key once and it answers right in the app.</span>
+                    </div>
+                    <div className="hv2-signup-actions">
+                        <button type="button" className="hv2-signup-btn" style={{ border: 0, cursor: 'pointer' }} onClick={() => { if (window.App && window.App.AskDHQ) window.App.AskDHQ.openKeySetup(); }}>Add my AI key</button>
                     </div>
                 </div>}
                 {notices.map(n => <div key={n.key} className="hv2-notice" role="status">

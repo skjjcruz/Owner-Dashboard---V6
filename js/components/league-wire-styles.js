@@ -138,6 +138,82 @@ dialog.wr-journal .wr-journal-bar{position:sticky;top:0;z-index:5}
    headline) and the stories fill two even columns beneath it — a short lead
    can no longer leave an empty box beside a long story column (owner report
    2026-10-06). Narrow screens keep the single stacked column. */
+/* ── Wire desks merged from C2 (2026-10-12): Records, Trends, League life,
+   draft receipts, NFL recaps + player boxes. Same tokens, both themes. ── */
+.wr-wire-record-book,.wr-wire-trends,.wr-wire-life,.wr-wire-lighter-side{grid-column:1/-1;min-width:0;margin:0 0 24px}
+.wr-wire-feature-kicker,.wr-wire-lighter-side>header>span{display:block;font-size:var(--text-micro,.6875rem);font-weight:700;letter-spacing:.08em;color:var(--wj-accent);margin:0}
+:is(.wr-wire-record-book,.wr-wire-trends,.wr-wire-life,.wr-wire-draft-receipts,.wr-wire-lighter-side)>header{border-bottom:2px solid var(--wj-accent-line);padding-bottom:12px;margin-bottom:14px}
+:is(.wr-wire-record-book,.wr-wire-trends,.wr-wire-life,.wr-wire-draft-receipts,.wr-wire-lighter-side)>header h3{font:700 1.4rem/1.15 var(--wj-display);color:var(--wj-ink);margin:6px 0;overflow-wrap:break-word}
+:is(.wr-wire-record-book,.wr-wire-trends,.wr-wire-life,.wr-wire-draft-receipts)>header p{font-size:var(--text-label,.75rem);line-height:1.55;color:var(--wj-muted);margin:0}
+.wr-wire-trends>header button,.wr-wire-draft-actions button,.wr-wire-lighter-side>button,.wr-wire-draft-receipts>button{margin-top:10px;min-height:44px}
+.wr-wire-record-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.wr-wire-record-grid .wr-journal-record{border:1px solid var(--wj-rule);border-radius:var(--card-radius-sm,8px);background:var(--wj-panel);padding:14px}
+.wr-wire-record-holders{list-style:none;margin:10px 0 0;padding:0}
+.wr-wire-record-holders li{display:grid;gap:2px;padding:9px 0;border-top:1px solid var(--wj-rule);font-size:var(--text-label,.75rem);line-height:1.45;min-width:0;overflow-wrap:anywhere}
+.wr-wire-record-holders b{color:var(--wj-ink)}
+.wr-wire-record-holders span{color:var(--wj-muted)}
+.wr-wire-record-holders small{font-size:var(--text-micro,.6875rem);color:var(--wj-faint)}
+.wr-wire-record-holders a{display:inline-flex;align-items:center;min-height:44px;font-size:var(--text-label,.75rem);text-underline-offset:3px}
+.wr-wire-trends-scope{font-size:var(--text-label,.75rem);color:var(--wj-muted);line-height:1.55}
+.wr-wire-trend-group h4{font:700 var(--text-label,.75rem) var(--wj-body);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 10px;color:var(--wj-ink)}
+.wr-wire-trend-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.wr-wire-trend-grid article{border:1px solid var(--wj-rule);border-radius:var(--card-radius-sm,8px);background:var(--wj-panel);padding:12px 14px;min-width:0;overflow-wrap:anywhere}
+.wr-wire-trend-grid article>span{font-size:var(--text-micro,.6875rem);color:var(--wj-faint);letter-spacing:.04em}
+.wr-wire-trend-grid h5{font:700 var(--text-body,1rem)/1.25 var(--wj-display);margin:4px 0 6px;color:var(--wj-ink)}
+.wr-wire-trend-grid strong{display:block;font:700 1.25rem var(--wj-mono);font-variant-numeric:tabular-nums;color:var(--wj-live)}
+.wr-wire-trend-group.is-down .wr-wire-trend-grid strong{color:var(--bad,#e74c3c)}
+.wr-wire-trend-grid strong small{font:500 var(--text-micro,.6875rem) var(--wj-body);color:var(--wj-faint)}
+.wr-wire-trend-grid p{font-size:var(--text-label,.75rem);color:var(--wj-muted);margin:4px 0}
+.wr-wire-trend-grid article>small{font-size:var(--text-micro,.6875rem);color:var(--wj-faint)}
+.wr-wire-trend-grid details{margin-top:6px}
+.wr-wire-trend-grid summary{cursor:pointer;min-height:44px;padding:12px 0;font-size:var(--text-label,.75rem);color:var(--wj-accent)}
+.wr-wire-trend-grid ul{margin:0;padding-left:18px;font-size:var(--text-label,.75rem);color:var(--wj-muted)}
+.wr-wire-life-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:22px}
+.wr-wire-feature-story{border:1px solid var(--wj-rule);border-radius:var(--card-radius-sm,8px);background:var(--wj-panel);padding:14px 16px;min-width:0;overflow-wrap:break-word;margin-bottom:12px}
+.wr-wire-life-grid .wr-wire-feature-story{margin:0}
+.wr-wire-feature-story h4{font:700 1.15rem/1.25 var(--wj-display);color:var(--wj-ink);margin:6px 0 8px}
+.wr-wire-feature-story>p{font-size:var(--text-label,.75rem);line-height:1.6;color:var(--wj-muted);margin:0 0 8px}
+.wr-wire-feature-story>p.wr-wire-feature-kicker{color:var(--wj-accent);margin:0}
+.wr-wire-story-marks{display:none}
+.wr-wire-mark{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;width:42px;height:42px;overflow:hidden;border:1px solid var(--wj-rule-strong);border-radius:50%;background:var(--wj-raised);color:var(--wj-ink);font:700 var(--text-micro,.6875rem) var(--wj-body)}
+.wr-wire-mark img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+@media(max-width:767px){.wr-wire-story-marks{display:flex;float:right;gap:5px;margin:0 0 12px 14px}.wr-wire-story-marks~.wr-wire-people{clear:both}.wr-journal-story.is-lead .wr-wire-story-marks{display:none}.wr-wire-feature-story,.wr-journal-story-copy{display:flow-root}.wr-journal-grid>.wr-journal-story>.wr-journal-art,.wr-wire-lighter-side .wr-journal-story>.wr-journal-art{display:none}.wr-journal-grid>.wr-journal-story{display:block}}
+.wr-wire-people{list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;padding:0}
+.wr-wire-people li{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:5px;max-width:100%;padding:3px 8px;border:1px solid var(--wj-rule);border-radius:var(--card-radius-xs,5px);background:var(--wj-paper);font-size:var(--text-micro,.6875rem);line-height:1.4;overflow-wrap:anywhere}
+.wr-wire-people strong{color:var(--wj-ink);font-weight:650}
+.wr-wire-people span{color:var(--wj-faint)}
+.wr-wire-draft-receipts{border-top:1px solid var(--wj-rule);padding-top:16px;margin-top:8px;min-width:0}
+.wr-wire-draft-actions{display:flex;flex-wrap:wrap;gap:8px}
+.wr-wire-draft-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:12px 0}
+.wr-wire-draft-controls label{display:grid;gap:4px;font-size:var(--text-micro,.6875rem);color:var(--wj-faint);min-width:0}
+.wr-wire-draft-scope{font-size:var(--text-label,.75rem);color:var(--wj-muted);margin:6px 0 12px}
+.wr-wire-owner-notebook{margin-top:16px;min-width:0}
+.wr-wire-owner-notebook h4{font:700 var(--text-title,1.125rem) var(--wj-display);margin:0 0 6px}
+.wr-wire-owner-notebook>p{font-size:var(--text-label,.75rem);color:var(--wj-muted)}
+.wr-wire-owner-notebook summary{cursor:pointer;min-height:44px;padding:12px 0;font-size:var(--text-label,.75rem);color:var(--wj-accent)}
+.wr-wire-draft-table{overflow-x:auto;max-width:100%}
+.wr-wire-draft-table table{border-collapse:collapse;width:100%;font:500 var(--text-label,.75rem) var(--wj-mono);font-variant-numeric:tabular-nums}
+.wr-wire-draft-table caption{text-align:left;color:var(--wj-faint);padding:0 0 8px;font:400 var(--text-micro,.6875rem) var(--wj-body)}
+.wr-wire-draft-table :is(th,td){padding:8px 6px;border-bottom:1px solid var(--wj-rule);text-align:right;white-space:nowrap}
+.wr-wire-draft-table th[scope=row]{text-align:left;font-family:var(--wj-body);white-space:normal;min-width:120px}
+.wr-wire-draft-table th[scope=row] small{display:block;color:var(--wj-faint);font-size:var(--text-micro,.6875rem)}
+.wr-wire-lighter-side{border-top:2px solid var(--wj-rule-strong);padding-top:18px;margin-top:24px;max-width:72ch}
+.wr-wire-lighter-side>header{border-bottom:0;margin-bottom:10px;padding-bottom:0}
+.wr-wire-provisional{display:block;color:var(--wj-accent)!important;font-weight:600;margin-bottom:2px}
+.wr-nfl-story p{font-size:var(--text-label,.75rem);line-height:1.55;color:var(--wj-muted);margin:12px 0 0}
+.wr-nfl-story .wr-nfl-recap strong{color:var(--wj-ink)}
+.wr-nfl-story .wr-nfl-spotlight{margin-top:6px;color:var(--wj-faint)}
+.wr-nfl-player-stats{margin-top:12px;border-top:1px solid var(--wj-rule);padding-top:8px;min-width:0}
+.wr-nfl-player-stats>button{min-height:44px;margin:4px 0}
+.wr-nfl-open-box{display:inline-flex;align-items:center;gap:8px}
+.wr-nfl-standouts{margin:10px 0}
+.wr-nfl-standouts p{margin:4px 0 0}
+.wr-nfl-player-box{min-width:0}
+.wr-nfl-box-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0 12px}
+.wr-nfl-box-filters label{display:grid;gap:4px;font-size:var(--text-micro,.6875rem);color:var(--wj-faint);min-width:0}
+.wr-nfl-box-note{color:var(--wj-faint)}
+.wr-nfl-player-box th[scope=row]{font-family:var(--wj-body);white-space:normal;min-width:110px}
+.wr-nfl-team-stats summary span{float:none}
 @media(min-width:1101px){.wr-journal-main{grid-template-columns:minmax(0,1fr)}.wr-journal-story.is-lead{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:28px;align-items:start}.wr-journal-story.is-lead>.wr-journal-art{max-height:none;height:100%;min-height:230px;margin:0}.wr-journal-main>.wr-journal-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:28px;align-items:start;border-left:0;padding-left:0;margin-top:24px;border-top:1px solid var(--wj-rule)}.wr-journal-main>.wr-journal-grid>.wr-journal-story:nth-child(-n+2){padding-top:17px}}
 .wr-journal-story.is-lead .wr-journal-art-teams{inset:38px 14px 50px}
 .wr-journal-story.is-lead .wr-journal-art-teams>div{gap:6px}
