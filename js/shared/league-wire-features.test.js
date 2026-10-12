@@ -2,7 +2,7 @@
 // League life + identity (C2 tests/league-wire-features.cjs,
 // league-wire-identity.cjs, league-wire-feature-ui.cjs @1be683d, ported).
 // Dynasty HQ differences under test: no opinion pieces (name ratings), owner
-// names only from Sleeper (no sourcebook), and NO logos/avatars anywhere.
+// names only from Sleeper (no sourcebook), team logos as C2 shows them (Sleeper CDN only).
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
@@ -86,9 +86,9 @@ test('Dynasty HQ: no opinion pieces (team-name ratings) and no "favorite" judgme
     assert(!/reviewName|Our favorite|stadium announcement|could use an edit/.test(src));
 });
 
-test('Identity: Sleeper display names only; owner follows the account across slots; ambiguity → unknown; no logos', () => {
+test('Identity: Sleeper display names only; owner follows the account across slots; ambiguity → unknown', () => {
     const root = engines(), api = root.WrWireIdentity;
-    assert.deepEqual(Object.keys(api).sort(), ['forOwner', 'initials', 'resolve'], 'logoSources / storyMarks are not ported (initials only)');
+    assert.deepEqual(Object.keys(api).sort(), ['forOwner', 'initials', 'logoSources', 'resolve', 'storyMarks']);
     const one = { league_id: '1356311207652360192', season: '2026', rosters: [{ roster_id: 7, owner_id: '540392203863576576' }], users: [{ user_id: '540392203863576576', display_name: 'skjjcruz', metadata: { team_name: 'Dirty Mike and the boys' } }] };
     assert.deepEqual(plain(api.resolve(one, 7)), { ownerId: '540392203863576576', ownerName: 'skjjcruz', teamName: 'Dirty Mike and the boys', ownerKnown: true }, 'no private sourcebook name: the Sleeper display name');
     // Even a registered book carrying C2-style owner bindings cannot rename anyone.
@@ -115,8 +115,26 @@ test('Identity: Sleeper display names only; owner follows the account across slo
     assert.equal(api.resolve({ ...accountOnly, rosters: [{ roster_id: 1, owner_id: 'u' }, { roster_id: 1, owner_id: 'v' }] }, 1).ownerId, null, 'duplicate roster slots do not choose an owner');
     assert.equal(api.resolve({ ...accountOnly, users: [{ user_id: 'u', display_name: 'First' }, { user_id: 'u', display_name: 'Other' }] }, 1).ownerKnown, false);
     assert.equal(api.initials('Équipe Montréal'), 'ÉM'); assert.equal(api.initials(''), 'WR');
-    for (const file of ['js/shared/league-wire-identity.js', 'js/shared/league-wire-features.js', 'js/components/league-wire-features.js', 'js/components/league-wire-records.js', 'js/components/league-wire-trends.js', 'js/components/league-wire-nfl.js'])
-        assert(!/sleepercdn\.com|<img|avatar/i.test(read(file).replace(/^\s*\/\/.*$/gm, '')), file + ' shows no logos or avatars');
+});
+
+test('Logos as C2 shows them: team logo, else owner avatar, else initials; Sleeper CDN only; max two per story', () => {
+    const api = engines().WrWireIdentity;
+    const lg = { league_id: 'L', season: '2026', name: 'Test League', avatar: 'leagueav1', rosters: [{ roster_id: 1, owner_id: 'a' }, { roster_id: 2, owner_id: 'b' }, { roster_id: 3, owner_id: 'c' }, { roster_id: 4, owner_id: 'd' }], users: [
+        { user_id: 'a', display_name: 'alice', avatar: 'abc123', metadata: { avatar: 'https://sleepercdn.com/uploads/team-a.jpg' } },
+        { user_id: 'b', display_name: 'blake', avatar: 'def456', metadata: {} },
+        { user_id: 'c', display_name: 'casey', avatar: 'ghi789', metadata: { avatar: 'https://evil.example.com/x.jpg' } },
+        { user_id: 'd', display_name: 'drew', metadata: { avatar: 'https://sleepercdn.com/uploads/../../x.jpg' } }] };
+    assert.deepEqual(plain(api.logoSources(lg, 1)), ['https://sleepercdn.com/uploads/team-a.jpg', 'https://sleepercdn.com/avatars/thumbs/abc123'], 'team logo first, then the owner avatar');
+    assert.deepEqual(plain(api.logoSources(lg, 2)), ['https://sleepercdn.com/avatars/thumbs/def456']);
+    assert.deepEqual(plain(api.logoSources(lg, 3)), ['https://sleepercdn.com/avatars/thumbs/ghi789'], 'a non-Sleeper image is never used');
+    assert.deepEqual(plain(api.logoSources(lg, 4)), [], 'path tricks are rejected → initials');
+    assert.deepEqual(plain(api.logoSources(lg)), ['https://sleepercdn.com/avatars/thumbs/leagueav1'], 'league avatar when no team');
+    assert.deepEqual(plain(api.logoSources({ ...lg, rosters: [...lg.rosters, { roster_id: 1, owner_id: 'z' }] }, 1)), [], 'a conflicting roster slot gets no logo');
+    const marks = api.storyMarks(lg, { rosterIds: [1, 2, 3] });
+    assert.equal(marks.length, 2, 'at most two marks');
+    assert.equal(marks[0].initials, 'AL'); assert.equal(marks[0].sources[0], 'https://sleepercdn.com/uploads/team-a.jpg');
+    assert.equal(api.storyMarks(lg, { documentary: true, eventSeason: 2019 })[0].initials, '2019', 'archive stories carry the season, no logo');
+    assert.equal(api.storyMarks(lg, {})[0].label, 'Test League', 'league stories carry the league mark');
 });
 
 // ── UI ──

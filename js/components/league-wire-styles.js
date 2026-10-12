@@ -174,6 +174,10 @@ dialog.wr-journal .wr-journal-bar{position:sticky;top:0;z-index:5}
 .wr-wire-feature-story h4{font:700 1.15rem/1.25 var(--wj-display);color:var(--wj-ink);margin:6px 0 8px}
 .wr-wire-feature-story>p{font-size:var(--text-label,.75rem);line-height:1.6;color:var(--wj-muted);margin:0 0 8px}
 .wr-wire-feature-story>p.wr-wire-feature-kicker{color:var(--wj-accent);margin:0}
+.wr-wire-story-marks{display:none}
+.wr-wire-mark{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;width:42px;height:42px;overflow:hidden;border:1px solid var(--wj-rule-strong);border-radius:50%;background:var(--wj-raised);color:var(--wj-ink);font:700 var(--text-micro,.6875rem) var(--wj-body)}
+.wr-wire-mark img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+@media(max-width:767px){.wr-wire-story-marks{display:flex;float:right;gap:5px;margin:0 0 12px 14px}.wr-wire-story-marks~.wr-wire-people{clear:both}.wr-journal-story.is-lead .wr-wire-story-marks{display:none}.wr-wire-feature-story,.wr-journal-story-copy{display:flow-root}.wr-journal-grid>.wr-journal-story>.wr-journal-art,.wr-wire-lighter-side .wr-journal-story>.wr-journal-art{display:none}.wr-journal-grid>.wr-journal-story{display:block}}
 .wr-wire-people{list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;padding:0}
 .wr-wire-people li{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:5px;max-width:100%;padding:3px 8px;border:1px solid var(--wj-rule);border-radius:var(--card-radius-xs,5px);background:var(--wj-paper);font-size:var(--text-micro,.6875rem);line-height:1.4;overflow-wrap:anywhere}
 .wr-wire-people strong{color:var(--wj-ink);font-weight:650}

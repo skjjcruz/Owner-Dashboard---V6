@@ -10,19 +10,35 @@
 //     (WrWireDraftHistory.load). Nothing is fetched until the reader taps
 //     "Open draft receipts"; work is scoped to account + league + season +
 //     week and cancelled on change, unmount or a 30s timeout.
-// Dynasty HQ: NO logos or avatars anywhere (owner ruling, Lab 015592e) —
-// C2's phone logo marks (WrWireLogo / WrWireStoryMarks) are not ported. No
-// opinion columns (the Opinion desk is not ported).
+// Team logos as C2 shows them (owner ruling 2026-10-12): WrWireLogo shows the
+// team's Sleeper logo, else the owner's Sleeper avatar, else initials;
+// WrWireStoryMarks puts up to two of them on a story on phones (CSS hides
+// them on wider screens, where the story art carries the badges). No opinion
+// columns (the Opinion desk is not ported).
 // ══════════════════════════════════════════════════════════════════
+function WrWireLogo({ sources = [], initials = 'W', label = '', className = 'wr-wire-mark' }) {
+    const [failed, setFailed] = React.useState([]);
+    const src = (sources || []).find(url => !failed.includes(url));
+    return <span className={className} title={label} aria-hidden="true"><span>{initials}</span>{src && <img key={src} src={src} alt="" width="42" height="42" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(previous => [...previous, src])} />}</span>;
+}
+
+function WrWireStoryMarks({ story, league }) {
+    if (!league || !story) return null;
+    let marks = [];
+    try { marks = window.WrWireIdentity?.storyMarks?.(league, story) || []; } catch (e) { marks = []; }
+    return marks.length ? <div className="wr-wire-story-marks" aria-hidden="true">{marks.map(mark => <WrWireLogo key={mark.key + ':' + mark.sources.join('|')} {...mark} />)}</div> : null;
+}
+
 function WrWirePeople({ participants = [] }) {
     const people = [...new Map((participants || []).filter(p => p?.ownerName).map(p => [p.ownerId || p.ownerName + ':' + p.teamName, p])).values()];
     if (!people.length) return null;
     return <ul className="wr-wire-people" aria-label="Owners and teams">{people.map((p, i) => <li key={p.ownerId || i}><strong>{p.ownerName}</strong>{p.teamName && p.teamName !== p.ownerName && <span>{p.teamSeason ? p.teamSeason + ' · ' : ''}{p.teamName}</span>}</li>)}</ul>;
 }
 
-function WrWireFeatureStory({ story }) {
+function WrWireFeatureStory({ story, league }) {
     const paragraphs = window.WrWireReading?.paragraphs?.(story.body) || String(story.body || '').split(/\n\n+/);
     return <article className="wr-wire-feature-story">
+        <WrWireStoryMarks story={story} league={league} />
         <p className="wr-wire-feature-kicker">{story.label || story.category}</p>
         <h4>{story.text}</h4>
         <WrWirePeople participants={story.participants} />
@@ -42,7 +58,7 @@ function WrWireLeagueLife({ features = [], headToHead = true, league, weeks, pri
         <header><span className="wr-wire-feature-kicker">THE LIGHTER SIDE</span><h3>League life</h3><p>Close calls, tough draws, comebacks and team names — every line from this league’s Sleeper results.</p></header>
         {!headToHead && <p className="wr-journal-footnote">League life stories need head-to-head matchups, so they are off for this league format. Draft receipts are below.</p>}
         {headToHead && !visible.length && <p className="wr-journal-footnote">{features.length ? 'No League life stories match this search or team.' : 'Nothing qualifies this week yet. These stories need completed weeks and close games, big swings or name changes to report.'}</p>}
-        {visible.length > 0 && <div className="wr-wire-life-grid">{visible.map(f => <WrWireFeatureStory key={f.id} story={f} />)}</div>}
+        {visible.length > 0 && <div className="wr-wire-life-grid">{visible.map(f => <WrWireFeatureStory key={f.id} story={f} league={league} />)}</div>}
         <WrWireDraftReceipts league={league} weeks={weeks} priorSeasons={priorSeasons} throughWeek={throughWeek} accountScope={accountScope} search={search} ownerFilter={ownerFilter} />
     </section>;
 }
@@ -125,7 +141,7 @@ function WrWireDraftReceipts({ league, weeks = [], priorSeasons = [], throughWee
             <label>Receipt type<select aria-label="Draft receipt type" value={selected.category} onChange={event => updateFilter('category', event.target.value)}>{[['all', 'All receipts'], ['value', 'Later-pick wins'], ['doover', 'Draft do-overs'], ['late', 'Late-round contributors'], ['workload', 'Lineup gaps']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>}
         {seasons.length > 0 && <p className="wr-wire-draft-scope">Checked seasons: {seasons.join(', ')}. {visible.length} {visible.length === 1 ? 'receipt' : 'receipts'}{filtered ? ' matching this view' : ''}.{current.progress?.remaining > 0 ? ` ${current.progress.remaining} older seasons remain available.` : ''}</p>}
-        {visible.slice(0, selected.limit).map(story => <WrWireFeatureStory key={story.id} story={story} />)}
+        {visible.slice(0, selected.limit).map(story => <WrWireFeatureStory key={story.id} story={story} league={league} />)}
         {visible.length > selected.limit && <button type="button" onClick={() => setFilters({ ...selected, scope, limit: selected.limit + 6 })}>More receipts · {visible.length - selected.limit} remaining</button>}
         {loaded && !loading && !visible.length && current.status !== 'error' && <p className="wr-journal-footnote">{filtered ? 'No receipts match these filters in the checked seasons.' : current.ownerHistories?.length ? 'No comparison met the story threshold. Choose an owner to explore their verified picks.' : 'More completed lineup evidence is needed before publishing a receipt.'}</p>}
         {notebook && <section className="wr-wire-owner-notebook" aria-label={`${notebook.ownerName} draft notebook`}><h4>{notebook.ownerName}’s draft notebook</h4><p>The same owner, across {notebook.seasons.length} checked {notebook.seasons.length === 1 ? 'draft' : 'drafts'}. Each season keeps its own scoring rules; picks with fewer than four verified fantasy starts are omitted.</p>
@@ -135,6 +151,8 @@ function WrWireDraftReceipts({ league, weeks = [], priorSeasons = [], throughWee
         {current.coverage?.length > 0 && <details className="wr-journal-context"><summary>Coverage & comparison rules</summary>{current.coverage.map((item, i) => <p key={i}>{item}</p>)}</details>}
     </section>;
 }
+window.WrWireLogo = WrWireLogo;
+window.WrWireStoryMarks = WrWireStoryMarks;
 window.WrWirePeople = WrWirePeople;
 window.WrWireFeatureStory = WrWireFeatureStory;
 window.WrWireLeagueLife = WrWireLeagueLife;
