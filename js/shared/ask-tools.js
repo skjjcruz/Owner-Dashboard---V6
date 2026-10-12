@@ -489,6 +489,7 @@
 
     register({
         name: 'get_start_sit',
+        timeoutMs: 25000,   // the call plus each player's story (news reads take a few seconds)
         description: 'THE call for any start/sit or lineup question this week, verdict first: which changes to make (start X over Y and the points), confidence, coin-flip close calls with the tiebreak, who must not start (out, doubtful, bye, IR, already played) and Questionable starters in late games with a pivot. Pass `players` when the member names who he is choosing between. Uses DHQ\'s weekly projection in this league\'s scoring, never dynasty value. Lead with `recommendation`.',
         parameters: { type: 'object', properties: {
             players: { type: 'array', items: { type: 'string' }, description: 'Optional: the players the member asked about (names or Sleeper ids).' },
@@ -555,15 +556,15 @@
                 const names = [...new Set((asked.length ? asked.map(pname) : []).concat((res.changes || []).flatMap(c => [c.start, c.sit]).filter(Boolean)))].slice(0, 4);
                 const gp = tools.get('get_player');
                 if (gp && names.length) {
-                    const ctxs = await withTimeout(Promise.all(names.map(n => gp.run({ player: n }, h).catch(() => null))), 8000, []);
+                    const ctxs = await withTimeout(Promise.all(names.map(n => gp.run({ player: n }, h).catch(() => null))), 9000, []);
                     const pc = {};
                     (ctxs || []).forEach((x, i) => {
                         if (!x || x.error) return;
                         const se = x.season || {};
                         pc[names[i]] = {
-                            this_week: x.this_week, injury: x.injury || null, depth: x.depth || undefined,
+                            this_week: x.this_week, injury: x.injury || null, injury_detail: x.injury_detail, depth: x.depth || undefined,
                             season: se.games != null ? { games: se.games, ppg: se.ppg, weeks: se.weeks } : undefined,
-                            news: (x.news || []).slice(0, 3),
+                            report: x.report, news: x.news ? x.news.slice(0, 3) : undefined, news_note: x.news_note,
                         };
                     });
                     if (Object.keys(pc).length) {
@@ -572,7 +573,8 @@
                     }
                 }
             } catch (e) { /* the call stands without context */ }
-            return Object.assign({ team: label(r) }, res);
+            // The call and the story first: a long reply is trimmed from the end.
+            return Object.assign({ team: label(r), recommendation: res.recommendation, player_context: res.player_context, answer_with_context: res.answer_with_context }, res);
         },
     });
 
