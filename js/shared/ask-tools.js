@@ -111,7 +111,7 @@
     const lock = pid => (App.GameLocks && App.GameLocks.state ? App.GameLocks.state(String(pid)) : null);
     const injury = pid => { const p = pl(pid); return p.injury_status ? p.injury_status + (p.injury_body_part ? ' (' + p.injury_body_part + ')' : '') : null; };
     // This week for one player: actual points once his game started, else
-    // DHQ's projection (median shown, as Game Day does), else Sleeper's.
+    // DHQ's projection (the number the Lineup screen shows). Never Sleeper's.
     function thisWeek(pid) {
         const g = lock(pid);
         const out = {};
@@ -237,7 +237,7 @@
     const TAG_REASON = { OUT: 'out', DOUBTFUL: 'doubtful', D: 'doubtful', IR: 'IR', 'INJURED RESERVE': 'IR', PUP: 'PUP', SUS: 'suspended', SUSPENDED: 'suspended', NA: 'not active (NA)', NFI: 'NFI', COV: 'COVID list', DNR: 'did not report' };
     // Why a player projects 0 (or has no number) this week; null if he has a
     // real projection or is locked. bye · out · doubtful · IR · … ·
-    // no_sleeper_line (Sleeper projects nothing for him: backup or no role,
+    // not_projected (Sleeper projects nothing for him: backup or no role,
     // truth law) · no_projection (DHQ has no number, e.g. a team defense) ·
     // no_role (DHQ projects him for 0).
     function zeroReason(pid, r, wk) {
@@ -249,7 +249,7 @@
         const tag = String(p.injury_status || '').trim().toUpperCase();
         if (tag && TAG_REASON[tag]) return TAG_REASON[tag];
         if (/^IR\b/.test(tag)) return 'IR';
-        if (r && r.noSleeper) return 'no_sleeper_line';
+        if (r && r.noSleeper) return 'not_projected';
         if (!r) return 'no_projection';
         return 'no_role';
     }
@@ -471,7 +471,7 @@
         ];
         if (F.win_pct != null) evidence.push('Win chance with the best lineup: ' + Math.round(F.win_pct) + '%.');
         evidence.push(F.locks_loaded ? 'Game locks checked: ' + locked.length + ' of your players\' games have started.' : 'Game locks NOT loaded: could not confirm whose game has started.');
-        if (F.sleeper_loaded === false) evidence.push('Sleeper\'s lines for this week are not loaded, so DHQ numbers are not checked against them.');
+        if (F.sleeper_loaded === false) evidence.push('This week\'s projection inputs are not all loaded yet, so treat the numbers as provisional.');
         rules.unshift('Ranked by DHQ\'s average week in this league\'s scoring, never by dynasty value.');
         if ((F.not_found || []).length) evidence.push('No player found for: ' + F.not_found.join(', ') + '.');
 

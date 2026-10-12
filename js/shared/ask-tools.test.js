@@ -190,8 +190,8 @@ test('scenario 16: truth law — a rostered player with no Sleeper line reads 0 
     const a = out.asked[0];
     assert.equal(a.player, 'Zonovan Knight');
     assert.equal(a.proj, 0, 'never quoted with a non-zero number');
-    assert.equal(a.verdict, "don't start: no_sleeper_line");
-    assert.deepEqual(out.do_not_start.find(x => x.player === 'Zonovan Knight'), { player: 'Zonovan Knight', reason: 'no_sleeper_line' });
+    assert.equal(a.verdict, "don't start: not_projected");
+    assert.deepEqual(out.do_not_start.find(x => x.player === 'Zonovan Knight'), { player: 'Zonovan Knight', reason: 'not_projected' });
     const adv = await T.run('get_lineup_advice', {});
     assert.ok(!adv.start.some(x => x.name === 'Zonovan Knight'));
 });
