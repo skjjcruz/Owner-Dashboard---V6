@@ -708,7 +708,7 @@
     ].join('\n');
     function el(tag, cls, text) { const e = root.document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
     let ui = null;
-    function brainLabel(b) { const k = savedKey(); return b === 'key' && k ? 'Your ' + PROVIDERS[k.provider].label + ' key' : b === 'device' ? 'Your device\'s AI · free' : b === 'device-download' ? 'Your device\'s AI (sets up on first ask)' : 'Your ChatGPT or Claude'; }
+    function brainLabel(b) { const k = savedKey(); return b === 'key' && k ? 'Your ' + PROVIDERS[k.provider].label + ' key' : b === 'device' ? 'Your device\'s AI · free' : b === 'device-download' ? 'Your device\'s AI (sets up on first ask)' : (root.DHQ_LAB === true ? 'Your ChatGPT or Claude' : 'Add your AI key'); }
     // Paste-your-key card: one box, the company is read from the key.
     function keyCard(note, retryQ) {
         const box = el('div', 'askdhq-a askdhq-key');
