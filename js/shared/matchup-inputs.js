@@ -1066,7 +1066,14 @@
             if (!teamPlayed) for (const mid of Object.keys(wk.stats)) { const m = players[mid]; if (m && String(m.team || '').toUpperCase() === team && num(wk.stats[mid].gp) >= 1) { teamPlayed = true; break; } }
             if (!teamPlayed) continue;
             const st = wk.stats[pid];
-            if (!st || !(num(st.gp) >= 1)) return 0;
+            if (!st || !(num(st.gp) >= 1)) {
+                // Missed the team's last game but healthy now: his last game
+                // played says how much he plays, not the zero (Aaron Donald,
+                // week 5 2026: out in week 4, cut to 15% and projected 0.7;
+                // weeks 1-5 replay 2591-2044 to 2591-2041, DB 590-448 to 595-442)
+                if (!OUT_FOR_SHARE[statusOf(players[pid], ctx)] && weeks.some(w2 => w2.week < wk.week && w2.stats[pid] && num(w2.stats[pid].gp) >= 1)) continue;
+                return 0;
+            }
             const mine = num(side === 'def' ? st.def_snp : st.off_snp), all = num(side === 'def' ? st.tm_def_snp : st.tm_off_snp);
             return all > 0 ? clamp((mine || 0) / all, 0, 1) : null;
         }
