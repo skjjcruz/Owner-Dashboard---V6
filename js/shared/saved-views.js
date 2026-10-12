@@ -136,8 +136,10 @@
             });
             refresh();
         }
-        function doDelete(id) {
-            if (!confirm('Delete this saved view?')) return;
+        async function doDelete(id) {
+            // In-app box (js/shared/dhq-dialogs.js): the native app can't show confirm().
+            const yes = typeof window.dhqConfirm === 'function' ? await window.dhqConfirm('Delete this saved view?', { ok: 'Delete', danger: true }) : confirm('Delete this saved view?');
+            if (!yes) return;
             API.remove(surface, leagueId, id);
             if (activeId === id) setActiveId(null);
             refresh();

@@ -1098,13 +1098,16 @@
         };
     }
 
+    // Clipboard first; when the browser or the native app blocks it, the
+    // in-app copy box (js/shared/dhq-dialogs.js) shows the text with a Copy
+    // button (resolves true only once it is really copied).
     function copyText(text) {
         if (!text) return Promise.resolve(false);
+        const box = () => (typeof window.dhqCopyText === 'function' ? window.dhqCopyText('Copy live offer summary:', text) : Promise.resolve(false));
         if (navigator.clipboard?.writeText) {
-            return navigator.clipboard.writeText(text).then(() => true).catch(() => false);
+            return navigator.clipboard.writeText(text).then(() => true).catch(box);
         }
-        window.prompt('Copy live offer summary:', text);
-        return Promise.resolve(true);
+        return box();
     }
 
     function miniBtn(color) {

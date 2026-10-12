@@ -537,11 +537,14 @@
             persistBoardPatch({ tags: { [pid]: next }, activeLane: boardLane });
         };
 
-        const _onEditNote = (player) => {
+        // In-app text boxes (js/shared/dhq-dialogs.js): the native app can't
+        // show prompt(). Same contract: null = Cancel, '' = cleared.
+        const askText = (message, value) => (typeof window.dhqPrompt === 'function' ? window.dhqPrompt(message, { value, ok: 'Save' }) : Promise.resolve(prompt(message, value)));
+        const _onEditNote = async (player) => {
             const pid = idOf(player);
             if (!pid) return;
             const current = entryFor(player).note || '';
-            const next = prompt('Private board note for ' + (player.name || 'player') + ':', current);
+            const next = await askText('Private board note for ' + (player.name || 'player') + ':', current);
             if (next === null) return;
             persistBoardPatch({ notes: { [pid]: next.trim() }, activeLane: boardLane });
         };
@@ -608,11 +611,11 @@
             saveManualOrder(order);
         };
 
-        const _onEditTier = (player) => {
+        const _onEditTier = async (player) => {
             const pid = idOf(player);
             if (!pid) return;
             const current = entryFor(player).tier || player.tier || player.csv?.tier || '';
-            const raw = prompt('Tier for ' + (player.name || 'player') + ' (1-12, blank to clear):', current ? String(current) : '');
+            const raw = await askText('Tier for ' + (player.name || 'player') + ' (1-12, blank to clear):', current ? String(current) : '');
             if (raw === null) return;
             const trimmed = raw.trim();
             const value = trimmed === '' ? 0 : parseInt(trimmed, 10);

@@ -2769,7 +2769,7 @@
         }, []);
 
         const requestFullDraftReport = useCallback(() => {
-            if (!rosterState.isUsable) { alert(rosterState.message); return; }
+            if (!rosterState.isUsable) { (window.dhqNotice || window.alert)(rosterState.message); return; }
             const needs = needLabels.map(n => n.pos + (n.urgency === 'deficit' ? ' critical' : '')).join(', ') || 'balanced';
             const picks = myPicks.filter(p => p.year === leagueSeason).map(fmtPick).join(', ') || 'unknown';
             const prompt = isRookieDraft
