@@ -528,7 +528,16 @@
     const clip = o =>{ let s = ''; try { s = JSON.stringify(o); } catch (e) { s = '{"error":"unreadable"}'; } return s.length > 24000 ? s.slice(0, 24000) + '…(trimmed)' : s; };
     const chat = [];
     const CHAT_TURNS = 6;
-    async function askWithKey(question, onStep) {
+    // A deleted question leaves the AI's memory too, so follow-ups never
+    // lean on it (owner ask 2026-10-12: delete questions from the thread).
+    function forgetTurn(id) {
+        if (id == null) return;
+        for (let i = chat.length - 1; i >= 0; i--) if (chat[i].id === id) chat.splice(i, 1);
+    }
+    // turn (optional): { id, deleted } from the thread. Deleting the question
+    // while the AI works stops the request and keeps the answer out of memory.
+    async function askWithKey(question, onStep, turn) {
+        if (turn && turn.deleted) return { ok: false, deleted: true, error: 'deleted' };
         if (!consentOk()) return { ok: false, error: 'Agree to send your league data to your AI first.', consent: true };
         const k = savedKey();
         if (!k) return { ok: false, error: 'no key' };
@@ -543,6 +552,7 @@
         const deep = /\b(trade|offer|deal|sell|buy|package|cut|drop|release|waive)\b/i.test(question);
         const ctl = root.AbortController ? new root.AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), 120000) : null;
+        if (turn) turn.abort = () => { try { if (ctl) ctl.abort(); } catch (e) { /* already done */ } };
         const signal = ctl && ctl.signal;
         const used = [];
         let sources = [], noSearch = false;
@@ -660,13 +670,15 @@
                 }
             }
         } catch (e) {
+            if (turn && turn.deleted) return { ok: false, deleted: true, error: 'deleted' };
             return { ok: false, retry: true, error: 'Couldn\'t reach ' + PROVIDERS[k.provider].label + '. Check your connection.' };
-        } finally { if (timer) clearTimeout(timer); }
+        } finally { if (timer) clearTimeout(timer); if (turn) turn.abort = null; }
+        if (turn && turn.deleted) return { ok: false, deleted: true, error: 'deleted' };
         const seen = new Set();
         sources = sources.filter(x => { const key = String(x.url).split('#')[0]; if (seen.has(key)) return false; seen.add(key); return true; }).slice(0, 4);
         text = String(text || '').trim();
         if (!text) return { ok: false, error: PROVIDERS[k.provider].label + ' sent back an empty answer.' };
-        chat.push({ q: question, a: text }); if (chat.length > CHAT_TURNS) chat.shift();
+        chat.push({ id: turn ? turn.id : null, q: question, a: text }); if (chat.length > CHAT_TURNS) chat.shift();
         return { ok: true, text, provider: k.provider, sources, noSearch, used };
     }
 
@@ -693,7 +705,10 @@
         '.askdhq-brain{font-size:.7rem;color:#9a9a9a;margin-left:auto}',
         '.askdhq-x{background:none;border:0;color:#9a9a9a;font-size:1.1rem;cursor:pointer;padding:2px 4px}',
         '.askdhq-log{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px}',
-        '.askdhq-q{align-self:flex-end;max-width:85%;background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.3);border-radius:var(--card-radius-sm,8px);padding:7px 10px}',
+        '.askdhq-q{position:relative;align-self:flex-end;max-width:85%;background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.3);border-radius:var(--card-radius-sm,8px);padding:7px 34px 7px 10px}',
+        // Owner ask 2026-10-12: a little x on each question deletes it (and its answer) from the thread.
+        '.askdhq-del{position:absolute;top:0;right:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:inherit;opacity:.55;font:400 18px/1 system-ui,sans-serif;cursor:pointer}',
+        '.askdhq-del:hover,.askdhq-del:focus-visible{opacity:1}',
         '.askdhq-a{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:var(--card-radius-sm,8px);padding:9px 11px}',
         '.askdhq-a h4{margin:0 0 4px;font-size:.72rem;letter-spacing:.06em;color:var(--gold,#D4AF37);text-transform:uppercase}',
         '.askdhq-a p{margin:0}',
@@ -739,7 +754,7 @@
             // Owner ask 2026-10-09: once the key is in, fold the box up to
             // one line so nothing looks unfinished.
             box.replaceChildren(el('p', null, '✓ ' + (ok === 'ok' ? 'Your ' + PROVIDERS[prov].label + ' key is saved and working.' : 'Your ' + PROVIDERS[prov].label + ' key is saved.') + (retryQ ? ' Asking your question again…' : ' Ask away below.')));
-            if (retryQ) { box.remove(); const last = ui && ui.log.lastElementChild; if (last && last.classList.contains('askdhq-q') && last.textContent === retryQ) last.remove(); ask(retryQ); return; }
+            if (retryQ) { box.remove(); const last = ui && ui.log.lastElementChild; if (last && last.classList.contains('askdhq-q') && last.dataset.q === retryQ) last.remove(); ask(retryQ); return; }
             // Owner ask 2026-10-11: on the leagues page the box closes once the
             // key is in; the member finds Ask your AI inside any league.
             const onLeaguesPage = !!root.document.querySelector('.hv2-shell');
@@ -805,11 +820,33 @@
         box.appendChild(el('div', 'askdhq-src', connector ? 'ChatGPT and Claude use your plan with the Dynasty HQ connector. With your own key, or on Chrome for desktop, your AI answers right here.' : 'Add your Claude, ChatGPT or Gemini key once and your AI answers right here.'));
         return box;
     }
+    let turnSeq = 0;
+    // The question bubble with its x. A turn is the bubble plus everything
+    // after it up to the next question (answer, consent box, key card…).
+    function questionBubble(q, turn) {
+        const qEl = el('div', 'askdhq-q');
+        qEl.dataset.q = q;
+        qEl.appendChild(el('span', null, q));
+        const x = el('button', 'askdhq-del', '×'); x.type = 'button';
+        x.setAttribute('aria-label', 'Delete this question'); x.title = 'Delete this question';
+        x.onclick = () => {
+            turn.deleted = true;
+            if (typeof turn.abort === 'function') turn.abort();
+            forgetTurn(turn.id);
+            let n = qEl.nextElementSibling;
+            while (n && !n.classList.contains('askdhq-q')) { const next = n.nextElementSibling; n.remove(); n = next; }
+            qEl.remove();
+            if (ui && ui.input) { try { ui.input.focus(); } catch (e) { /* no focus */ } }
+        };
+        qEl.appendChild(x);
+        return qEl;
+    }
     async function ask(question) {
         if (!ui) return;
         const q = String(question || '').trim();
         if (!q) return;
-        ui.log.appendChild(el('div', 'askdhq-q', q));
+        const turn = { id: ++turnSeq, deleted: false, abort: null };
+        ui.log.appendChild(questionBubble(q, turn));
         // Owner test 2026-10-09: asked from the leagues page (no league open)
         // and the panel just repeated its examples. Say what's needed, keep
         // the question, and ask it as soon as a league opens.
@@ -845,7 +882,7 @@
             cbox.appendChild(el('p', null, CONSENT_TEXT));
             const more = el('div', 'askdhq-more');
             const ok = el('button', 'askdhq-send', 'I agree'); ok.type = 'button'; ok.style.padding = '8px 14px';
-            ok.onclick = () => { recordConsent(); cbox.remove(); const last = ui && ui.log.lastElementChild; if (last && last.classList.contains('askdhq-q') && last.textContent === q) last.remove(); ask(q); };
+            ok.onclick = () => { recordConsent(); cbox.remove(); const last = ui && ui.log.lastElementChild; if (last && last.classList.contains('askdhq-q') && last.dataset.q === q) last.remove(); ask(q); };
             const no = el('button', 'askdhq-chip', 'Not now'); no.type = 'button';
             no.onclick = () => { cbox.replaceChildren(el('p', null, 'Nothing was sent. Ask again whenever you\'re ready.')); };
             more.appendChild(ok); more.appendChild(no); cbox.appendChild(more);
@@ -864,9 +901,10 @@
             // Show what it's looking at while it works ("Checking standings…").
             const looked = [];
             const onStep = w => { if (!looked.includes(w)) looked.push(w); p.textContent = 'Checking ' + looked.slice(-3).join(', ') + '…'; };
-            let res = await askWithKey(q, onStep);
+            let res = await askWithKey(q, onStep, turn);
             // One quiet retry for a blip (busy, timeout, dropped connection).
-            if (!res.ok && res.retry) { await new Promise(rs => setTimeout(rs, 1500)); res = await askWithKey(q, onStep); }
+            if (!res.ok && res.retry && !turn.deleted) { await new Promise(rs => setTimeout(rs, 1500)); res = await askWithKey(q, onStep, turn); }
+            if (turn.deleted) return;
             if (res.ok) {
                 // **bold** from the AI shows as bold (text nodes only, never HTML).
                 p.textContent = '';
@@ -1064,7 +1102,7 @@
         }, 1500);
     }
 
-    App.AskDHQ = App.AskDHQ || { consentOk, recordConsent, isMember, isGuest, membersOnly, openKeySetup, answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help, _checkAnswer: checkAnswer };
+    App.AskDHQ = App.AskDHQ || { forgetTurn, consentOk, recordConsent, isMember, isGuest, membersOnly, openKeySetup, answer, findPlayers, intentOf, brain, narrate, askElsewhereUrl, providerOf, saveKey, savedKey, forgetKey, askWithKey, mount, _help: help, _checkAnswer: checkAnswer };
     // Every AI request in the app funnels through OD.callAI or callClaude.
     // For a guest, one the guest started with a tap shows the members-only
     // card; background ones fail quietly as before. Members are untouched.

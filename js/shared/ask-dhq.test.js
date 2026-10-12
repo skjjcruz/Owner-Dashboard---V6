@@ -240,6 +240,39 @@ test('follow-ups carry the conversation; "waivers" still reads as a waiver quest
     A.forgetKey(); globalThis.fetch = realFetch;
 });
 
+// Owner ask 2026-10-12: a little x deletes a question from the thread. The AI
+// forgets it too, and one deleted while the AI works is stopped and never kept.
+test('deleted questions leave the AI\'s memory; one deleted mid-answer is stopped and never kept', async () => {
+    const realFetch = globalThis.fetch; let body = null; let hold = null;
+    globalThis.fetch = async (url, opts) => {
+        body = JSON.parse(opts.body);
+        const q = body.messages[body.messages.length - 1].content;
+        if (q === 'SLOW') await new Promise((res, rej) => { hold = res; if (opts.signal) opts.signal.addEventListener('abort', () => rej(new Error('aborted'))); });
+        return { ok: true, status: 200, json: async () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'answer to ' + q }] }) };
+    };
+    try {
+        A.saveKey('sk-ant-api03-abcdefghijklmnop');
+        const t1 = { id: 'k1', deleted: false }, t2 = { id: 'k2', deleted: false };
+        assert.equal((await A.askWithKey('KEEP', null, t1)).ok, true);
+        assert.equal((await A.askWithKey('DROP', null, t2)).ok, true);
+        A.forgetTurn('k2');
+        await A.askWithKey('NEXT', null, { id: 'k3', deleted: false });
+        const said = body.messages.map(m => typeof m.content === 'string' ? m.content : '').join(' | ');
+        assert.match(said, /KEEP/); assert.doesNotMatch(said, /DROP/, 'the deleted question is not sent again');
+        // Deleted while the AI is still working: the request stops, nothing is kept.
+        const t4 = { id: 'k4', deleted: false };
+        const pending = A.askWithKey('SLOW', null, t4);
+        await new Promise(r => setTimeout(r, 20));
+        t4.deleted = true; assert.equal(typeof t4.abort, 'function'); t4.abort();
+        const r4 = await pending;
+        assert.equal(r4.ok, false); assert.equal(r4.deleted, true); assert.notEqual(r4.retry, true, 'no quiet retry for a deleted question');
+        await A.askWithKey('AFTER', null, { id: 'k5', deleted: false });
+        const said2 = body.messages.map(m => typeof m.content === 'string' ? m.content : '').join(' | ');
+        assert.doesNotMatch(said2, /SLOW/, 'the deleted in-flight question never entered the memory');
+        if (hold) hold();
+    } finally { A.forgetKey(); globalThis.fetch = realFetch; }
+});
+
 test('owner report 2026-10-09: the key survives the shared client wiping device secrets, and is only the member\'s', () => {
     globalThis.OD = { identity: { currentOwner: () => 'account:steve' } };
     A.saveKey('sk-ant-api03-abcdefghijklmnop');
