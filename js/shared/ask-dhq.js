@@ -766,7 +766,9 @@
             }
             if (ui) ui.input.focus();
         };
-        box.appendChild(f); box.appendChild(agreeRow); box.appendChild(msg);
+        // Owner ask 2026-10-12: a spending limit caps the damage if a key is ever stolen.
+        const tip = el('div', 'askdhq-src', 'Tip: set a monthly spending limit on this key in your Claude, ChatGPT or Gemini account, so it can never run up a big bill.');
+        box.appendChild(f); box.appendChild(agreeRow); box.appendChild(msg); box.appendChild(tip);
         const more = el('div', 'askdhq-more');
         const free = el('a', 'askdhq-chip', 'Get a free Gemini key'); free.href = 'https://aistudio.google.com/apikey'; free.target = '_blank'; free.rel = 'noopener'; more.appendChild(free);
         if (savedKey()) { const rm = el('button', 'askdhq-chip', 'Remove my key'); rm.type = 'button'; rm.onclick = () => { forgetKey(); msg.textContent = 'Removed from this device.'; if (ui) brain().then(x => { ui.brain.textContent = brainLabel(x); }); }; more.appendChild(rm); }
@@ -913,7 +915,7 @@
                 src.textContent = 'Answered by your ' + PROVIDERS[k.provider].label + '. Your key stays on this device.' + (res.noSearch ? ' (Web search isn\'t turned on for this key, so no news lookups.)' : '');
                 if (res.sources && res.sources.length) {
                     const row = el('div', 'askdhq-more');
-                    res.sources.forEach(x => { let host = ''; try { host = new URL(x.url).hostname.replace(/^www\./, ''); } catch (e) { return; } const a = el('a', 'askdhq-chip', host); a.href = x.url; a.target = '_blank'; a.rel = 'noopener'; if (x.title) a.title = x.title; row.appendChild(a); });
+                    res.sources.forEach(x => { let host = ''; try { const u = new URL(x.url); if (!/^https?:$/.test(u.protocol) || !u.hostname) return; host = u.hostname.replace(/^www\./, ''); } catch (e) { return; } const a = el('a', 'askdhq-chip', host); a.href = x.url; a.target = '_blank'; a.rel = 'noopener'; if (x.title) a.title = x.title; row.appendChild(a); });
                     if (row.childNodes.length) box.insertBefore(row, src);
                 }
             } else {

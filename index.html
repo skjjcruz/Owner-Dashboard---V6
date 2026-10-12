@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://skjjcruz.github.io https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://hovnqztlbsgsywrbidbh.supabase.co https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.sleeper.app https://site.api.espn.com https://sports.core.api.espn.com https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://site.web.api.espn.com https://fantasysports.yahooapis.com https://api.fantasycalc.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://skjjcruz.github.io/DHQ-Web-Page/data/; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://sxshiqyxhhifvtfqawbq.supabase.co https://hovnqztlbsgsywrbidbh.supabase.co https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.sleeper.app https://site.api.espn.com https://sports.core.api.espn.com https://api.myfantasyleague.com https://*.myfantasyleague.com https://lm-api-reads.fantasy.espn.com https://site.web.api.espn.com https://fantasysports.yahooapis.com https://api.fantasycalc.com https://*.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none';">
 
     <!-- Early auth gate: bounce signed-out visitors to the sign-in page BEFORE the
          React/Babel app (~80 modules, multi-second in-browser compile) loads, so
@@ -123,7 +123,6 @@
          parse. Preloads never execute — the document.write chain in <body>
          still owns execution order. (No crossorigin on the preconnect/preloads:
          classic scripts fetch no-cors, and the connection must match.) -->
-    <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="preload" as="script" href="vendor/supabase.min.js">
     <link rel="preload" as="script" href="vendor/react.production.min.js">
     <link rel="preload" as="script" href="vendor/react-dom.production.min.js">
@@ -146,6 +145,14 @@ const WR_PLATFORM_SANDBOX_ACCESS = window.SANDBOX_MODE === true
 // The /api/dev-* proxies only exist in the local static dev server
 // (scripts/serve-static.cjs).
 const WR_IS_NATIVE_APP = false; // web-only build — never a native app shell
+// Security (owner ask 2026-10-12): no code is fetched live from outside
+// sites. Error reporting loads our own copy of the Sentry SDK (vendor/),
+// and this page's script-src allows only this site plus our own Lab's
+// data folder (the PFF + usage snapshots that DHQ projections read).
+(function () {
+  const prev = window.DYNASTY_HQ_CONFIG || {};
+  window.DYNASTY_HQ_CONFIG = { ...prev, sentry: { ...(prev.sentry || {}), sdkUrl: 'vendor/sentry-8.55.0/bundle.min.js' } };
+})();
 const _isLocalDev = !WR_IS_NATIVE_APP && ['localhost', '127.0.0.1'].includes(window.location.hostname || '');
 if (_isLocalDev) {
   const existingConfig = window.DYNASTY_HQ_CONFIG || {};
@@ -3121,7 +3128,6 @@ WRShared.preloadMany(WR_SHARED_FILES);
     </script>
 
 <script src="vendor/supabase.min.js"></script>
-<script>window.supabase||document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"><\/script>')</script>
 <!-- Shared module list + WRShared live in <head> (preloaded there); this
      document.write chain just executes them, in order, from the warm cache. -->
 <script>WRShared.loadMany(WR_SHARED_FILES);</script>
@@ -3138,10 +3144,10 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script src="draft-history.js"></script>
 <script src="charts.js"></script>
 <!-- html2canvas is lazy-loaded on first export via window.ensureHtml2Canvas() (defined in js/export.js) -->
-<script src="js/export.js"></script>
+<script src="js/export.js?v=20261012vendor1"></script>
 <script src="vendor/react.production.min.js"></script>
 <script src="vendor/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.2/babel.min.js"></script>
+<script src="vendor/@babel/standalone-7.29.7/babel.min.js"></script>
 
 <!-- 0. Theme engine — must load before any widget/component (plain JS, no Babel needed) -->
 <script src="js/theme.js?v=20260526lightgate1"></script>
@@ -3189,7 +3195,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
 <script src="js/shared/ask-tools-players.js?v=20261010waiver1"></script>
 <script src="js/shared/ask-tools-roster.js?v=20261010roster5"></script>
 <script src="js/shared/ask-tools-moves.js?v=20261010tone2"></script>
-<script src="js/shared/ask-dhq.js?v=20261012del1"></script>
+<script src="js/shared/ask-dhq.js?v=20261012tip1"></script>
 <script src="js/shared/dhq-proj.js?v=20261012proj8"></script>
 <script src="js/shared/nfl-context.js?v=20260929proj1"></script>
 <script src="js/shared/matchup.js?v=20260927live2"></script>
@@ -3254,7 +3260,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
      boot. js/module-loader.js injects executable copies, in DOM order within each
      group, when the owning surface first calls wrLoadModuleGroup('<group>'). -->
 <script src="js/module-loader.js?v=20260927fix3"></script>
-<script type="text/babel" src="js/settings.js?v=20261012dlg1"></script>
+<script type="text/babel" src="js/settings.js?v=20261012tip1"></script>
 <script type="text/babel" data-wr-defer="trade" src="js/trade-calc.js?v=20261010find2"></script>
 <script type="text/babel" src="js/post-draft.js?v=20260907b112"></script>
 <!-- FA waiver tools (C2 wave): stat catalog + stat math, market display helpers, waiver engine (fa group, before free-agency.js) -->

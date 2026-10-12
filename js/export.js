@@ -46,7 +46,7 @@
     if (_h2cPromise) return _h2cPromise;
     _h2cPromise = new Promise(function (resolve, reject) {
       var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      s.src = 'vendor/html2canvas-1.4.1/html2canvas.min.js'; // our own copy (owner ask 2026-10-12: no live outside code)
       s.async = true;
       s.onload = function () { resolve(window.html2canvas); };
       s.onerror = function () { _h2cPromise = null; reject(new Error('html2canvas failed to load')); };

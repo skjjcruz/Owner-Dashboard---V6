@@ -18,6 +18,14 @@ React loads with it.
 |------|---------|---------|
 | `react.production.min.js`     | `react`     | 18.3.1 |
 | `react-dom.production.min.js` | `react-dom` | 18.3.1 |
+| `supabase.min.js` | `@supabase/supabase-js` | 2.101.1 |
+| `@babel/standalone-7.29.7/babel.min.js` | `@babel/standalone` (from npm, package-lock) | 7.29.7 — only for un-built pages (local dev / raw source); the deploy build strips it |
+| `sentry-8.55.0/bundle.min.js` | Sentry browser SDK (the CDN bundle the site loaded since May 2025, unchanged since its Feb 2025 release) | 8.55.0 |
+| `html2canvas-1.4.1/html2canvas.min.js` | `html2canvas` (byte-identical to the npm release) | 1.4.1 |
+
+Owner ask 2026-10-12 (AI-key security): no page loads code live from an
+outside site. Every page's `script-src` allows only this site, and
+`js/shared/no-outside-code.test.js` fails if an outside script comes back.
 
 These are the official UMD production builds (unmodified).
 
