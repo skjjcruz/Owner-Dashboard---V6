@@ -190,8 +190,29 @@
         }
         return null;
     }
+    // Owner report 2026-10-12: a phone often did not finish the ~160 ESPN
+    // coach calls, so the app scored without coaching (Aaron Donald 4.5)
+    // while the server scored with it (4.6). The Lab's usage snapshot
+    // (data/usage-snapshot.js, refreshed every six hours, also loaded by
+    // the server build) now carries each head coach's staff record, so
+    // every device and the server score coaching from the same numbers.
+    // ESPN live is only the fallback when the snapshot is missing or
+    // incomplete.
+    function coachingFromSnapshot(season) {
+        const U = root.DhqUsage;
+        if (!U || Number(U.season) !== Number(season) || !U.teams) return null;
+        const out = {};
+        for (const c of Object.keys(U.teams)) {
+            const hc = U.teams[c] && U.teams[c].hc, st = hc && hc.staff;
+            if (!st || !st.regular || !st.playoffs) continue;
+            out[c] = { name: hc.name, experience: num(st.experience) || 0, regular: st.regular, playoffs: st.playoffs, score: staffScore(st.experience, st.regular, st.playoffs), source: 'snapshot' };
+        }
+        return Object.keys(out).length >= 30 ? out : null;
+    }
     async function coaching(season) {
         season = season || currentSeason();
+        const snap = coachingFromSnapshot(season);
+        if (snap) return snap;
         // A cached map with holes (from before LAB54, or a tab that kept one)
         // is not a hit: rebuild the missing teams instead of trusting it.
         const hit = cacheGet('coaching_' + season);
@@ -266,7 +287,7 @@
     }
 
     App.MatchupFeeds.espn = {
-        teams, standings, coaching, schedule, headToHead, gameFor, staffScore, currentSeason,
+        teams, standings, coaching, coachingFromSnapshot, schedule, headToHead, gameFor, staffScore, currentSeason,
         _cache: { get: cacheGet, set: cacheSet },
     };
     /* global module */
