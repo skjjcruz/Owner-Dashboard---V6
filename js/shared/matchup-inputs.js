@@ -70,6 +70,42 @@
         medTdWrTeHi: 0.25,      //   ... sliding to this share from medTdLoTgt to medTdHiTgt targets
         medTdLoTgt: 7, medTdHiTgt: 9,
         medTdRb: 0.5,           // RB: TD-skew term (see median below)
+        medTdTe: null,          // TE: share of expected TD points off (null = same slide as WR)
+        // How much a player's own share this season says about next week,
+        // by games played (see rawShareFor). With a track record behind
+        // him his first games count games/(games+trackClampK) until
+        // trackClampGames; 0 turns that clamp off.
+        earnedW: [0.3, 0.45, 0.6, 0.85],   // 0, 1, 2, 3+ games
+        trackClampGames: 6, trackClampK: 2,
+        // Share of the team's ball a whole position room takes (the cap the
+        // room is scaled down to) and how many games of last season's pace
+        // the team pie is blended with. null = the tables below.
+        // Backfields took 47.7% of their team's touches in weeks 1-5 2026
+        // (median 47.7%, 156 team-weeks); the 2025 table said 46%.
+        roomShareRb: 0.48, roomShareWr: null, roomShareTe: null,
+        piePhantom: null,
+        // How a room over its cap is scaled back (replay of weeks 1-5 2026,
+        // owner ask 2026-10-12): 'uniform' cut every man the same, so a
+        // starter's measured share paid for the bench's depth-chart guesses
+        // (Jeanty, week 1: cut 16% to 15 touches, took 29). 'guessed-first'
+        // cuts the depth-chart part of each share before any measured usage,
+        // and measured usage only past the cap times roomEarnedTolerance.
+        roomMode: 'guessed-first', roomEarnedTolerance: 1.1,
+        // A player's own last season vs the slot norm, when he has a track
+        // record (rawShareFor): 0.85 = 85% his record, 15% the norm. At
+        // 0.7 the RB1s' week-one shares ran 2.9 points low (replay).
+        trackW: 0.85,
+        // In the room scaling his last season counts as measured usage until
+        // this season's games take over: in full before his first game,
+        // fading to nothing by trackMeasuredGames (0 = never measured).
+        trackMeasuredGames: 3,
+        // Which week the roster row shows: 'typical' (the median, with the
+        // touchdown skew taken off) or 'average' (the mean the lineup adds
+        // up). Owner ruling 2026-10-12: the average. The typical week sat
+        // 0.9 (RB) to 1.5 (TE) points under the average every week, beside
+        // Sleeper's line and the L8 column, which are averages; it stays as
+        // the floor and in the lock for the closeness audit.
+        showWeek: 'average',
         medSplashDl: 0.6,       // DL: tackles + this share of splash points
         medShiftLb: 0.4, medShiftDb: 0.35,   // LB/DB: points off the average
         // Defenders' tackle norm by role (2025 regulars, tackles a game:
@@ -863,7 +899,8 @@
         // Last season counts as four phantom games (owner ruling 2026-09-22:
         // the Bills' 50-play shootout in week 1 was cutting Cook's touches 7%),
         // so one game is a fifth of the story, four games half, eight two thirds.
-        let perGame = norm ? (total + PIE_PHANTOM * norm) / (gp + PIE_PHANTOM) : total / gp;
+        const phantom = TUNE.piePhantom != null ? TUNE.piePhantom : PIE_PHANTOM;
+        let perGame = norm ? (total + phantom * norm) / (gp + phantom) : total / gp;
         const wk = App.WeeklyProj && App.WeeklyProj._ctx && App.WeeklyProj._ctx.byTeamWeek[team + '|' + week];
         const spread = wk && wk.vegas ? num(wk.vegas.spread) : null; // positive = underdog
         if (spread != null) {
@@ -882,16 +919,21 @@
         const players = opts.playersData || {};
         // A returning star takes his share whole and the rest of the room
         // shares what is left (down to 40% of their own).
-        let sum = 0, star = 0;
+        let sum = 0, star = 0, sumE = 0, sumB = 0;
         for (const mid of Object.keys(players)) {
             const m = players[mid];
             if (!m || String(m.team || '').toUpperCase() !== team || posGroup(m) !== grp) continue;
             if (OUT_FOR_SHARE[statusOf(m, ctx)]) continue;
-            const raw = rawShareFor(mid, m, grp, team, opts, ctx);
-            if (raw != null) { sum += raw; if (returningStar(mid, m, grp, team, ctx, opts)) star += raw; }
+            const info = rawShareFor(mid, m, grp, team, opts, ctx, true);
+            const raw = info ? info.share : null;
+            if (raw == null) continue;
+            sum += raw;
+            if (returningStar(mid, m, grp, team, ctx, opts)) { star += raw; sumE += raw; continue; }
+            sumE += info.earnedPart != null ? info.earnedPart : raw;
+            sumB += info.basePart != null ? info.basePart : 0;
         }
         const cap = roomCap(team, grp, opts, ctx);
-        ctx._room[k] = sum <= cap ? 1 : star > 0 && sum > star ? Math.max(0.4, (cap - star) / (sum - star)) : cap / sum;
+        ctx._room[k] = roomScaleParts({ sum, sumE, sumB, star, cap });
         return ctx._room[k];
     }
     // The room cap: the league median blended half and half with what
@@ -900,7 +942,8 @@
     // from the players on the roster now, so it is trusted only within
     // 20% of the median; a team that signed two WR1s would read too high.
     function roomCap(team, grp, opts, ctx) {
-        const median = ROOM_SHARE[grp] || 1;
+        const tuned = grp === 'RB' ? TUNE.roomShareRb : grp === 'WR' ? TUNE.roomShareWr : grp === 'TE' ? TUNE.roomShareTe : null;
+        const median = tuned != null ? tuned : (ROOM_SHARE[grp] || 1);
         ctx._roomCap = ctx._roomCap || {};
         const k = team + '|' + grp;
         if (ctx._roomCap[k] != null) return ctx._roomCap[k];
@@ -963,13 +1006,21 @@
             // backup's starts last year are no claim on this year's throws
             // (Daniels was cut to 69% of Washington's attempts by Mariota's
             // 2025 fill-in games).
-            out.roomScale = grp === 'QB' && out.posRank === 1 ? 1 : +roomScale(team, grp, opts, ctx).toFixed(3);
+            const rs = grp === 'QB' && out.posRank === 1 ? 1 : roomScale(team, grp, opts, ctx);
             // Nor is a star tight end: the tight-end room is a league-average
             // 24% of the targets, and a Bowers takes that alone (week 4 2026:
             // cut 36% to 4.7 targets, projected 6.6, scored 17.6 on 11).
             // Weeks 1-4: TE 195-157 to 199-156 vs Sleeper.
-            if (grp === 'TE' && rawInfo.trackShare != null && rawInfo.trackShare >= TUNE.starTeRoom) out.roomScale = 1;
-            if (returningStar(pid, player, grp, team, ctx, opts)) { out.roomScale = 1; out.returningStar = true; }
+            const whole = (grp === 'TE' && rawInfo.trackShare != null && rawInfo.trackShare >= TUNE.starTeRoom) || returningStar(pid, player, grp, team, ctx, opts);
+            if (returningStar(pid, player, grp, team, ctx, opts)) out.returningStar = true;
+            if (whole || rs === 1) out.roomScale = 1;
+            else if (typeof rs === 'number') out.roomScale = +rs.toFixed(3);
+            else {
+                // guessed-first: the measured and guessed parts scale apart
+                const eP = rawInfo.earnedPart != null ? rawInfo.earnedPart : proj, bP = rawInfo.basePart != null ? rawInfo.basePart : 0;
+                const scaled = rs.e * eP + rs.b * bP;
+                out.roomScale = proj > 0 ? +(scaled / proj).toFixed(3) : 1;
+            }
             proj *= out.roomScale;
             out.share = clamp(proj, 0, 1);
             const pie = teamPie(team, grp, ctx.week, opts, ctx);
@@ -1161,7 +1212,7 @@
         // earned as a backup, so he takes the slot norm as is.
         const track = promoted || deepBench || BALL_BASIS[grp] === 'tackles' ? null : trackRecordShare(pid, grp, team, ctx, opts);
         let base = slotNorm;
-        if (track != null) base = slotNorm != null ? 0.7 * track + 0.3 * slotNorm : track;
+        if (track != null) base = slotNorm != null ? TUNE.trackW * track + (1 - TUNE.trackW) * slotNorm : track;
         // One tackle norm served every DB and every LB, so corners ran high
         // and safeties and inside linebackers low. Each role takes its own.
         if (BALL_BASIS[grp] === 'tackles' && base != null && grp !== 'DL') {
@@ -1172,11 +1223,12 @@
         if (earned != null) out.earnedShare = +earned.toFixed(3);
         if (slotNorm != null) out.slotNorm = slotNorm;
         const gp = gamesPlayed == null ? 0 : gamesPlayed;
-        let wEarned = gp >= 3 ? 0.85 : gp === 2 ? 0.6 : gp === 1 ? 0.45 : 0.3;
-        // With a track record behind him, his first games count games/(games+2):
+        const ew = TUNE.earnedW;
+        let wEarned = ew[Math.min(3, Math.max(0, gp))];
+        // With a track record behind him, his first games count games/(games+K):
         // one game is a third of the story, three games are three fifths, and
         // by game six his own season carries three quarters.
-        if (track != null && gp < 6) wEarned = Math.min(wEarned, gp / (gp + 2));
+        if (track != null && TUNE.trackClampGames > 0 && gp < TUNE.trackClampGames) wEarned = Math.min(wEarned, gp / (gp + TUNE.trackClampK));
         if (promoted) { wEarned = Math.min(wEarned, 0.15); out.promoted = true; }
         let proj = null;
         if (earned != null && base != null) proj = wEarned * earned + (1 - wEarned) * base;
@@ -1222,8 +1274,43 @@
             if (ls != null && ls < 0.15) { const f = Math.max(0.3, ls / 0.15); proj *= f; out.snapGate = { snap: +ls.toFixed(3), factor: +f.toFixed(2) }; }
         }
         out.share = proj != null ? clamp(proj, 0, 1) : null;
+        // How much of the share was measured vs guessed; the room scaling
+        // reads the split.
+        if (out.share != null) Object.assign(out, splitShare({ share: out.share, earned, base, wEarned, track, slotNorm, gp }));
         ctx._rawShare[pid] = out;
         return full ? out : out.share;
+    }
+    // The measured part of a share (his own usage this season, and his own
+    // last season behind it while trackMeasuredGames says so) and the
+    // guessed part (the slot norm). Pure; the split keeps the share's total.
+    function splitShare(s) {
+        const hasE = s.earned != null, hasB = s.base != null;
+        const wB = hasE && hasB ? (1 - s.wEarned) : hasE ? 0 : 1;
+        const tm = TUNE.trackMeasuredGames > 0 ? clamp(1 - (s.gp || 0) / TUNE.trackMeasuredGames, 0, 1) : 0;
+        const trackPart = s.track != null ? tm * (s.slotNorm != null ? TUNE.trackW * s.track : s.track) : 0;
+        const eP = (hasE ? (hasB ? s.wEarned : 1) * s.earned : 0) + wB * trackPart;
+        const bP = wB * ((hasB ? s.base : 0) - trackPart);
+        const frac = eP + bP > 0 ? eP / (eP + bP) : 0;
+        const earnedPart = +(s.share * frac).toFixed(4);
+        return { earnedPart, basePart: +(s.share - earnedPart).toFixed(4) };
+    }
+    // How a room over its cap is scaled back, per TUNE.roomMode. Pure.
+    // Returns a number (one factor for every man) or { e, b } (factors for
+    // the measured and guessed parts of each share).
+    function roomScaleParts(r) {
+        const { sum, sumE, sumB, star, cap } = r;
+        if (TUNE.roomMode === 'guessed-first') {
+            // The depth-chart guesses give way first; what the men have
+            // actually been getting is cut only when that alone overflows.
+            let e = 1, b = 1;
+            if (sum > cap) {
+                b = sumB > 0 ? clamp((cap - sumE) / sumB, 0, 1) : 1;
+                const tol = cap * (TUNE.roomEarnedTolerance || 1);
+                if (sumE > tol) { b = 0; e = tol / sumE; }
+            }
+            return { e, b };
+        }
+        return sum <= cap ? 1 : star > 0 && sum > star ? Math.max(0.4, (cap - star) / (sum - star)) : cap / sum;
     }
 
     // ── DHQ's own baseline ────────────────────────────────────────────
@@ -1319,7 +1406,8 @@
             if (m != null && m > 0) pts = m + TUNE.kAlpha * (pts - m);
         }
         const med = typicalWeek(pts, grp, built.line, role, opts.scoring);
-        return { median: +med.toFixed(2), mean: +pts.toFixed(2), floor: +Math.min(pts * 0.7, med).toFixed(2), ceiling: +(pts * 1.35).toFixed(2), why: built.why, line: built.line };
+        const shown = TUNE.showWeek === 'average' ? pts : med;
+        return { median: +shown.toFixed(2), typical: +med.toFixed(2), mean: +pts.toFixed(2), floor: +Math.min(pts * 0.7, med).toFixed(2), ceiling: +(pts * 1.35).toFixed(2), why: built.why, line: built.line };
     }
     // The typical week (the median) from the average line. Fantasy points
     // are lopsided: most weeks come in under the average and a few big
@@ -1339,7 +1427,9 @@
     function typicalWeek(pts, grp, L, role, scoring) {
         const sc = scoring || {};
         let med = pts;
-        if (grp === 'WR' || grp === 'TE') {
+        if (grp === 'TE' && TUNE.medTdTe != null) {
+            med = pts - TUNE.medTdTe * (num(sc.rec_td) || 0) * (num(L.rec_td) || 0);
+        } else if (grp === 'WR' || grp === 'TE') {
             const t = Math.max(0, Math.min(1, ((num(L.rec_tgt) || 0) - TUNE.medTdLoTgt) / (TUNE.medTdHiTgt - TUNE.medTdLoTgt)));
             const k = TUNE.medTdWrTe + t * (TUNE.medTdWrTeHi - TUNE.medTdWrTe);
             med = pts - k * (num(sc.rec_td) || 0) * (num(L.rec_td) || 0);
@@ -1673,7 +1763,7 @@
         if (opts.baselineMode === 'dhq') {
             const own = dhqBaselineFor(pid, player, grp, input.role, opts, ctx);
             if (own) {
-                input.baseline = { median: own.median, mean: own.mean != null ? own.mean : own.median, floor: own.floor, ceiling: own.ceiling };
+                input.baseline = { median: own.median, mean: own.mean != null ? own.mean : own.median, typical: own.typical != null ? own.typical : own.median, floor: own.floor, ceiling: own.ceiling, line: own.line || null };
                 input.baselineSource = 'dhq';
                 input.baselineWhy = own.why;
                 input.baselineLine = own.line;
@@ -1868,6 +1958,7 @@
 
     App.MatchupInputs = App.MatchupInputs || {
         prepare, build, project, projectRoster, statusOf, idpRankings, priorRankings, depthCharts, baselineFor, dhqBaselineFor, sleeperPoints, opponentOf, opponentFor, trenchFor, castFor, teamDepth, expectedShare, teamSlotNorm, passPool, freedTargetShare, posGroup, normName, roleFor, oppHealthFor, returnLine, recentPPGFrom,
+        splitShare, roomScaleParts, typicalWeek, TUNE,
     };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.MatchupInputs;

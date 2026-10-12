@@ -98,9 +98,13 @@ test('receivers show the typical week: three quarters of the expected TD points 
     const low = base('w1', { team: 'KC', position: 'WR' }, 'WR', { projTargets: 5, posRank: 2 });
     const high = base('w2', { team: 'KC', position: 'WR' }, 'WR', { projTargets: 10, posRank: 1 });
     assert.ok(low.line.rec_tgt <= 7 && high.line.rec_tgt >= 9, 'targets ' + low.line.rec_tgt + ' / ' + high.line.rec_tgt);
-    const cut = (b) => b.mean - b.median, td = (b) => b.line.rec_td * 6;
+    const cut = (b) => b.mean - b.typical, td = (b) => b.line.rec_td * 6;
     assert.ok(Math.abs(cut(low) - 0.75 * td(low)) < 0.02, 'low cut ' + cut(low) + ' td pts ' + td(low));
     assert.ok(Math.abs(cut(high) - 0.25 * td(high)) < 0.02, 'high cut ' + cut(high) + ' td pts ' + td(high));
+    // the roster row shows the average week (owner ruling 2026-10-12); the
+    // typical week rides along for the floor and the closeness audit
+    assert.equal(low.median, low.mean);
+    assert.ok(low.floor <= low.typical);
 });
 
 test('every back is shaded for his touchdown-skewed weeks, the lead back included', () => {
@@ -108,8 +112,8 @@ test('every back is shaded for his touchdown-skewed weeks, the lead back include
     const rb2 = base('r2', { team: 'KC', position: 'RB' }, 'RB', { projTargets: 8, posRank: 2 });
     for (const b of [rb1, rb2]) {
         const lam = (b.line.rush_td || 0) + (b.line.rec_td || 0);
-        assert.ok(Math.abs((b.mean - b.median) - 0.5 * 6 * lam * Math.exp(-lam)) < 0.02, 'cut ' + (b.mean - b.median) + ' λ ' + lam);
-        assert.ok(b.median < b.mean);
+        assert.ok(Math.abs((b.mean - b.typical) - 0.5 * 6 * lam * Math.exp(-lam)) < 0.02, 'cut ' + (b.mean - b.typical) + ' λ ' + lam);
+        assert.ok(b.typical < b.mean);
     }
 });
 
@@ -117,7 +121,39 @@ test('a lineman\'s big plays follow his snaps, and his typical week keeps 60% of
     const part = base('d1', { team: 'KC', position: 'DE' }, 'DL', { projTargets: 1, posRank: 3, snapScale: { snap: 0.12 } });
     const full = base('d2', { team: 'KC', position: 'DE' }, 'DL', { projTargets: 1, posRank: 1, snapScale: { snap: 0.8 } });
     assert.ok(part.line.idp_sack < full.line.idp_sack / 3, 'a 12%-snap backup is not charged a starter\'s sacks: ' + part.line.idp_sack + ' vs ' + full.line.idp_sack);
-    assert.ok(full.median < full.mean, 'typical week under the average for a lineman');
+    assert.ok(full.typical < full.mean, 'typical week under the average for a lineman');
+});
+
+// ── Room scaling: the guessed part gives way first ──────────────────
+test('a room over its cap cuts the depth-chart guesses before measured usage', () => {
+    // 0.40 measured + 0.20 guessed against a 0.48 cap: the guesses shrink
+    // to 0.08, measured usage stands
+    const r = I.roomScaleParts({ sum: 0.60, sumE: 0.40, sumB: 0.20, star: 0, cap: 0.48 });
+    assert.equal(r.e, 1);
+    assert.ok(Math.abs(r.b - 0.4) < 1e-9, 'guessed factor ' + r.b);
+    // under the cap nothing moves
+    assert.deepEqual(I.roomScaleParts({ sum: 0.45, sumE: 0.30, sumB: 0.15, star: 0, cap: 0.48 }), { e: 1, b: 1 });
+});
+
+test('measured usage is cut only past the cap plus its tolerance', () => {
+    // 0.55 measured alone is over a 0.48 cap x 1.1 = 0.528: guesses go to
+    // zero and the measured shares scale to the tolerance
+    const r = I.roomScaleParts({ sum: 0.65, sumE: 0.55, sumB: 0.10, star: 0, cap: 0.48 });
+    assert.equal(r.b, 0);
+    assert.ok(Math.abs(r.e - 0.528 / 0.55) < 1e-9, 'measured factor ' + r.e);
+});
+
+test('the measured/guessed split keeps the whole share and fades last season out by game three', () => {
+    // one game in: 45% his own usage, 55% of (85% track + 15% slot)
+    const s = I.splitShare({ share: 0.30, earned: 0.33, base: 0.85 * 0.30 + 0.15 * 0.20, wEarned: 0.45, track: 0.30, slotNorm: 0.20, gp: 1 });
+    assert.ok(Math.abs(s.earnedPart + s.basePart - 0.30) < 1e-6, 'parts add up');
+    assert.ok(s.earnedPart > 0.22 && s.earnedPart < 0.25, 'his own usage plus two thirds of his record count as measured: ' + s.earnedPart);
+    // three games in his record no longer counts as measured
+    const t = I.splitShare({ share: 0.30, earned: 0.33, base: 0.85 * 0.30 + 0.15 * 0.20, wEarned: 0.85, track: 0.30, slotNorm: 0.20, gp: 3 });
+    assert.ok(Math.abs(t.earnedPart - 0.30 * (0.85 * 0.33) / (0.85 * 0.33 + 0.15 * (0.85 * 0.30 + 0.15 * 0.20))) < 1e-3, 'measured = this season only: ' + t.earnedPart);
+    // before any game, a tracked starter is all measured but for the slot's 15%
+    const u = I.splitShare({ share: 0.285, earned: null, base: 0.85 * 0.30 + 0.15 * 0.20, wEarned: 0.3, track: 0.30, slotNorm: 0.20, gp: 0 });
+    assert.ok(Math.abs(u.basePart - 0.285 * (0.15 * 0.20) / 0.285) < 1e-3, 'only the slot norm is a guess: ' + u.basePart);
 });
 
 test('a backup quarterback projects zero, average and typical week alike', () => {
