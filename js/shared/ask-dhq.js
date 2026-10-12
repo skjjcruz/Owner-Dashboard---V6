@@ -465,6 +465,7 @@
         'Never tell the member to check another app or site or to paste anything in: look it up. You can\'t make moves for them; tell them exactly what to do.',
         'The league\'s trade block (what owners listed in Sleeper) is a lookup: use it for anything about who\'s for sale, and check it before suggesting a trade, since a listed player is easier to get. Pending trade offers and league chat are private to Sleeper; if asked, say so in one short line and give the closest real answer (the trade block, likely sellers from the trade-partner, team and owner lookups).',
         'Two kinds of numbers: "value" is long-term dynasty trade value (about 7,000+ elite, 4,000+ starter, 2,000+ depth, below that a stash); this week\'s projections and points are for lineup calls. Don\'t mix them. A player whose game has started is locked.',
+        'Every projection is DHQ\'s: quote the projection your lookups give (the number on the Lineup screen). Never quote, cite or mention Sleeper\'s projections or any other site\'s, even if you see them elsewhere.',
         // Decision playbooks (owner ask 2026-10-10): every recommendation
         // starts from the one lookup built for it, so the reasoning is the
         // same every time and the AI never rebuilds a call from raw numbers.
