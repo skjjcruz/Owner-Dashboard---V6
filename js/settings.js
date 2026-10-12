@@ -29,8 +29,11 @@
     // Double-confirm, backend delete via window.OD.deleteAccount(), then local
     // cleanup + redirect. Returns false if the user backed out or it failed.
     async function dhqDeleteAccountFlow() {
-        if (!confirm('Delete your Dynasty HQ account? This permanently removes your account, subscription link, and saved data. This cannot be undone.')) return false;
-        if (!confirm('Last check — are you sure? Your account and data will be gone for good.')) return false;
+        // In-app boxes, not confirm(): the native app shell can't show the
+        // browser's own (owner report 2026-10-12, see core.js dhqConfirm).
+        const ask = (m, o) => (typeof window.dhqConfirm === 'function' ? window.dhqConfirm(m, o) : Promise.resolve(confirm(m)));
+        if (!(await ask('Delete your Dynasty HQ account? This permanently removes your account, subscription link, and saved data. This cannot be undone.', { ok: 'Delete account', danger: true }))) return false;
+        if (!(await ask('Last check — are you sure? Your account and data will be gone for good.', { ok: 'Yes, delete it', danger: true }))) return false;
         try {
             await window.OD.deleteAccount();
             try {
@@ -46,7 +49,8 @@
             else window.location.href = 'landing.html?signout=1';
             return true;
         } catch (err) {
-            alert('Could not delete the account: ' + (err && err.message ? err.message : 'unknown error') + '. Contact support if this keeps happening.');
+            const msg = 'Could not delete the account: ' + (err && err.message ? err.message : 'unknown error') + '. Contact support if this keeps happening.';
+            if (typeof window.dhqNotice === 'function') await window.dhqNotice(msg); else alert(msg);
             return false;
         }
     }
