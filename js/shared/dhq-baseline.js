@@ -108,7 +108,8 @@
             const carryShare = rate(c.rush_att, touches, n.carryShare, 20);
             const carries = vol * carryShare, tg = vol * (1 - carryShare);
             const ypc = rate(c.rush_yd, c.rush_att, n.ypc, n.K) * gradeTilt(g.run || g.off);
-            const tdpc = rate(c.rush_td, c.rush_att, n.tdpc, n.K * 2);
+            // touchdown rate pulls harder than yardage (tdK x the phantom carries)
+            const tdpc = rate(c.rush_td, c.rush_att, n.tdpc, n.K * (n.tdK != null ? n.tdK : 2));
             const catchR = rate(c.rec, c.rec_tgt, n.catch, 25);
             const ypt = rate(c.rec_yd, c.rec_tgt, n.ypt, 25) * gradeTilt(g.route || g.off);
             const tdpt = rate(c.rec_td, c.rec_tgt, n.tdpt, 50);
