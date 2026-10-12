@@ -384,48 +384,14 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
     }
 
     // In-app "are you sure?" box (owner report 2026-10-12: Sign out did
-    // nothing in the native app). The browser's own confirm()/alert() only
-    // show inside an iPhone app when the app shell supports them; without
-    // that, confirm() silently answers "no". This box is plain page content,
-    // so it works the same on the website, the Lab and the app.
-    //   dhqConfirm(message, { ok, cancel, danger }) → Promise<boolean>
-    //   dhqNotice(message) → Promise<void>   (one OK button)
-    function dhqConfirm(message, opts) {
-        const o = opts || {};
-        return new Promise(resolve => {
-            let done = false;
-            const wrap = document.createElement('div');
-            const finish = val => { if (done) return; done = true; try { document.removeEventListener('keydown', onKey, true); wrap.remove(); } catch (e) { /* gone */ } resolve(val); };
-            const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); finish(false); } };
-            try {
-                wrap.setAttribute('role', 'alertdialog'); wrap.setAttribute('aria-modal', 'true'); wrap.setAttribute('aria-label', String(message));
-                wrap.style.cssText = 'position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.6)';
-                const box = document.createElement('div');
-                box.style.cssText = 'width:100%;max-width:380px;box-sizing:border-box;padding:20px;background:var(--off-black, #141414);color:var(--white, #fff);border:1px solid var(--acc-line2, rgba(212,175,55,0.3));border-radius:var(--card-radius, 10px);box-shadow:0 12px 40px rgba(0,0,0,0.5);font:500 15px/1.5 var(--font-body, system-ui, sans-serif)';
-                const p = document.createElement('p'); p.style.cssText = 'margin:0 0 18px'; p.textContent = String(message);
-                const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap';
-                const btn = (label, primary) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.style.cssText = 'min-height:44px;min-width:96px;padding:0 16px;border-radius:var(--card-radius-sm, 8px);font:700 14px var(--font-body, system-ui, sans-serif);cursor:pointer;' + (primary ? (o.danger ? 'background:#c0392b;color:#fff;border:1px solid #c0392b' : 'background:var(--gold, #D4AF37);color:#111;border:1px solid var(--gold, #D4AF37)') : 'background:transparent;color:var(--white, #fff);border:1px solid rgba(255,255,255,0.25)'); return b; };
-                const ok = btn(o.ok || 'OK', true);
-                ok.onclick = () => finish(true);
-                if (!o.notice) { const cancel = btn(o.cancel || 'Cancel', false); cancel.onclick = () => finish(false); row.appendChild(cancel); }
-                row.appendChild(ok);
-                box.append(p, row); wrap.appendChild(box);
-                wrap.addEventListener('click', e => { if (e.target === wrap && !o.notice) finish(false); });
-                document.addEventListener('keydown', onKey, true);
-                (document.body || document.documentElement).appendChild(wrap);
-                try { ok.focus(); } catch (e) { /* no focus */ }
-            } catch (e) {
-                // No DOM to draw on: fall back to the browser's own box.
-                try { resolve(o.notice ? (window.alert(String(message)), true) : window.confirm(String(message))); } catch (e2) { resolve(false); }
-            }
-        });
-    }
-    function dhqNotice(message) { return dhqConfirm(message, { notice: true }).then(() => undefined); }
-    window.dhqConfirm = dhqConfirm;
-    window.dhqNotice = dhqNotice;
+    // nothing in the native app — the app shell can't show the browser's
+    // confirm(), which then silently answers "no"). The boxes live in
+    // js/shared/dhq-dialogs.js (loaded before this file on every page);
+    // the browser's own box is only the fallback if that file is missing.
+    const askConfirm = (message, opts) => (typeof window.dhqConfirm === 'function' ? window.dhqConfirm(message, opts) : Promise.resolve(typeof window.confirm === 'function' ? window.confirm(String(message)) : false));
 
     function handleLogout() {
-        dhqConfirm('Sign out of Dynasty HQ on this device?', { ok: 'Sign out' }).then(yes => { if (yes) dhqSignOut(); });
+        askConfirm('Sign out of Dynasty HQ on this device?', { ok: 'Sign out' }).then(yes => { if (yes) dhqSignOut(); });
     }
 
 

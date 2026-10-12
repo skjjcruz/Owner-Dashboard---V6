@@ -1561,7 +1561,7 @@
             let replay = null;
             if (activeState.mode === 'ghost') {
                 if (!activeState.sleeperDraftId) {
-                    alert('Ghost Replay mode requires selecting a draft from the Replay Source list.');
+                    (window.dhqNotice || window.alert)('Ghost Replay mode requires selecting a draft from the Replay Source list.');
                     return;
                 }
                 try {
@@ -1570,12 +1570,12 @@
                         replay = window.DraftCC.ghostReplay.buildReplayState(activeState, sleeperPicks);
                         narrative = '👻 GHOST REPLAY · ' + sleeperPicks.length + ' picks loaded. Use the scrubber to time-travel.';
                     } else {
-                        alert('The selected draft has no picks yet — nothing to replay. Pick a completed draft, or try Live Sync mode for a draft in progress.');
+                        (window.dhqNotice || window.alert)('The selected draft has no picks yet — nothing to replay. Pick a completed draft, or try Live Sync mode for a draft in progress.');
                         return;
                     }
                 } catch (e) {
                     if (window.wrLog) window.wrLog('cc.ghostLoad', e);
-                    alert('Failed to fetch draft picks from Sleeper: ' + (e?.message || 'unknown error'));
+                    (window.dhqNotice || window.alert)('Failed to fetch draft picks from Sleeper: ' + (e?.message || 'unknown error'));
                     return;
                 }
             }
@@ -1584,7 +1584,7 @@
             let liveDraftStatus = '';
             if (activeState.mode === 'live-sync') {
                 if (!activeState.sleeperDraftId) {
-                    alert('Live Sync mode requires selecting an upcoming or in-progress draft from the Live Sync Source list.');
+                    (window.dhqNotice || window.alert)('Live Sync mode requires selecting an upcoming or in-progress draft from the Live Sync Source list.');
                     return;
                 }
                 liveDraftStatus = activeState.liveDraftMeta?.status || '';
@@ -3480,8 +3480,10 @@
             dispatch({ type: 'HYDRATE', state: loaded });
         };
 
-        const onDelete = (tpl) => {
-            if (!confirm('Delete template "' + tpl.name + '"?')) return;
+        const onDelete = async (tpl) => {
+            // In-app box (js/shared/dhq-dialogs.js): the native app can't show confirm().
+            const yes = typeof window.dhqConfirm === 'function' ? await window.dhqConfirm('Delete template "' + tpl.name + '"?', { ok: 'Delete', danger: true }) : confirm('Delete template "' + tpl.name + '"?');
+            if (!yes) return;
             window.DraftCC.persistence.deleteTemplate(leagueId, tpl.id);
             setRefreshKey(x => x + 1);
         };
@@ -5086,9 +5088,9 @@
                                             const text = stateHelpers.formatDraftShareReport
                                                 ? stateHelpers.formatDraftShareReport(recap)
                                                 : stateHelpers.formatDraftRecapText?.(recap);
-                                            if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => alert('Share report copied.'));
-                                            else alert('Clipboard unavailable in this browser.');
-                                        } catch (e) { alert('Copy failed: ' + e.message); }
+                                            if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => (window.dhqNotice || window.alert)('Share report copied.'));
+                                            else (window.dhqNotice || window.alert)('Clipboard unavailable in this browser.');
+                                        } catch (e) { (window.dhqNotice || window.alert)('Copy failed: ' + e.message); }
                                     }} style={{ padding: '10px 22px', background: 'var(--ov-3, rgba(255,255,255,0.035))', color: 'var(--silver)', border: '1px solid var(--ov-6, rgba(255,255,255,0.14))', borderRadius: '6px', fontFamily: FONT_DISPL, fontSize: '0.86rem', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em', ...actBtnPhone }}>COPY REPORT</button>}
                                     {recapPro && <button onClick={() => {
                                         try {
@@ -5099,7 +5101,7 @@
                                                     : 'Draft Recap - ' + grade.letter;
                                             const blob = new Blob([text], { type: 'text/markdown' });
                                             const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'draft-recap-' + Date.now() + '.md'; a.click(); URL.revokeObjectURL(url);
-                                        } catch (e) { alert('Export failed: ' + e.message); }
+                                        } catch (e) { (window.dhqNotice || window.alert)('Export failed: ' + e.message); }
                                     }} style={{ padding: '10px 22px', background: 'transparent', color: 'var(--silver)', border: '1px solid var(--ov-6, rgba(255,255,255,0.15))', borderRadius: '6px', fontFamily: FONT_DISPL, fontSize: '0.86rem', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em', ...actBtnPhone }}>EXPORT REPORT</button>}
                                     {onPrimary && <button onClick={onPrimary} style={{ padding: '10px 22px', background: 'var(--gold)', color: 'var(--black)', border: 'none', borderRadius: '6px', fontFamily: FONT_DISPL, fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em', ...actBtnPhone }}>{primaryLabel || 'DONE'}</button>}
                                 </div>
@@ -5666,11 +5668,15 @@
                     {/* Phase 5: Save template button */}
                     {myPicks.length > 0 && (
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 const defaultName = 'Mock ' + new Date().toLocaleString();
-                                const name = prompt('Template name:', defaultName);
+                                // The in-app box doesn't freeze the page like prompt() did, and a
+                                // live draft keeps moving while the name is typed: save the board
+                                // exactly as it was when the button was tapped.
+                                const snapshot = state;
+                                const name = typeof window.dhqPrompt === 'function' ? await window.dhqPrompt('Template name:', { value: defaultName, ok: 'Save' }) : prompt('Template name:', defaultName);
                                 if (!name) return;
-                                const rec = window.DraftCC.persistence?.saveTemplate(state, name);
+                                const rec = window.DraftCC.persistence?.saveTemplate(snapshot, name);
                                 if (rec) {
                                     dispatch({
                                         type: 'ALEX_EVENT_ADD',
@@ -5942,8 +5948,8 @@
                                             ? stateHelpers.saveDraftRecap(state, { grade, key })
                                             : recap;
                                         if (!payload) localStorage.setItem(key, JSON.stringify(recap || {}));
-                                        alert('Draft recap saved to archive');
-                                    } catch (e) { alert('Save failed: ' + e.message); }
+                                        (window.dhqNotice || window.alert)('Draft recap saved to archive');
+                                    } catch (e) { (window.dhqNotice || window.alert)('Save failed: ' + e.message); }
                                 }}
                                 primaryLabel={forcedMode === 'live-sync' ? 'VIEW DRAFT BOARD →' : 'DRAFT AGAIN'}
                                 onPrimary={onExit}
@@ -6390,13 +6396,16 @@
         };
     }
 
+    // Clipboard first; when the browser or the native app blocks it, the
+    // in-app copy box (js/shared/dhq-dialogs.js) shows the text with a Copy
+    // button (resolves true only once it is really copied).
     function copyLiveText(text) {
         if (!text) return Promise.resolve(false);
+        const box = () => (typeof window.dhqCopyText === 'function' ? window.dhqCopyText('Copy live offer summary:', text) : Promise.resolve(false));
         if (navigator.clipboard?.writeText) {
-            return navigator.clipboard.writeText(text).then(() => true).catch(() => false);
+            return navigator.clipboard.writeText(text).then(() => true).catch(box);
         }
-        window.prompt('Copy live offer summary:', text);
-        return Promise.resolve(true);
+        return box();
     }
 
     function liveTone(tone) {

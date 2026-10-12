@@ -16,7 +16,7 @@
     async function downloadDraftCard(state) {
         try { await window.ensureHtml2Canvas?.(); } catch (e) { /* handled by guard below */ }
         if (typeof window.html2canvas !== 'function') {
-            alert('html2canvas not loaded — cannot export PNG');
+            (window.dhqNotice || window.alert)('html2canvas not loaded — cannot export PNG');
             return null;
         }
 
@@ -150,7 +150,7 @@
             return canvas;
         } catch (e) {
             if (window.wrLog) window.wrLog('exports.downloadDraftCard', e);
-            alert('Export failed: ' + (e?.message || e));
+            (window.dhqNotice || window.alert)('Export failed: ' + (e?.message || e));
             return null;
         } finally {
             if (card.parentNode) card.parentNode.removeChild(card);

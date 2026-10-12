@@ -293,7 +293,9 @@
         };
 
         const handleDelete = async (docName) => {
-            if (!confirm('Delete "' + docName + '"? Alex will no longer reference it.')) return;
+            // In-app box (js/shared/dhq-dialogs.js): the native app can't show confirm().
+            const yes = typeof window.dhqConfirm === 'function' ? await window.dhqConfirm('Delete "' + docName + '"? Alex will no longer reference it.', { ok: 'Delete', danger: true }) : confirm('Delete "' + docName + '"? Alex will no longer reference it.');
+            if (!yes) return;
             await window.OD?.deleteLeagueDoc(leagueId, docName);
             const updated = await window.OD?.listLeagueDocs(leagueId);
             setDocs(updated || []);
@@ -658,11 +660,11 @@
                                     <button onClick={() => {
                                         Object.keys(localStorage).filter(k => k.startsWith('dhq_leagueintel_') || k.startsWith('dhq_hist_')).forEach(k => localStorage.removeItem(k)); window.DhqStorage?.idbRemove?.('dhq_leagueintel_v14'); /* the intel build lives in IndexedDB now */
                                         if (window.App) { window.App.LI = {}; window.App.LI_LOADED = false; }
-                                        alert('DHQ cache cleared. Reload to rebuild.');
+                                        (window.dhqNotice || window.alert)('DHQ cache cleared. Reload to rebuild.');
                                     }} style={{ padding: '6px 12px', minHeight: '44px', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)', background: 'rgba(231,76,60,0.1)', border: '1px solid rgba(231,76,60,0.3)', borderRadius: '4px', color: 'var(--k-e74c3c, #e74c3c)', cursor: 'pointer' }}>
                                         Clear DHQ Cache
                                     </button>
-                                    <button onClick={() => { sessionStorage.clear(); alert('Session cache cleared.'); }}
+                                    <button onClick={() => { sessionStorage.clear(); (window.dhqNotice || window.alert)('Session cache cleared.'); }}
                                         style={{ padding: '6px 12px', minHeight: '44px', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--silver)', cursor: 'pointer' }}>
                                         Clear Session Cache
                                     </button>
@@ -959,11 +961,11 @@
                             <button onClick={() => {
                                 Object.keys(localStorage).filter(k => k.startsWith('dhq_leagueintel_') || k.startsWith('dhq_hist_')).forEach(k => localStorage.removeItem(k)); window.DhqStorage?.idbRemove?.('dhq_leagueintel_v14'); /* the intel build lives in IndexedDB now */
                                 if (window.App) { window.App.LI = {}; window.App.LI_LOADED = false; }
-                                alert('DHQ cache cleared. Reload to rebuild.');
+                                (window.dhqNotice || window.alert)('DHQ cache cleared. Reload to rebuild.');
                             }} style={{ padding: '6px 12px', minHeight: '44px', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)', background: 'rgba(231,76,60,0.1)', border: '1px solid rgba(231,76,60,0.3)', borderRadius: '4px', color: 'var(--k-e74c3c, #e74c3c)', cursor: 'pointer' }}>
                                 Clear DHQ Cache
                             </button>
-                            <button onClick={() => { sessionStorage.clear(); alert('Session cache cleared.'); }}
+                            <button onClick={() => { sessionStorage.clear(); (window.dhqNotice || window.alert)('Session cache cleared.'); }}
                                 style={{ padding: '6px 12px', minHeight: '44px', fontSize: 'var(--text-body, 1rem)', fontFamily: 'var(--font-body)', background: 'var(--ov-3, rgba(255,255,255,0.04))', border: '1px solid var(--ov-6, rgba(255,255,255,0.1))', borderRadius: '4px', color: 'var(--silver)', cursor: 'pointer' }}>
                                 Clear Session Cache
                             </button>

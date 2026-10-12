@@ -516,6 +516,7 @@
   </div>
 </div>
 
+<script src="js/shared/dhq-dialogs.js?v=20261012dlg1"></script>
 <script src="vendor/supabase.min.js"></script>
 <script>window.supabase||document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.101.1/dist/umd/supabase.min.js"><\/script>')</script>
 <script>
@@ -745,7 +746,7 @@
 
     try {
       const res = await fetchUsers(adminSecret, currentPage, currentSearch);
-      if (res.status === 401) { alert('Session expired — please log in again.'); return; }
+      if (res.status === 401) { (window.dhqNotice || window.alert)('Session expired — please log in again.'); return; }
       const data = await res.json();
       renderTable(data);
     } catch (e) {
@@ -768,29 +769,31 @@
     // One-tap confirm (typing the email was too fiddly on tablets). The real
     // guardrails live server-side: can't delete yourself or another admin, and
     // a paying customer needs the second explicit confirm below.
-    const ok = confirm(
-      `Delete this account?\n\n${email}\n\nThis permanently removes the account and ALL its data, and forgets its Google/Apple sign-ins so the person can start over.`);
+    const ask = (m, o) => (window.dhqConfirm ? window.dhqConfirm(m, o) : Promise.resolve(confirm(m)));
+    const say = m => (window.dhqNotice ? window.dhqNotice(m) : Promise.resolve(alert(m)));
+    const ok = await ask(
+      `Delete this account?\n\n${email}\n\nThis permanently removes the account and ALL its data, and forgets its Google/Apple sign-ins so the person can start over.`, { ok: 'Delete account', danger: true });
     if (!ok) return;
     try {
       let res = await requestDelete(email, false);
       if (res.status === 409) {
         const data = await res.json().catch(() => ({}));
-        const go = confirm(
+        const go = await ask(
           `⚠️ ${data.message || 'This account has a LIVE PAID subscription.'}
 
-Deleting will cancel their billing. Delete anyway?`);
+Deleting will cancel their billing. Delete anyway?`, { ok: 'Delete anyway', danger: true });
         if (!go) return;
         res = await requestDelete(email, true);
       }
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
-        alert(`Deleted. (sign-in records removed: ${data.deletedAuthUsers ?? 0})`);
+        await say(`Deleted. (sign-in records removed: ${data.deletedAuthUsers ?? 0})`);
         loadUsers();
       } else {
-        alert('Delete failed: ' + (data.error || res.status));
+        await say('Delete failed: ' + (data.error || res.status));
       }
     } catch (e) {
-      alert('Delete failed: network error.');
+      await say('Delete failed: network error.');
     }
   }
 
