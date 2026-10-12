@@ -79,6 +79,9 @@ const LAB_PRESERVE = [
   /^data\//,
   /^scripts\//,
   /^js\/shared\/(matchup-|MATCHUP-)/,
+  // The Lab repo's own .gitignore (Lab PR #99 added the backtest caches);
+  // a publish wiped it once (2026-10-12).
+  /^\.gitignore$/,
 ];
 // ...except a file this repo now ships itself. The projection engine was
 // ported to the website (Sep 2026: matchup-engine, matchup-inputs,

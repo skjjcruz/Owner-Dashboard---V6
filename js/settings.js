@@ -947,7 +947,7 @@
                         {/* Owner ask 2026-10-12: one place for the member's own AI key
                             (Ask your AI). The old ai-setup.html page is retired. */}
                         <div style={{ fontSize: 'var(--text-label, 0.75rem)', color: 'var(--silver)', lineHeight: 1.55, marginBottom: '0.75rem' }}>
-                            Connect your own Claude, ChatGPT or Gemini key and your AI answers inside any league with "Ask your AI". The key stays on this device until you remove it, and it is sent only to the AI company it belongs to, never to DHQ. Usage is billed to your own account.
+                            Connect your own Claude, ChatGPT or Gemini key and your AI answers inside any league with "Ask your AI". The key stays on this device until you remove it, and it is sent only to the AI company it belongs to, never to DHQ. Usage is billed to your own account. Tip: set a monthly spending limit on the key in your Claude, ChatGPT or Gemini account.
                         </div>
                         <button onClick={() => { if (window.App && window.App.AskDHQ && window.App.AskDHQ.openKeySetup) window.App.AskDHQ.openKeySetup(); }} style={{ ...btnOutline, width: '100%', flex: 'none', fontSize: 'var(--text-body, 1rem)' }}>Connect my AI</button>
                     </div>
