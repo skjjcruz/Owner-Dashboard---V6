@@ -118,7 +118,7 @@
         if (g) { out.game = g.status; if (g.opp) out.opp = (g.home ? 'vs ' : '@ ') + g.opp; if (g.locked) out.scored = round1(g.pts); if (g.label) out.game_label = g.label; }
         const DQ = App.DhqProj;
         const r = DQ && DQ.get ? DQ.get(String(pid)) : null;
-        if (r) { out.proj = round1(r.median != null ? r.median : r.mean); if (r.floor != null) out.floor = round1(r.floor); if (r.ceiling != null) out.ceiling = round1(r.ceiling); }
+        if (r) { out.proj = round1(r.median != null ? r.median : r.mean); if (r.floor != null) out.floor = round1(r.floor); if (r.ceiling != null) out.ceiling = round1(r.ceiling); if (r.why && out.proj > 0) out.why = String(r.why); }
         return out;
     }
     // One compact player line used across tools.
@@ -546,6 +546,32 @@
                 week: wk, slots, current, placed: chk.placed || {}, current_total: d.currentTotal, best_total: d.optimalTotal,
                 locks_loaded: locksLoaded(), sleeper_loaded: sleeperLoaded, win_pct: winPct, players, asked, not_found: notFound, game_kicks: gameKicks,
             });
+            // Owner ask 2026-10-12: a start/sit answer needs the story, not just
+            // the number (how he has played, health and practice, his role,
+            // what drives DHQ's number). The player lookup for each player in
+            // the call rides along, so the answer never depends on the AI
+            // remembering to look him up.
+            try {
+                const names = [...new Set((asked.length ? asked.map(pname) : []).concat((res.changes || []).flatMap(c => [c.start, c.sit]).filter(Boolean)))].slice(0, 4);
+                const gp = tools.get('get_player');
+                if (gp && names.length) {
+                    const ctxs = await withTimeout(Promise.all(names.map(n => gp.run({ player: n }, h).catch(() => null))), 8000, []);
+                    const pc = {};
+                    (ctxs || []).forEach((x, i) => {
+                        if (!x || x.error) return;
+                        const se = x.season || {};
+                        pc[names[i]] = {
+                            this_week: x.this_week, injury: x.injury || null, depth: x.depth || undefined,
+                            season: se.games != null ? { games: se.games, ppg: se.ppg, weeks: se.weeks } : undefined,
+                            news: (x.news || []).slice(0, 3),
+                        };
+                    });
+                    if (Object.keys(pc).length) {
+                        res.player_context = pc;
+                        res.answer_with_context = 'After the call, give the story for each player in it from player_context: how he has played this season (average, games played or missed), health and practice news, his role, and what drives his DHQ projection (this_week.why). Keep it to a few sentences.';
+                    }
+                }
+            } catch (e) { /* the call stands without context */ }
             return Object.assign({ team: label(r) }, res);
         },
     });
