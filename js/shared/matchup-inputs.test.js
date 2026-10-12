@@ -212,3 +212,16 @@ test('a returning star takes his whole share; the room cut falls on the others',
     assert.equal(jj.returningStar, true);
     assert.equal(jj.roomScale, 1);
 });
+
+test('a defender back from a missed game keeps the snaps of his last game played, not zero', () => {
+    const playersData = { don: { player_id: 'don', team: 'LAR', position: 'DT' }, lb: { player_id: 'lb', team: 'LAR', position: 'LB' } };
+    const wk = (w, don) => ({ week: w, stats: Object.assign({ TEAM_LAR: { gp: 1 }, lb: { gp: 1, idp_tkl: 8, def_snp: 60, tm_def_snp: 60 } }, don ? { don } : {}) });
+    const opts = {
+        playersData,
+        statsData: { TEAM_LAR: { gp: 3 }, don: { gp: 2, idp_tkl: 4, def_snp: 68, tm_def_snp: 125 }, lb: { gp: 3, idp_tkl: 24, def_snp: 180, tm_def_snp: 180 } },
+        priorData: {},
+    };
+    const ctx = { week: 5, depth: null, recentWeeks: [wk(2, { gp: 1, idp_tkl: 3, def_snp: 33, tm_def_snp: 58 }), wk(3, { gp: 1, idp_tkl: 1, def_snp: 35, tm_def_snp: 67 }), wk(4, null)] };
+    const r = I.roleFor('don', playersData.don, 'DL', 'LAR', opts, ctx);
+    assert.ok(r.snapScale && Math.abs(r.snapScale.snap - 35 / 67) < 0.005, 'snap ' + JSON.stringify(r.snapScale) + ' (the missed week read as 0%)');
+});
