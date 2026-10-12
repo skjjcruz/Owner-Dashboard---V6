@@ -488,6 +488,7 @@
         const base = input.baseline || {};
         const bMed = num(base.median) || 0;
         const bMean = num(base.mean) != null ? num(base.mean) : bMed;
+        const bTyp = num(base.typical) != null ? num(base.typical) : bMed;
         const bFloor = num(base.floor) != null ? num(base.floor) : bMed * 0.75;
         const bCeil = num(base.ceiling) != null ? num(base.ceiling) : bMed * 1.25;
         // Available means healthy enough to play; a baseline of zero is a
@@ -507,9 +508,10 @@
         const points = available ? {
             median: +(bMed * mult * availMult).toFixed(2),
             mean: +(bMean * mult * availMult).toFixed(2),
+            typical: +(bTyp * mult * availMult).toFixed(2),
             floor: +(bFloor * mult * availMult * (1 - floorPenalty)).toFixed(2),
             ceiling: +(bCeil * mult * availMult).toFixed(2),
-        } : { median: 0, mean: 0, floor: 0, ceiling: 0 };
+        } : { median: 0, mean: 0, typical: 0, floor: 0, ceiling: 0 };
 
         const grade = available ? gradeFor(mult) : 'F';
         const verdict = available && points.median <= 0 ? 'sit' : verdictFor(grade, available);
