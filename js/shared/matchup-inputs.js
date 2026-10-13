@@ -101,11 +101,18 @@
         trackMeasuredGames: 3,
         // Which week the roster row shows: 'typical' (the median, with the
         // touchdown skew taken off) or 'average' (the mean the lineup adds
-        // up). Owner ruling 2026-10-12: the average. The typical week sat
-        // 0.9 (RB) to 1.5 (TE) points under the average every week, beside
-        // Sleeper's line and the L8 column, which are averages; it stays as
-        // the floor and in the lock for the closeness audit.
-        showWeek: 'average',
+        // up). Owner ruling 2026-10-12 was the average (the typical week sat
+        // 0.9-1.5 points under it, beside Sleeper's line and the L8 column);
+        // owner ruling 2026-10-13: back to the typical week, which beats
+        // Sleeper more often (weeks 1-5 replay on this formula: 56.3% vs
+        // 54.9%; RB 61.6 vs 57.8, WR 54.2 vs 50.6, TE 57.3 vs 52.3). The
+        // safety check below keeps a starter from reading absurdly low.
+        showWeek: 'typical',
+        // Safety check (owner ruling 2026-10-13: "we can't have Hall of
+        // Famers projecting for 1 point ever"): a healthy starter Sleeper
+        // still projects as one, whom we put under safetyUnder of Sleeper's
+        // line AND of his own normal, is raised to safetyTo of Sleeper's line.
+        safetyUnder: 0.5, safetyTo: 0.7,
         medSplashDl: 0.6,       // DL: tackles + this share of splash points
         medShiftLb: 0.4, medShiftDb: 0.35,   // LB/DB: points off the average
         // Defenders' tackle norm by role (2025 regulars, tackles a game:
@@ -1933,6 +1940,68 @@
         const scored = WP.projectPlayer(pid, { playersData: opts.playersData, statsData: opts.statsData, priorData: opts.priorData, scoring: opts.scoring, week, requireSleeper: true });
         return scored && scored.points ? num(scored.points.median) : null;
     }
+    // ── Safety check ─────────────────────────────────────────────────
+    // The last word on a projection: a number far under what everyone
+    // expects of a healthy starter is a bug somewhere upstream (Aaron Donald,
+    // week 5 2026: a missed game read as 0% of the snaps, projected 0.7
+    // against Sleeper's 3.3; Garrett Wilson, week 1: 1.7 against 12.3,
+    // scored 10.9). It fires only when we are under half of Sleeper's line
+    // AND under half of his own normal; a man who lost his job is under his
+    // normal but not under Sleeper's line, and stays where he is. Weeks 1-5
+    // replay: 44 player-weeks raised (about 9 a week), 2660-2067 to 2664-2063
+    // vs Sleeper. A version on his own normal alone raised 100, mostly
+    // linebackers past their old role, and helped 45 and hurt 53.
+    const SAFE_SLEEPER_MIN = { QB: 10, RB: 6, WR: 6, TE: 5, K: 5, DL: 3, LB: 3, DB: 3 };
+    const SAFE_RANK = { QB: 1, RB: 2, WR: 3, TE: 1, K: 1 };
+    function sideSnap(st, side) {
+        if (!st || !(num(st.gp) >= 1)) return null;
+        const mine = num(side === 'def' ? st.def_snp : st.off_snp), all = num(side === 'def' ? st.tm_def_snp : st.tm_off_snp);
+        return all > 0 ? clamp((mine || 0) / all, 0, 1) : null;
+    }
+    // His normal: points a healthy game this season (a game under half his
+    // usual snaps does not count), two phantom games of last season's pace.
+    function normalPoints(pid, grp, opts, ctx) {
+        const DB = App.DhqBaseline;
+        if (!DB) return null;
+        const side = BALL_BASIS[grp] === 'tackles' ? 'def' : 'off';
+        const snaps = (ctx.recentWeeks || []).map(wk => wk && wk.stats ? sideSnap(wk.stats[pid], side) : null).filter(v => v != null).sort((a, b) => a - b);
+        const usual = snaps.length ? snaps[Math.floor((snaps.length - 1) / 2)] : null;
+        let sum = 0, n = 0;
+        for (const wk of ctx.recentWeeks || []) {
+            const st = wk && wk.stats && wk.stats[pid];
+            if (!st || !(num(st.gp) >= 1)) continue;
+            const sn = sideSnap(st, side);
+            if (sn != null && usual != null && usual >= 0.4 && sn < 0.5 * usual) continue;
+            sum += num(DB.scoreLine(st, opts.scoring, grp)) || 0; n++;
+        }
+        const pr = opts.priorData && opts.priorData[pid], pgp = pr ? num(pr.gp) || 0 : 0;
+        if (pgp >= 6) return (sum + 2 * ((num(DB.scoreLine(pr, opts.scoring, grp)) || 0) / pgp)) / (n + 2);
+        return n >= 2 ? sum / n : null;
+    }
+    function safetyCheck(pid, out, input, opts, ctx) {
+        if (!out || !out.available || !out.points || !(out.sleeper > 0)) return;
+        const player = opts.playersData && opts.playersData[pid];
+        const grp = posGroup(player);
+        if (!SAFE_SLEEPER_MIN[grp] || out.sleeper < SAFE_SLEEPER_MIN[grp]) return;
+        // a starter: top of the chart, or a defender who played half the snaps in a game this season
+        if (BALL_BASIS[grp] === 'tackles') {
+            const xs = (ctx.recentWeeks || []).map(wk => wk && wk.stats ? sideSnap(wk.stats[pid], 'def') : null).filter(v => v != null);
+            if (xs.length && Math.max(...xs) < 0.5) return;
+        } else {
+            const rk = num(input.role && input.role.posRank);
+            if (!(rk >= 1 && rk <= SAFE_RANK[grp])) return;
+        }
+        const shown = num(out.points.median) || 0;
+        if (shown >= TUNE.safetyUnder * out.sleeper) return;
+        const normal = normalPoints(pid, grp, opts, ctx);
+        if (normal != null && shown >= TUNE.safetyUnder * normal) return;
+        const to = TUNE.safetyTo * out.sleeper;
+        const k = shown > 0 ? to / shown : null;
+        for (const f of ['median', 'typical', 'mean', 'floor', 'ceiling']) if (out.points[f] != null) out.points[f] = +(k != null ? out.points[f] * k : to).toFixed(2);
+        out.safety = { from: +shown.toFixed(2), to: +to.toFixed(2), normal: normal != null ? +normal.toFixed(2) : null };
+        out.why = [{ key: 'safety', label: 'Safety check', impactPct: shown > 0 ? +((k - 1) * 100).toFixed(1) : 100,
+            note: 'Projected ' + shown.toFixed(1) + ', under half of Sleeper\'s ' + out.sleeper.toFixed(1) + (normal != null ? ' and of his normal ' + normal.toFixed(1) : '') + ' for a healthy starter; held at ' + to.toFixed(1) }].concat(out.why || []);
+    }
     function project(pid, week, opts, ctx) {
         const input = build(pid, week, opts, ctx);
         if (!input || !App.MatchupEngine) return null;
@@ -1941,6 +2010,7 @@
         out.opponentAbbr = input.opponentAbbr;
         out.sleeper = sleeperPoints(pid, week, opts);
         out.input = input;
+        safetyCheck(pid, out, input, opts, ctx);
         return out;
     }
 
@@ -1958,7 +2028,7 @@
 
     App.MatchupInputs = App.MatchupInputs || {
         prepare, build, project, projectRoster, statusOf, idpRankings, priorRankings, depthCharts, baselineFor, dhqBaselineFor, sleeperPoints, opponentOf, opponentFor, trenchFor, castFor, teamDepth, expectedShare, teamSlotNorm, passPool, freedTargetShare, posGroup, normName, roleFor, oppHealthFor, returnLine, recentPPGFrom,
-        splitShare, roomScaleParts, typicalWeek, TUNE,
+        splitShare, roomScaleParts, typicalWeek, TUNE, _safetyCheck: safetyCheck,
     };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.MatchupInputs;
