@@ -5,13 +5,13 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 function load(store) {
-    global.window = global;
-    global.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; } };
-    global.App = { WeeklyProj: { _ctx: { byTeamWeek: { 'LAR|5': { kickoff: '2026-10-13T00:15Z' }, 'DAL|5': { kickoff: '2026-10-09T00:15Z' } } } } };
-    global.S = { players: { a: { team: 'DAL' }, b: { team: 'LAR' }, c: { team: 'LAR' } } };
+    globalThis.window = globalThis;
+    globalThis.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; } };
+    globalThis.App = { WeeklyProj: { _ctx: { byTeamWeek: { 'LAR|5': { kickoff: '2026-10-13T00:15Z' }, 'DAL|5': { kickoff: '2026-10-09T00:15Z' } } } } };
+    globalThis.S = { players: { a: { team: 'DAL' }, b: { team: 'LAR' }, c: { team: 'LAR' } } };
     delete require.cache[require.resolve('./sleeper-proj.js')];
     require('./sleeper-proj.js');
-    return global.App.SleeperProj;
+    return globalThis.App.SleeperProj;
 }
 
 test('a row dropped after his game kicked off comes back; fresh rows win', () => {
