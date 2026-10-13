@@ -50,6 +50,47 @@
         return false;
     }
 
+    // Owner report 2026-10-12 (Monday night): once a game ends, Sleeper
+    // drops that game's players from the week's projections, so by Monday
+    // night only the last game's ~30 players were left. The payload failed
+    // the published check and every other player lost his line. The rows
+    // this device has seen this week are kept (one week, live rows only)
+    // and merged back under the fresh payload: fresh rows win, rows Sleeper
+    // has since dropped come back as they were.
+    const KEEP_KEY = 'dhq_sleeper_week_v1';
+    function liveRows(byPid) {
+        const out = {};
+        if (!byPid || typeof byPid !== 'object') return out;
+        for (const pid in byPid) { const row = byPid[pid]; if (row && VOLUME_FIELDS.some(k => Number(row[k]) > 0)) out[pid] = row; }
+        return out;
+    }
+    function keptRows(key) {
+        try { const k = JSON.parse(root.localStorage.getItem(KEEP_KEY) || 'null'); return k && k.key === key && k.rows ? k.rows : null; } catch (e) { return null; }
+    }
+    function keepRows(key, rows) {
+        try { root.localStorage.setItem(KEEP_KEY, JSON.stringify({ key, rows })); } catch (e) { /* storage full or blocked: the fresh payload still works */ }
+    }
+    // Only a player whose game has already kicked off gets a kept row back:
+    // a player Sleeper drops BEFORE his game (ruled out, lost his role) must
+    // stay dropped (truth law). Kickoffs come from the week's game context;
+    // without it nothing is restored.
+    function kickedOff(pid, wk, now) {
+        const p = ((root.S || {}).players || {})[pid];
+        const bt = App.WeeklyProj && App.WeeklyProj._ctx && App.WeeklyProj._ctx.byTeamWeek;
+        const g = p && p.team && bt ? bt[String(p.team).toUpperCase() + '|' + wk] : null;
+        const t = g && g.kickoff ? Date.parse(g.kickoff) : NaN;
+        return Number.isFinite(t) && t <= (now || Date.now());
+    }
+    function withKept(key, byPid, now) {
+        const kept = keptRows(key);
+        if (!kept) return byPid;
+        const wk = String(key).split('|')[1];
+        const fresh = liveRows(byPid);
+        const back = {};
+        for (const pid in kept) if (!fresh[pid] && kickedOff(pid, wk, now)) back[pid] = kept[pid];
+        return Object.keys(back).length ? Object.assign({}, byPid || {}, back) : byPid;
+    }
+
     // Load the upcoming week's Sleeper projections and hand them to WeeklyProj.
     // Cached per (season, week). Returns the loaded week, or null on failure.
     async function loadCurrent(season) {
@@ -74,7 +115,9 @@
                     if (r.ok) byPid = await r.json();
                 } catch (e) { /* keep the cached payload for the check below */ }
             }
+            byPid = withKept(key, byPid);
             if (looksPublished(byPid)) {
+                keepRows(key, Object.assign({}, keptRows(key) || {}, liveRows(byPid)));
                 WP.setProjections(wk, byPid);
                 _done[key] = true;
                 try { root.dispatchEvent && root.dispatchEvent(new CustomEvent('wr:proj-updated', { detail: { week: wk, season: yr } })); } catch (e) { /* no window */ }
@@ -84,5 +127,5 @@
         return null;
     }
 
-    App.SleeperProj = App.SleeperProj || { loadCurrent, targetWeek, targetSeason, _done };
+    App.SleeperProj = App.SleeperProj || { loadCurrent, targetWeek, targetSeason, _done, _withKept: withKept, _liveRows: liveRows };
 })(typeof window !== 'undefined' ? window : globalThis);
