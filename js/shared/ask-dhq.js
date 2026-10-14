@@ -57,8 +57,8 @@
     const injury = pid => { const p = pl(pid); return p.injury_status ? p.injury_status + (p.injury_body_part ? ' (' + p.injury_body_part + ')' : '') : ''; };
 
     // This week's number for a player: actual points once his game has
-    // started, otherwise DHQ's average week (what the Lineup screen picks
-    // on), otherwise nothing (still loading, or nobody projects him).
+    // started, otherwise DHQ's projection as the Lineup screen shows it
+    // (decisions use .avg), otherwise nothing (still loading, or nobody projects him).
     function weekPts(pid) {
         const g = lock(pid);
         if (g && g.locked) return { pts: round1(g.pts), kind: g.status === 'live' ? 'live' : 'final' };
