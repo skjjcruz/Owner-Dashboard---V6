@@ -217,14 +217,19 @@
     });
     // ── This week, on ONE statistic (Lab research 2026-10-10) ────────
     // Lineup calls rank by DHQ's average week (mean): DhqProj.lineupCheck
-    // picks with it, so every number a lineup tool prints is that same
-    // average week (the old get_lineup_advice showed start rows on the mean
-    // and bench rows on the median, so a "start" could read lower than the
-    // man he replaced). A locked player (his game has kicked off) counts his
-    // actual points and cannot move. A 0 always says why.
+    // picks with it, and swaps, gains and totals use it. The number a lineup
+    // tool QUOTES for a player (`proj`) is the one the Lineup screen shows,
+    // the typical week, so the screen, Ask your AI and Claude agree (owner
+    // rule 2026-10-14); `avg` carries the average week. A locked player (his
+    // game has kicked off) counts his actual points and cannot move. A 0
+    // always says why.
     const locksLoaded = () => { try { return !!(App.GameLocks && App.GameLocks.ready && App.GameLocks.ready()); } catch (e) { return false; } };
     const dhqRow = pid => { const D = App.DhqProj; try { return D && D.get ? D.get(String(pid)) : null; } catch (e) { return null; } };
     const meanOf = r => (r ? (Number(r.mean != null ? r.mean : r.median) || 0) : null);
+    // The number the Lineup screen shows (App.DhqProj.fmt: the typical week,
+    // owner ruling 2026-10-13). Owner rule 2026-10-14, one number everywhere:
+    // the AI quotes this; swaps and totals still rank on the average week.
+    const shownOf = r => (r ? (Number(r.median != null ? r.median : r.mean) || 0) : null);
     // Same test DhqProj uses for a bye (its byeOn): the team has no game in
     // a full slate of this week's games.
     function byeFromSlate(team, wk) {
@@ -253,14 +258,14 @@
         if (!r) return 'no_projection';
         return 'no_role';
     }
-    // One player's row for a lineup tool: proj = average week (or actual
-    // points once locked), floor/ceiling from DHQ, locked, why it's 0.
+    // One player's row for a lineup tool: proj = the shown number (or actual
+    // points once locked), avg = average week, floor/ceiling from DHQ, locked, why it's 0.
     function weekRow(pid, wk) {
         pid = String(pid);
         const g = lock(pid), r = dhqRow(pid), out = {};
         out.locked = !!(g && g.locked);
         if (out.locked) { out.proj = round1(g.pts); out.game = g.label || g.status; }
-        else if (r) { out.proj = round1(meanOf(r)); if (r.floor != null) out.floor = round1(r.floor); if (r.ceiling != null) out.ceiling = round1(r.ceiling); }
+        else if (r) { out.proj = round1(shownOf(r)); out.avg = round1(meanOf(r)); if (r.floor != null) out.floor = round1(r.floor); if (r.ceiling != null) out.ceiling = round1(r.ceiling); }
         else out.proj = null;
         const z = out.locked ? null : zeroReason(pid, r, wk);
         if (z && !(out.proj > 0)) out.zero_reason = z;
@@ -270,7 +275,7 @@
 
     register({
         name: 'get_lineup_advice',
-        description: 'Is my lineup set right this week? The best lineup by projection, which swaps to make and how many points they add. Every number is DHQ\'s average week in this league\'s scoring (actual points once a game has started). Locked players (games already started) stay put; locks_loaded says whether that was checked.',
+        description: 'Is my lineup set right this week? The best lineup by projection, which swaps to make and how many points they add. Each player\'s proj is DHQ\'s projection, the number the Lineup screen shows (actual points once a game has started); swaps and totals are ranked on DHQ\'s average week (avg). Locked players (games already started) stay put; locks_loaded says whether that was checked.',
         parameters: { type: 'object', properties: { team: { type: 'string', description: 'Default: me.' } } },
         async run(a) {
             const r = findTeam(a.team), lg = league();
@@ -282,7 +287,7 @@
             const locks = locksLoaded();
             const out = {
                 team: label(r), week: chk.week,
-                projection: 'DHQ average week (mean), this league\'s scoring; actual points for a locked player',
+                projection: 'proj = DHQ projection, the number the Lineup screen shows (this league\'s scoring; actual points for a locked player). Swaps and totals rank on avg, DHQ\'s average week',
                 locks_loaded: locks,
                 current_total: round1(d.currentTotal), best_total: round1(d.optimalTotal), points_left_on_bench: round1(d.delta), lineup_is_optimal: !!d.isOptimal,
                 start: (d.startInstead || []).map(x => Object.assign({ name: pname(x.pid), slot: x.slot }, weekRow(x.pid, chk.week))),
@@ -321,7 +326,10 @@
         const F = facts || {}, P = F.players || {};
         const slots = F.slots || [], current = F.current || {}, placed = F.placed || {};
         const nm = pid => (P[pid] && P[pid].name) || String(pid);
-        const pj = pid => (P[pid] && P[pid].proj != null ? Number(P[pid].proj) : 0);
+        // The number to quote: what the Lineup screen shows.
+        const sh = pid => (P[pid] && P[pid].proj != null ? Number(P[pid].proj) : 0);
+        // Ranked on the average week (`avg`) when given; `proj` is the shown number.
+        const pj = pid => (P[pid] && P[pid].avg != null ? Number(P[pid].avg) : P[pid] && P[pid].proj != null ? Number(P[pid].proj) : 0);
         const slotName = k => { const s = slots.find(x => String(x.idx) === String(k)); return s ? s.slotName : ''; };
         const slotElig = k => { const s = slots.find(x => String(x.idx) === String(k)); return s ? s.elig : []; };
         const fitsSlot = (pid, k) => ((P[pid] && P[pid].positions) || []).some(q => slotElig(k).includes(q));
@@ -357,7 +365,7 @@
             const gain = pj(c.start) - (b ? pj(c.sit) : 0);
             const top = Math.max(pj(c.start), b ? pj(c.sit) : 0);
             const close = !!b && !(b.zero_reason && HARD_NO.has(b.zero_reason)) && (gain < CLOSE_PTS || gain < CLOSE_PCT * top);
-            const bits = [nm(c.start) + ' ' + f1(pj(c.start)) + (b ? ' vs ' + nm(c.sit) + ' ' + f1(pj(c.sit)) : ' into an empty slot') + ' (average week)'];
+            const bits = ['DHQ projects ' + nm(c.start) + ' ' + f1(sh(c.start)) + (b ? ' vs ' + nm(c.sit) + ' ' + f1(sh(c.sit)) : ' into an empty slot')];
             if (b && b.zero_reason) bits.push(nm(c.sit) + ': ' + b.zero_reason);
             if (a.injury_status) bits.push(nm(c.start) + ' is ' + a.injury_status);
             if (b && b.injury_status && !b.zero_reason) bits.push(nm(c.sit) + ' is ' + b.injury_status);
@@ -413,10 +421,10 @@
             const pivLater = !!(piv && kick && Number(P[piv].kick) >= kick);
             let note;
             if (!piv) note = 'No healthy bench player fits his slot.';
-            else if (late === true && !pivLater) note = 'Nobody on the bench who fits his slot plays as late: if he is ruled out about 90 minutes before kickoff, you cannot swap. Best fallback is ' + nm(piv) + ' (' + f1(pj(piv)) + '), whose game starts earlier; decide before it does.';
+            else if (late === true && !pivLater) note = 'Nobody on the bench who fits his slot plays as late: if he is ruled out about 90 minutes before kickoff, you cannot swap. Best fallback is ' + nm(piv) + ' (' + f1(sh(piv)) + '), whose game starts earlier; decide before it does.';
             else if (pivLater) note = 'Start him; if he is inactive, swap in ' + nm(piv) + ' (plays in the same or a later game).';
             else note = 'If he is ruled out before ' + nm(piv) + '\'s game locks, swap in ' + nm(piv) + '.';
-            questionable.push({ player: nm(pid), status: x.injury_status, slot: slotName(k), late_game: late, pivot: piv ? nm(piv) : null, pivot_proj: piv ? round1(pj(piv)) : null, pivot_plays_later: pivLater, note });
+            questionable.push({ player: nm(pid), status: x.injury_status, slot: slotName(k), late_game: late, pivot: piv ? nm(piv) : null, pivot_proj: piv ? round1(sh(piv)) : null, pivot_plays_later: pivLater, note });
         });
         if (questionable.length) rules.push('Questionable starter in a late game: start him only with a pivot who plays the same or a later game.');
 
@@ -467,12 +475,12 @@
         if (!F.locks_loaded || F.sleeper_loaded === false) confidence = 'low';
 
         const evidence = [
-            'Current lineup ' + f1(F.current_total) + ' vs best ' + f1(F.best_total) + ' (DHQ average week, this league\'s scoring' + (locked.length ? '; locked players at actual points' : '') + ').',
+            'Current lineup ' + f1(F.current_total) + ' vs best ' + f1(F.best_total) + ' (totals on DHQ\'s average week, this league\'s scoring' + (locked.length ? '; locked players at actual points' : '') + ').',
         ];
         if (F.win_pct != null) evidence.push('Win chance with the best lineup: ' + Math.round(F.win_pct) + '%.');
         evidence.push(F.locks_loaded ? 'Game locks checked: ' + locked.length + ' of your players\' games have started.' : 'Game locks NOT loaded: could not confirm whose game has started.');
         if (F.sleeper_loaded === false) evidence.push('This week\'s projection inputs are not all loaded yet, so treat the numbers as provisional.');
-        rules.unshift('Ranked by DHQ\'s average week in this league\'s scoring, never by dynasty value.');
+        rules.unshift('Ranked by DHQ\'s average week in this league\'s scoring, never by dynasty value. Quote each player\'s proj: DHQ\'s projection, the number the Lineup screen shows.');
         if ((F.not_found || []).length) evidence.push('No player found for: ' + F.not_found.join(', ') + '.');
 
         const optimal_lineup = Object.keys(placed).sort((x, y) => Number(x) - Number(y)).map(k => {
@@ -483,7 +491,7 @@
         if (asked) res.asked = asked;
         if (h2h) res.head_to_head = h2h;
         if (!F.locks_loaded) res.warning = 'Could not confirm which games have started: say so, and do not promise that any player named here can still be moved.';
-        res.method = 'DHQ start/sit: the best lineup by DHQ\'s weekly projection (average week, this league\'s scoring; exact slot assignment, dual-position players count at every position). Locked players stay put at actual points; out, doubtful, bye, IR, taxi never start. A swap worth under ' + CLOSE_PTS + ' pts or ' + Math.round(CLOSE_PCT * 100) + '% is a coin flip: favored (' + FAVORED_PCT + '%+) takes the higher floor, underdog (' + UNDERDOG_PCT + '% or less) the higher ceiling. A Questionable starter in a late game needs a pivot who plays as late. Lead with `recommendation`; explain with `changes`, `close_calls`, `do_not_start`, `questionable`. Never use dynasty value for this.';
+        res.method = 'DHQ start/sit: the best lineup by DHQ\'s weekly projection (ranked on the average week, this league\'s scoring; quote each player\'s proj, the number the Lineup screen shows; exact slot assignment, dual-position players count at every position). Locked players stay put at actual points; out, doubtful, bye, IR, taxi never start. A swap worth under ' + CLOSE_PTS + ' pts or ' + Math.round(CLOSE_PCT * 100) + '% is a coin flip: favored (' + FAVORED_PCT + '%+) takes the higher floor, underdog (' + UNDERDOG_PCT + '% or less) the higher ceiling. A Questionable starter in a late game needs a pivot who plays as late. Lead with `recommendation`; explain with `changes`, `close_calls`, `do_not_start`, `questionable`. Never use dynasty value for this.';
         return res;
     }
 
@@ -517,7 +525,7 @@
                 const row = weekRow(pid, wk), g = lock(pid), p = pl(pid);
                 const onRoster = (r.players || []).map(String).includes(pid);
                 players[pid] = {
-                    name: pname(pid), positions: posOf(pid), proj: row.proj, floor: row.floor, ceiling: row.ceiling, locked: row.locked,
+                    name: pname(pid), positions: posOf(pid), proj: row.proj, avg: row.avg, floor: row.floor, ceiling: row.ceiling, locked: row.locked,
                     kick: g && g.kick ? Number(g.kick) : null, injury_status: p.injury_status || null, zero_reason: row.zero_reason || null,
                     why: (dhqRow(pid) || {}).why || null, roster_slot: onRoster ? slotOf(r, pid) : 'not on roster',
                 };

@@ -202,7 +202,7 @@ test('a later week is refused, not guessed', async () => {
     assert.match(out.error, /week 5/);
 });
 
-test('get_lineup_advice: one statistic (average week) for start and bench rows, locks flagged', async () => {
+test('get_lineup_advice: quotes the shown number (typical week), carries the average week, locks flagged', async () => {
     await boot();
     const out = await T.run('get_lineup_advice', {});
     assert.ok(!out.error, out.error);
@@ -210,8 +210,10 @@ test('get_lineup_advice: one statistic (average week) for start and bench rows, 
     assert.ok(out.start.length && out.bench.length);
     for (const row of out.start.concat(out.bench)) {
         const pid = PID(row.name);
-        const want = GL.actual(pid) != null ? GL.actual(pid) : results[pid].mean;
-        assert.equal(row.proj, Math.round(want * 10) / 10, row.name + ' shows his average week, not the median');
+        const locked = GL.actual(pid) != null;
+        const want = locked ? GL.actual(pid) : results[pid].median;
+        assert.equal(row.proj, Math.round(want * 10) / 10, row.name + ' quotes the number the Lineup screen shows');
+        if (!locked) assert.equal(row.avg, Math.round(results[pid].mean * 10) / 10, row.name + ' carries his average week');
         assert.equal(row.locked, GL.isLocked(pid));
     }
     const hall = out.bench.find(x => x.name === 'Derick Hall');
@@ -260,6 +262,13 @@ test('a clear gain is a firm call with high confidence', () => {
     assert.equal(out.changes[0].gain_pts, 4);
     assert.equal(out.recommendation, 'Start Chop Robinson over Derick Hall at DL (+4 pts).');
     assert.equal(out.confidence, 'high');
+});
+
+test('gains rank on the average week (avg); the why quotes the shown number (proj)', () => {
+    const out = call(base({ a: P('Typical', 7.0, { avg: 9.0 }), b: P('Other', 7.4, { avg: 5.0, roster_slot: 'starter' }) }, { win_pct: 50 }));
+    assert.equal(out.changes[0].gain_pts, 4, 'gain is 9.0 - 5.0 on the average week');
+    assert.match(out.changes[0].why, /^DHQ projects Typical 7\.0 vs Other 7\.4/);
+    assert.doesNotMatch(out.changes[0].why, /average week/);
 });
 
 test('a sit who is out is never a coin flip, and locks not loaded means low confidence', () => {
