@@ -131,6 +131,9 @@
         // targets (WR/TE) or touches (RB) he needs, and the share of it he
         // must still hold in his healthy games this season
         starShare: { WR: 0.2, TE: 0.2, RB: 0.3 }, starKeepsRole: 0.6,
+        // An every-down defender (see everyDown): the share of his team's
+        // defensive snaps he played in its last game
+        noLineSnap: 0.5,
     }, root.__DHQ_TUNE || {});
     const SLEEPER_DEPTH_POS = { QB: 'QB', RB: 'RB', FB: 'RB', WR: 'WR', LWR: 'WR', SWR: 'WR', RWR: 'WR', TE: 'TE', K: 'K',
         LDE: 'DL', RDE: 'DL', DE: 'DL', DT: 'DL', NT: 'DL', LDT: 'DL', RDT: 'DL', DL: 'DL',
@@ -1978,6 +1981,21 @@
         if (pgp >= 6) return (sum + 2 * ((num(DB.scoreLine(pr, opts.scoring, grp)) || 0) / pgp)) / (n + 2);
         return n >= 2 ? sum / n : null;
     }
+    // Every-down defender (owner ruling 2026-10-14, Rasul Douglas): a
+    // healthy defender whose team plays this week and who played at least
+    // noLineSnap of its defensive snaps in its last game keeps his DHQ
+    // number even when no weekly line is published for him, an exception to
+    // the truth law (dhq-proj.js gated). Week 6 2026: Douglas 87 snaps and
+    // 10 tackles in week 5, no line all season, read "—". Healthy defenders
+    // with 40+ snaps and no line, weeks 2-5 replay (25 games): DHQ's number
+    // missed by 2.6 a game, a zero by 5.2.
+    function everyDown(pid, out, input, opts, ctx) {
+        if (!out || out.available === false || !input || !input.opponentAbbr) return false;
+        const player = opts.playersData && opts.playersData[pid];
+        if (BALL_BASIS[posGroup(player)] !== 'tackles' || statusOf(player, ctx) !== '') return false;
+        const sn = lastGameSnap(pid, String(input.team || (player && player.team) || '').toUpperCase(), ctx, opts, 'def');
+        return sn != null && sn >= TUNE.noLineSnap;
+    }
     function safetyCheck(pid, out, input, opts, ctx) {
         if (!out || !out.available || !out.points || !(out.sleeper > 0)) return;
         const player = opts.playersData && opts.playersData[pid];
@@ -2011,6 +2029,7 @@
         out.sleeper = sleeperPoints(pid, week, opts);
         out.input = input;
         safetyCheck(pid, out, input, opts, ctx);
+        out.everyDown = everyDown(pid, out, input, opts, ctx);
         return out;
     }
 
@@ -2028,7 +2047,7 @@
 
     App.MatchupInputs = App.MatchupInputs || {
         prepare, build, project, projectRoster, statusOf, idpRankings, priorRankings, depthCharts, baselineFor, dhqBaselineFor, sleeperPoints, opponentOf, opponentFor, trenchFor, castFor, teamDepth, expectedShare, teamSlotNorm, passPool, freedTargetShare, posGroup, normName, roleFor, oppHealthFor, returnLine, recentPPGFrom,
-        splitShare, roomScaleParts, typicalWeek, TUNE, _safetyCheck: safetyCheck,
+        splitShare, roomScaleParts, typicalWeek, TUNE, _safetyCheck: safetyCheck, _everyDown: everyDown,
     };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.MatchupInputs;
