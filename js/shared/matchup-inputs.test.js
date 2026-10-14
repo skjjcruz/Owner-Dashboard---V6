@@ -285,3 +285,23 @@ test('the safety check leaves alone a number above half of Sleeper, a backup, an
     // under Sleeper's line but at his own normal (two 2-target games): he lost the job, not a bug
     assert.equal(safetyCase(2, 12, 1, [{ rec_tgt: 2, rec: 1, rec_yd: 12 }, { rec_tgt: 2, rec: 1, rec_yd: 15 }]).safety, undefined, 'at his normal');
 });
+
+// Every-down defender: no weekly line, but healthy, playing, and on the field
+// for most of his team's last game (Rasul Douglas, week 6 2026).
+const everyDownCase = (snap, tag, opp, pos) => {
+    const playersData = { rd: { player_id: 'rd', team: 'WAS', position: pos || 'CB', injury_status: tag || null } };
+    const ctx = { week: 6, recentWeeks: [{ week: 5, stats: { TEAM_WAS: { gp: 1 }, rd: { gp: 1, idp_tkl: 10, def_snp: snap, tm_def_snp: 89 } } }] };
+    const out = { available: true, sleeper: null, points: { median: 5.8 } };
+    return I._everyDown('rd', out, { team: 'WAS', opponentAbbr: opp === undefined ? 'SF' : opp }, { playersData }, ctx);
+};
+test('a healthy every-down defender keeps his number without a weekly line', () => {
+    assert.equal(everyDownCase(87), true, '87 of 89 snaps');
+    assert.equal(everyDownCase(45), true, 'half the snaps');
+});
+test('the every-down exception skips part-timers, tagged players, byes and offense', () => {
+    assert.equal(everyDownCase(30), false, 'a third of the snaps');
+    assert.equal(everyDownCase(87, 'Questionable'), false, 'an injury tag');
+    assert.equal(everyDownCase(87, 'IR'), false, 'IR');
+    assert.equal(everyDownCase(87, null, null), false, 'no game this week');
+    assert.equal(everyDownCase(87, null, 'SF', 'WR'), false, 'not a defender');
+});

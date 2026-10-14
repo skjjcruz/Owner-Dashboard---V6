@@ -200,6 +200,10 @@ test('once Sleeper\'s week is in, a player it does not project shows 0, typical 
     assert.equal(D.get('ptsOnly').mean, 0, 'a line with nothing this league scores');
     assert.equal(D.get('kOff').noSleeper, true);
     assert.equal(D.totalNum(['qb1', 'kOff', 'adp']), 18, 'totals add nothing for them');
+    // an every-down defender (healthy, half his team's snaps last game) keeps his number
+    D._st.results.cb1 = { median: 5.8, mean: 6.1, everyDown: true };
+    assert.equal(D.fmt('cb1'), '5.8', 'every-down defender with no Sleeper line');
+    assert.equal(D.totalNum(['qb1', 'cb1']), 24.1);
     assert.equal(D.dataStatus().sleeper.ok, true);
     // Sleeper's week did not load: nobody is zeroed, and the status says so.
     ready = false;

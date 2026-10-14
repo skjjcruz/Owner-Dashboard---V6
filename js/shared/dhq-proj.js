@@ -24,7 +24,7 @@
     'use strict';
     const App = root.App = root.App || {};
     const SL = 'https://api.sleeper.app/v1';
-    const VERSION = '20261013proj11';
+    const VERSION = '20261014proj12';
     const DEPS = [
         'js/shared/matchup-engine.js', 'js/shared/dhq-baseline.js', 'js/shared/matchup-feeds-espn.js',
         'js/shared/matchup-inputs.js', 'data/pff-matchup-snapshot.js', 'data/usage-snapshot.js',
@@ -230,7 +230,7 @@
                     try {
                         const p = MI.project(pid, at.wk, opts, st.ctx);
                         if (p && p.points && Number.isFinite(Number(p.points.median))) {
-                            res = { median: p.available === false ? 0 : +Number(p.points.median).toFixed(1), mean: p.available === false ? 0 : +Number(p.points.mean != null ? p.points.mean : p.points.median).toFixed(1), floor: p.available === false ? 0 : +Number(p.points.floor || 0).toFixed(1), ceiling: p.available === false ? 0 : +Number(p.points.ceiling || 0).toFixed(1), grade: p.grade, verdict: p.verdict, why: whyText(p.why) };
+                            res = { median: p.available === false ? 0 : +Number(p.points.median).toFixed(1), mean: p.available === false ? 0 : +Number(p.points.mean != null ? p.points.mean : p.points.median).toFixed(1), floor: p.available === false ? 0 : +Number(p.points.floor || 0).toFixed(1), ceiling: p.available === false ? 0 : +Number(p.points.ceiling || 0).toFixed(1), grade: p.grade, verdict: p.verdict, why: whyText(p.why), everyDown: !!p.everyDown };
                         }
                     } catch (e) { res = null; }
                     st.results[pid] = res;
@@ -279,7 +279,11 @@
     // at 8 points, third-string QBs at 5-8, a few dozen idle defenders and
     // backups). Applied when a number is read, so it holds even when
     // Sleeper's lines land after DHQ has projected. If Sleeper's week did not
-    // load, nothing is zeroed and dataStatus().sleeper says so.
+    // load, nothing is zeroed and dataStatus().sleeper says so. One exception
+    // (owner ruling 2026-10-14): an every-down defender, healthy, his team
+    // playing, half its snaps or more in its last game (everyDown in
+    // matchup-inputs.js), keeps his number; Sleeper leaves some starting
+    // corners unprojected all season (Rasul Douglas, Amik Robertson).
     function sleeperReady(wk) {
         const WP = App.WeeklyProj;
         return !!(WP && WP.hasProjWeek && WP.projLine && WP.hasProjWeek(wk));
@@ -301,7 +305,7 @@
         if (gate.key !== k || gate.ready !== ready) { gate.key = k; gate.ready = ready; gate.memo = {}; }
         if (!ready) return r;
         if (!(pid in gate.memo)) gate.memo[pid] = sleeperProjects(pid, wk, lg.scoring);
-        if (gate.memo[pid]) return r;
+        if (gate.memo[pid] || r.everyDown) return r;
         return { median: 0, mean: 0, floor: 0, ceiling: 0, grade: r.grade, verdict: 'out', why: 'no Sleeper projection this week', noSleeper: true };
     }
     function get(pid) {
