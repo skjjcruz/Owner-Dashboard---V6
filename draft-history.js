@@ -225,7 +225,10 @@
   // ── Public sync ───────────────────────────────────────────────────────────────
   async function syncDraftDNA(leagueId) {
     const picks = await fetchLeagueDraftHistory(leagueId);
-    if (!picks.length) throw new Error('No completed draft picks found for this league (3 seasons checked).');
+    // A league with no completed draft yet (a new league) has no draft DNA:
+    // that's a normal state, not an error (owner report 2026-10-16: it was
+    // logged as a client error). Callers treat null as "nothing to merge".
+    if (!picks.length) return null;
     const map = computeOwnerDraftDNA(picks);
     saveDraftDNA(leagueId, map);
     return map;
