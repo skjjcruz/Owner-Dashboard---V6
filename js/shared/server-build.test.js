@@ -13,13 +13,13 @@ function load(env) {
     return { SB: require('./server-build.js'), calls };
 }
 
-test('outside the Lab it sends nothing', () => {
+test('website and app send too (not only the Lab)', () => {
     const { SB, calls } = load({ lab: undefined });
     SB.note(['1312100327931019264']);
-    assert.equal(calls.length, 0);
+    assert.equal(calls.length, 1);
 });
 
-test('Lab: sends Sleeper ids only, once a day per league', () => {
+test('sends Sleeper ids only, once a day per league', () => {
     const { SB, calls } = load({ lab: true });
     SB.note(['1312100327931019264', 'espn_687493_2026', 'mfl_10005_2026', '1312100327931019264']);
     assert.equal(calls.length, 1);
