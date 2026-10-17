@@ -1,6 +1,6 @@
 // js/shared/server-build.js — tell the engine server which Sleeper leagues a
 // member uses, so it builds them ahead of time (owner go-ahead 2026-10-17,
-// transition step 1). Lab only for now (window.DHQ_LAB). Fire and forget:
+// transition step 1; Lab, website and app since 2026-10-17). Fire and forget:
 // it never throws, never waits on anything and changes nothing on screen.
 // Each league is sent at most once a day per device; the server queues only
 // real Sleeper leagues (server/supabase/functions/dhq-request).
@@ -16,7 +16,7 @@
     }
     function note(ids) {
         try {
-            if (root.DHQ_LAB !== true || typeof root.fetch !== 'function') return;
+            if (typeof root.fetch !== 'function') return;
             const now = Date.now(), log = sentLog();
             // Sleeper league ids only (ESPN / MFL ids carry a prefix).
             const fresh = [...new Set((ids || []).map(String).filter(id => /^\d{10,20}$/.test(id)))]
