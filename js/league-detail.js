@@ -1933,6 +1933,7 @@
                 // Key by league ID — switching back to a previously-loaded league can
                 // reuse its cache if the underlying data hasn't changed.
                 const leagueKey = currentLeague.league_id || currentLeague.id || '';
+                window.App?.ServerBuild?.note?.([leagueKey]);
                 if (window.assessTeamFromGlobal?._cache) {
                     // Only clear entries for the current league, not all leagues
                     const cache = window.assessTeamFromGlobal._cache;

@@ -1570,6 +1570,9 @@
 
                 const leagues = (await withHubTimeout(fetchUserLeagues(user.user_id, selectedYear))) || [];
                 if (!leagues.length) { setSleeperLeagues([]); setLoading(false); hubSyncedAtRef.current = Date.now(); return; }
+                // Lab: tell the engine server these leagues are in use so it
+                // builds them ahead of time (fire and forget, never waits).
+                window.App?.ServerBuild?.note?.(leagues.map(l => l.league_id));
 
                 // Stream each league's full details into state as it resolves, preserving
                 // the original order, instead of awaiting the slowest league via a single
