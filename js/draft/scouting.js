@@ -125,14 +125,17 @@
         refreshDynastyValues();
         const key = normName(name);
         if (_nameIndex[key]) return _nameIndex[key];
-        for (const alias of aliasKeys(name)) {
-            if (_nameIndex[alias]) return _nameIndex[alias];
-        }
+        // Nicknames and initials go through the shared rule (rookie-data.js
+        // findProspect), which never lets a full first name borrow a different
+        // player's rank: this window.findProspect is also the one the value
+        // engine reads (2026-10-19: Jaylen Wright took Jeremiah Wright's draft
+        // round and Carlos Allen took CJ Allen's rank through the loose alias).
         if (typeof sharedFind === 'function') {
             const found = sharedFind(name);
-            return found ? normalizeProspect(found, 0) : null;
+            return found ? (_nameIndex[normName(found.name)] || normalizeProspect(found, 0)) : null;
         }
-        return null;
+        const stripped = stripSuffix(key);
+        return stripped !== key ? (_nameIndex[stripped] || null) : null;
     }
 
     window.DraftCC.scouting = {
