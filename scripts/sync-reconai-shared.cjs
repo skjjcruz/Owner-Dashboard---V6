@@ -100,7 +100,20 @@ if (missing.length) {
 fs.rmSync(TARGET, { recursive: true, force: true });
 fs.mkdirSync(TARGET, { recursive: true });
 
-for (const file of modules) {
+// Shared modules no page here loads, so they are not published (cleanup,
+// 2026-10-20): the retired v2 value formula and its PFF grade snapshot, read
+// only when window.__DHQ_ENGINE_V2 is true (off since 2026-09-20). The engine
+// server keeps its own copies. To turn v2 back on, drop them from this list
+// and put them back in index.html's WR_SHARED_FILES.
+const NOT_VENDORED = new Set(['values-v2.js', 'pff-snapshot.js']);
+const vendored = modules.filter(f => !NOT_VENDORED.has(f));
+const loadedButDropped = requiredModules().filter(f => NOT_VENDORED.has(f));
+if (loadedButDropped.length) {
+  console.error(`[sync-reconai-shared] pages load ${loadedButDropped.join(', ')}, which this script does not vendor (NOT_VENDORED)`);
+  process.exit(1);
+}
+
+for (const file of vendored) {
   const src = path.join(SOURCE, file);
   if (!fs.existsSync(src)) {
     console.error(`[sync-reconai-shared] Missing module in source: ${src}`);
@@ -121,4 +134,4 @@ for (const rel of data) {
   fs.copyFileSync(src, dest);
 }
 
-console.log(`[sync-reconai-shared] Vendored ${modules.length} modules into ${path.relative(ROOT, TARGET)}/ and refreshed ${data.length} data files from ${SOURCE}`);
+console.log(`[sync-reconai-shared] Vendored ${vendored.length} modules into ${path.relative(ROOT, TARGET)}/ and refreshed ${data.length} data files from ${SOURCE}`);

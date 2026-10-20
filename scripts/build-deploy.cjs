@@ -87,6 +87,102 @@ function transform(code, filename) {
   }).code;
 }
 
+// Plain (non-JSX) scripts ship minified too (cleanup, owner go-ahead
+// 2026-10-20): comments and whitespace stripped, local names shortened.
+// Global names are kept, so scripts still see each other, and so is
+// module.exports, so the Lab's node jobs can still require them. Target
+// es2020, not the JSX path's es2019: these files already use ?. and ??, and
+// lowering those adds top-level temp vars (supabase-client.js would get
+// `var p,_,h,S,…` — new globals, one of them the app's S). At es2020 no
+// syntax is rewritten and no global is added (checked on all 125 files).
+// js/vendor/ is third-party and already minified: shipped as it is. The minified copy goes in the dist-deploy/
+// overlay and its hash is what ?v=, version.json and the shared-loader stamp
+// use, so they always describe the bytes that are served.
+// DHQ_MINIFY=0 ships the plain scripts as-is; DHQ_MINIFY_SKIP (a regex over
+// the path) leaves matching files as-is (publish-lab keeps the engine files
+// the Lab edits in place readable).
+const MINIFY_ROOT_FILES = ['charts.js', 'college-stats.js', 'draft-history.js', 'themes.js'];
+const minified = new Map(); // pathname -> minified code that ships
+const minifyStats = { files: 0, before: 0, after: 0, skipped: [] };
+
+function minifyOn() { return !/^(0|false|no)$/i.test(String(process.env.DHQ_MINIFY || '').trim()); }
+
+// Sources the entries load as type="text/babel": compileExternal minifies those.
+function babelSources() {
+  const out = new Set();
+  for (const e of ENTRIES) {
+    const p = path.join(ROOT, e);
+    if (!fs.existsSync(p)) continue;
+    const re = /<script\b[^>]*\btype=["']text\/babel["'][^>]*>/gi;
+    let m;
+    while ((m = re.exec(fs.readFileSync(p, 'utf8')))) {
+      const src = m[0].match(/\bsrc=["']([^"']+)["']/i);
+      if (src) out.add(src[1].split('?')[0]);
+    }
+  }
+  return out;
+}
+
+// Names a classic script declares at its top level (its globals).
+function topLevelNames(code) {
+  const ast = Babel.transform(code, { ast: true, code: false, sourceType: 'script', parserOpts: { allowReturnOutsideFunction: true } }).ast;
+  const names = new Set();
+  const addPattern = p => {
+    if (!p) return;
+    if (p.type === 'Identifier') names.add(p.name);
+    else if (p.type === 'ObjectPattern') p.properties.forEach(q => addPattern(q.type === 'RestElement' ? q.argument : q.value));
+    else if (p.type === 'ArrayPattern') p.elements.forEach(addPattern);
+    else if (p.type === 'AssignmentPattern') addPattern(p.left);
+    else if (p.type === 'RestElement') addPattern(p.argument);
+  };
+  for (const n of ast.program.body) {
+    if ((n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration') && n.id) names.add(n.id.name);
+    else if (n.type === 'VariableDeclaration') n.declarations.forEach(d => addPattern(d.id));
+  }
+  return names;
+}
+
+function minifyFiles(rels) {
+  if (!minifyOn()) return;
+  const skip = process.env.DHQ_MINIFY_SKIP ? new RegExp(process.env.DHQ_MINIFY_SKIP) : null;
+  const babel = babelSources();
+  for (const rel of rels) {
+    if (!/\.js$/.test(rel) || /\.test\.js$/.test(rel) || /^js\/vendor\//.test(rel) || babel.has(rel) || minified.has(rel)) continue;
+    if (skip && skip.test(rel)) { minifyStats.skipped.push(rel); continue; }
+    const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    let code;
+    try {
+      code = esbuild.transformSync(src, { loader: 'js', minify: true, legalComments: 'none', target: 'es2020' }).code + '\n';
+    } catch (err) {
+      // Not plain JS (it would fail in the browser too): ship it as it is.
+      console.warn(`[build-deploy]   minify: ${rel} not parsed, ships unminified (${String(err.message).split('\n')[0]})`);
+      continue;
+    }
+    // Guard: the same global names before and after, or the file ships as-is.
+    const before = topLevelNames(src), after = topLevelNames(code);
+    const changed = [...after].filter(n => !before.has(n)).concat([...before].filter(n => !after.has(n)));
+    if (changed.length) {
+      console.warn(`[build-deploy]   minify: ${rel} would change its global names (${changed.join(', ')}), ships unminified`);
+      continue;
+    }
+    const out = path.join(OUT_DIR, rel);
+    ensureDir(path.dirname(out));
+    fs.writeFileSync(out, code, 'utf8');
+    minified.set(rel, code);
+    assetHash.set(rel, contentHash(code));
+    minifyStats.files++; minifyStats.before += src.length; minifyStats.after += code.length;
+  }
+}
+
+function relFiles(dir) {
+  return listFiles(path.join(ROOT, dir)).map(f => path.relative(ROOT, f).split(path.sep).join('/'));
+}
+
+// The bytes a file is served with: its minified copy, else the source.
+function servedBytes(rel) {
+  return minified.has(rel) ? Buffer.from(minified.get(rel), 'utf8') : fs.readFileSync(path.join(ROOT, rel));
+}
+
 function compileExternal(src) {
   const pathname = src.split('?')[0];
   const inputPath = path.join(ROOT, pathname);
@@ -243,7 +339,7 @@ function engineStamp() {
   for (const d of deps) {
     const p = path.join(ROOT, d);
     if (!fs.existsSync(p)) throw new Error(DHQ_PROJ_SRC + ' loads ' + d + ', which is not in the build');
-    h.update(d).update('\0').update(fs.readFileSync(p)).update('\0');
+    h.update(d).update('\0').update(servedBytes(d)).update('\0');
   }
   return { deps, v: h.digest('hex').slice(0, 10) };
 }
@@ -337,10 +433,12 @@ function stampSharedLoaderVersion() {
     console.log('[build-deploy] shared-loader stamp skipped (loader or reconai-shared/ missing)');
     return;
   }
+  // Over the bytes that ship (minified by step 0a), so the stamp moves
+  // whenever they do.
   const h = crypto.createHash('sha256');
   for (const f of fs.readdirSync(sharedDir).sort()) {
     const p = path.join(sharedDir, f);
-    if (fs.statSync(p).isFile()) h.update(f).update(fs.readFileSync(p));
+    if (fs.statSync(p).isFile()) h.update(f).update(servedBytes('reconai-shared/' + f));
   }
   const stamp = h.digest('hex').slice(0, 10);
   const src = fs.readFileSync(loaderPath, 'utf8');
@@ -356,7 +454,15 @@ function stampSharedLoaderVersion() {
 function build() {
   fs.rmSync(OUT_DIR, { recursive: true, force: true });
   ensureDir(OUT_DIR);
+  // 0a. the shared engine first (the loader's stamp covers its served bytes),
+  // 0b. then js/ and the root scripts, after the loader carries its stamp.
+  minifyFiles(relFiles('reconai-shared'));
   stampSharedLoaderVersion();
+  minifyFiles([...relFiles('js'), ...MINIFY_ROOT_FILES.filter(f => fs.existsSync(path.join(ROOT, f)))]);
+  if (minifyOn()) {
+    console.log(`[build-deploy] minified ${minifyStats.files} plain scripts: ${Math.round(minifyStats.before / 1024)} KB -> ${Math.round(minifyStats.after / 1024)} KB`
+      + (minifyStats.skipped.length ? `; left as-is: ${minifyStats.skipped.join(', ')}` : ''));
+  } else console.log('[build-deploy] DHQ_MINIFY=0: plain scripts ship as-is');
   for (const e of ENTRIES) processEntry(e);
   for (const p of STAMP_ONLY) processStampOnly(p);
   stampAndWrite();

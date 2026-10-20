@@ -64,6 +64,10 @@ const ARTIFACT_PATHS = [
   'manifest.json', 'icon-192.png', 'icon-512.png',
   'js', 'content', 'legal', 'vendor', 'reconai-shared', 'draft-war-room', 'team-comps',
 ];
+// Removed after the overlay, as deploy.yml does: tests and notes under js/,
+// and modules no page loads (cleanup, 2026-10-20).
+const NOT_PUBLISHED = /\.test\.js$|\.md$/i;
+const NOT_PUBLISHED_FILES = ['vendor/README.md', 'js/shared/gm-trade-engine.js', 'js/shared/qb-trade-rules-v2.js'];
 // deploy.yml also ships these two; the Lab must not.
 const NEVER_SHIP = ['CNAME', '.nojekyll'];
 
@@ -163,7 +167,9 @@ const loaderBefore = read(loaderPath);
 if (!NO_BUILD) {
   if (!fs.existsSync(SHARED_SRC)) fail('DHQ-Shared not found at ' + SHARED_SRC + ' (set DHQ_SHARED_SOURCE)');
   run('sync-reconai-shared.cjs', { DHQ_SHARED_SOURCE: SHARED_SRC });
-  run('build-deploy.cjs');
+  // The engine files the Lab edits in place stay readable there (and the
+  // unported-work check above keeps comparing them with this repo's history).
+  run('build-deploy.cjs', { DHQ_MINIFY_SKIP: LAB_ENGINE_WATCH.source });
 }
 if (!fs.existsSync(path.join(DIST, 'index.html'))) fail('dist-deploy/index.html missing — build failed?');
 // The stamped loader is what ships; the source file goes back to how it was.
@@ -204,6 +210,11 @@ for (const p of NEVER_SHIP) {
 // (includes version.json + the build-stamped pages that live-update.js polls)
 fs.cpSync(DIST, LAB_DIR, { recursive: true });
 if (!fs.existsSync(path.join(LAB_DIR, 'version.json'))) fail('version.json missing from dist-deploy/ — live update would never fire');
+// Same as deploy.yml: tests, notes and files no page loads are not published.
+for (const rel of walk(path.join(LAB_DIR, 'js'), 'js', [])) {
+  if (NOT_PUBLISHED.test(rel)) fs.rmSync(path.join(LAB_DIR, rel));
+}
+for (const rel of NOT_PUBLISHED_FILES) fs.rmSync(path.join(LAB_DIR, rel), { force: true });
 
 // ── 6. gate every root page ────────────────────────────────────────────────
 const gate = read(path.join(LAB_SRC, 'gate.html'));
