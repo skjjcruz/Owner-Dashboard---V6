@@ -32,7 +32,9 @@
                       .catch((e) => { if (window.wrLog) window.wrLog(group + '.lazyLoad', e); if (alive) setPhase('error'); });
                 // A stalled group can still land after the loader gave up; the
                 // loader announces it, and the tab recovers without a tap.
-                const onGroupLoaded = (e) => { if (e && e.detail && e.detail.group === group) settle(); };
+                // '*': a boot script the boot guard fetched again just arrived
+                // (it may be what this tab was missing).
+                const onGroupLoaded = (e) => { if (e && e.detail && (e.detail.group === group || e.detail.group === '*')) settle(); };
                 window.addEventListener('wr:module-group-loaded', onGroupLoaded);
                 return () => { alive = false; window.removeEventListener('wr:module-group-loaded', onGroupLoaded); };
             }, [attempt, phase === 'ready']);
