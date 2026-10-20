@@ -70,7 +70,10 @@
     const LineupTabLazy = wrLazyTab('lineup', 'Lineup', () => (typeof window.LineupTab === 'function' ? window.LineupTab : null));
     // The Wire (league newspaper): engines + JSX + styles live in the deferred
     // 'wire' group, injected on first open of the tab.
-    const LeagueWireTabLazy = wrLazyTab('wire', 'The Wire', () => (typeof window.WrLeagueWire === 'function' ? window.WrLeagueWire : null));
+    // The Wire also needs the boot-loaded live scores module: when that file
+    // failed to download, show the tab's "didn't load / Try again" instead of a
+    // crash (2026-10-20: L.useScores TypeError on a phone that missed it).
+    const LeagueWireTabLazy = wrLazyTab('wire', 'The Wire', () => (typeof window.WrLeagueWire === 'function' && window.App?.LeagueLiveScores ? window.WrLeagueWire : null));
 
     function escapeHtml(str) {
         return String(str)
