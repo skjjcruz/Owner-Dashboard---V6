@@ -166,7 +166,7 @@ const loaderPath = path.join(ROOT, 'js', 'shared', 'shared-loader.js');
 const loaderBefore = read(loaderPath);
 if (!NO_BUILD) {
   if (!fs.existsSync(SHARED_SRC)) fail('DHQ-Shared not found at ' + SHARED_SRC + ' (set DHQ_SHARED_SOURCE)');
-  run('sync-reconai-shared.cjs', { DHQ_SHARED_SOURCE: SHARED_SRC });
+  run('sync-reconai-shared.cjs', { DHQ_SHARED_SOURCE: SHARED_SRC, DHQ_SHARED_FOR_PAGES: '1' });
   // The engine files the Lab edits in place stay readable there (and the
   // unported-work check above keeps comparing them with this repo's history).
   run('build-deploy.cjs', { DHQ_MINIFY_SKIP: LAB_ENGINE_WATCH.source });

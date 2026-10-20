@@ -55,7 +55,7 @@ jobs:
         run: npm ci --omit=dev
 
       - name: Sync shared modules from DHQ-Shared
-        run: DHQ_SHARED_SOURCE="$GITHUB_WORKSPACE/dhq-shared-src" npm run sync:shared
+        run: DHQ_SHARED_SOURCE="$GITHUB_WORKSPACE/dhq-shared-src" DHQ_SHARED_FOR_PAGES=1 npm run sync:shared
 
       # Precompile every type="text/babel" entry (index.html) to plain JS
       # so production never
