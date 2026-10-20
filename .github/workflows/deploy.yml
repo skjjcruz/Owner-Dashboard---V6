@@ -92,6 +92,10 @@ jobs:
           # raw sources, replacing the JSX modules and the entry HTML files
           # that loaded Babel.
           cp -R dist-deploy/. pages-artifact/
+          # Not published: tests and notes under js/, and modules no page
+          # loads (cleanup, 2026-10-20; scripts/publish-lab.cjs does the same).
+          find pages-artifact/js -type f \( -name '*.test.js' -o -name '*.md' \) -delete
+          rm -f pages-artifact/vendor/README.md pages-artifact/js/shared/gm-trade-engine.js pages-artifact/js/shared/qb-trade-rules-v2.js
           # Live update: without version.json running pages never see this deploy.
           [ -f pages-artifact/version.json ] || { echo "Missing pages-artifact/version.json" >&2; exit 1; }
 
