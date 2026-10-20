@@ -78,6 +78,18 @@ test('Editions: lookbacks, back-to-back, season cutoff, title watch, rematches, 
     const medianWatch = make({ ...league, settings: { ...league.settings, league_average_match: 1 } }, { end: 1, weeks: [w(1, 90, 100)] }).stories.find(s => s.contextual && s.rosterIds.includes(1));
     assert.match(medianWatch.body, /0–2 through Week 1, including median results/);
     assert(root.WrWireStories.frontPage(current.stories).every(s => !s.documentary), 'archive facts never take front-page slots');
+    // Outside the playoff spots there is no title talk (owner ask 2026-10-20).
+    const onePlayoffSpot = { ...league, settings: { ...league.settings, playoff_teams: 1 } };
+    const out = make(onePlayoffSpot, { end: 2, weeks: [w(1, 90, 100), w(2, 90, 100)] }).stories.filter(s => s.contextual && s.rosterIds.includes(1));
+    assert.equal(out.length, 1);
+    assert.equal(out[0].text, 'Defending champions Current 1 sit outside the playoff spots', 'a defending champion out of the picture gets the plain fact');
+    assert.match(out[0].body, /No\. 2 in The Wire’s standings, 1 place behind the 1 playoff spots/);
+    assert(!/title run|back-to-back|in a row/.test(out[0].text + out[0].body.split('\n\n')[0]));
+    const later = { ...onePlayoffSpot, league_id: 'L2027', previous_league_id: 'L2026', season: '2027' };
+    root.WrWireChronicles.register(root.WrWireChronicles.fromSleeperHistory({ league: later, history, seasons }));
+    assert(!make(later, { end: 2, weeks: [w(1, 90, 100), w(2, 90, 100)] }).stories.some(s => s.contextual && s.rosterIds.includes(1)), 'a past (not defending) champion out of the picture gets no title story');
+    const laterIn = make({ ...later, settings: { ...later.settings, playoff_teams: 6 } }, { end: 2, weeks: [w(1, 90, 100), w(2, 90, 100)] }).stories.find(s => s.contextual && s.rosterIds.includes(1));
+    assert(laterIn && /championship form\?$/.test(laterIn.text), 'the same team inside the playoff spots keeps its title story');
     assert(root.WrWireStories.weeklyLookback(current.stories, 'L2026:2').documentary);
     const rivalry = make(league, { end: 2, weeks: [w(1, 90, 100), w(2, 90, 100)], board: { ...board, week: 3 }, rivalries: [{ owners: ['u1', 'u2'], name: 'The Finals Feud' }] });
     assert.equal(rivalry.previews.length, 1, 'one story per matchup');
