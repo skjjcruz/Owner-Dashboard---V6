@@ -185,6 +185,11 @@
                 item.related.push({ label: 'History & current form', text: `Past titles come from Sleeper’s playoff brackets for the listed seasons. The ${year} record is through Week ${end}${Number(league.settings?.league_average_match) === 1 ? ', including median games' : ''}. The Wire’s standings use record, then points scored; they are not official playoff seeds or a championship forecast.` });
                 return item;
             };
+            // Title talk is for teams in the playoff picture (owner ask
+            // 2026-10-20: a 3–3 team at No. 12, selling off its roster, got
+            // "Another title run?"). Outside the playoff spots a past champion
+            // gets no title story; a defending champion gets the plain fact.
+            const slots = Math.max(1, Number(league.settings?.playoff_teams) || 6);
             owners.forEach((rid, account) => {
                 const team = edition.table.find(t => str(t.rid) === str(rid));
                 const titles = finals.filter(f => f.owners?.[0] && str(f.owners[0]) === account);
@@ -193,6 +198,13 @@
                 const years = [...new Set(titles.map(f => Number(f.season)))].sort((a, b) => b - a);
                 let streak = 0;
                 while (years.includes(year - 1 - streak)) streak++;
+                if (Number(team.rank) > slots) {
+                    if (!streak) return;
+                    const back = Number(team.rank) - slots;
+                    currentStory(titles, [rid], `Defending champions ${name} sit outside the playoff spots`,
+                        `${name} are ${record(team)} through Week ${end}${Number(league.settings?.league_average_match) === 1 ? ', including median results' : ''}, with ${score(team.pf)} points scored. That puts them at No. ${team.rank} in The Wire’s standings, ${back} ${back === 1 ? 'place' : 'places'} behind the ${slots} playoff spots.\n\n${latest.winner} won the ${latest.season} title.`, 70);
+                    return;
+                }
                 const headline = streak >= 2 ? `Can ${name} make it ${streak + 1} titles in a row?`
                     : streak === 1 ? `Can ${name} make it back-to-back?`
                         : team.wins < team.losses ? `Can ${name} get back to championship form?` : `Another title run for ${name}?`;
