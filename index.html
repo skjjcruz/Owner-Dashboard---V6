@@ -3047,6 +3047,7 @@ WRShared.preloadMany(WR_SHARED_FILES);
                 s.async = false;
                 s.setAttribute('data-wr-retry', '1');
                 s.onerror = function () { report('script-retry-failed', [src], 1); };
+                s.onload = function () { try { window.dispatchEvent(new CustomEvent('wr:module-group-loaded', { detail: { group: '*', retried: src } })); } catch (e) {} };
                 document.head.appendChild(s);
             }, 1500);
         }
