@@ -1079,6 +1079,7 @@ test('live update: silent self-update — build id + version.json, every page po
     ok(bd.includes("target: 'es2020'") && bd.includes('would change its global names'), 'plain scripts minify at es2020 behind the global-names guard');
     ok(wf.includes("-name '*.test.js' -o -name '*.md'") && wf.includes('qb-trade-rules-v2.js'), 'deploy does not publish tests, notes or unused modules');
     ok(!/'values-v2\.js'|'pff-snapshot\.js'/.test(index), 'the retired v2 value files are not loaded');
+    ok(wf.includes('DHQ_SHARED_FOR_PAGES=1 npm run sync:shared'), 'the Pages build leaves the retired v2 files out (the engine server keeps them)');
     // The Lab publisher lives in the website repo only (the app repo has none).
     const labPath = path.join(ROOT, 'scripts/publish-lab.cjs');
     if (fs.existsSync(labPath)) {

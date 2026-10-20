@@ -9,7 +9,7 @@
     "test:e2e-auth": "node tests/e2e-auth/run.cjs",
     "sync:shared": "node scripts/sync-reconai-shared.cjs",
     "build:preview": "npm run sync:shared && node scripts/build-preview.cjs",
-    "build:deploy": "npm run sync:shared && node scripts/build-deploy.cjs",
+    "build:deploy": "DHQ_SHARED_FOR_PAGES=1 npm run sync:shared && node scripts/build-deploy.cjs",
     "preview:prod": "npm run build:preview && node scripts/serve-static.cjs --port=3002",
     "prepare": "husky || true",
     "start": "npm run sync:shared && node scripts/serve-static.cjs --port=3001 --compile",
