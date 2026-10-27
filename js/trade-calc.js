@@ -419,6 +419,13 @@
     // as "$250 FAAB".
     const TC_ORD = { 1: '1st', 2: '2nd', 3: '3rd' };
     function tcPickText(id) { const p = String(id).split('-'); const sl = (p[4] || '').charAt(0) === 's' ? Number(p[4].slice(1)) : null; return p[1] + ' ' + (sl ? p[2] + '.' + String(sl).padStart(2, '0') : (TC_ORD[p[2]] || p[2] + 'th')) + ' from ' + p[3]; }
+    // The device's and the server's evaluate_trade agree on everything a
+    // screen shows: the verdict (minus `precedence`, a note for the AI) and
+    // the headliner.
+    function tcSameCall(a, b) {
+        const norm = x => { const v = Object.assign({}, (x && x.verdict) || {}); delete v.precedence; return JSON.stringify([Object.keys(v).sort().map(k => [k, v[k]]), (x && x.headliner) || null]); };
+        return !!a && !!b && norm(a) === norm(b);
+    }
     function tcCallArgs(ids, pickIds, faab) { return (ids || []).map(String).concat((pickIds || []).map(tcPickText), faab > 0 ? ['$' + faab + ' FAAB'] : []); }
     const TC_CALL = {
         word: v => (v.decision === 'offer' ? 'Send it' : v.decision === 'counter' ? 'Counter' : 'Pass'),
@@ -1359,14 +1366,26 @@
             const partner = tradeOwner.B ? rosterOfOwner(tradeOwner.B) : null;
             const key = dhqCallKey;
             const args = Object.assign({ give, get }, partner ? { partner: String(partner.roster_id) } : {});
-            let live = true, fromServer = false;
+            let live = true, dev, srv;
+            // The server's call is used only when it is identical to the
+            // device's on everything the screen shows (verdict, headliner);
+            // otherwise the device's stays and the difference is logged.
+            const settle = () => {
+                if (!live || dev === undefined || srv === undefined || !srv || !dev) return;
+                const same = tcSameCall(dev, srv);
+                if (window._labDbg) window._labDbg.tradeCallServer = { key, same, verdict: srv.verdict, headliner: srv.headliner };
+                if (same) setDhqCall(Object.assign({}, srv, { key, source: 'server' }));
+                else if (window.wrLog) window.wrLog('trade.serverCall', new Error('server call differs'), { key });
+            };
             const t = setTimeout(() => {
                 T.run('evaluate_trade', args)
                     .then(r => {
-                        if (window._labDbg) window._labDbg.tradeCallDevice = r && r.verdict ? { key, verdict: r.verdict, headliner: r.headliner || null } : null;
-                        if (live && !fromServer) setDhqCall(r && r.verdict ? { key, verdict: r.verdict, headliner: r.headliner || null } : null);
+                        dev = r && r.verdict ? { verdict: r.verdict, headliner: r.headliner || null } : null;
+                        if (window._labDbg) window._labDbg.tradeCallDevice = dev ? Object.assign({ key }, dev) : null;
+                        if (live) setDhqCall(dev ? Object.assign({ key }, dev) : null);
+                        settle();
                     })
-                    .catch(() => { if (live && !fromServer) setDhqCall(null); });
+                    .catch(() => { dev = null; if (live) setDhqCall(null); });
                 // The engine server's call (Phase A5): the same evaluator, run
                 // on the server (dhq-tools/app evaluate_trade). The device's
                 // answer shows at once and the server's replaces it when it
@@ -1381,13 +1400,8 @@
                 try { if (localStorage.getItem('dhq_server_li_off') === '1') return; } catch (e) { /* storage off */ }
                 fetch('https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-tools/app?league=' + lid + '&user=' + encodeURIComponent(myRoster.owner_id) + '&tool=evaluate_trade&args=' + encodeURIComponent(JSON.stringify(args)), { credentials: 'omit' })
                     .then(r => (r.ok ? r.json() : null))
-                    .then(b => {
-                        if (!live || !b || !b.ok || !b.result || !b.result.verdict) return;
-                        fromServer = true;
-                        if (window._labDbg) window._labDbg.tradeCallServer = { key, verdict: b.result.verdict, headliner: b.result.headliner || null };
-                        setDhqCall({ key, verdict: b.result.verdict, headliner: b.result.headliner || null, source: 'server' });
-                    })
-                    .catch(() => { /* the device's call stands */ });
+                    .then(b => { srv = b && b.ok && b.result && b.result.verdict ? { verdict: b.result.verdict, headliner: b.result.headliner || null } : null; settle(); })
+                    .catch(() => { srv = null; /* the device's call stands */ });
             }, 250);
             return () => { live = false; clearTimeout(t); };
         }, [dhqCallKey, myRoster?.roster_id, allRosters.length]);
@@ -4319,6 +4333,35 @@
                 .slice(0, finderPoolOn ? 24 : undefined);
             return { deals, actionable: deals.filter(deal => deal.likelihood >= finderActionFloor) };
         }
+        // The engine server grades the same list (dhq-tools/app evaluate_deals,
+        // Phase A5) and every deal is compared with the device's grade on what
+        // the Finder reads (verdict, headliner). The list on screen is the
+        // device's either way; the comparison is logged, so the server can
+        // take over once it has matched in the field.
+        function finderServerCheck(dealArgs, evals) {
+            const lid = String(currentLeague.id || currentLeague.league_id || '');
+            const type = Number(currentLeague.settings?.type);
+            const picks = dealArgs.some(d => [].concat(d.give || [], d.get || []).some(x => /\b(1st|2nd|3rd|\d+th|\d+\.\d+)\b/.test(String(x)) && /\b20\d\d\b/.test(String(x))));
+            if (!/^\d{10,20}$/.test(lid) || !myRoster?.owner_id || !dealArgs.length || (picks && type !== 1 && type !== 2) || typeof fetch !== 'function') return;
+            try { if (localStorage.getItem('dhq_server_li_off') === '1') return; } catch (e) { return; }
+            const t0 = Date.now();
+            fetch('https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-tools/app', { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ league: lid, user: String(myRoster.owner_id), tool: 'evaluate_deals', args: { deals: dealArgs } }) })
+                .then(r => (r.ok ? r.json() : null))
+                .then(b => {
+                    const res = b && b.ok && b.result && Array.isArray(b.result.results) ? b.result.results : null;
+                    if (!res) return;
+                    let same = 0, diff = 0; const sample = [];
+                    evals.forEach((ev, i) => {
+                        const a = ev && !ev.error ? { verdict: ev.verdict, headliner: ev.headliner || null } : null;
+                        const s = res[i] && !res[i].error ? res[i] : null;
+                        if ((!a && !s) || tcSameCall(a, s)) same++; else { diff++; if (sample.length < 3) sample.push({ deal: dealArgs[i], device: a, server: s }); }
+                    });
+                    window._labDbg = window._labDbg || {};
+                    window._labDbg.finderServer = { deals: dealArgs.length, same, diff, ms: Date.now() - t0, sample };
+                    if (diff && window.wrLog) window.wrLog('trade.finderServer', new Error(diff + ' of ' + dealArgs.length + ' deals differ'), { sample });
+                })
+                .catch(() => { /* the device's list stands */ });
+        }
         const [finderShared, setFinderShared] = useState({ key: null, status: 'idle', deals: [], actionableCount: 0, dropped: 0, planned: 0 });
         useEffect(() => {
             if (!finderScoreKey) return undefined;
@@ -4337,8 +4380,10 @@
                 const seen = new Set(cands.map(d => d._sig).filter(Boolean));
                 const extra = planned.filter(d => { if (seen.has(d._sig)) return false; seen.add(d._sig); return true; });
                 const all = cands.concat(extra);
-                const evals = await AT.evaluateDeals(all.map(tcDealArgs));
+                const dealArgs = all.map(tcDealArgs);
+                const evals = await AT.evaluateDeals(dealArgs);
                 if (!live) return;
+                finderServerCheck(dealArgs, evals);
                 const t = AT.triageByVerdict(all.map((deal, i) => ({ deal, ev: evals[i] || {} })), {
                     bar: finderActionFloor,
                     verdictOf: x => (x.ev && x.ev.verdict) || null,
