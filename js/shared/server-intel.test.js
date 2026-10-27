@@ -127,3 +127,16 @@ test('the pick-value curve matches the engine formula', () => {
     assert.equal(fn(2027, 1, 8), Math.round(pv[8].value * 0.88));
     assert.equal(fn(2026, 1, 0), pv[8].value, 'no slot reads mid-round');
 });
+
+test('the build\'s assessments and DNA ride along with the values (Phase A1)', async () => {
+    const assess = { assessments: [{ rosterId: 1, healthScore: 80 }], dna: { 1: { label: 'x' } }, rosters: [{ roster_id: 1, players: ['p1', 'p2'], settings: { wins: 1, losses: 0, ties: 0, fpts: 100 } }] };
+    let r = load({ fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(body({ assess })) }) });
+    await r.App.loadLeagueIntel();
+    assert.equal(r.App.ServerAssess.leagueId, LID);
+    assert.equal(r.App.ServerAssess.li, r.App.LI, 'tied to this build\'s values');
+    assert.deepEqual(r.App.ServerAssess.assessments, assess.assessments);
+    assert.deepEqual(r.App.ServerAssess.rosters, assess.rosters);
+    r = load();
+    await r.App.loadLeagueIntel();
+    assert.equal(r.App.ServerAssess, null, 'an older build without them: the device assesses');
+});
