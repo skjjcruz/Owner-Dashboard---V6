@@ -170,3 +170,16 @@ test('this week\'s DHQ projections ride along when the build is fresh (Phase A3)
     await tick();
     assert.equal(r.App.ServerProj.week, 8, 'values from the cache, projections from the server');
 });
+
+test('later weeks come from dhq-league?part=later, once per league (Phase A3)', async () => {
+    const later = { cur: 7, model: 'abc123def456', built_at: new Date().toISOString(), weeks: { 8: { p1: [10, 11, 6, 16, 'x'] } }, inj: {} };
+    let r = load({ fetch: (u) => Promise.resolve({ ok: true, json: () => Promise.resolve(/part=later/.test(u) ? { league_id: LID, dhq_later: later } : body()) }) });
+    const a = await r.SI.later(LID);
+    assert.equal(a.league_id, LID);
+    assert.deepEqual(a.weeks, later.weeks);
+    await r.SI.later(LID);
+    assert.equal(r.fetches.filter(u => /part=later/.test(u)).length, 1, 'kept, not asked again');
+    r = load({ fetch: () => Promise.resolve({ ok: false, status: 404 }) });
+    assert.equal(await r.SI.later(LID), null, 'none built: the device projects');
+    assert.equal(await r.SI.later('mfl_123'), null, 'Sleeper leagues only');
+});

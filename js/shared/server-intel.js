@@ -87,6 +87,27 @@
         } catch (e) { return false; } finally { if (timer) clearTimeout(timer); }
     }
 
+    // Later weeks' DHQ projections from the build (dhq-league?part=later),
+    // asked for by dhq-proj.js projectWeek the first time a later week is
+    // needed: one request per league, kept 30 minutes. null when the league
+    // has none (the device projects them, as before).
+    const laterMemo = {};
+    function later(lid) {
+        lid = String(lid || '');
+        if (!/^\d{10,20}$/.test(lid) || off() || typeof root.fetch !== 'function') return Promise.resolve(null);
+        const hit = laterMemo[lid];
+        if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.p;
+        const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+        const timer = ctl ? setTimeout(() => ctl.abort(), TIMEOUT) : null;
+        const p = root.fetch(URL + lid + '&part=later', { credentials: 'omit', signal: ctl ? ctl.signal : undefined })
+            .then(r => (r.ok ? r.json() : null))
+            .then(body => (body && body.dhq_later && String(body.league_id) === lid ? Object.assign({ league_id: lid }, body.dhq_later) : null))
+            .catch(() => null)
+            .finally(() => { if (timer) clearTimeout(timer); });
+        laterMemo[lid] = { at: Date.now(), p };
+        return p;
+    }
+
     let pending = null;
     async function fromServer() {
         const S = state();
@@ -168,7 +189,7 @@
         });
     } catch (e) { /* App frozen: the device path stays as it was */ }
 
-    App.ServerIntel = { _reject: reject, _takeProj: takeProj, _projOnly: projOnly, _pickValueFn: pickValueFn, _fromServer: fromServer, _wrap: wrap };
+    App.ServerIntel = { later, _reject: reject, _takeProj: takeProj, _projOnly: projOnly, _pickValueFn: pickValueFn, _fromServer: fromServer, _wrap: wrap };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.ServerIntel;
 })(typeof window !== 'undefined' ? window : globalThis);
