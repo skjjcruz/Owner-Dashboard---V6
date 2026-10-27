@@ -187,6 +187,20 @@ function LineupTab({
     const [seasonData, setSeasonData] = React.useState(null);
     const [note, setNote] = React.useState('');
     const [submit, setSubmit] = React.useState({ status: 'idle', msg: '' });
+    // The engine server's start/sit call for the lineup saved in Sleeper
+    // (Phase A4, js/shared/startsit-verdict.js fromServer): THE CALL shows it
+    // when it was made on exactly what this screen shows (serverVerdict).
+    const [srvCall, setSrvCall] = React.useState(null);
+    const srvLid = currentLeague ? (currentLeague.league_id || currentLeague.id) : null;
+    const srvOwner = myRoster ? myRoster.owner_id : null;
+    const srvSig = myRoster ? (myRoster.starters || []).join(',') : '';
+    React.useEffect(() => {
+        const SVr = window.App && window.App.StartSitVerdict;
+        if (!SVr || !SVr.fromServer || !srvLid || !srvOwner) { setSrvCall(null); return undefined; }
+        let alive = true;
+        SVr.fromServer(srvLid, srvOwner, srvSig).then(r => { if (alive) setSrvCall(r); });
+        return () => { alive = false; };
+    }, [srvLid, srvOwner, srvSig]);
     // Real DvP: spin up the SOS engine (18-week defense-vs-position rankings),
     // then bump ctxTick so projections recompute with matchup context applied.
     React.useEffect(() => {
@@ -598,6 +612,10 @@ function LineupTab({
         if (!pid) return 0;
         if (actualOf(pid) != null) return actualOf(pid);
         if (!dhqOk) return objPts(pid);
+        // The call's own number (DhqProj.lineupPts: Doubtful 0, a defense on
+        // Sleeper's line), so the swap gains match the optimizer and the AI.
+        const DQ = window.App && window.App.DhqProj;
+        if (DQ && DQ.lineupPts) return Math.max(0, DQ.lineupPts(pid) || 0);
         return Math.max(0, dhqAvg(pid));
     };
     function lineupDiff(fromAssign, toAssign) {
@@ -898,6 +916,13 @@ function LineupTab({
         noteFactsRef.current = f;
         const SV = window.App && window.App.StartSitVerdict;
         try { verdict = SV ? SV.compute(f) : null; } catch (e) { verdict = null; }
+        // The server's call (the AI's), when it was made on this very lineup and this best lineup.
+        if (SV && SV.serverVerdict && srvCall && dhqOk && dhqCheck && dhqCheck.optimal && DQ && DQ.week) {
+            try {
+                const sv = SV.serverVerdict(srvCall, { week: DQ.week(), current: ids, best: (dhqCheck.optimal.starters || []).map(x => String(x.pid)) });
+                if (sv) verdict = sv;
+            } catch (e) { /* the screen's own call stands */ }
+        }
     }
 
     // ── Around the league (C2 port, 2026-09-27) ──

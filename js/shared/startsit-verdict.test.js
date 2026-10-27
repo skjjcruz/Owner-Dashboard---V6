@@ -61,6 +61,31 @@ test('the call names the two numbers it was decided on (DHQ: the average week)',
     assert.equal(v.text, 'Start Rashee Rice over Aaron Jones at WR (avg 12.7 vs 10.1, +2.6 pts)');
     const c = V.compute({ ...base, benchPts: 0.3, swaps: [{ slot: 'RB', in: 'X', out: 'Y', gain: 0.3, inPts: 9.9, outPts: 9.6 }] });
     assert.match(c.text, /within 0\.3 pts \(avg 9\.9 vs 9\.6\)\. Your call\./);
-    const p = V.compute({ ...base, onDhq: false, benchPts: 1, swaps: [{ slot: 'TE', in: 'A', out: 'B', gain: 1, inPts: 8, outPts: 7 }] });
-    assert.equal(p.text, 'Start A over B at TE (8 vs 7, +1 pts)', 'platform numbers carry no "avg"');
+    const p = V.compute({ ...base, onDhq: false, benchPts: 2, swaps: [{ slot: 'TE', in: 'A', out: 'B', gain: 2, inPts: 8, outPts: 6 }] });
+    assert.equal(p.text, 'Start A over B at TE (8 vs 6, +2 pts)', 'platform numbers carry no "avg"');
+});
+
+// Owner ruling 2026-10-27: the AI's coin-flip rule (within 1.5 pts or 10% of
+// the better player), never when the player going to the bench can't score.
+test('a coin flip within 1.5 pts or 10%, never when the benched player can\'t score', () => {
+    const one = (gain, inPts, outPts) => V.compute({ ...base, benchPts: gain, swaps: [{ slot: 'WR', in: 'A', out: 'B', gain, inPts, outPts }] }).kind;
+    assert.equal(one(1.4, 9.4, 8), 'close', 'under 1.5 pts');
+    assert.equal(one(2.0, 22, 20), 'close', 'under 10% of 22');
+    assert.equal(one(2.0, 12, 10), 'swap', '2 pts and 17%: a call');
+    assert.equal(one(1.2, 1.2, 0), 'swap', 'the benched player is out (0): start the one who plays');
+    assert.equal(V.CLOSE_CALL_PTS, 1.5);
+    assert.equal(V.CLOSE_CALL_PCT, 0.1);
+});
+
+test('the server\'s call stands in only when it was made on exactly what the screen shows', () => {
+    const srv = { week: 8, recommendation: 'Start A over B at WR (+3.1 pts).', lineup_is_optimal: false, changes: [{ start: 'A', sit: 'B', close_call: false }],
+        current_lineup: [{ pid: '1' }, { pid: '2' }], optimal_lineup: [{ pid: '1' }, { pid: '3' }] };
+    const see = { week: 8, current: ['2', '1'], best: ['3', '1'] };
+    assert.deepEqual(V.serverVerdict(srv, see), { kind: 'swap', source: 'DHQ', top: null, text: 'Start A over B at WR (+3.1 pts).', server: true });
+    assert.equal(V.serverVerdict(srv, { ...see, week: 9 }), null, 'another week');
+    assert.equal(V.serverVerdict(srv, { ...see, current: ['1', '4'] }), null, 'edits on screen');
+    assert.equal(V.serverVerdict(srv, { ...see, best: ['1', '4'] }), null, 'a different best lineup');
+    assert.equal(V.serverVerdict({ ...srv, changes: [{ close_call: true }] }, see).kind, 'close');
+    assert.equal(V.serverVerdict({ ...srv, lineup_is_optimal: true, changes: [], optimal_lineup: [{ pid: '1' }, { pid: '2' }] }, { ...see, best: ['1', '2'] }).kind, 'optimal');
+    assert.equal(V.serverVerdict(null, see), null);
 });

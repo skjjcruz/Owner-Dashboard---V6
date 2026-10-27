@@ -304,3 +304,28 @@ test('later weeks come from the server build; a changed injury tag or a missing 
     }
     globalThis.S = saved.S; App.WeeklyProj = saved.WP; globalThis.document = saved.doc; App.ServerIntel = saved.SI;
 });
+
+// Owner rulings 2026-10-27 (the server's start/sit rules): Doubtful counts 0,
+// a player DHQ has no number for (a team defense) ranks on Sleeper's line in
+// this league's scoring, and with no line once Sleeper's week is in he is 0.
+test('lineup calls: Doubtful is out, a defense ranks on Sleeper\'s line, no line means 0', () => {
+    const saved = { S: globalThis.S, WP: App.WeeklyProj, raw: App.calcRawPts, GL: App.GameLocks };
+    globalThis.S = { currentLeagueId: 'L9', leagues: [{ league_id: 'L9', scoring_settings: { pts: 1, bonus_rec_te: 0.5 } }], players: {
+        wr: { team: 'BUF', position: 'WR' }, dbt: { team: 'BUF', position: 'RB', injury_status: 'Doubtful' }, def: { team: 'KC', position: 'DEF' }, def2: { team: 'NYJ', position: 'DEF' }, te: { team: 'KC', position: 'TE' } } };
+    const lines = { def: { pts: 7.5, pts_ppr: 7.5 }, wr: { pts: 9, pts_ppr: 9 } };
+    let ready = true;
+    App.WeeklyProj = { displayWeek: () => 9, hasProjWeek: () => ready, projLine: (pid) => lines[pid] || null };
+    App.calcRawPts = (line, sc) => Number(line.pts || 0) * Number(sc.pts || 0);
+    App.GameLocks = null;
+    D.get('reset');
+    Object.assign(D._st.results, { wr: { median: 10, mean: 11 }, dbt: { median: 12, mean: 12 }, def: null, def2: null });
+    assert.equal(D.lineupPts('wr'), 11, 'his average week');
+    assert.equal(D.lineupPts('dbt'), 0, 'Doubtful: out');
+    assert.equal(D.lineupPts('def'), 7.5, 'a defense: Sleeper\'s line, this league\'s scoring');
+    assert.equal(D.lineupPts('def2'), 0, 'no line once Sleeper\'s week is in: no role');
+    ready = false;
+    assert.equal(D.lineupPts('def2'), null, 'Sleeper\'s week not loaded: nothing to rank him on (he keeps his slot)');
+    assert.equal(D.lineupTotal(['wr', 'dbt', 'def']), 18.5);
+    globalThis.S = saved.S; App.WeeklyProj = saved.WP; App.calcRawPts = saved.raw; App.GameLocks = saved.GL;
+    D._st.results = {};
+});
