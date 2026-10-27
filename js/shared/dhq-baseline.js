@@ -41,7 +41,8 @@
         TE: { catch: 0.70, ypt: 7.2, tdpt: 0.050, K: 40, byRank: {
             1: { catch: 0.723, ypt: 7.56, tdpt: 0.049 }, 2: { catch: 0.724, ypt: 7.13, tdpt: 0.050 }, 3: { catch: 0.712, ypt: 6.56, tdpt: 0.050 } } },
         RB: { ypc: 4.2, tdpc: 0.030, catch: 0.76, ypt: 6.2, tdpt: 0.020, carryShare: 0.80, K: 60 },
-        QB: { cmp: 0.65, ypa: 7.0, tdpa: 0.045, intpa: 0.022, rushAttPg: 3.0, rypc: 4.5, rtdpc: 0.04, K: 100 },
+        // tdTau / tdOwnW: pass touchdowns follow the game total (see the QB branch)
+        QB: { cmp: 0.65, ypa: 7.0, tdpa: 0.045, intpa: 0.022, rushAttPg: 3.0, rypc: 4.5, rtdpc: 0.04, K: 100, tdTau: 0.06, tdOwnW: 0 },
         DL: { soloShare: 0.62, sackPg: 0.35, intPg: 0.01, pdPg: 0.15, ffPg: 0.06, K: 8 },
         LB: { soloShare: 0.62, sackPg: 0.18, intPg: 0.04, pdPg: 0.25, ffPg: 0.06, K: 8 },
         DB: { soloShare: 0.75, sackPg: 0.04, intPg: 0.06, pdPg: 0.60, ffPg: 0.04, K: 8 },
@@ -121,7 +122,20 @@
             if (vol == null) return null;
             const cmp = rate(c.pass_cmp, c.pass_att, n.cmp, n.K);
             const ypa = rate(c.pass_yd, c.pass_att, n.ypa, n.K) * gradeTilt(g.pass || g.off);
-            const tdpa = rate(c.pass_td, c.pass_att, n.tdpa, n.K * 2);
+            // Pass touchdowns follow the game total, not his own TD history
+            // (QB audit 2026-10-26, no-peek replays of 2025 weeks 2-17 and 2026
+            // weeks 1-7): with the Vegas implied team total in hand, his own TD
+            // rate added nothing (2025: -0.14 TDs per projected TD, +-0.17) while
+            // each implied point was worth +0.09 passing TDs (2026: +0.08), so the
+            // rate is the league's 4.5% moved 6% per implied point off 22.5
+            // (capped at +-10 points). Without a Vegas line it is his own rate as
+            // before. 2025: QB 228-234 to 245-218 vs Sleeper, miss 5.99 to 5.83.
+            const tdOwn = rate(c.pass_td, c.pass_att, n.tdpa, n.K * 2);
+            const imp = Number(input.teamImplied);
+            const ownW = n.tdOwnW != null ? n.tdOwnW : 0;
+            const tdpa = Number.isFinite(imp) && imp > 0 && n.tdTau != null
+                ? ownW * tdOwn + (1 - ownW) * n.tdpa * (1 + n.tdTau * clamp(imp - 22.5, -10, 10))
+                : tdOwn;
             const intpa = rate(c.pass_int, c.pass_att, n.intpa, n.K * 2);
             const rushAtt = perGame(c.rush_att, c.gp, n.rushAttPg, 4);
             const rypc = rate(c.rush_yd, c.rush_att, n.rypc, 30) * gradeTilt(g.run);
@@ -129,7 +143,7 @@
             line.pass_att = vol; line.pass_cmp = vol * cmp; line.pass_yd = vol * ypa; line.pass_td = vol * tdpa; line.pass_int = vol * intpa;
             line.rush_att = rushAtt; line.rush_yd = rushAtt * rypc; line.rush_td = rushAtt * rtdpc;
             line.fum_lost = (vol * 0.004) + rushAtt * FUMBLE_PER_TOUCH;
-            why.push(vol.toFixed(1) + ' attempts · ' + ypa.toFixed(1) + ' yds/att · ' + (tdpa * 100).toFixed(1) + '% TD · ' + rushAtt.toFixed(1) + ' rushes');
+            why.push(vol.toFixed(1) + ' attempts · ' + ypa.toFixed(1) + ' yds/att · ' + (tdpa * 100).toFixed(1) + '% TD' + (Number.isFinite(imp) && imp > 0 && n.tdTau != null ? ' (team total ' + imp.toFixed(1) + ')' : '') + ' · ' + rushAtt.toFixed(1) + ' rushes');
         } else if (P === 'DL' || P === 'LB' || P === 'DB') {
             if (vol == null) return null;
             // Big plays (sacks, INT, PD, FF, TFL, QB hits, recoveries) pull
