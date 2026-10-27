@@ -60,10 +60,11 @@ test('wraps the loader whichever file loads first', async () => {
     assert.equal(App.LI_SOURCE.source, 'server');
 });
 
-test('a valid device cache still wins, with no server call', async () => {
+test('a valid device cache still wins; only this week\'s projections come from the server', async () => {
     const { App, device, fetches } = load({ cache: true });
     await App.loadLeagueIntel();
-    assert.equal(fetches.length, 0);
+    await tick();
+    assert.deepEqual(fetches.map(u => u.split('?')[1]), ['league=' + LID + '&part=proj']);
     assert.equal(device.calls, 0);
     assert.equal(App.LI.cached, true);
 });
@@ -146,4 +147,26 @@ test('the build\'s assessments and DNA ride along with the values (Phase A1)', a
     r = load();
     await r.App.loadLeagueIntel();
     assert.equal(r.App.ServerAssess, null, 'an older build without them: the device assesses');
+});
+
+test('this week\'s DHQ projections ride along when the build is fresh (Phase A3)', async () => {
+    const proj = (ageMin) => ({ week: 8, built_at: new Date(Date.now() - ageMin * 60000).toISOString(), players: {}, app: { model: 'abc123def456', results: { p1: { median: 12.1, mean: 12.6 } }, none: ['p9'], inj: {} } });
+    let adopted = 0;
+    let r = load({ fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(body({ dhq_proj: proj(20) })) }) });
+    r.App.DhqProj = { adoptServer: () => { adopted++; } };
+    await r.App.loadLeagueIntel();
+    assert.equal(r.App.ServerProj.leagueId, LID);
+    assert.equal(r.App.ServerProj.week, 8);
+    assert.equal(r.App.ServerProj.app.model, 'abc123def456');
+    assert.equal(adopted, 1, 'waiting players take the server\'s numbers');
+    r = load({ fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(body({ dhq_proj: proj(200) })) }) });
+    await r.App.loadLeagueIntel();
+    assert.equal(r.App.ServerProj, undefined, 'over two hours old: the device projects');
+    r = load({ fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(body({ dhq_proj: { week: 8, players: {} } })) }) });
+    await r.App.loadLeagueIntel();
+    assert.equal(r.App.ServerProj, undefined, 'an older build without the app results: the device projects');
+    r = load({ cache: true, fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({ league_id: LID, built_at: proj(5).built_at, dhq_proj: proj(5) }) }) });
+    await r.App.loadLeagueIntel();
+    await tick();
+    assert.equal(r.App.ServerProj.week, 8, 'values from the cache, projections from the server');
 });
