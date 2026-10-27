@@ -284,3 +284,23 @@ test('the server build\'s numbers stand in when the page runs the same projectio
     D._st.queue.clear(); D._st.results = {};
     globalThis.S = saved.S; App.WeeklyProj = saved.WP; globalThis.document = saved.doc; App.ServerProj = saved.SP;
 });
+
+test('later weeks come from the server build; a changed injury tag or a missing player is projected here', async () => {
+    const saved = { S: globalThis.S, WP: App.WeeklyProj, doc: globalThis.document, SI: App.ServerIntel };
+    globalThis.document = { querySelector: (q) => (/dhq-proj-model/.test(q) ? { content: 'm1' } : null), createElement: () => { throw new Error('no loading in this test'); }, head: {} };
+    globalThis.S = { currentLeagueId: 'L1', leagues: [{ league_id: 'L1', scoring_settings: {} }], players: { a: { team: 'BUF', position: 'WR' }, b: { team: 'KC', position: 'RB', injury_status: 'Out' }, z: { position: 'WR' } } };
+    App.WeeklyProj = { displayWeek: () => 7, hasProjWeek: () => false, projLine: () => null };
+    let sl = { league_id: 'L1', cur: 7, model: 'm1', built_at: new Date().toISOString(), weeks: { 8: { a: [12.1, 12.8, 7, 19, 'Role +5%'], b: [3, 3.2, 1, 6, ''], z: null } }, inj: {} };
+    App.ServerIntel = { later: async () => sl };
+    const r = await D.projectWeek(['a', 'z'], 8);
+    assert.deepEqual(r.a, { median: 12.1, mean: 12.8, floor: 7, ceiling: 19, why: 'Role +5%' });
+    assert.equal(r.z, null);
+    // b's tag changed since the build (none → Out): projected here, and the engine can't load in this test
+    await assert.rejects(() => D.projectWeek(['a', 'b'], 8));
+    for (const other of [{ model: 'm2' }, { cur: 6 }, { league_id: 'L2' }, { built_at: new Date(Date.now() - 25 * 3600e3).toISOString() }]) {
+        sl = Object.assign({}, sl, other);
+        await assert.rejects(() => D.projectWeek(['a'], 8), undefined, 'not usable: projected here');
+        sl = Object.assign({}, sl, { model: 'm1', cur: 7, league_id: 'L1', built_at: new Date().toISOString() });
+    }
+    globalThis.S = saved.S; App.WeeklyProj = saved.WP; globalThis.document = saved.doc; App.ServerIntel = saved.SI;
+});
