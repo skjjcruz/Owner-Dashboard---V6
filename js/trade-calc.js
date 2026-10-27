@@ -423,7 +423,7 @@
     // screen shows: the verdict (minus `precedence`, a note for the AI) and
     // the headliner.
     function tcSameCall(a, b) {
-        const norm = x => { const v = Object.assign({}, (x && x.verdict) || {}); delete v.precedence; return JSON.stringify([Object.keys(v).sort().map(k => [k, v[k]]), (x && x.headliner) || null]); };
+        const norm = x => { const v = Object.assign({}, (x && x.verdict) || {}); delete v.precedence; return JSON.stringify([Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => [k, v[k]]), (x && x.headliner) || null]); };
         return !!a && !!b && norm(a) === norm(b);
     }
     function tcCallArgs(ids, pickIds, faab) { return (ids || []).map(String).concat((pickIds || []).map(tcPickText), faab > 0 ? ['$' + faab + ' FAAB'] : []); }
@@ -4253,10 +4253,14 @@
                 .forEach(d => (d.receivePlayers || []).forEach(p => ask(byRid(d.partnerRosterId), p.pid, targetAsks, 8)));
             (pinned ? [pinned] : partnerBoard.map(i => i.assessment)).forEach(a => ask(a, null, blockAsks, 8));
             const out = [];
+            const planAsks = [], planResults = [];
             for (const q of [...focusAsk, ...targetAsks, ...blockAsks]) {
                 if (!isLive()) return [];
                 let r = null;
-                try { r = await AT.run('trade_plan', q.pid ? { target: q.pid, partner: String(q.a.rosterId) } : { partner: String(q.a.rosterId) }); } catch (e) { r = null; }
+                const planArgs = q.pid ? { target: q.pid, partner: String(q.a.rosterId) } : { partner: String(q.a.rosterId) };
+                try { r = await AT.run('trade_plan', planArgs); } catch (e) { r = null; }
+                planAsks.push(planArgs);
+                planResults.push(r && !r.error && Array.isArray(r.offers) ? r : null);
                 if (!r || r.error || !Array.isArray(r.offers)) continue;
                 const score = partnerBoard.find(i => String(i.assessment.rosterId) === String(q.a.rosterId))?.score || 0;
                 r.offers.forEach(o => {
@@ -4285,6 +4289,7 @@
                     out.push({ ...deal, id, _sig: sig, _core: core, partnerScore: score, ruleBuilt: true });
                 });
             }
+            finderPlansServerCheck(planAsks, planResults);
             return out;
         }
         // One scored row: the deal rebuilt with the shared acceptance as its
@@ -4338,6 +4343,36 @@
         // the Finder reads (verdict, headliner). The list on screen is the
         // device's either way; the comparison is logged, so the server can
         // take over once it has matched in the field.
+        // The same check for the rule-built offers: each trade_plan ask is
+        // also answered on the server (dhq-tools/app trade_plans, one POST)
+        // and its offers compared with the device's (everything an offer
+        // carries, piece ids included). The device's offers are used either
+        // way; the comparison is logged in _labDbg.finderPlansServer.
+        function finderPlansServerCheck(asks, results) {
+            const lid = String(currentLeague.id || currentLeague.league_id || '');
+            if (!asks.length || !/^\d{10,20}$/.test(lid) || !myRoster?.owner_id || typeof fetch !== 'function') return;
+            try { if (localStorage.getItem('dhq_server_li_off') === '1') return; } catch (e) { return; }
+            const offersOf = r => (r && Array.isArray(r.offers) ? r.offers : null);
+            // A field that is set but empty on the device is simply absent from the server's JSON: same offer.
+            const norm = o => JSON.stringify(Object.keys(o || {}).filter(k => k !== 'piece_ids' && o[k] !== undefined).sort().map(k => [k, o[k]]).concat([['piece_ids', (o && o.piece_ids) || null]]));
+            const t0 = Date.now();
+            fetch('https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-tools/app', { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ league: lid, user: String(myRoster.owner_id), tool: 'trade_plans', args: { asks } }) })
+                .then(r => (r.ok ? r.json() : null))
+                .then(b => {
+                    const res = b && b.ok && b.result && Array.isArray(b.result.results) ? b.result.results : null;
+                    if (!res) return;
+                    let same = 0, diff = 0; const sample = [];
+                    results.forEach((r, i) => {
+                        const a = offersOf(r), sv = res[i] && !res[i].error ? offersOf(res[i]) : null;
+                        const eq = (!a && !sv) || (a && sv && a.length === sv.length && a.every((o, k) => norm(o) === norm(sv[k])));
+                        if (eq) same++; else { diff++; if (sample.length < 2) sample.push({ ask: asks[i], device: a, server: sv }); }
+                    });
+                    window._labDbg = window._labDbg || {};
+                    window._labDbg.finderPlansServer = { asks: asks.length, same, diff, ms: Date.now() - t0, sample };
+                    if (diff && window.wrLog) window.wrLog('trade.finderPlansServer', new Error(diff + ' of ' + asks.length + ' trade plans differ'), { sample });
+                })
+                .catch(() => { /* the device's offers stand */ });
+        }
         function finderServerCheck(dealArgs, evals) {
             const lid = String(currentLeague.id || currentLeague.league_id || '');
             const type = Number(currentLeague.settings?.type);
