@@ -24,10 +24,10 @@
     'use strict';
     const App = root.App = root.App || {};
     const SL = 'https://api.sleeper.app/v1';
-    const VERSION = '20261027proj13';
+    const VERSION = '20261027proj14';
     const DEPS = [
         'js/shared/matchup-engine.js', 'js/shared/dhq-baseline.js', 'js/shared/matchup-feeds-espn.js',
-        'js/shared/matchup-inputs.js', 'data/pff-matchup-snapshot.js', 'data/usage-snapshot.js',
+        'js/shared/matchup-inputs.js', 'data/pff-matchup-snapshot.js', 'data/usage-snapshot.js', 'data/wr-model-snapshot.js',
     ];
     // The PFF and usage snapshots are rebuilt on a schedule in the Lab repo
     // (skjjcruz/DHQ-Web-Page), where the PFF key is a repo secret and never
@@ -83,7 +83,7 @@
     // does not load, or one built for another season, is set aside and the
     // engine runs without it: that input reads as missing (neutral grade,
     // league norm) in each player's factors, never a made-up number.
-    const DATA_GLOBAL = { 'data/pff-matchup-snapshot.js': 'DhqPffMatchup', 'data/usage-snapshot.js': 'DhqUsage' };
+    const DATA_GLOBAL = { 'data/pff-matchup-snapshot.js': 'DhqPffMatchup', 'data/usage-snapshot.js': 'DhqUsage', 'data/wr-model-snapshot.js': 'DhqWrModel' };
     function loadDeps() {
         if (st.deps) return st.deps;
         st.deps = (async () => {
