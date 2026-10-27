@@ -107,7 +107,8 @@ test('hero, waiver-board rows and FAAB Command agree on one estimate for the sam
     assert.deepEqual([cmd.sug, cmd.lo, cmd.hi], [hero.faab.sug, hero.faab.lo, hero.faab.hi], 'FAAB Command = hero');
     assert.equal(cmd.analysis.rec.bid, hero.faab.sug, 'the printed "$N" in FAAB Command is the hero\'s model bid');
     // And it is the engine's own number, with the engine's own inputs.
-    const raw = ctx.window.App.Faab.estimate({ league, myRosterId: 1, txns, playersData: players, targetPid: hero.pid, targetPos: hero.pos, dhq: hero.dhq });
+    // (season bids only: the week-1 claims are summer claims, owner ruling 2026-10-27)
+    const raw = ctx.window.App.Faab.estimate({ league, myRosterId: 1, txns: ctx.window.App.Faab.inSeason(txns, league.season), playersData: players, targetPid: hero.pid, targetPos: hero.pos, dhq: hero.dhq });
     assert.deepEqual([raw.sug, raw.lo, raw.hi], [hero.faab.sug, hero.faab.lo, hero.faab.hi], 'App.Faab.estimate = hero');
     assert(hero.faab.lo <= hero.faab.sug && hero.faab.sug <= hero.faab.hi);
     assert.equal(hero.faab.competitors, 2, 'both rivals have a QB need and a legal budget ($1 minimum) — the drawer\'s competition read comes off the same model');
@@ -169,10 +170,10 @@ test('redraft: brief board, FA tab pool, FAAB Command and the Home widget price 
     assert.equal(cmd.dhq, 5200);
     // Home widget fallback path (fa group not loaded): the engine on the same
     // resolver value and the same cached history.
-    const widget = ctx.window.App.Faab.estimate({ league, myRosterId: 1, txns, playersData: pd, targetPid: 'starter', targetPos: 'QB', dhq: PlayerValue.getValue('starter', { skin }) });
+    const widget = ctx.window.App.Faab.estimate({ league, myRosterId: 1, txns: ctx.window.App.Faab.inSeason(txns, league.season), playersData: pd, targetPid: 'starter', targetPos: 'QB', dhq: PlayerValue.getValue('starter', { skin }) });
     assert.deepEqual([widget.sug, widget.lo, widget.hi], [hero.faab.sug, hero.faab.lo, hero.faab.hi], 'Home widget = brief');
     // Pricing off the raw DHQ would have been a different number — the bug.
-    const stale = ctx.window.App.Faab.estimate({ league, myRosterId: 1, txns, playersData: pd, targetPid: 'starter', targetPos: 'QB', dhq: 3000 });
+    const stale = ctx.window.App.Faab.estimate({ league, myRosterId: 1, txns: ctx.window.App.Faab.inSeason(txns, league.season), playersData: pd, targetPid: 'starter', targetPos: 'QB', dhq: 3000 });
     assert.notDeepEqual([stale.sug, stale.lo, stale.hi], [hero.faab.sug, hero.faab.lo, hero.faab.hi], 'fixture really separates the two values');
 });
 
@@ -211,4 +212,73 @@ test('bid-history fetch: a cache hit is not announced as a change (review N1); n
     assert.equal(vm.runInContext('_faTxnsVersion', ctx), v0 + 1);
     assert.equal(events.length, 1);
     assert.equal(events[0].type, 'wr:fa-txns-updated');
+});
+
+test('bids count the season only: summer claims (before the season start, or week 1 with no timestamp) are left out', () => {
+    const ctx = load(scores);
+    const F = ctx.window.App.Faab;
+    const start = F.seasonStartMs(2026, {});
+    assert.equal(new Date(start).toISOString().slice(0, 10), '2026-09-09', 'the Wednesday after Labor Day');
+    assert.equal(new Date(F.seasonStartMs(2026, { season_type: 'regular', season_start_date: '2026-09-10' })).toISOString().slice(0, 10), '2026-09-10');
+    const w = (o) => Object.assign({ type: 'waiver', settings: { waiver_bid: 10 } }, o);
+    const kept = F.inSeason([
+        w({ created: start - 1 }), w({ created: start }), w({ leg: 1 }), w({ leg: 2 }),
+        { type: 'free_agent', leg: 1 }, w({ leg: 1, settings: { waiver_bid: 0 } }),
+    ], 2026, {});
+    assert.deepEqual(kept.map(t => (t.created === start ? 'start' : t.created ? 'summer' : t.type + ':' + t.leg + ':' + t.settings?.waiver_bid)), ['start', 'waiver:2:10', 'free_agent:1:undefined', 'waiver:1:0']);
+});
+
+// ── Phase A4 (2026-10-27): the board's bids come from the engine server ──
+function loadWithServer(scores, reply, extraWindow) {
+    const extra = extraWindow || {};
+    const app = Object.assign({ LI: { playerScores: scores }, normPos: p => p, WeeklyProj: weeklyProj() }, extra.App || {});
+    const events = [], asked = [];
+    const window = Object.assign({ WR: {}, S: {}, dispatchEvent: (e) => events.push(e.detail) }, extra, { App: app });
+    window.localStorage = { getItem: () => null };
+    const fetch = (url) => { asked.push(url); return reply(url); };
+    const ctx = vm.createContext({ window, console, localStorage: window.localStorage, fetch, setTimeout, clearTimeout, CustomEvent: function (t, i) { this.type = t; this.detail = i && i.detail; } });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, 'faab-engine.js'), 'utf8'), ctx);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, 'waiver-tools.js'), 'utf8'), ctx);
+    vm.runInContext(head, ctx);
+    return { ctx, events, asked };
+}
+const tick = () => new Promise(r => setTimeout(r, 80));
+test('Sleeper dynasty league: the board\'s bids come from the server in one call; the device prices meanwhile and when it can\'t', async () => {
+    const lid = '1312100327931019264';
+    const me = { roster_id: 1, owner_id: '540392203863576576', players: [], settings: { waiver_budget_used: 10 } };
+    const league = { league_id: lid, roster_positions: ['QB', 'RB', 'BN'], rosters: [me], settings: { type: 2, waiver_type: 2, waiver_budget: 100 } };
+    const srv = { sug: 41, lo: 30, hi: 55, winPct: 0.6, analysis: { rivals: [{ engaged: true }, { engaged: true }] } };
+    let up = true;
+    const reply = () => Promise.resolve(up ? { ok: true, json: () => Promise.resolve({ ok: true, result: { faab: true, bids: { starter: srv, back: null } } }) } : { ok: false, json: () => Promise.resolve({}) });
+    const { ctx, events, asked } = loadWithServer(scores, reply);
+    const bid = (pid) => ctx.faModelBid({ league, myRoster: me, playersData: players, pid, pos: players[pid].position });
+    const first = bid('starter');
+    assert.ok(first && first.sug !== 41, 'before the server answers: the device\'s own bid');
+    bid('back');
+    await tick();
+    assert.equal(asked.length, 1, 'one request for the whole board');
+    const args = JSON.parse(decodeURIComponent(asked[0].split('args=')[1]));
+    assert.deepEqual(args.pids.sort(), ['back', 'starter']);
+    assert.match(asked[0], /user=540392203863576576&tool=faab_bids/);
+    assert.equal(events.length, 1, 'the screens redraw (wr:fa-txns-updated)');
+    const s = bid('starter');
+    assert.deepEqual([s.sug, s.lo, s.hi], [41, 30, 55], 'the server\'s bid');
+    assert.equal(s.competitors, 2);
+    assert.equal(s.dhq, 3000);
+    assert.equal(bid('back'), null, 'the server\'s model has no bid for him');
+    assert.equal(bid('starter'), s, 'the same object every render');
+    // redraft (values the device builds itself, rest-of-season): the device prices
+    const r2 = loadWithServer(scores, reply, { App: { PlayerValue: { getValue: () => 5200, rosState: () => ({ leagueId: lid }) } } });
+    r2.ctx.faModelBid({ league, myRoster: me, playersData: players, pid: 'starter', pos: 'QB' });
+    await tick();
+    assert.equal(r2.asked.length, 0);
+    // the server down: the device prices, and doesn't ask again for a while
+    up = false;
+    const r3 = loadWithServer(scores, reply);
+    const d1 = r3.ctx.faModelBid({ league, myRoster: me, playersData: players, pid: 'starter', pos: 'QB' });
+    await tick();
+    const d2 = r3.ctx.faModelBid({ league, myRoster: me, playersData: players, pid: 'starter', pos: 'QB' });
+    await tick();
+    assert.equal(r3.asked.length, 1);
+    assert.ok(d2 && d2.sug === d1.sug, 'the device\'s bid stands');
 });

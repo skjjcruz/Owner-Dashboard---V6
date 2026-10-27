@@ -160,8 +160,15 @@
     function faBidHistoryTxns(league) {
         const lid = league?.league_id || league?.id;
         if (!lid || !window.WrTxns?.getCached) return [];
-        try { return (window.WrTxns.getCached(lid) || []).concat(window.WrTxns.getFailedWaivers ? (window.WrTxns.getFailedWaivers(lid) || []) : []); }
+        try { return faInSeason((window.WrTxns.getCached(lid) || []).concat(window.WrTxns.getFailedWaivers ? (window.WrTxns.getFailedWaivers(lid) || []) : []), league); }
         catch (e) { return []; }
+    }
+    // Season bids only (owner ruling 2026-10-27): the rule lives with the
+    // bid model (App.Faab.inSeason, faab-engine.js) so the Home widget's
+    // fallback and the server apply the same one.
+    function faInSeason(txns, league) {
+        const F = window.App?.Faab;
+        return F?.inSeason ? F.inSeason(txns, league?.season, window.S && window.S.nflState) : (txns || []);
     }
     // Where a bid can be estimated at all: a FAAB league on Sleeper (we don't
     // import ESPN / MFL / Yahoo budgets or claims). One gate for the fetch and
@@ -273,6 +280,73 @@
     //
     // `dhq` from callers is IGNORED — the value is resolved here (faValueOf)
     // so no surface can price the same player off a different number.
+    // ── The server's bids (Phase A4, 2026-10-27) ─────────────────────
+    // Every bid on the board, FAAB Command and the Flash Brief comes from the
+    // engine server (dhq-tools/app, tool faab_bids): the same model, fed the
+    // same inputs, as the AI's bid, so the app and the AI quote one number.
+    // One request for the whole board, kept 15 minutes or until a roster's
+    // budget or size changes; the screens redraw on wr:fa-txns-updated when
+    // it lands. The device's own model prices a player meanwhile, and always
+    // when the server can't: a redraft or chopped league (values the device
+    // builds itself, rest-of-season), a league the server hasn't built, or
+    // the server off or unreachable.
+    const FA_SRV_URL = 'https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-tools/app';
+    const _faSrv = new Map();   // lid → { sig, at, bids, want, timer, dead }
+    function faSrvUsable(league, myRoster, pid, skin, horizonWeeks) {
+        const lid = String(league?.league_id || league?.id || '');
+        if (!/^\d{10,20}$/.test(lid) || !myRoster?.owner_id || horizonWeeks || typeof fetch !== 'function') return false;
+        try { if (window.localStorage.getItem('dhq_server_li_off') === '1') return false; } catch (e) { /* storage off */ }
+        const ros = window.App?.PlayerValue?.rosState?.();
+        if (ros && String(ros.leagueId) === lid) return false;
+        return faValueOf(pid, skin) === (Number(window.App?.LI?.playerScores?.[pid]) || 0);
+    }
+    // undefined: the device prices him (not here yet, or the server failed
+    // lately); null: the server's model has no bid for him; else its estimate.
+    function faSrvBid(league, myRoster, pid, minBid) {
+        const lid = String(league.league_id || league.id);
+        const sig = myRoster.roster_id + '|' + myRoster.owner_id + '|' + (minBid || '') + '|' + faRosterSig(league);
+        let slot = _faSrv.get(lid);
+        if (!slot || slot.sig !== sig || Date.now() - slot.at > 15 * 60 * 1000) {
+            if (slot && slot.timer) clearTimeout(slot.timer);
+            slot = { sig, at: Date.now(), bids: {}, want: new Set(), timer: null, dead: slot && Date.now() < slot.dead ? slot.dead : 0 };
+            _faSrv.set(lid, slot);
+        }
+        if (slot.dead) {
+            if (Date.now() < slot.dead) return undefined;   // the server failed lately: the device prices
+            slot.dead = 0;
+        }
+        if (pid in slot.bids) return slot.bids[pid];
+        slot.want.add(pid);
+        if (!slot.timer) slot.timer = setTimeout(() => faSrvFetch(lid, slot, myRoster.owner_id, minBid), 40);
+        return undefined;
+    }
+    async function faSrvFetch(lid, slot, owner, minBid) {
+        slot.timer = null;
+        const pids = [...slot.want].filter(pid => !(pid in slot.bids)).slice(0, 400);
+        slot.want.clear();
+        if (!pids.length) return;
+        try {
+            const q = 'league=' + lid + '&user=' + encodeURIComponent(owner) + '&tool=faab_bids&args=' + encodeURIComponent(JSON.stringify({ pids, min_bid_override: minBid || undefined }));
+            const r = await fetch(FA_SRV_URL + '?' + q, { credentials: 'omit' });
+            const body = r.ok ? await r.json() : null;
+            if (_faSrv.get(lid) !== slot) return;   // the roster moved on meanwhile
+            if (!body || !body.ok || !body.result || body.result.faab === false) throw new Error('no server bids');
+            pids.forEach(pid => { slot.bids[pid] = body.result.bids[pid] || null; });
+        } catch (e) {
+            if (_faSrv.get(lid) === slot) slot.dead = Date.now() + 5 * 60 * 1000;   // the device prices for five minutes, then asks again
+        }
+        _faTxnsVersion++;
+        try { window.dispatchEvent(new CustomEvent('wr:fa-txns-updated', { detail: { leagueId: lid, version: _faTxnsVersion, source: 'server' } })); } catch (e) { /* no-op */ }
+    }
+    // The drawer's competition read, from the model's own rivals.
+    function faDecorate(est, dhq) {
+        est.dhq = dhq;
+        const engaged = (est.analysis?.rivals || []).filter(r => r.engaged).length;
+        est.competitors = engaged;
+        est.conf = engaged <= 1 ? 'Low competition' : engaged <= 3 ? 'Moderate' : 'High demand';
+        est.confCol = engaged <= 1 ? 'var(--good)' : engaged <= 3 ? 'var(--warn)' : 'var(--bad)';
+        return est;
+    }
     const _faBidCache = new WeakMap();
     function faModelBid({ league, myRoster, playersData, pid, pos, skin }) {
         const Faab = window.App?.Faab;
@@ -281,6 +355,11 @@
         const dhq = faValueOf(pid, skin);
         const gmEff = window.WR?.GmMode?.effects?.(lid) || {};
         const horizonWeeks = window.App?.ChopOdds?.horizonFor?.(lid, null) || null;
+        if (faSrvUsable(league, myRoster, pid, skin, horizonWeeks)) {
+            const s = faSrvBid(league, myRoster, String(pid), gmEff.faabMinBid);
+            if (s === null) return null;
+            if (s) return s.__dhqDecorated ? s : Object.defineProperty(faDecorate(s, dhq), '__dhqDecorated', { value: true });
+        }
         const key = [_faTxnsVersion, faRosterSig(league), myRoster?.roster_id, pid, pos, dhq, gmEff.faabMinBid || '', horizonWeeks || ''].join('|');
         let slot = _faBidCache.get(league);
         if (!slot || slot.pd !== playersData) { slot = { pd: playersData, map: new Map() }; _faBidCache.set(league, slot); }
@@ -301,15 +380,7 @@
                 horizonWeeks,
             });
         } catch (e) { est = null; if (window.wrLog) window.wrLog('fa.modelBid', e); }
-        if (est) {
-            est.dhq = dhq;
-            // The drawer's competition read, from the same model: rivals with
-            // a need at the position AND the budget to chase him.
-            const engaged = (est.analysis?.rivals || []).filter(r => r.engaged).length;
-            est.competitors = engaged;
-            est.conf = engaged <= 1 ? 'Low competition' : engaged <= 3 ? 'Moderate' : 'High demand';
-            est.confCol = engaged <= 1 ? 'var(--good)' : engaged <= 3 ? 'var(--warn)' : 'var(--bad)';
-        }
+        if (est) faDecorate(est, dhq);   // rivals with a need at the position AND the budget to chase him
         slot.map.set(key, est);
         return est;
     }
@@ -965,7 +1036,7 @@
                     await faEnsureBidHistory(league);
                     const txns = window.WrTxns.getCached ? (window.WrTxns.getCached(lid) || []) : [];
                     const evidence = window.App?.WaiverTools?.bidEvidence
-                        ? window.App.WaiverTools.bidEvidence(txns, league, target.pos, playersData)
+                        ? window.App.WaiverTools.bidEvidence(faInSeason(txns, league), league, target.pos, playersData)
                         : null;
                     const est = faModelBid({ league, myRoster, playersData, pid: target.pid, pos: target.pos, skin });
                     if (alive) setPlan(est || evidence ? { est, evidence } : null);

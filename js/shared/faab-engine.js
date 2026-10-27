@@ -385,7 +385,29 @@
         return (est.hiCapped && !(opts && opts.capLabel === false)) ? s + ' (your cap)' : s;
     }
 
-    App.Faab = Object.assign(App.Faab || {}, { analyze, estimate, limits, strengthOf, formatRange, extractBids, needAt, quantile });
+    // Season bids only (owner ruling 2026-10-27): Sleeper files every summer
+    // claim under week 1, and those cheap claims dragged bids below what
+    // owners pay now ($42 on the screen against the AI's $72 for the same
+    // player). Waiver bids before the season's first day are left out:
+    // nfl_state.season_start_date once the regular season is on, else the
+    // Wednesday after Labor Day; a bid with no timestamp counts from week 2
+    // on. Free-agent adds and bid-less claims pass through. The engine
+    // server applies the same rule (dhq-tools decide-roster.ts inSeason).
+    function seasonStartMs(season, nflState) {
+        const ns = nflState || {};
+        const yr = Number(season) || new Date().getUTCFullYear();
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ns.season_start_date || ''));
+        if (m && (ns.season_type === 'regular' || ns.season_type === 'post') && Number(m[1]) === yr) return Date.UTC(yr, Number(m[2]) - 1, Number(m[3]));
+        const dow = new Date(Date.UTC(yr, 8, 1)).getUTCDay();
+        return Date.UTC(yr, 8, 1 + ((8 - dow) % 7) + 2);
+    }
+    function inSeason(txns, season, nflState) {
+        const start = seasonStartMs(season, nflState);
+        return (txns || []).filter(t => !t || t.type !== 'waiver' || !(Number(t.settings && t.settings.waiver_bid) > 0)
+            || (Number(t.created) > 0 ? Number(t.created) >= start : Number(t.leg) >= 2));
+    }
+
+    App.Faab = Object.assign(App.Faab || {}, { analyze, estimate, limits, strengthOf, formatRange, extractBids, needAt, quantile, inSeason, seasonStartMs });
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.Faab;
 })(typeof window !== 'undefined' ? window : globalThis);
