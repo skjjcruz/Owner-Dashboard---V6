@@ -351,7 +351,7 @@ function engineStamp() {
 // app uses the server's numbers only when the two agree, so a page running
 // other projection code computes its own.
 const PROJ_MODEL_FILES = [
-  'js/shared/weekly-proj.js', 'js/shared/sleeper-proj.js', 'js/shared/nfl-context.js', 'js/utils/sos-engine.js',
+  'js/shared/weekly-proj.js', 'js/shared/startsit-engine.js', 'js/shared/sleeper-proj.js', 'js/shared/nfl-context.js', 'js/utils/sos-engine.js',
   'js/shared/matchup-engine.js', 'js/shared/dhq-baseline.js', 'js/shared/matchup-feeds-espn.js', 'js/shared/matchup-inputs.js',
   'js/shared/dhq-proj.js',
 ];
