@@ -2055,40 +2055,54 @@
     // ratio of his DHQ stat line scored both ways, and his average week keeps
     // the engine's spread around it. No snapshot for this week, or a player
     // it does not list: the engine's number stands.
-    let wrIdx = null;
-    function wrModelRow(pid, player, ctx) {
+    // RBs and TEs (owner ruling 2026-10-27, same recipe, one model each, in
+    // the same snapshot's byPos): RB 2025 56.4% / 2026 59.9% vs Sleeper (the
+    // engine 53.0 / 56.3), TE 58.5% / 59.0% (52.8 / 55.3), posted-roster path.
+    const MODEL_POS = { WR: 1, RB: 1, TE: 1 };
+    let modelIdx = null;
+    function modelRow(pos, pid, player, ctx) {
         const S = root.DhqWrModel;
         if (!S || !S.players || Number(S.week) !== Number(ctx.week) || (ctx.season != null && Number(S.season) !== Number(ctx.season))) return null;
-        if (!wrIdx || wrIdx.src !== S) {
-            wrIdx = { src: S, sid: {}, nt: {} };
-            for (const g of Object.keys(S.players)) {
-                const r = S.players[g];
-                if (r[0]) wrIdx.sid[String(r[0])] = r;
-                wrIdx.nt[normName(r[1]) + '|' + String(r[2] || '').toUpperCase()] = r;
+        if (!modelIdx || modelIdx.src !== S) {
+            modelIdx = { src: S };
+            const lists = Object.assign({ WR: S.players }, S.byPos || {});
+            for (const [P, list] of Object.entries(lists)) {
+                const ix = modelIdx[P] = { sid: {}, nt: {} };
+                for (const g of Object.keys(list || {})) {
+                    const r = list[g];
+                    if (r[0]) ix.sid[String(r[0])] = r;
+                    ix.nt[normName(r[1]) + '|' + String(r[2] || '').toUpperCase()] = r;
+                }
             }
         }
+        const ix = modelIdx[pos];
+        if (!ix) return null;
         const nameOf = player && (player.full_name || ((player.first_name || '') + ' ' + (player.last_name || '')));
-        return wrIdx.sid[String(pid)] || (player ? wrIdx.nt[normName(nameOf) + '|' + String(player.team || '').toUpperCase()] : null) || null;
+        return ix.sid[String(pid)] || (player ? ix.nt[normName(nameOf) + '|' + String(player.team || '').toUpperCase()] : null) || null;
     }
     function wrModel(pid, out, input, opts, ctx) {
         if (!out || out.available === false || !out.points) return;
         const player = opts.playersData && opts.playersData[pid];
-        if (posGroup(player) !== 'WR') return;
-        const row = wrModelRow(pid, player, ctx);
+        const pos = posGroup(player);
+        if (!MODEL_POS[pos]) return;
+        const row = modelRow(pos, pid, player, ctx);
         const med = row ? num(row[3]) : null;
         if (med == null || !(med >= 0)) return;
         const DB = App.DhqBaseline, line = input && input.baselineLine;
-        const own = line && DB ? num(DB.scoreLine(line, opts.scoring, 'WR')) : null, half = line && DB ? num(DB.scoreLine(line, HALF, 'WR')) : null;
+        const own = line && DB ? num(DB.scoreLine(line, opts.scoring, pos)) : null, half = line && DB ? num(DB.scoreLine(line, HALF, pos)) : null;
         const conv = own > 0 && half > 0 ? own / half : 1;
         const to = med * conv, shown = num(out.points.median) || 0;
         const k = shown > 0 ? to / shown : null;
         for (const f of ['median', 'typical', 'mean', 'floor', 'ceiling']) if (out.points[f] != null) out.points[f] = +(k != null ? out.points[f] * k : to).toFixed(2);
         out.wrModel = { from: +shown.toFixed(2), to: +to.toFixed(2), half: med };
         const bits = [];
-        if (num(row[5]) != null) bits.push(num(row[5]).toFixed(1) + ' targets expected');
+        if (pos === 'RB') {
+            if (num(row[5]) != null) bits.push(num(row[5]).toFixed(1) + ' carries');
+            if (num(row[8]) != null) bits.push(num(row[8]).toFixed(1) + ' targets expected');
+        } else if (num(row[5]) != null) bits.push(num(row[5]).toFixed(1) + ' targets expected');
         if (num(row[6]) != null) bits.push(Math.round(num(row[6]) * 100) + '% of snaps last game');
         if (num(row[7]) != null) bits.push('team total ' + num(row[7]).toFixed(1));
-        out.why = [{ key: 'wrModel', label: 'DHQ WR model', impactPct: k != null ? +((k - 1) * 100).toFixed(1) : 0,
+        out.why = [{ key: 'wrModel', label: 'DHQ ' + pos + ' model', impactPct: k != null ? +((k - 1) * 100).toFixed(1) : 0,
             note: 'Typical game ' + to.toFixed(1) + (bits.length ? ': ' + bits.join(', ') : '') }].concat(out.why || []);
     }
     function safetyCheck(pid, out, input, opts, ctx) {
