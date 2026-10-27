@@ -136,6 +136,13 @@ test('the build\'s assessments and DNA ride along with the values (Phase A1)', a
     assert.equal(r.App.ServerAssess.li, r.App.LI, 'tied to this build\'s values');
     assert.deepEqual(r.App.ServerAssess.assessments, assess.assessments);
     assert.deepEqual(r.App.ServerAssess.rosters, assess.rosters);
+    assert.equal(r.App.ServerBrain, null, 'no brain in this build');
+    const brain = { ledger: { teams: {} }, intent: { byRosterId: {} }, brain: { leagueId: LID } };
+    r = load({ fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(body({ assess, brain })) }) });
+    await r.App.loadLeagueIntel();
+    assert.deepEqual(r.App.ServerBrain.ledger, brain.ledger);
+    assert.deepEqual(r.App.ServerBrain.brain, brain.brain);
+    assert.equal(r.App.ServerBrain.leagueId, LID);
     r = load();
     await r.App.loadLeagueIntel();
     assert.equal(r.App.ServerAssess, null, 'an older build without them: the device assesses');

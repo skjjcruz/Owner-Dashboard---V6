@@ -1687,6 +1687,14 @@
             // patch the prop's fields over it as a fallback.
             const rawLg = (window.S?.leagues || []).find(l => String(l.league_id) === String(leagueId));
             const labLeague = { ...(currentLeague || {}), ...(rawLg || {}), league_id: leagueId };
+            // The engine server's ledger and intent reads for this build
+            // (Phase A2, 2026-10-27), while the league matches the build.
+            const sb = window.App?.ServerBrain;
+            if (sb && sb.ledger && String(sb.leagueId) === String(leagueId) && window.App?.serverBuildMatches?.(window.S)) {
+                window._labDbg = { started: Date.now(), server: true };
+                setLabModel({ ledger: sb.ledger, intent: sb.intent || null });
+                return () => { dead = true; };
+            }
             // Owner device 2026-09-04: the tab can mount before the player DB
             // arrives — posOf then returns null for everyone, the optimal fill
             // goes empty, and a zero-point ledger got cached for the session

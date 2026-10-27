@@ -34,8 +34,9 @@ function engine() {
     ];
     ctx.S = { currentLeagueId: 'L1', season: '2026', rosters, players: { a: { position: 'QB' }, b: { position: 'RB' }, c: { position: 'WR' }, d: { position: 'TE' } }, playerStats: {}, leagueUsers: [], tradedPicks: [], leagues: [{ league_id: 'L1', roster_positions: ['QB', 'RB', 'WR', 'TE'], settings: {} }] };
     ctx.App.S = ctx.S;
+    ctx.S.tradedPicks = [{ season: '2027', round: 1, roster_id: 2, owner_id: 1 }];
     const served = [{ rosterId: 1, healthScore: 11, tier: 'SERVER' }, { rosterId: 2, healthScore: 22, tier: 'SERVER' }];
-    ctx.App.ServerAssess = { leagueId: 'L1', li: LI, assessments: served, dna: { 1: { label: 'server dna' }, 2: null }, rosters: JSON.parse(JSON.stringify(rosters)) };
+    ctx.App.ServerAssess = { leagueId: 'L1', li: LI, assessments: served, dna: { 1: { label: 'server dna' }, 2: null }, rosters: JSON.parse(JSON.stringify(rosters)), picks_sig: '2027|1|2|1' };
     return ctx;
 }
 
@@ -56,6 +57,8 @@ test('a roster move, a scored week or other values: the device assesses', () => 
         E => { E.App.LI = Object.assign({}, E.App.LI, { builtAt: 2 }); },
         E => { E.App.LI._projectedYear = 2028; },
         E => { E.S.currentLeagueId = 'L2'; },
+        E => { E.S.tradedPicks = [{ season: '2027', round: 1, roster_id: 2, owner_id: 2 }]; },
+        E => { E.S.tradedPicks = []; },
         E => { E.App.ServerAssess = null; },
     ]) {
         const E = engine();
@@ -66,4 +69,15 @@ test('a roster move, a scored week or other values: the device assesses', () => 
     const E = engine();
     E.App.LI = Object.assign({}, E.App.LI, { builtAt: 2 });
     assert.equal(E.computeWeightedDNA(1), null, 'no profile on the device: its own answer, not the server\'s');
+});
+
+test('serverBuildMatches: the same check the one brain uses (picks included)', () => {
+    let E = engine();
+    assert.equal(E.App.serverBuildMatches(E.S), true);
+    E.S.tradedPicks.push({ season: '2028', round: 2, roster_id: 1, owner_id: 2 });
+    assert.equal(E.App.serverBuildMatches(E.S), false, 'a picks-only trade since the build');
+    E = engine();
+    delete E.App.ServerAssess.picks_sig;
+    E.S.tradedPicks = [];
+    assert.equal(E.App.serverBuildMatches(E.S), true, 'a build without the picks fingerprint checks rosters only');
 });
