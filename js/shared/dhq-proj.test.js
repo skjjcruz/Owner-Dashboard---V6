@@ -246,3 +246,41 @@ test('projection columns: headers, Sleeper text, and the DHQ sort value', () => 
     assert.equal(c.sortVal('none'), -1, 'no DHQ number sorts last');
     globalThis.S = saved.S; App.WeeklyProj = saved.WP;
 });
+
+// ── Phase A3 (2026-10-27): this week's numbers from the engine server ──
+test('the server build\'s numbers stand in when the page runs the same projection model', () => {
+    const saved = { S: globalThis.S, WP: App.WeeklyProj, doc: globalThis.document, SP: App.ServerProj };
+    let model = 'm1';
+    globalThis.document = { querySelector: (q) => (/dhq-proj-model/.test(q) && model ? { content: model } : null), createElement: () => { throw new Error('no loading in this test'); }, head: {} };
+    globalThis.S = { currentLeagueId: 'L1', leagues: [{ league_id: 'L1', scoring_settings: {} }], players: {
+        a: { team: 'BUF', position: 'WR' }, b: { team: 'BUF', position: 'RB', injury_status: 'Questionable' }, c: { team: 'KC', position: 'QB', injury_status: 'Out' }, d: { team: 'KC', position: 'TE' } } };
+    App.WeeklyProj = { displayWeek: () => 8, hasProjWeek: () => false, projLine: () => null };
+    App.ServerProj = { leagueId: 'L1', week: 8, builtAt: new Date().toISOString(), app: { model: 'm1', results: { a: { median: 11.2, mean: 11.9, floor: 4, ceiling: 20, grade: 'B', verdict: 'start', why: 'x', everyDown: false }, b: { median: 9, mean: 9.5 }, c: { median: 14, mean: 14 } }, none: ['d'], inj: { b: 'Questionable', c: 'Questionable' } } };
+    D.get('reset');   // a new league/week key: results cleared
+    const before = D._st.served;
+    assert.equal(D.get('a').mean, 11.9, 'served at once, nothing computed');
+    assert.equal(D.get('a').grade, 'B');
+    assert.equal(D.get('b').median, 9, 'same injury tag as the build');
+    assert.equal(D.get('c'), null, 'his tag changed since the build (Questionable → Out): computed here');
+    assert.ok(D._st.queue.has('c'));
+    assert.equal(D.get('d'), null, 'DHQ has no number for him on the server either');
+    assert.equal(D._st.results.d, null);
+    assert.equal(D._st.served - before, 3);
+    // the server's numbers land while players are waiting: they take them
+    D._st.queue.clear(); D._st.results = {};
+    const sp = App.ServerProj; App.ServerProj = null;
+    D._st.key = 'L1|8'; D._st.queue.add('a'); D._st.queue.add('c');
+    App.ServerProj = sp;
+    assert.equal(D.adoptServer(), 1);
+    assert.equal(D._st.results.a.mean, 11.9);
+    assert.ok(D._st.queue.has('c'));
+    // another projection model (the Lab's experiments), week or league: computed here
+    for (const change of [() => { model = 'm2'; }, () => { model = null; }, () => { App.ServerProj = Object.assign({}, sp, { week: 7 }); }, () => { App.ServerProj = Object.assign({}, sp, { leagueId: 'L2' }); }]) {
+        model = 'm1'; App.ServerProj = sp; D._st.queue.clear(); D._st.results = {};
+        change();
+        assert.equal(D.get('a'), null);
+        assert.ok(D._st.queue.has('a'));
+    }
+    D._st.queue.clear(); D._st.results = {};
+    globalThis.S = saved.S; App.WeeklyProj = saved.WP; globalThis.document = saved.doc; App.ServerProj = saved.SP;
+});

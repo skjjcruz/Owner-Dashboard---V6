@@ -344,6 +344,24 @@ function engineStamp() {
   return { deps, v: h.digest('hex').slice(0, 10) };
 }
 
+// The projection model's fingerprint (Phase A3, 2026-10-27): a hash of the
+// projection code's source, stamped as <meta name="dhq-proj-model">. The
+// engine server hashes its own copies the same way (server/engine/dhq-proj.js
+// MODEL_FILES, projModel) and stores it with each league's projections; the
+// app uses the server's numbers only when the two agree, so a page running
+// other projection code computes its own.
+const PROJ_MODEL_FILES = [
+  'js/shared/weekly-proj.js', 'js/shared/startsit-engine.js', 'js/shared/sleeper-proj.js', 'js/shared/nfl-context.js', 'js/utils/sos-engine.js',
+  'js/shared/matchup-engine.js', 'js/shared/dhq-baseline.js', 'js/shared/matchup-feeds-espn.js', 'js/shared/matchup-inputs.js',
+  'js/shared/dhq-proj.js',
+];
+function projModel() {
+  if (!PROJ_MODEL_FILES.every(f => fs.existsSync(path.join(ROOT, f)))) return null;
+  const h = crypto.createHash('sha256');
+  for (const f of PROJ_MODEL_FILES) h.update(f).update('\0').update(fs.readFileSync(path.join(ROOT, f))).update('\0');
+  return h.digest('hex').slice(0, 12);
+}
+
 function pageAssets(html, assets) {
   const urls = [];
   const add = (url, pathname) => {
@@ -386,10 +404,11 @@ function stampAndWrite() {
   const { tag, build } = computeBuildId();
   const meta = `<meta name="dhq-build" content="${build}">`;
   const engine = engineStamp();
+  const model = projModel();
   const assets = {}, pageLists = {};
   for (const [page, raw] of pages) {
     if (!raw.includes(LIVE_UPDATE_SRC)) throw new Error(`${page}: does not load ${LIVE_UPDATE_SRC} — it would never self-update`);
-    let html = raw.replace(/<meta\s+name=["'](dhq-build|dhq-engine-v)["'][^>]*>\s*/gi, '');
+    let html = raw.replace(/<meta\s+name=["'](dhq-build|dhq-engine-v|dhq-proj-model)["'][^>]*>\s*/gi, '');
     const charset = html.match(/<meta\s+charset[^>]*>/i);
     const head = html.match(/<head[^>]*>/i);
     const anchor = charset || head;
@@ -397,7 +416,8 @@ function stampAndWrite() {
     const at = anchor.index + anchor[0].length;
     const indent = charset ? (html.slice(0, anchor.index).match(/[ \t]*$/) || [''])[0] : '  ';
     const engineMeta = engine && html.includes(DHQ_PROJ_SRC) ? '\n' + indent + `<meta name="dhq-engine-v" content="${engine.v}">` : '';
-    html = html.slice(0, at) + '\n' + indent + meta + engineMeta + html.slice(at);
+    const modelMeta = model && html.includes(DHQ_PROJ_SRC) ? '\n' + indent + `<meta name="dhq-proj-model" content="${model}">` : '';
+    html = html.slice(0, at) + '\n' + indent + meta + engineMeta + modelMeta + html.slice(at);
     ensureDir(OUT_DIR);
     fs.writeFileSync(path.join(OUT_DIR, page), html, 'utf8');
     pageLists[page] = pageAssets(html, assets);

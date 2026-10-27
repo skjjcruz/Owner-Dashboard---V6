@@ -52,6 +52,7 @@
         ctx: null, ctxKey: null,
         error: null,
         data: {},            // snapshot src → { ok, built?, why? } (see checkData)
+        served: 0,           // results taken from the engine server's build (Phase A3)
     };
 
     // ── plumbing ──────────────────────────────────────────────────────
@@ -260,16 +261,63 @@
         const g = App.MatchupInputs ? App.MatchupInputs.posGroup(p) : String((App.normPos && App.normPos(p.position)) || p.position || '').toUpperCase();
         return !!POS_OK[g] || !!POS_OK[({ DE: 'DL', DT: 'DL', NT: 'DL', CB: 'DB', S: 'DB', SS: 'DB', FS: 'DB', OLB: 'LB', ILB: 'LB', MLB: 'LB' })[String(p.position || '').toUpperCase()]];
     }
+    // ── The engine server's numbers (Phase A3, 2026-10-27) ────────────
+    // The server builds this week's DHQ projections with this same code
+    // (server/engine/dhq-proj.js) for every rostered player and everyone
+    // Sleeper projects, so the AI tools and the app read one number. When
+    // this page runs the same projection model (<meta name="dhq-proj-model">,
+    // stamped by the build, equals the server build's) for this league and
+    // week, a player's result comes from the server instead of being
+    // computed here, with nothing downloaded. A player whose injury tag has
+    // changed since the build is computed here as before. The truth law
+    // (gated) and game locks still apply live, on top of either.
+    function pageModel() {
+        try {
+            const m = root.document && root.document.querySelector && root.document.querySelector('meta[name="dhq-proj-model"]');
+            return (m && m.content) || null;
+        } catch (e) { return null; }
+    }
+    function served() {
+        const sp = App.ServerProj, lg = league(), wk = week();
+        if (!sp || !sp.app || !lg || !wk || String(sp.leagueId) !== lg.id || Number(sp.week) !== wk) return null;
+        const pm = pageModel();
+        return pm && sp.app.model === pm ? sp : null;
+    }
+    // undefined: compute here; null: DHQ has no number for him; else his result.
+    function fromServer(pid) {
+        const sp = served();
+        if (!sp) return undefined;
+        const live = String(((S().players || {})[pid] || {}).injury_status || '');
+        if (live !== String((sp.app.inj || {})[pid] || '')) return undefined;
+        const r = (sp.app.results || {})[pid];
+        if (r) { st.served++; return Object.assign({}, r); }
+        if ((sp.app.none || []).indexOf(pid) >= 0) { st.served++; return null; }
+        return undefined;
+    }
+    let notifyTimer = null;
+    function notifySoon() { if (notifyTimer) return; notifyTimer = setTimeout(() => { notifyTimer = null; notify(); }, 0); }
+    // The server's projections just arrived (server-intel.js): anyone still
+    // waiting in the queue takes the server's number instead.
+    function adoptServer() {
+        if (!resetIfMoved() || !served()) return 0;
+        let n = 0;
+        [...st.queue].forEach(pid => { const r = fromServer(pid); if (r !== undefined) { st.queue.delete(pid); st.results[pid] = r; n++; } });
+        if (n) notifySoon();
+        return n;
+    }
     function request(pids) {
         if (!resetIfMoved()) return;
-        let added = false;
+        let added = false, fromSrv = false;
         (pids || []).forEach(pid => {
             pid = String(pid || '');
             if (!pid || pid in st.results || st.queue.has(pid)) return;
             if (!eligible(pid)) { st.results[pid] = null; return; }
+            const sv = fromServer(pid);
+            if (sv !== undefined) { st.results[pid] = sv; fromSrv = true; return; }
             st.queue.add(pid); added = true;
         });
         if (added) kick();
+        if (fromSrv) notifySoon();
     }
     // ── Truth law: if it's not in Sleeper, it's not there ─────────────
     // Once Sleeper has published this week's projections, a player it gives
@@ -313,7 +361,7 @@
         if (!resetIfMoved() || !pid) return null;
         if (pid in st.results) return gated(pid, st.results[pid]);
         request([pid]);
-        return null;
+        return pid in st.results ? gated(pid, st.results[pid]) : null;   // the server's number, when it had one
     }
     // A player's shown number is his typical week; every choice (lineups,
     // sorts, swaps, THE CALL) and every total uses his average week.
@@ -863,7 +911,7 @@
         root.addEventListener && root.addEventListener('wr:proj-updated', (e) => { if (!(e && e.detail && e.detail.source === 'dhq')) { loadPlatform(); setTimeout(warmLeague, 500); } });
     }
 
-    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, projectWeek, futureMatchup, seasonDists, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, avgOf, ptsOf, dataStatus, cols: COLS, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
+    App.DhqProj = App.DhqProj || { get, fmt, sum, totalNum, stamp, week, teamDist, weekDists, rosterDists, optimalFor, matchup, lineupCheck, projectWeek, futureMatchup, seasonDists, slotList, assignSlots, hungarian, posList, provLabel, loadPlatform, request, warmLeague, avgOf, ptsOf, dataStatus, adoptServer, served, cols: COLS, _checkData: checkData, _loadDeps: loadDeps, _st: st, VERSION };
     if (typeof document !== 'undefined') boot();
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.DhqProj;

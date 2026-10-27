@@ -60,6 +60,33 @@
         return '';
     }
 
+    // This week's DHQ projections from the build (Phase A3, 2026-10-27):
+    // dhq-proj.js uses them while the page runs the same projection model,
+    // league and week (DhqProj served()), instead of computing them here.
+    // Taken whenever the build is fresh, even if its values aren't used.
+    function takeProj(body, lid) {
+        const d = body && body.dhq_proj;
+        if (!d || !d.app || !d.app.results || String(body.league_id) !== lid) return false;
+        const age = Date.now() - Date.parse(d.built_at || body.built_at);
+        if (!(age >= -5 * 60 * 1000 && age < TTL_IN_SEASON)) return false;
+        App.ServerProj = { leagueId: lid, week: Number(d.week) || 0, builtAt: d.built_at || body.built_at, app: d.app };
+        try { if (App.DhqProj && App.DhqProj.adoptServer) App.DhqProj.adoptServer(); } catch (e) { /* the device computes */ }
+        return true;
+    }
+    // Projections only, for a league whose values came from the device's cache.
+    async function projOnly(lid) {
+        if (App.ServerProj && App.ServerProj.leagueId === lid && Date.now() - Date.parse(App.ServerProj.builtAt) < 15 * 60 * 1000) return false;
+        const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+        const timer = ctl ? setTimeout(() => ctl.abort(), TIMEOUT) : null;
+        try {
+            const r = await root.fetch(URL + lid + '&part=proj', { credentials: 'omit', signal: ctl ? ctl.signal : undefined });
+            if (!r.ok) return false;
+            const body = await r.json();
+            const S = state();
+            return !!S && String(S.currentLeagueId) === lid && takeProj(body, lid);
+        } catch (e) { return false; } finally { if (timer) clearTimeout(timer); }
+    }
+
     let pending = null;
     async function fromServer() {
         const S = state();
@@ -75,6 +102,7 @@
             body = await r.json();
         } finally { if (timer) clearTimeout(timer); }
         const S2 = state();
+        if (S2 && String(S2.currentLeagueId) === lid) takeProj(body, lid);
         if (!S2 || String(S2.currentLeagueId) !== lid || App.LI_LOADED) return false;   // moved on, or loaded meanwhile
         const why = reject(body, S2, Date.now());
         if (why) { console.log('[ServerIntel] server build not used (' + why + '); computing on device'); return false; }
@@ -109,8 +137,15 @@
         const wrapped = async function () {
             if (App.LI_LOADED) return;
             if (off() || root._liLoading || typeof root.fetch !== 'function') return orig.apply(this, arguments);
-            // The device's own cache first, exactly as before.
-            try { if (typeof App.loadLICache === 'function' && await App.loadLICache()) return; } catch (e) { /* fall through */ }
+            // The device's own cache first, exactly as before (then this week's
+            // projections alone from the server, in the background).
+            try {
+                if (typeof App.loadLICache === 'function' && await App.loadLICache()) {
+                    const S = state(), lid = String((S && S.currentLeagueId) || '');
+                    if (/^\d{10,20}$/.test(lid)) projOnly(lid);
+                    return;
+                }
+            } catch (e) { /* fall through */ }
             if (App.LI_LOADED) return;
             if (!pending) pending = fromServer().catch(e => { console.log('[ServerIntel] ' + (e && e.name === 'AbortError' ? 'server slow' : 'server unavailable') + '; computing on device'); return false; }).finally(() => { pending = null; });
             if (await pending) return;
@@ -133,7 +168,7 @@
         });
     } catch (e) { /* App frozen: the device path stays as it was */ }
 
-    App.ServerIntel = { _reject: reject, _pickValueFn: pickValueFn, _fromServer: fromServer, _wrap: wrap };
+    App.ServerIntel = { _reject: reject, _takeProj: takeProj, _projOnly: projOnly, _pickValueFn: pickValueFn, _fromServer: fromServer, _wrap: wrap };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.ServerIntel;
 })(typeof window !== 'undefined' ? window : globalThis);
