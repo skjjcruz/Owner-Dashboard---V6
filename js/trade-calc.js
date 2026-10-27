@@ -1358,11 +1358,36 @@
             const get = tcCallArgs(tradeIds.B, tradePickIds.B, tradeFaab.B);
             const partner = tradeOwner.B ? rosterOfOwner(tradeOwner.B) : null;
             const key = dhqCallKey;
-            let live = true;
+            const args = Object.assign({ give, get }, partner ? { partner: String(partner.roster_id) } : {});
+            let live = true, fromServer = false;
             const t = setTimeout(() => {
-                T.run('evaluate_trade', Object.assign({ give, get }, partner ? { partner: String(partner.roster_id) } : {}))
-                    .then(r => { if (live) setDhqCall(r && r.verdict ? { key, verdict: r.verdict, headliner: r.headliner || null } : null); })
-                    .catch(() => { if (live) setDhqCall(null); });
+                T.run('evaluate_trade', args)
+                    .then(r => {
+                        if (window._labDbg) window._labDbg.tradeCallDevice = r && r.verdict ? { key, verdict: r.verdict, headliner: r.headliner || null } : null;
+                        if (live && !fromServer) setDhqCall(r && r.verdict ? { key, verdict: r.verdict, headliner: r.headliner || null } : null);
+                    })
+                    .catch(() => { if (live && !fromServer) setDhqCall(null); });
+                // The engine server's call (Phase A5): the same evaluator, run
+                // on the server (dhq-tools/app evaluate_trade). The device's
+                // answer shows at once and the server's replaces it when it
+                // lands (identical on 60 test deals, so nothing moves on
+                // screen). A server that can't answer leaves the device's.
+                // Picks only where the build prices them (dynasty and keeper
+                // leagues; a redraft or chopped league has no future picks).
+                const lid = String(currentLeague.id || currentLeague.league_id || '');
+                const type = Number(currentLeague.settings?.type);
+                const picks = tradePickIds.A.length || tradePickIds.B.length;
+                if (!/^\d{10,20}$/.test(lid) || !myRoster?.owner_id || (picks && type !== 1 && type !== 2) || typeof fetch !== 'function') return;
+                try { if (localStorage.getItem('dhq_server_li_off') === '1') return; } catch (e) { /* storage off */ }
+                fetch('https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-tools/app?league=' + lid + '&user=' + encodeURIComponent(myRoster.owner_id) + '&tool=evaluate_trade&args=' + encodeURIComponent(JSON.stringify(args)), { credentials: 'omit' })
+                    .then(r => (r.ok ? r.json() : null))
+                    .then(b => {
+                        if (!live || !b || !b.ok || !b.result || !b.result.verdict) return;
+                        fromServer = true;
+                        if (window._labDbg) window._labDbg.tradeCallServer = { key, verdict: b.result.verdict, headliner: b.result.headliner || null };
+                        setDhqCall({ key, verdict: b.result.verdict, headliner: b.result.headliner || null, source: 'server' });
+                    })
+                    .catch(() => { /* the device's call stands */ });
             }, 250);
             return () => { live = false; clearTimeout(t); };
         }, [dhqCallKey, myRoster?.roster_id, allRosters.length]);
