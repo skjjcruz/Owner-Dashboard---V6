@@ -2042,6 +2042,69 @@
         out.market = { from: +shown.toFixed(2), to: +to.toFixed(2), anchor: +anchor.toFixed(2) };
         out.why = [{ key: 'market', label: 'Market check', impactPct: k != null ? +((k - 1) * 100).toFixed(1) : 0, note: note + '; held at ' + to.toFixed(1) }].concat(out.why || []);
     }
+    // DHQ WR model (owner ruling 2026-10-27: our WR number stands on its own;
+    // Sleeper is only the yardstick). A gradient-boosted model of a
+    // receiver's TYPICAL game from free nflverse data, scored weekly in a
+    // GitHub Action into data/wr-model-snapshot.js (scripts/
+    // build-wr-model-snapshot.mjs): his share of the targets among the
+    // receivers active this week, snaps, the Vegas total and spread, the
+    // depth chart, the injury report, career scoring, draft slot and age.
+    // Out of sample vs Sleeper: 2025 57.3% (miss 3.48 vs 3.65), 2026 weeks
+    // 1-7 56.9% (3.44 vs 3.57); the engine's own WR number was 53.5% and
+    // 51.5%. The model is half-PPR; a league's own scoring is carried by the
+    // ratio of his DHQ stat line scored both ways, and his average week keeps
+    // the engine's spread around it. No snapshot for this week, or a player
+    // it does not list: the engine's number stands.
+    // RBs and TEs (owner ruling 2026-10-27, same recipe, one model each, in
+    // the same snapshot's byPos): RB 2025 56.4% / 2026 59.9% vs Sleeper (the
+    // engine 53.0 / 56.3), TE 58.5% / 59.0% (52.8 / 55.3), posted-roster path.
+    const MODEL_POS = { WR: 1, RB: 1, TE: 1 };
+    let modelIdx = null;
+    function modelRow(pos, pid, player, ctx) {
+        const S = root.DhqWrModel;
+        if (!S || !S.players || Number(S.week) !== Number(ctx.week) || (ctx.season != null && Number(S.season) !== Number(ctx.season))) return null;
+        if (!modelIdx || modelIdx.src !== S) {
+            modelIdx = { src: S };
+            const lists = Object.assign({ WR: S.players }, S.byPos || {});
+            for (const [P, list] of Object.entries(lists)) {
+                const ix = modelIdx[P] = { sid: {}, nt: {} };
+                for (const g of Object.keys(list || {})) {
+                    const r = list[g];
+                    if (r[0]) ix.sid[String(r[0])] = r;
+                    ix.nt[normName(r[1]) + '|' + String(r[2] || '').toUpperCase()] = r;
+                }
+            }
+        }
+        const ix = modelIdx[pos];
+        if (!ix) return null;
+        const nameOf = player && (player.full_name || ((player.first_name || '') + ' ' + (player.last_name || '')));
+        return ix.sid[String(pid)] || (player ? ix.nt[normName(nameOf) + '|' + String(player.team || '').toUpperCase()] : null) || null;
+    }
+    function wrModel(pid, out, input, opts, ctx) {
+        if (!out || out.available === false || !out.points) return;
+        const player = opts.playersData && opts.playersData[pid];
+        const pos = posGroup(player);
+        if (!MODEL_POS[pos]) return;
+        const row = modelRow(pos, pid, player, ctx);
+        const med = row ? num(row[3]) : null;
+        if (med == null || !(med >= 0)) return;
+        const DB = App.DhqBaseline, line = input && input.baselineLine;
+        const own = line && DB ? num(DB.scoreLine(line, opts.scoring, pos)) : null, half = line && DB ? num(DB.scoreLine(line, HALF, pos)) : null;
+        const conv = own > 0 && half > 0 ? own / half : 1;
+        const to = med * conv, shown = num(out.points.median) || 0;
+        const k = shown > 0 ? to / shown : null;
+        for (const f of ['median', 'typical', 'mean', 'floor', 'ceiling']) if (out.points[f] != null) out.points[f] = +(k != null ? out.points[f] * k : to).toFixed(2);
+        out.wrModel = { from: +shown.toFixed(2), to: +to.toFixed(2), half: med };
+        const bits = [];
+        if (pos === 'RB') {
+            if (num(row[5]) != null) bits.push(num(row[5]).toFixed(1) + ' carries');
+            if (num(row[8]) != null) bits.push(num(row[8]).toFixed(1) + ' targets expected');
+        } else if (num(row[5]) != null) bits.push(num(row[5]).toFixed(1) + ' targets expected');
+        if (num(row[6]) != null) bits.push(Math.round(num(row[6]) * 100) + '% of snaps last game');
+        if (num(row[7]) != null) bits.push('team total ' + num(row[7]).toFixed(1));
+        out.why = [{ key: 'wrModel', label: 'DHQ ' + pos + ' model', impactPct: k != null ? +((k - 1) * 100).toFixed(1) : 0,
+            note: 'Typical game ' + to.toFixed(1) + (bits.length ? ': ' + bits.join(', ') : '') }].concat(out.why || []);
+    }
     function safetyCheck(pid, out, input, opts, ctx) {
         if (!out || !out.available || !out.points || !(out.sleeper > 0)) return;
         const player = opts.playersData && opts.playersData[pid];
@@ -2076,6 +2139,7 @@
         out.input = input;
         safetyCheck(pid, out, input, opts, ctx);
         out.everyDown = everyDown(pid, out, input, opts, ctx);
+        wrModel(pid, out, input, opts, ctx);
         qbMarket(pid, out, input, opts, ctx);
         return out;
     }
@@ -2094,7 +2158,7 @@
 
     App.MatchupInputs = App.MatchupInputs || {
         prepare, build, project, projectRoster, statusOf, idpRankings, priorRankings, depthCharts, baselineFor, dhqBaselineFor, sleeperPoints, opponentOf, opponentFor, trenchFor, castFor, teamDepth, expectedShare, teamSlotNorm, passPool, freedTargetShare, posGroup, normName, roleFor, oppHealthFor, returnLine, recentPPGFrom,
-        splitShare, roomScaleParts, typicalWeek, TUNE, _safetyCheck: safetyCheck, _everyDown: everyDown, _qbMarket: qbMarket,
+        splitShare, roomScaleParts, typicalWeek, TUNE, _safetyCheck: safetyCheck, _everyDown: everyDown, _qbMarket: qbMarket, _wrModel: wrModel,
     };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.MatchupInputs;
