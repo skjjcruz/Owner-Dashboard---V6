@@ -83,8 +83,10 @@
                     // history (getCached), so this tile can't disagree with the
                     // FA tab or the Flash Brief for the same player. Without the
                     // fa group: the identical engine call on identical inputs.
-                    const cached = window.WrTxns.getCached ? (window.WrTxns.getCached(lid) || []) : [];
-                    const failed = window.WrTxns.getFailedWaivers ? (window.WrTxns.getFailedWaivers(lid) || []) : [];
+                    // Season bids only (App.Faab.inSeason, owner ruling 2026-10-27).
+                    const season = (txns) => (window.App?.Faab?.inSeason ? window.App.Faab.inSeason(txns, currentLeague?.season, window.S && window.S.nflState) : txns);
+                    const cached = season(window.WrTxns.getCached ? (window.WrTxns.getCached(lid) || []) : []);
+                    const failed = season(window.WrTxns.getFailedWaivers ? (window.WrTxns.getFailedWaivers(lid) || []) : []);
                     const est = window.App.faModelBid
                         ? window.App.faModelBid({ league: currentLeague, myRoster, playersData, pid: target.pid, pos: target.pos })
                         : (window.App.Faab.estimate ? window.App.Faab.estimate({
