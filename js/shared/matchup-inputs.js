@@ -134,6 +134,12 @@
         // An every-down defender (see everyDown): the share of his team's
         // defensive snaps he played in its last game
         noLineSnap: 0.5,
+        // QB market check (see qbMarket): Sleeper's line pulled `pull` of the
+        // way toward what the Vegas line expects of a starting QB, then
+        // blended with DHQ's own number at `engineW`. Vegas-expected half-PPR
+        // QB points = a + bItt x implied team total + cSpread x spread (2023-25
+        // starters with a line of 10+, n 1,573).
+        qbMarket: { pull: 0.3, engineW: 0.25, a: 0.142, bItt: 0.7463, cSpread: 0.1134, minHalf: 10 },
     }, root.__DHQ_TUNE || {});
     const SLEEPER_DEPTH_POS = { QB: 'QB', RB: 'RB', FB: 'RB', WR: 'WR', LWR: 'WR', SWR: 'WR', RWR: 'WR', TE: 'TE', K: 'K',
         LDE: 'DL', RDE: 'DL', DE: 'DL', DT: 'DL', NT: 'DL', LDT: 'DL', RDT: 'DL', DL: 'DL',
@@ -1360,7 +1366,10 @@
         const pf = pffPlayer(player) || {};
         // Defenders' big-play norms follow their snaps (see dhq-baseline.js).
         const snapFactor = (grp === 'DL' || grp === 'LB' || grp === 'DB') && role && role.snapScale && num(role.snapScale.snap) != null ? role.snapScale.snap / 0.6 : null;
-        const built = DB.buildLine({ position: grp, volume, samples, snapFactor, rank: role && num(role.posRank) != null ? role.posRank : null, grades: { route: pf.route, run: pf.run, pass: pf.pass, off: pf.off, prush: pf.prush, cov: pf.cov, tkl: pf.tkl, fg: pf.fg } });
+        // The Vegas implied team total (QBs: pass touchdowns follow it, see dhq-baseline.js)
+        const wkV = grp === 'QB' && App.WeeklyProj && App.WeeklyProj._ctx && App.WeeklyProj._ctx.byTeamWeek[String(player.team || '').toUpperCase() + '|' + ctx.week];
+        const teamImplied = wkV && wkV.vegas ? num(wkV.vegas.impliedTotal) : null;
+        const built = DB.buildLine({ position: grp, volume, samples, snapFactor, teamImplied, rank: role && num(role.posRank) != null ? role.posRank : null, grades: { route: pf.route, run: pf.run, pass: pf.pass, off: pf.off, prush: pf.prush, cov: pf.cov, tkl: pf.tkl, fg: pf.fg } });
         if (!built) return null;   // no DHQ line for this position (team defense): the caller falls back
         if (grp === 'K') {
             // A kicker's attempts follow his team's scoring (owner ruling
@@ -1996,6 +2005,43 @@
         const sn = lastGameSnap(pid, String(input.team || (player && player.team) || '').toUpperCase(), ctx, opts, 'def');
         return sn != null && sn >= TUNE.noLineSnap;
     }
+    // QB market check (owner ruling 2026-10-27, QB project). A starting QB's
+    // week is mostly luck (about 7 points a game either way), so the edge
+    // over Sleeper is in where its line disagrees with the betting market:
+    // when Sleeper sits above what the Vegas team total and spread expect of
+    // a QB, he falls short of it, and below, he beats it, by about half the
+    // gap (slope -0.27 to -0.65 in each of 2023-26 held out). The shown
+    // number is Sleeper's line pulled 30% toward the Vegas-expected number,
+    // blended 75/25 with DHQ's own (touchdowns already following the team
+    // total, dhq-baseline.js). Held-out seasons vs Sleeper: 2025 54.2%
+    // (engine alone 52.4%, before the QB project 49.7%), 2026 52.3% (47.0%,
+    // 44.6%); 2023 50.4% and 2024 53.3% for the pull alone. Starters only
+    // (Sleeper's half-PPR line 10+); no Vegas line: no pull, the blend
+    // stands; no Sleeper line: untouched (the truth law decides).
+    const HALF = { pass_yd: 0.04, pass_td: 4, pass_int: -1, pass_2pt: 2, rush_yd: 0.1, rush_td: 6, rush_2pt: 2, rec: 0.5, rec_yd: 0.1, rec_td: 6, rec_2pt: 2, fum_lost: -2 };
+    function qbMarket(pid, out, input, opts, ctx) {
+        const M = TUNE.qbMarket;
+        if (!M || !out || !out.available || !out.points || !(out.sleeper > 0)) return;
+        if (posGroup(opts.playersData && opts.playersData[pid]) !== 'QB') return;
+        const WP = App.WeeklyProj, line = WP && WP.projLine ? WP.projLine(pid, ctx.week) : null;
+        const half = line && App.DhqBaseline ? num(App.DhqBaseline.scoreLine(line, HALF, 'QB')) : null;
+        if (!(half >= M.minHalf)) return;
+        const wk = WP && WP._ctx && WP._ctx.byTeamWeek[String(input.team || '').toUpperCase() + '|' + ctx.week];
+        const v = wk && wk.vegas, imp = v ? num(v.impliedTotal) : null, spr = v ? num(v.spread) : null;
+        let anchor = out.sleeper, note = 'No betting line yet';
+        if (imp != null) {
+            const expect = M.a + M.bItt * imp + M.cSpread * (spr || 0);
+            anchor = out.sleeper * (1 - M.pull * (1 - expect / half));
+            note = 'Team total ' + imp.toFixed(1) + (spr != null ? ', spread ' + (spr > 0 ? '+' : '') + spr : '') + ': the market expects ' + expect.toFixed(1) + ' from his offense';
+        }
+        const shown = num(out.points.median) || 0;
+        const to = M.engineW * shown + (1 - M.engineW) * anchor;
+        if (!(to > 0)) return;
+        const k = shown > 0 ? to / shown : null;
+        for (const f of ['median', 'typical', 'mean', 'floor', 'ceiling']) if (out.points[f] != null) out.points[f] = +(k != null ? out.points[f] * k : to).toFixed(2);
+        out.market = { from: +shown.toFixed(2), to: +to.toFixed(2), anchor: +anchor.toFixed(2) };
+        out.why = [{ key: 'market', label: 'Market check', impactPct: k != null ? +((k - 1) * 100).toFixed(1) : 0, note: note + '; held at ' + to.toFixed(1) }].concat(out.why || []);
+    }
     function safetyCheck(pid, out, input, opts, ctx) {
         if (!out || !out.available || !out.points || !(out.sleeper > 0)) return;
         const player = opts.playersData && opts.playersData[pid];
@@ -2030,6 +2076,7 @@
         out.input = input;
         safetyCheck(pid, out, input, opts, ctx);
         out.everyDown = everyDown(pid, out, input, opts, ctx);
+        qbMarket(pid, out, input, opts, ctx);
         return out;
     }
 
@@ -2047,7 +2094,7 @@
 
     App.MatchupInputs = App.MatchupInputs || {
         prepare, build, project, projectRoster, statusOf, idpRankings, priorRankings, depthCharts, baselineFor, dhqBaselineFor, sleeperPoints, opponentOf, opponentFor, trenchFor, castFor, teamDepth, expectedShare, teamSlotNorm, passPool, freedTargetShare, posGroup, normName, roleFor, oppHealthFor, returnLine, recentPPGFrom,
-        splitShare, roomScaleParts, typicalWeek, TUNE, _safetyCheck: safetyCheck, _everyDown: everyDown,
+        splitShare, roomScaleParts, typicalWeek, TUNE, _safetyCheck: safetyCheck, _everyDown: everyDown, _qbMarket: qbMarket,
     };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.MatchupInputs;
