@@ -85,7 +85,14 @@
         // object and every roster still matches the build; otherwise the
         // device computes them as before.
         App.ServerAssess = body.assess && Array.isArray(body.assess.assessments)
-            ? { leagueId: lid, builtAt: body.built_at, li: LI, assessments: body.assess.assessments, dna: body.assess.dna || {}, rosters: body.assess.rosters || [] }
+            ? { leagueId: lid, builtAt: body.built_at, li: LI, assessments: body.assess.assessments, dna: body.assess.dna || {}, rosters: body.assess.rosters || [], picks_sig: body.assess.picks_sig }
+            : null;
+        // The build's points ledger, owner-intent reads and one brain (Phase
+        // A2): the engine and the trade desk use them while the league
+        // matches the build (App.serverBuildMatches), instead of downloading
+        // the projection feeds and computing them here.
+        App.ServerBrain = App.ServerAssess && body.brain && body.brain.ledger
+            ? { leagueId: lid, builtAt: body.built_at, ledger: body.brain.ledger, intent: body.brain.intent || null, brain: body.brain.brain || null }
             : null;
         App.LI = LI;
         App.LI_LOADED = true;
