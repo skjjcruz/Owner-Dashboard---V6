@@ -9,9 +9,9 @@
 // has. The server copy is used only when it is this league and season,
 // recent enough (the same 2h in season / 8h offseason the device cache
 // allows) and covers the league's rosters; anything else, a slow answer or
-// a failed fetch falls through to the device. Only league values and
-// history come from here: projections, lineups, injuries and live points are
-// still read live from Sleeper on the device.
+// a failed fetch falls through to the device. League values, history, team
+// assessments and owner DNA come from here: projections, lineups, injuries
+// and live points are still read live from Sleeper on the device.
 //
 // Off switch for one device: localStorage dhq_server_li_off = '1'.
 (function (root) {
@@ -80,6 +80,13 @@
         if (why) { console.log('[ServerIntel] server build not used (' + why + '); computing on device'); return false; }
         const LI = body.intel;
         LI.dhqPickValueFn = pickValueFn(LI.dhqPickValues, S2.rosters.length || 16, parseInt(S2.season) || new Date().getFullYear());
+        // The build's team assessments and owner DNA (Phase A1, 2026-10-27).
+        // team-assess.js and analytics-engine.js use them while App.LI is this
+        // object and every roster still matches the build; otherwise the
+        // device computes them as before.
+        App.ServerAssess = body.assess && Array.isArray(body.assess.assessments)
+            ? { leagueId: lid, builtAt: body.built_at, li: LI, assessments: body.assess.assessments, dna: body.assess.dna || {}, rosters: body.assess.rosters || [] }
+            : null;
         App.LI = LI;
         App.LI_LOADED = true;
         App.LI_SOURCE = { source: 'server', built_at: body.built_at, ms: Date.now() - t0 };
