@@ -19,6 +19,12 @@
     const App = root.App = root.App || {};
     const URL = 'https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-league?league=';
     const TIMEOUT = 8000;
+    // A league the server is building for the first time (it was just sent
+    // there, server-build.js): asked again every 0.7 s for up to 8 s
+    // before the device computes it (Phase A6, 2026-10-28). Its values land
+    // a few seconds after the league is opened, about when the device would
+    // have finished; the loading screen is the same either way.
+    const WAIT = { ms: 8000, poll: 700 };
     const TTL_IN_SEASON = 2 * 60 * 60 * 1000, TTL = 8 * 60 * 60 * 1000;
 
     function off() { try { return root.localStorage.getItem('dhq_server_li_off') === '1'; } catch (e) { return false; } }
@@ -116,10 +122,23 @@
         const t0 = Date.now();
         const ctl = typeof AbortController === 'function' ? new AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), TIMEOUT) : null;
-        let body;
+        let body, waited = 0;
         try {
-            const r = await root.fetch(URL + lid, { credentials: 'omit', signal: ctl ? ctl.signal : undefined });
-            if (!r.ok) { console.log('[ServerIntel] league not built on the server (' + r.status + '); computing on device'); return false; }
+            let r = await root.fetch(URL + lid, { credentials: 'omit', signal: ctl ? ctl.signal : undefined });
+            if (r.status === 404 && App.ServerBuild && App.ServerBuild.building && await App.ServerBuild.building(lid)) {
+                const t1 = Date.now();
+                while (r.status === 404 && Date.now() - t1 < WAIT.ms) {
+                    await new Promise(res => setTimeout(res, WAIT.poll));
+                    const S1 = state();
+                    if (!S1 || String(S1.currentLeagueId) !== lid || App.LI_LOADED) return false;
+                    const c2 = typeof AbortController === 'function' ? new AbortController() : null;
+                    const t2 = c2 ? setTimeout(() => c2.abort(), 4000) : null;
+                    try { r = await root.fetch(URL + lid + '&t=' + Date.now(), { credentials: 'omit', cache: 'no-store', signal: c2 ? c2.signal : undefined }); }
+                    catch (e) { r = { ok: false, status: 404 }; } finally { if (t2) clearTimeout(t2); }
+                }
+                waited = Date.now() - t1;
+            }
+            if (!r.ok) { console.log('[ServerIntel] league not built on the server (' + r.status + (waited ? ', waited ' + waited + ' ms' : '') + '); computing on device'); return false; }
             body = await r.json();
         } finally { if (timer) clearTimeout(timer); }
         const S2 = state();
@@ -145,7 +164,7 @@
             : null;
         App.LI = LI;
         App.LI_LOADED = true;
-        App.LI_SOURCE = { source: 'server', built_at: body.built_at, ms: Date.now() - t0 };
+        App.LI_SOURCE = { source: 'server', built_at: body.built_at, ms: Date.now() - t0, waited };
         console.log('[ServerIntel] LeagueIntel loaded from the server: ' + Object.keys(LI.playerScores).length + ' players, built ' + Math.round((Date.now() - Date.parse(body.built_at)) / 60000) + ' min ago, ' + (Date.now() - t0) + ' ms');
         // As a fresh build does: tell the app, then run the assessment brain.
         setTimeout(() => { try { if (root.DhqEvents) root.DhqEvents.emit('li:loaded', { source: 'server' }); } catch (e) { /* no-op */ } }, 0);
@@ -189,7 +208,7 @@
         });
     } catch (e) { /* App frozen: the device path stays as it was */ }
 
-    App.ServerIntel = { later, _reject: reject, _takeProj: takeProj, _projOnly: projOnly, _pickValueFn: pickValueFn, _fromServer: fromServer, _wrap: wrap };
+    App.ServerIntel = { later, _wait: WAIT, _reject: reject, _takeProj: takeProj, _projOnly: projOnly, _pickValueFn: pickValueFn, _fromServer: fromServer, _wrap: wrap };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.ServerIntel;
 })(typeof window !== 'undefined' ? window : globalThis);

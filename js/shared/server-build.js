@@ -32,7 +32,7 @@
     // The league on screen: sent even if note() already sent it today, so a
     // league still waiting to be built goes to the front of the server's
     // queue (Phase A6). At most once every 10 minutes per league.
-    const opened = {};
+    const opened = {}, answers = {};
     function open(id) {
         try {
             id = String(id || '');
@@ -42,11 +42,19 @@
             opened[id] = now;
             const log = sentLog(); log[id] = now;
             try { root.localStorage.setItem(KEY, JSON.stringify(log)); } catch (e) { /* storage full or off */ }
-            root.fetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leagues: [id], open: id }), credentials: 'omit', keepalive: true }).catch(() => {});
+            answers[id] = root.fetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leagues: [id], open: id }), credentials: 'omit', keepalive: true })
+                .then(r => (r.ok ? r.json() : null)).catch(() => null);
         } catch (e) { /* never break the app */ }
     }
+    // Whether the server took the league on screen (queued it, or has it):
+    // server-intel.js then waits a few seconds for a first build.
+    function building(id) {
+        id = String(id || '');
+        if (!answers[id] || !(Date.now() - opened[id] < 10 * 60 * 1000)) return Promise.resolve(false);
+        return answers[id].then(a => !!a && (Number(a.queued) > 0 || Number(a.known) > 0)).catch(() => false);
+    }
 
-    App.ServerBuild = App.ServerBuild || { note, open, _key: KEY };
+    App.ServerBuild = App.ServerBuild || { note, open, building, _key: KEY };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.ServerBuild;
 })(typeof window !== 'undefined' ? window : globalThis);
