@@ -29,7 +29,24 @@
         } catch (e) { /* never break the app */ }
     }
 
-    App.ServerBuild = App.ServerBuild || { note, _key: KEY };
+    // The league on screen: sent even if note() already sent it today, so a
+    // league still waiting to be built goes to the front of the server's
+    // queue (Phase A6). At most once every 10 minutes per league.
+    const opened = {};
+    function open(id) {
+        try {
+            id = String(id || '');
+            if (typeof root.fetch !== 'function' || !/^\d{10,20}$/.test(id)) return;
+            const now = Date.now();
+            if (opened[id] && now - opened[id] < 10 * 60 * 1000) return;
+            opened[id] = now;
+            const log = sentLog(); log[id] = now;
+            try { root.localStorage.setItem(KEY, JSON.stringify(log)); } catch (e) { /* storage full or off */ }
+            root.fetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leagues: [id], open: id }), credentials: 'omit', keepalive: true }).catch(() => {});
+        } catch (e) { /* never break the app */ }
+    }
+
+    App.ServerBuild = App.ServerBuild || { note, open, _key: KEY };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.ServerBuild;
 })(typeof window !== 'undefined' ? window : globalThis);
