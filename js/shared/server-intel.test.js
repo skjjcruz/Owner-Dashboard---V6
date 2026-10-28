@@ -219,3 +219,15 @@ test('the member moves to another league while waiting: nothing is loaded for th
     assert.equal(App.LI_SOURCE, undefined);
     assert.equal(device.calls, 1, 'the loader then runs for the league on screen, as before');
 });
+
+test('waits only while the server is building the league (or briefly while it is queued)', async () => {
+    const nf = queue => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ error: 'not built', queue }) });
+    for (const [queue, waits] of [['building', true], ['pending', true], [null, false], ['failed', false]]) {
+        const { App, SI, device, fetches } = load({ fetch: () => nf(queue) });
+        SI._wait.poll = 5; SI._wait.ms = 60; SI._wait.pending = 30;
+        App.ServerBuild = { building: async () => true };
+        await App.loadLeagueIntel();
+        assert.equal(device.calls, 1, queue + ': the device computes in the end');
+        assert.equal(fetches.length > 1, waits, queue + (waits ? ' waits' : ' does not wait'));
+    }
+});

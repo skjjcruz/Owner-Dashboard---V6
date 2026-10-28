@@ -23,8 +23,18 @@
     // there, server-build.js): asked again every 0.7 s for up to 8 s
     // before the device computes it (Phase A6, 2026-10-28). Its values land
     // a few seconds after the league is opened, about when the device would
-    // have finished; the loading screen is the same either way.
-    const WAIT = { ms: 8000, poll: 700 };
+    // have finished; the loading screen is the same either way. The server
+    // says where the league is (queue): waited on while 'building', for up
+    // to 3 s while still 'pending' (every builder busy), not at all otherwise.
+    const WAIT = { ms: 8000, pending: 3000, poll: 700 };
+    async function queueOf(r) {
+        try { const b = await r.json(); return b && typeof b === 'object' && 'queue' in b ? b.queue : undefined; } catch (e) { return undefined; }
+    }
+    function worthWaiting(queue, since) {
+        if (queue === 'building' || queue === undefined) return Date.now() - since < WAIT.ms;   // undefined: a server that doesn't say
+        if (queue === 'pending') return Date.now() - since < WAIT.pending;
+        return false;
+    }
     const TTL_IN_SEASON = 2 * 60 * 60 * 1000, TTL = 8 * 60 * 60 * 1000;
 
     function off() { try { return root.localStorage.getItem('dhq_server_li_off') === '1'; } catch (e) { return false; } }
@@ -127,7 +137,7 @@
             let r = await root.fetch(URL + lid, { credentials: 'omit', signal: ctl ? ctl.signal : undefined });
             if (r.status === 404 && App.ServerBuild && App.ServerBuild.building && await App.ServerBuild.building(lid)) {
                 const t1 = Date.now();
-                while (r.status === 404 && Date.now() - t1 < WAIT.ms) {
+                while (r.status === 404 && worthWaiting(await queueOf(r), t1)) {
                     await new Promise(res => setTimeout(res, WAIT.poll));
                     const S1 = state();
                     if (!S1 || String(S1.currentLeagueId) !== lid || App.LI_LOADED) return false;
