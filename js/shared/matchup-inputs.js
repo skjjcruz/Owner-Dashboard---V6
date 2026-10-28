@@ -2148,6 +2148,26 @@
         out.why = [{ key: 'wrModel', label: 'DHQ ' + pos + ' model', impactPct: k != null ? +((k - 1) * 100).toFixed(1) : 0,
             note: 'Typical game ' + to.toFixed(1) + (bits.length ? ': ' + bits.join(', ') : '') }].concat(out.why || []);
     }
+    // DHQ D/ST model (owner, 2026-10-28): DHQ's first number for team
+    // defenses (they used to show Sleeper's). The weekly job writes each
+    // defense's expected line in Sleeper's keys (points-allowed and
+    // yards-allowed tiers as probabilities, sacks, INT, fumble recoveries,
+    // TDs, ...) into the snapshot's dst; any league's rules score it: the
+    // average week is the scored line, the typical week b0 + b1 x average.
+    // Out of sample vs Sleeper in the owner's three D/ST leagues: 53.0% each
+    // (2025 + 2026 weeks 1-7), smaller average miss in all six. No line for
+    // the team this week: null (no DHQ number, as before).
+    function dstFor(player, week, season, scoring) {
+        const S = root.DhqWrModel, D = S && S.dst;
+        if (!D || !D.teams || !player || Number(S.week) !== Number(week) || (season != null && Number(S.season) !== Number(season))) return null;
+        const row = D.teams[String(player.team || player.player_id || '').toUpperCase()];
+        if (!row) return null;
+        const sc = scoring || {};
+        let average = 0;
+        D.keys.forEach((k, i) => { average += (Number(sc[k]) || 0) * (num(row[1][i]) || 0); });
+        const line = {}; D.keys.forEach((k, i) => { line[k] = num(row[1][i]) || 0; });
+        return { typical: D.b0 + D.b1 * average, average, opp: row[0], line };
+    }
     function safetyCheck(pid, out, input, opts, ctx) {
         if (!out || !out.available || !out.points || !(out.sleeper > 0)) return;
         const player = opts.playersData && opts.playersData[pid];
@@ -2201,7 +2221,7 @@
 
     App.MatchupInputs = App.MatchupInputs || {
         prepare, build, project, projectRoster, statusOf, idpRankings, priorRankings, depthCharts, baselineFor, dhqBaselineFor, sleeperPoints, opponentOf, opponentFor, trenchFor, castFor, teamDepth, expectedShare, teamSlotNorm, passPool, freedTargetShare, posGroup, normName, roleFor, oppHealthFor, returnLine, recentPPGFrom,
-        splitShare, roomScaleParts, typicalWeek, TUNE, _safetyCheck: safetyCheck, _everyDown: everyDown, _qbMarket: qbMarket, _wrModel: wrModel,
+        splitShare, roomScaleParts, typicalWeek, TUNE, _safetyCheck: safetyCheck, _everyDown: everyDown, _qbMarket: qbMarket, _wrModel: wrModel, dstFor,
     };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.MatchupInputs;

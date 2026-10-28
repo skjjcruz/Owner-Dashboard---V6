@@ -24,7 +24,7 @@
     'use strict';
     const App = root.App = root.App || {};
     const SL = 'https://api.sleeper.app/v1';
-    const VERSION = '20261027proj14';
+    const VERSION = '20261028proj15';
     const DEPS = [
         'js/shared/matchup-engine.js', 'js/shared/dhq-baseline.js', 'js/shared/matchup-feeds-espn.js',
         'js/shared/matchup-inputs.js', 'data/pff-matchup-snapshot.js', 'data/usage-snapshot.js', 'data/wr-model-snapshot.js',
@@ -40,7 +40,7 @@
         return onLab ? src : DATA_HOME + src;
     }
     const CHUNK = 25;
-    const POS_OK = { QB: 1, RB: 1, WR: 1, TE: 1, K: 1, DL: 1, LB: 1, DB: 1 };
+    const POS_OK = { QB: 1, RB: 1, WR: 1, TE: 1, K: 1, DL: 1, LB: 1, DB: 1, DEF: 1 };   // DEF: the DHQ D/ST model (MatchupInputs.dstFor)
 
     const st = {
         deps: null,          // promise: engine files loaded
@@ -236,6 +236,14 @@
                 for (const pid of batch) {
                     if (pid in st.results) continue;
                     let res = null;
+                    // Team defenses: the DHQ D/ST model, scored with this league's rules (no line: no DHQ number, as before)
+                    const pl = shared.players[pid];
+                    if (pl && MI.posGroup(pl) === 'DEF') {
+                        const d = MI.dstFor ? MI.dstFor(pl, at.wk, yr, at.lg.scoring) : null;
+                        st.results[pid] = d ? { median: +d.typical.toFixed(1), mean: +d.average.toFixed(1), floor: +(d.typical - 4).toFixed(1), ceiling: +(d.average + 6).toFixed(1), grade: null, verdict: null,
+                            why: 'DHQ D/ST model vs ' + d.opp + ': ' + (d.line.sack || 0).toFixed(1) + ' sacks, ' + ((d.line.int || 0) + (d.line.fum_rec || 0)).toFixed(1) + ' takeaways, ' + (d.line.pts_allow || 0).toFixed(0) + ' points allowed expected' } : null;
+                        continue;
+                    }
                     try {
                         const p = MI.project(pid, at.wk, opts, st.ctx);
                         if (p && p.points && Number.isFinite(Number(p.points.median))) {
