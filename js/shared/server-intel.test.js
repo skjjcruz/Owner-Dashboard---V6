@@ -183,3 +183,39 @@ test('later weeks come from dhq-league?part=later, once per league (Phase A3)', 
     assert.equal(await r.SI.later(LID), null, 'none built: the device projects');
     assert.equal(await r.SI.later('mfl_123'), null, 'Sleeper leagues only');
 });
+
+test('a league the server is building for the first time: asks again until its values land', async () => {
+    let n = 0;
+    const { App, SI, device, fetches } = load({ fetch: () => (++n < 3 ? Promise.resolve({ ok: false, status: 404 }) : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body()) })) });
+    SI._wait.poll = 5;
+    App.ServerBuild = { building: async () => true };
+    await App.loadLeagueIntel();
+    assert.equal(device.calls, 0);
+    assert.equal(fetches.length, 3);
+    assert.ok(/&t=\d+$/.test(fetches[2]), 'asked again past any cache');
+    assert.equal(App.LI_SOURCE.source, 'server');
+    assert.ok(App.LI_SOURCE.waited >= 0);
+});
+
+test('a first build that doesn\'t land in time, or a league the server didn\'t take: the device computes', async () => {
+    for (const taken of [true, false]) {
+        const { App, SI, device, fetches } = load({ fetch: () => Promise.resolve({ ok: false, status: 404 }) });
+        SI._wait.poll = 5; SI._wait.ms = 40;
+        App.ServerBuild = { building: async () => taken };
+        await App.loadLeagueIntel();
+        assert.equal(device.calls, 1);
+        assert.equal(App.LI.device, true);
+        if (!taken) assert.equal(fetches.length, 1, 'no waiting when the server never took it');
+        else assert.ok(fetches.length > 1);
+    }
+});
+
+test('the member moves to another league while waiting: nothing is loaded for the old one', async () => {
+    const { App, SI, device } = load({ fetch: () => Promise.resolve({ ok: false, status: 404 }) });
+    SI._wait.poll = 5; SI._wait.ms = 2000;
+    App.ServerBuild = { building: async () => true };
+    setTimeout(() => { App.S.currentLeagueId = '1389388885716385792'; }, 20);
+    await App.loadLeagueIntel();
+    assert.equal(App.LI_SOURCE, undefined);
+    assert.equal(device.calls, 1, 'the loader then runs for the league on screen, as before');
+});
