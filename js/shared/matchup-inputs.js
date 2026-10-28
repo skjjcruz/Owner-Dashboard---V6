@@ -2058,7 +2058,31 @@
     // RBs and TEs (owner ruling 2026-10-27, same recipe, one model each, in
     // the same snapshot's byPos): RB 2025 56.4% / 2026 59.9% vs Sleeper (the
     // engine 53.0 / 56.3), TE 58.5% / 59.0% (52.8 / 55.3), posted-roster path.
-    const MODEL_POS = { WR: 1, RB: 1, TE: 1 };
+    // Defenders (owner, 2026-10-27): nine per-stat models give his expected
+    // IDP stat line (byPos.DL/LB/DB, idpMap.keys order); it is scored with
+    // the league's own rules and mapped to the typical game (idpMap: tackle
+    // points, TFL/QB-hit/PD points and big-play points, the big plays
+    // weighted by the chance of any). His average week is the expected line
+    // itself. Out of sample vs Sleeper: 2025 60.3% (standard scoring) and
+    // 62.5% (a big-play league), 2026 60.6% / 60.9%; the engine was lower in
+    // every position, season and scoring. A league that scores no IDP stat:
+    // unchanged.
+    const MODEL_POS = { WR: 1, RB: 1, TE: 1, DL: 1, LB: 1, DB: 1 };
+    const IDP_GRP = { DL: 1, LB: 1, DB: 1 };
+    function idpPoints(row, S, scoring) {
+        const M = S && S.idpMap, arr = row && row[9];
+        if (!M || !M.keys || !Array.isArray(arr)) return null;
+        const line = {};
+        M.keys.forEach((k, i) => { line[k] = num(arr[i]) || 0; });
+        line.idp_tkl = (line.idp_tkl_solo || 0) + (line.idp_tkl_ast || 0);   // leagues that score total tackles
+        const sc = scoring || {};
+        const pts = keys => keys.reduce((a, k) => a + (Number(sc[k]) || 0) * (line[k] || 0), 0);
+        const t = pts(M.groups.tackles.concat(['idp_tkl'])), m = pts(M.groups.mid), r = pts(M.groups.rare);
+        const avg = t + m + r;
+        if (!(avg > 0)) return null;
+        const pBig = 1 - Math.exp(-((line.idp_sack || 0) + (line.idp_int || 0) + (line.idp_ff || 0) + (line.idp_fum_rec || 0)));
+        return { typical: Math.max(0, M.b0 + M.b_tackles * t + M.b_mid * m + r * (M.b_rare + M.b_rare_p * pBig)), avg };
+    }
     let modelIdx = null;
     function modelRow(pos, pid, player, ctx) {
         const S = root.DhqWrModel;
@@ -2075,10 +2099,13 @@
                 }
             }
         }
-        const ix = modelIdx[pos];
-        if (!ix) return null;
+        // a defender's group can differ between sources (an edge rusher listed LB here, DL there): any IDP group
+        const groups = IDP_GRP[pos] ? ['DL', 'LB', 'DB'] : [pos];
         const nameOf = player && (player.full_name || ((player.first_name || '') + ' ' + (player.last_name || '')));
-        return ix.sid[String(pid)] || (player ? ix.nt[normName(nameOf) + '|' + String(player.team || '').toUpperCase()] : null) || null;
+        const ntKey = player ? normName(nameOf) + '|' + String(player.team || '').toUpperCase() : null;
+        for (const g of groups) { const ix = modelIdx[g]; if (ix && ix.sid[String(pid)]) return ix.sid[String(pid)]; }
+        for (const g of groups) { const ix = modelIdx[g]; if (ix && ntKey && ix.nt[ntKey]) return ix.nt[ntKey]; }
+        return null;
     }
     function wrModel(pid, out, input, opts, ctx) {
         if (!out || out.available === false || !out.points) return;
@@ -2086,6 +2113,22 @@
         const pos = posGroup(player);
         if (!MODEL_POS[pos]) return;
         const row = modelRow(pos, pid, player, ctx);
+        if (IDP_GRP[pos]) {
+            const ip = row ? idpPoints(row, root.DhqWrModel, opts.scoring) : null;
+            if (!ip) return;
+            const shown0 = num(out.points.median) || 0, kk = shown0 > 0 ? ip.typical / shown0 : null;
+            for (const f of ['floor', 'ceiling']) if (out.points[f] != null) out.points[f] = +(kk != null ? out.points[f] * kk : ip.typical).toFixed(2);
+            out.points.median = +ip.typical.toFixed(2);
+            if (out.points.typical != null) out.points.typical = out.points.median;
+            out.points.mean = +Math.max(ip.typical, ip.avg).toFixed(2);
+            out.wrModel = { from: +shown0.toFixed(2), to: out.points.median, avg: +ip.avg.toFixed(2) };
+            const bits = [];
+            if (num(row[5]) != null) bits.push(num(row[5]).toFixed(1) + ' tackles expected');
+            if (num(row[6]) != null) bits.push(Math.round(num(row[6]) * 100) + '% of snaps last game');
+            out.why = [{ key: 'wrModel', label: 'DHQ ' + pos + ' model', impactPct: kk != null ? +((kk - 1) * 100).toFixed(1) : 0,
+                note: 'Typical game ' + out.points.median.toFixed(1) + ', average ' + ip.avg.toFixed(1) + (bits.length ? ': ' + bits.join(', ') : '') }].concat(out.why || []);
+            return;
+        }
         const med = row ? num(row[3]) : null;
         if (med == null || !(med >= 0)) return;
         const DB = App.DhqBaseline, line = input && input.baselineLine;
