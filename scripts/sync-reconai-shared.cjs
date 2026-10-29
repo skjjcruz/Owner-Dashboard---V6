@@ -108,7 +108,11 @@ fs.mkdirSync(TARGET, { recursive: true });
 // build still loads both. To turn v2 back on, drop them from this list and
 // put them back in index.html's WR_SHARED_FILES.
 const FOR_PAGES = /^(1|true|yes)$/i.test(String(process.env.DHQ_SHARED_FOR_PAGES || '').trim());
-const NOT_VENDORED = new Set(FOR_PAGES ? ['values-v2.js', 'pff-snapshot.js'] : []);
+// The value formula itself (dhq-engine-values.js, Phase A6, 2026-10-29) runs
+// on the engine server only: a page gets its values from the server's build
+// or, for a league the server hasn't built, sends what it gathered to
+// dhq-compute (js/shared/server-intel.js remoteCompute).
+const NOT_VENDORED = new Set(FOR_PAGES ? ['values-v2.js', 'pff-snapshot.js', 'dhq-engine-values.js'] : []);
 const vendored = modules.filter(f => !NOT_VENDORED.has(f));
 const loadedButDropped = requiredModules().filter(f => NOT_VENDORED.has(f));
 if (loadedButDropped.length) {
