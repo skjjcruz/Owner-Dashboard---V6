@@ -10,7 +10,8 @@ name: Dependabot auto-merge
 # Security re-scan still validates main on its own schedule.
 on:
   schedule:
-    - cron: "30 6 * * *"
+    # Weekly, the day after Dependabot's weekly run (Phase B2, 2026-10-29).
+    - cron: "30 6 * * 2"
   workflow_dispatch:
 
 permissions:

@@ -1,5 +1,10 @@
 name: CI
-on: [push, pull_request]
+# Pushes to main and pull requests (a branch with a pull request was tested
+# twice: Phase B2, 2026-10-29, build minutes).
+on:
+  push:
+    branches: [main]
+  pull_request:
 jobs:
   lint:
     runs-on: ubuntu-latest
