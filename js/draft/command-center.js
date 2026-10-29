@@ -782,8 +782,38 @@
             if (state.overrideMode) return; // User is manually picking for the CPU team
 
             const delay = SpeedMap[state.speed] ?? 700;
-            cpuTimerRef.current = setTimeout(() => {
-                const slot = state.pickOrder[state.currentIdx];
+            // The computer's pick comes from the engine server (cpu-engine.js,
+            // Phase A7): asked for now, while the pick delay runs, and applied
+            // when the delay ends, so the pace is the same. Anything that
+            // changes first (a trade offer, the speed, an override) drops it.
+            let cancelled = false;
+            const slot0 = state.pickOrder[state.currentIdx];
+            const ghostPick = state.mode === 'ghost' && state.replay && state.replay.replayPicks ? state.replay.replayPicks[state.currentIdx] : null;
+            const persona0 = slot0 ? (state.personas?.[slot0.rosterId] || null) : null;
+            let pickAsk = Promise.resolve(null);
+            if (slot0 && slot0.rosterId !== state.userRosterId && !ghostPick && persona0 && window.DraftCC.cpuEngine) {
+                // GM Strategy weights are the USER's plan — never inject them into
+                // opponent persona picks (opponents would draft with the user's own
+                // bias). This loop only ever picks for CPU slots, so no gmMode /
+                // draftWeights ride in the pick context; user-side pick advice reads
+                // the strategy via the live decision engine and the AI board lane.
+                const draftCtx = state.draftContext || null;
+                pickAsk = Promise.resolve(window.DraftCC.cpuEngine.personaPick(
+                    persona0,
+                    state.pool,
+                    slot0.round,
+                    slot0.overall,
+                    {
+                        teamRoster: state.teamRosters?.[slot0.teamIdx] || [],
+                        draftTuning: state.draftTuning,
+                        draftContext: draftCtx,
+                        boardContext: draftCtx?.boardContext || null,
+                        ownerIntel: persona0?.ownerIntel || draftCtx?.ownerContext?.[String(slot0.rosterId)] || null,
+                    }
+                )).catch(e => { if (window.wrLog) window.wrLog('cc.cpuPick', e); return null; });
+            }
+            cpuTimerRef.current = setTimeout(async () => {
+                const slot = slot0;
                 if (!slot || slot.rosterId === state.userRosterId) return;
 
                 // Phase 5: Ghost replay mode — use historical pick instead of AI
@@ -808,40 +838,15 @@
                     }
                 }
 
-                const persona = state.personas?.[slot.rosterId] || null;
-                const teamRoster = state.teamRosters?.[slot.teamIdx] || [];
                 let pick = null;
                 let reasoning = null;
                 let confidence = null;
-                try {
-                    if (persona && window.DraftCC.cpuEngine) {
-                        // GM Strategy weights are the USER's plan — never inject them into
-                        // opponent persona picks (opponents would draft with the user's own
-                        // bias). This loop only ever picks for CPU slots, so no gmMode /
-                        // draftWeights ride in the pick context; user-side pick advice reads
-                        // the strategy via the live decision engine and the AI board lane.
-                        const draftCtx = state.draftContext || null;
-                        const result = window.DraftCC.cpuEngine.personaPick(
-                            persona,
-                            state.pool,
-                            slot.round,
-                            slot.overall,
-                            {
-                                teamRoster,
-                                draftTuning: state.draftTuning,
-                                draftContext: draftCtx,
-                                boardContext: draftCtx?.boardContext || null,
-                                ownerIntel: persona?.ownerIntel || draftCtx?.ownerContext?.[String(slot.rosterId)] || null,
-                            }
-                        );
-                        if (result) {
-                            pick = result.player;
-                            reasoning = result.reasoning;
-                            confidence = result.confidence;
-                        }
-                    }
-                } catch (e) {
-                    if (window.wrLog) window.wrLog('cc.cpuPick', e);
+                const result = await pickAsk;
+                if (cancelled) return;
+                if (result) {
+                    pick = result.player;
+                    reasoning = result.reasoning;
+                    confidence = result.confidence;
                 }
 
                 // Fallback: best DHQ
@@ -855,7 +860,7 @@
                 }
             }, delay);
 
-            return () => clearTimeout(cpuTimerRef.current);
+            return () => { cancelled = true; clearTimeout(cpuTimerRef.current); };
         }, [state.phase, state.currentIdx, state.speed, state.mode, state.overrideMode, isUserTurn, isDone]);
 
         // ── Phase 3: CPU trade offer generation ──────────────────────
@@ -1776,35 +1781,23 @@
             // "likely pick" can never be a player who is already off the board.
             const apCopies = Math.max(1, Number(state.playerCopies) || 1);
             const availablePool = (state.pool || []).filter(p => p && p.pid && (state.draftedPids?.[p.pid] || 0) < apCopies);
-            const payload = {};
-            Object.entries(state.personas).forEach(([rid, persona]) => {
-                try {
-                    const draftCtx = state.draftContext || null;
-                    // Each opponent predicts at THEIR OWN next slot, not the slot of
-                    // whoever happens to be on the clock right now.
-                    const oppSlot = (state.pickOrder || [])
-                        .slice(state.currentIdx)
-                        .find(s => String(s.rosterId) === String(rid));
-                    const preds = window.DraftCC.cpuEngine.computePredictions(
-                        persona,
-                        availablePool,
-                        oppSlot?.round || round,
-                        oppSlot?.overall || currentSlot.overall,
-                        {
-                            draftTuning: state.draftTuning,
-                            draftContext: draftCtx,
-                            boardContext: draftCtx?.boardContext || null,
-                            ownerIntel: persona?.ownerIntel || draftCtx?.ownerContext?.[String(rid)] || null,
-                        }
-                    );
-                    payload[rid] = preds;
-                } catch (e) {
-                    if (window.wrLog) window.wrLog('cc.computePreds', e);
-                }
+            // Each opponent predicts at THEIR OWN next slot, not the slot of
+            // whoever happens to be on the clock right now. One engine-server
+            // call for every opponent (cpu-engine.js, Phase A7); a pick made
+            // before it answers makes it stale, and the next one replaces it.
+            const teams = Object.entries(state.personas).map(([rid, persona]) => {
+                const oppSlot = (state.pickOrder || [])
+                    .slice(state.currentIdx)
+                    .find(s => String(s.rosterId) === String(rid));
+                return { rid, persona, round: oppSlot?.round || round, pick: oppSlot?.overall || currentSlot.overall };
             });
-            if (Object.keys(payload).length) {
-                dispatch({ type: 'UPDATE_PREDICTIONS', payload, round });
-            }
+            const askedAt = state.currentIdx;
+            Promise.resolve(window.DraftCC.cpuEngine.computePredictions(teams, availablePool, { draftTuning: state.draftTuning }))
+                .then(payload => {
+                    if (lastPredIdxRef.current !== askedAt) return;
+                    if (payload && Object.keys(payload).length) dispatch({ type: 'UPDATE_PREDICTIONS', payload, round });
+                })
+                .catch(e => { if (window.wrLog) window.wrLog('cc.computePreds', e); });
         }, [state.phase, state.currentIdx, personaSignature]);
 
         const onExit = React.useCallback(() => {

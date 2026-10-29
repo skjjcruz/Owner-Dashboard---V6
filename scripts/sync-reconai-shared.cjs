@@ -112,7 +112,7 @@ const FOR_PAGES = /^(1|true|yes)$/i.test(String(process.env.DHQ_SHARED_FOR_PAGES
 // on the engine server only: a page gets its values from the server's build
 // or, for a league the server hasn't built, sends what it gathered to
 // dhq-compute (js/shared/server-intel.js remoteCompute).
-const NOT_VENDORED = new Set(FOR_PAGES ? ['values-v2.js', 'pff-snapshot.js', 'dhq-engine-values.js'] : []);
+const NOT_VENDORED = new Set(FOR_PAGES ? ['values-v2.js', 'pff-snapshot.js', 'dhq-engine-values.js', 'rookie-data.js', 'mock-engine.js'] : []);
 const vendored = modules.filter(f => !NOT_VENDORED.has(f));
 const loadedButDropped = requiredModules().filter(f => NOT_VENDORED.has(f));
 if (loadedButDropped.length) {
