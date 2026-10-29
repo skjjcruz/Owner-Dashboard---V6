@@ -124,6 +124,53 @@
         return p;
     }
 
+    // Values for a league the server hasn't built (Phase A6, 2026-10-28):
+    // the page no longer carries the value formula, so dhq-engine.js hands
+    // the data it gathered (the league, rosters and league history, from
+    // whichever platform) to this, which posts it to dhq-compute and waits
+    // for the engine server to compute the values (a few seconds).
+    const COMPUTE = 'https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-compute';
+    const COMPUTE_WAIT = { ms: 45000, poll: 600 };
+    async function remoteCompute(job) {
+        const S = job && job.S, gathered = job && job.gathered;
+        if (!S || !gathered || typeof root.fetch !== 'function') throw new Error('nothing to compute');
+        const t0 = Date.now();
+        const lid = String(S.currentLeagueId || '');
+        const league = job.league || (S.leagues || []).find(l => String(l.league_id) === lid) || {};
+        // The page's own player records the server's directory doesn't hold:
+        // players Sleeper doesn't know (espn_123) and every record an ESPN,
+        // MFL or Yahoo league laid over Sleeper's (they carry _espn_id /
+        // _mfl_id / _yahoo_id; MFL's carry NFL draft capital), so the server
+        // values the same records the page would have.
+        const players = {};
+        for (const pid in (S.players || {})) {
+            const pl = S.players[pid];
+            if (pl && (!/^\d+$/.test(pid) || pl._espn_id != null || pl._mfl_id != null || pl._yahoo_id != null)) players[pid] = pl;
+        }
+        const payload = {
+            league, rosters: S.rosters || [], leagueUsers: S.leagueUsers || [], season: S.season, nflState: S.nflState || null,
+            platform: job.platform || S.platform || 'sleeper', players, tradedPicks: S.tradedPicks || [], gathered,
+        };
+        const r = await root.fetch(COMPUTE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ league_key: lid, platform: payload.platform, payload }), credentials: 'omit' });
+        const ask = await r.json().catch(() => null);
+        if (!r.ok || !ask || !ask.id) throw new Error('compute not accepted (' + r.status + ')');
+        for (;;) {
+            if (Date.now() - t0 > COMPUTE_WAIT.ms) throw new Error('compute timed out');
+            await new Promise(res => setTimeout(res, COMPUTE_WAIT.poll));
+            let a = null;
+            try { const g = await root.fetch(COMPUTE + '?id=' + ask.id, { credentials: 'omit', cache: 'no-store' }); a = await g.json(); } catch (e) { continue; }
+            if (a && a.status === 'done' && a.intel && a.intel.playerScores) {
+                const LI = a.intel;
+                LI.dhqPickValueFn = pickValueFn(LI.dhqPickValues || {}, (S.rosters || []).length || 16, parseInt(S.season) || new Date().getFullYear());
+                App.LI_SOURCE = { source: 'server-compute', ms: Date.now() - t0 };
+                console.log('[ServerIntel] values computed on the server from this page\'s data: ' + Object.keys(LI.playerScores).length + ' players, ' + (Date.now() - t0) + ' ms');
+                return LI;
+            }
+            if (a && a.status === 'failed') throw new Error('compute failed: ' + (a.error || ''));
+        }
+    }
+    App.remoteComputeLeagueIntel = App.remoteComputeLeagueIntel || remoteCompute;
+
     let pending = null;
     async function fromServer() {
         const S = state();
@@ -218,7 +265,7 @@
         });
     } catch (e) { /* App frozen: the device path stays as it was */ }
 
-    App.ServerIntel = { later, _wait: WAIT, _reject: reject, _takeProj: takeProj, _projOnly: projOnly, _pickValueFn: pickValueFn, _fromServer: fromServer, _wrap: wrap };
+    App.ServerIntel = { later, _wait: WAIT, _remoteCompute: remoteCompute, _computeWait: COMPUTE_WAIT, _reject: reject, _takeProj: takeProj, _projOnly: projOnly, _pickValueFn: pickValueFn, _fromServer: fromServer, _wrap: wrap };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.ServerIntel;
 })(typeof window !== 'undefined' ? window : globalThis);
