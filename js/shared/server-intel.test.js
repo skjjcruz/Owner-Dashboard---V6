@@ -231,3 +231,35 @@ test('waits only while the server is building the league (or briefly while it is
         assert.equal(fetches.length > 1, waits, queue + (waits ? ' waits' : ' does not wait'));
     }
 });
+
+test('remote compute: posts the gathered league, waits for the server, returns its values', async () => {
+    const calls = [];
+    let polls = 0;
+    const { App, SI } = load({ fetch: (url) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body()) }) });
+    globalThis.fetch = (url, init) => {
+        calls.push([url, init && init.method, init && init.body]);
+        if (init && init.method === 'POST') return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ id: 'abc' }) });
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(++polls < 2 ? { status: 'building' } : { status: 'done', intel: intel(150) }) });
+    };
+    SI._computeWait.poll = 5;
+    const S = { currentLeagueId: 'espn_1_2026', season: '2026', platform: 'espn', rosters: [{ roster_id: 1, players: ['4046', 'espn_9'] }],
+        players: { 4046: { position: 'QB' }, 4047: { position: 'WR', _espn_id: 77 }, espn_9: { position: 'RB' } }, leagues: [{ league_id: 'espn_1_2026', scoring_settings: {} }] };
+    const LI = await App.remoteComputeLeagueIntel({ S, platform: 'espn', gathered: { leagueId: 'espn_1_2026', chain: [], allDraftPicks: [] } });
+    assert.equal(Object.keys(LI.playerScores).length, 150);
+    assert.equal(typeof LI.dhqPickValueFn, 'function');
+    assert.equal(App.LI_SOURCE.source, 'server-compute');
+    const sent = JSON.parse(calls[0][2]);
+    assert.equal(sent.league_key, 'espn_1_2026');
+    assert.deepEqual(Object.keys(sent.payload.players).sort(), ['4047', 'espn_9'], 'only records the server lacks or a platform laid over Sleeper\'s');
+    assert.ok(calls.slice(1).every(c => /\?id=abc$/.test(c[0])));
+});
+
+test('remote compute: a failed or refused compute rejects (no values rather than wrong ones)', async () => {
+    const { App, SI } = load();
+    SI._computeWait.poll = 5;
+    const S = { currentLeagueId: LID, season: '2026', rosters: [], players: {}, leagues: [{ league_id: LID }] };
+    globalThis.fetch = () => Promise.resolve({ ok: false, status: 429, json: () => Promise.resolve({ error: 'busy' }) });
+    await assert.rejects(App.remoteComputeLeagueIntel({ S, gathered: { leagueId: LID } }), /not accepted/);
+    globalThis.fetch = (u, init) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(init && init.method === 'POST' ? { id: 'x' } : { status: 'failed', error: 'boom' }) });
+    await assert.rejects(App.remoteComputeLeagueIntel({ S, gathered: { leagueId: LID } }), /compute failed/);
+});
