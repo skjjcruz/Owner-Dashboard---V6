@@ -419,6 +419,17 @@
     // as "$250 FAAB".
     const TC_ORD = { 1: '1st', 2: '2nd', 3: '3rd' };
     function tcPickText(id) { const p = String(id).split('-'); const sl = (p[4] || '').charAt(0) === 's' ? Number(p[4].slice(1)) : null; return p[1] + ' ' + (sl ? p[2] + '.' + String(sl).padStart(2, '0') : (TC_ORD[p[2]] || p[2] + 'th')) + ' from ' + p[3]; }
+    // The server's trade answers come from its stored build of the league, so
+    // they're only comparable while the page shows that same build: values
+    // loaded from it (not a fresher one computed for the page, nor a copy
+    // from this device's cache) and not a projected season (2026-10-29: a
+    // '2027 — projected' view and a 3-hour-old build showed '95 of 95 deals
+    // differ').
+    function tcServerComparable() {
+        const LI = window.App?.LI;
+        if (!LI || LI._projectedYear) return false;
+        return window.App?.LI_SOURCE?.source === 'server';
+    }
     // The device's and the server's evaluate_trade agree on everything a
     // screen shows: the verdict (minus `precedence`, a note for the AI) and
     // the headliner.
@@ -1397,6 +1408,7 @@
                 const type = Number(currentLeague.settings?.type);
                 const picks = tradePickIds.A.length || tradePickIds.B.length;
                 if (!/^\d{10,20}$/.test(lid) || !myRoster?.owner_id || (picks && type !== 1 && type !== 2) || typeof fetch !== 'function') return;
+                if (!tcServerComparable()) return;
                 try { if (localStorage.getItem('dhq_server_li_off') === '1') return; } catch (e) { /* storage off */ }
                 fetch('https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-tools/app?league=' + lid + '&user=' + encodeURIComponent(myRoster.owner_id) + '&tool=evaluate_trade&args=' + encodeURIComponent(JSON.stringify(args)), { credentials: 'omit' })
                     .then(r => (r.ok ? r.json() : null))
@@ -4351,6 +4363,7 @@
         function finderPlansServerCheck(asks, results) {
             const lid = String(currentLeague.id || currentLeague.league_id || '');
             if (!asks.length || !/^\d{10,20}$/.test(lid) || !myRoster?.owner_id || typeof fetch !== 'function') return;
+            if (!tcServerComparable()) return;
             try { if (localStorage.getItem('dhq_server_li_off') === '1') return; } catch (e) { return; }
             const offersOf = r => (r && Array.isArray(r.offers) ? r.offers : null);
             // A field that is set but empty on the device is simply absent from the server's JSON: same offer.
@@ -4378,6 +4391,7 @@
             const type = Number(currentLeague.settings?.type);
             const picks = dealArgs.some(d => [].concat(d.give || [], d.get || []).some(x => /\b(1st|2nd|3rd|\d+th|\d+\.\d+)\b/.test(String(x)) && /\b20\d\d\b/.test(String(x))));
             if (!/^\d{10,20}$/.test(lid) || !myRoster?.owner_id || !dealArgs.length || (picks && type !== 1 && type !== 2) || typeof fetch !== 'function') return;
+            if (!tcServerComparable()) return;
             try { if (localStorage.getItem('dhq_server_li_off') === '1') return; } catch (e) { return; }
             const t0 = Date.now();
             fetch('https://hovnqztlbsgsywrbidbh.supabase.co/functions/v1/dhq-tools/app', { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ league: lid, user: String(myRoster.owner_id), tool: 'evaluate_deals', args: { deals: dealArgs } }) })
