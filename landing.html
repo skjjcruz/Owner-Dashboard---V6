@@ -1114,31 +1114,36 @@
     }
 
     // \u2500\u2500 Google OAuth (account only) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-    function handleGoogle() {
-      if (labNeedsLeagueFirst(handleGoogle)) return; // Lab: league account first
+    // The "started" events are AWAITED before the browser leaves for the
+    // provider (each wait is capped at 900ms inside trackLandingEvent). Fired
+    // and forgotten, they died in flight: a real Google signup on 10/29
+    // landed oauth_succeeded + signup_succeeded and no started row, so the
+    // funnel read "Signup started 0, succeeded 1" (owner ask 2026-10-30).
+    const OAUTH_STARTED_KEY = 'fw_oauth_started_v1';
+    async function startOAuth(provider) {
       const db = getSbClient();
       if (!db) { showAlert('error', 'Sign-in is still loading \u2014 try again in a moment.'); return; }
-      trackLandingEvent('oauth_started', { provider: 'google' });
+      const started = authMode === 'signup' ? 'signup_started' : 'signin_started';
+      try { sessionStorage.setItem(OAUTH_STARTED_KEY, started); } catch (e) { /* ignore */ }
       // Mission Control's funnel counts signup_started/signup_succeeded.
       // Without these a Google or Apple signup is invisible and the funnel
       // reads 0 no matter how many people sign up (owner ask 2026-08-20).
-      trackLandingEvent(authMode === 'signup' ? 'signup_started' : 'signin_started', { method: 'google' });
+      await Promise.all([
+        trackLandingEvent('oauth_started', { provider }),
+        trackLandingEvent(started, { method: provider }),
+      ]);
       markOAuthPending();
-      db.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
+      db.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin + window.location.pathname } });
+    }
+    function handleGoogle() {
+      if (labNeedsLeagueFirst(handleGoogle)) return; // Lab: league account first
+      startOAuth('google');
     }
 
     // ── Apple OAuth (account only) ──────────────────────────────────────────
     function handleApple() {
       if (labNeedsLeagueFirst(handleApple)) return; // Lab: league account first
-      const db = getSbClient();
-      if (!db) { showAlert('error', 'Sign-in is still loading — try again in a moment.'); return; }
-      trackLandingEvent('oauth_started', { provider: 'apple' });
-      // Mission Control's funnel counts signup_started/signup_succeeded.
-      // Without these a Google or Apple signup is invisible and the funnel
-      // reads 0 no matter how many people sign up (owner ask 2026-08-20).
-      trackLandingEvent(authMode === 'signup' ? 'signup_started' : 'signin_started', { method: 'apple' });
-      markOAuthPending();
-      db.auth.signInWithOAuth({ provider: 'apple', options: { redirectTo: window.location.origin + window.location.pathname } });
+      startOAuth('apple');
     }
 
     // Handle Google redirect back: store session, then route to step 2.
@@ -1307,7 +1312,17 @@
         // AWAITED so the success reaches the server before we navigate away —
         // otherwise a successful signup reads as a funnel dropout.
         const oauthAccountId = (appSession && appSession.user && appSession.user.id) || null;
+        // The click recorded signup_started or signin_started from the
+        // screen's mode; the server now says whether the account is new. A
+        // new account that clicked from the sign-in sheet gets its
+        // signup_started here, so started >= succeeded always holds.
+        let startedAs = null;
+        try { startedAs = sessionStorage.getItem(OAUTH_STARTED_KEY); sessionStorage.removeItem(OAUTH_STARTED_KEY); } catch (e) { startedAs = null; }
+        const backfill = oauthIsNew && startedAs !== 'signup_started'
+          ? trackLandingEvent('signup_started', { method: oauthProvider, accountId: oauthAccountId, inferred: true })
+          : Promise.resolve();
         await Promise.all([
+          backfill,
           trackLandingEvent('oauth_succeeded', { provider: oauthProvider, isNew: oauthIsNew, accountId: oauthAccountId }),
           trackLandingEvent(oauthIsNew ? 'signup_succeeded' : 'signin_succeeded', { method: oauthProvider, accountId: oauthAccountId }),
         ]);
