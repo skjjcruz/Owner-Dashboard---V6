@@ -1079,6 +1079,10 @@ test('live update: silent self-update — build id + version.json, every page po
     ok(bd.includes("target: 'es2020'") && bd.includes('would change its global names'), 'plain scripts minify at es2020 behind the global-names guard');
     ok(wf.includes("-name '*.test.js' -o -name '*.md'") && wf.includes('qb-trade-rules-v2.js'), 'deploy does not publish tests, notes or unused modules');
     ok(!/'values-v2\.js'|'pff-snapshot\.js'/.test(index), 'the retired v2 value files are not loaded');
+    // Phase A8: the standalone core's value formula runs on the engine server only.
+    const syncSrc = fs.readFileSync(path.join(ROOT, 'scripts/sync-reconai-shared.cjs'), 'utf8');
+    ok(!/'dhq-core-values\.js'/.test(index), 'pages do not load the core value formula (dhq-core-values.js)');
+    ok(/NOT_VENDORED = new Set\(FOR_PAGES \? \[[^\]]*'dhq-core-values\.js'/.test(syncSrc), 'the Pages build leaves dhq-core-values.js out');
     ok(wf.includes('DHQ_SHARED_FOR_PAGES=1 npm run sync:shared'), 'the Pages build leaves the retired v2 files out (the engine server keeps them)');
     // The Lab publisher lives in the website repo only (the app repo has none).
     const labPath = path.join(ROOT, 'scripts/publish-lab.cjs');
