@@ -229,22 +229,42 @@
         return true;
     }
 
+    // This week's projections may still be on their way while the page asks
+    // for its first numbers: dhq-proj.js waits on this (true once they have
+    // arrived for the league, false when the server had none) before it
+    // downloads the projection engine, so a player the server has is never
+    // computed here (A8, 2026-10-30).
+    const projWait = { lid: '', p: null };
+    function track(lid, p) {
+        if (!/^\d{10,20}$/.test(lid)) return;
+        projWait.lid = lid;
+        projWait.p = Promise.resolve(p).catch(() => false).then(() => !!(App.ServerProj && App.ServerProj.leagueId === lid));
+    }
+    function projSettled(lid) {
+        lid = String(lid || '');
+        if (App.ServerProj && App.ServerProj.leagueId === lid) return Promise.resolve(true);
+        return projWait.lid === lid && projWait.p ? projWait.p : null;
+    }
+
     function wrap(orig) {
         if (typeof orig !== 'function' || orig.__serverIntel) return orig;
         const wrapped = async function () {
             if (App.LI_LOADED) return;
             if (off() || root._liLoading || typeof root.fetch !== 'function') return orig.apply(this, arguments);
+            let settle = () => {};
+            track(String((state() || {}).currentLeagueId || ''), new Promise(r => { settle = r; }));
             // The device's own cache first, exactly as before (then this week's
             // projections alone from the server, in the background).
             try {
                 if (typeof App.loadLICache === 'function' && await App.loadLICache()) {
                     const S = state(), lid = String((S && S.currentLeagueId) || '');
-                    if (/^\d{10,20}$/.test(lid)) projOnly(lid);
+                    settle(/^\d{10,20}$/.test(lid) ? projOnly(lid) : false);
                     return;
                 }
             } catch (e) { /* fall through */ }
-            if (App.LI_LOADED) return;
+            if (App.LI_LOADED) { settle(false); return; }
             if (!pending) pending = fromServer().catch(e => { console.log('[ServerIntel] ' + (e && e.name === 'AbortError' ? 'server slow' : 'server unavailable') + '; computing on device'); return false; }).finally(() => { pending = null; });
+            settle(pending);
             if (await pending) return;
             if (App.LI_LOADED) return;
             return orig.apply(this, arguments);
@@ -265,7 +285,7 @@
         });
     } catch (e) { /* App frozen: the device path stays as it was */ }
 
-    App.ServerIntel = { later, _wait: WAIT, _remoteCompute: remoteCompute, _computeWait: COMPUTE_WAIT, _reject: reject, _takeProj: takeProj, _projOnly: projOnly, _pickValueFn: pickValueFn, _fromServer: fromServer, _wrap: wrap };
+    App.ServerIntel = { later, projSettled, _wait: WAIT, _remoteCompute: remoteCompute, _computeWait: COMPUTE_WAIT, _reject: reject, _takeProj: takeProj, _projOnly: projOnly, _pickValueFn: pickValueFn, _fromServer: fromServer, _wrap: wrap };
     /* global module */
     if (typeof module !== 'undefined' && module.exports) module.exports = App.ServerIntel;
 })(typeof window !== 'undefined' ? window : globalThis);

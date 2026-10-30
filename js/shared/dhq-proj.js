@@ -222,6 +222,8 @@
         if (st.running) return;
         st.running = true;
         try {
+            await serverFirst();
+            if (!st.queue.size) return;
             await loadDeps();
             while (st.queue.size) {
                 const at = resetIfMoved();
@@ -261,6 +263,19 @@
         } finally {
             st.running = false;
         }
+    }
+    // This week's numbers may still be on their way from the server
+    // (server-intel.js): wait for them, at most 15 s, before downloading the
+    // engine, and take every player they cover. Only who is left (injury tag
+    // changed since the build, no server build) is computed here.
+    async function serverFirst() {
+        const SI = App.ServerIntel, lg = league();
+        const p = SI && SI.projSettled && lg ? SI.projSettled(lg.id) : null;
+        if (!p) return;
+        let t = null;
+        await Promise.race([p, new Promise(r => { t = setTimeout(r, 15000); })]);
+        clearTimeout(t);
+        adoptServer();
     }
     let _kick = null;
     function kick() { if (_kick) return; _kick = setTimeout(() => { _kick = null; run(); }, 50); }

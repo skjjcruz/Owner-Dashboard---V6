@@ -171,6 +171,19 @@ test('this week\'s DHQ projections ride along when the build is fresh (Phase A3)
     assert.equal(r.App.ServerProj.week, 8, 'values from the cache, projections from the server');
 });
 
+test('projSettled: the projection engine can wait for this week\'s numbers (A8)', async () => {
+    const proj = { week: 8, built_at: new Date().toISOString(), players: {}, app: { model: 'm1', results: { p1: { median: 1, mean: 1 } }, none: [], inj: {} } };
+    let r = load({ fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(body({ dhq_proj: proj })) }) });
+    assert.equal(r.SI.projSettled(LID), null, 'nothing asked for yet');
+    const go = r.App.loadLeagueIntel();
+    assert.equal(await r.SI.projSettled(LID), true);
+    await go;
+    r = load({ cache: true, fetch: () => Promise.resolve({ ok: false, status: 404 }) });
+    await r.App.loadLeagueIntel();
+    assert.equal(await r.SI.projSettled(LID), false, 'the server had none: the page computes');
+    assert.equal(r.SI.projSettled('999999999999'), null, 'another league');
+});
+
 test('later weeks come from dhq-league?part=later, once per league (Phase A3)', async () => {
     const later = { cur: 7, model: 'abc123def456', built_at: new Date().toISOString(), weeks: { 8: { p1: [10, 11, 6, 16, 'x'] } }, inj: {} };
     let r = load({ fetch: (u) => Promise.resolve({ ok: true, json: () => Promise.resolve(/part=later/.test(u) ? { league_id: LID, dhq_later: later } : body()) }) });
