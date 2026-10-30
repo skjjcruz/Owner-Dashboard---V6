@@ -2168,6 +2168,44 @@
         const line = {}; D.keys.forEach((k, i) => { line[k] = num(row[1][i]) || 0; });
         return { typical: D.b0 + D.b1 * average, average, opp: row[0], line };
     }
+    // League extras (owner, 2026-10-29: "make our model fit each league's
+    // scoring"): the stats a league scores beyond the half-PPR line our
+    // numbers carry — first downs, sacks taken, incompletions, return yards,
+    // 100/200/300/400-yard and 40+/50+ bonuses, reception-length buckets,
+    // fumbles, pick-sixes — projected from his own history (snapshot extras,
+    // scripts/models/extras/) and scored with the league's own rules. The
+    // typical week takes the steady stats and the bonuses; fumbles and
+    // pick-sixes count only in the average. QBs get them before the market
+    // check's blend (Sleeper's anchor already carries its own). A league
+    // that scores none of them: unchanged. Out of sample vs Sleeper: Psycho
+    // RB/WR/TE 51.2% -> 55.8%, QB 52.0 -> 55.4; CTB The One 51.1 -> 54.1,
+    // QB 53.3 -> 55.7; the other leagues about even.
+    const EXTRA_POS = { QB: 1, RB: 1, WR: 1, TE: 1 };
+    function leagueExtras(pid, out, input, opts, ctx) {
+        const S = root.DhqWrModel, E = S && S.extras;
+        if (!E || !E.players || !out || out.available === false || !out.points) return;
+        if (Number(S.week) !== Number(ctx.week) || (ctx.season != null && Number(S.season) !== Number(ctx.season))) return;
+        const player = opts.playersData && opts.playersData[pid];
+        if (!EXTRA_POS[posGroup(player)]) return;
+        const row = E.players[String(pid)] || (player && player.gsis_id ? E.players[String(player.gsis_id).trim()] : null);
+        if (!row) return;
+        const sc = opts.scoring || {}, at = {};
+        E.keys.forEach((k, i) => { at[k] = num(row[i]) || 0; });
+        const sum = keys => keys.reduce((a, k) => a + (Number(sc[k]) || 0) * (at[k] || 0), 0);
+        const st = sum(E.groups.steady), ra = sum(E.groups.rare), ng = sum(E.groups.neg);
+        const typ = E.typical.steady * st + E.typical.rare * ra + E.typical.neg * ng, avg = st + ra + ng;
+        if (!typ && !avg) return;
+        for (const f of ['median', 'typical', 'floor', 'ceiling']) if (out.points[f] != null) out.points[f] = +Math.max(0, out.points[f] + typ).toFixed(2);
+        if (out.points.mean != null) out.points.mean = +Math.max(0, out.points.mean + avg).toFixed(2);
+        out.extras = { typical: +typ.toFixed(2), average: +avg.toFixed(2) };
+        const bits = [];
+        const fd = (at.rec_fd || 0) * (Number(sc.rec_fd) || 0) + (at.rush_fd || 0) * (Number(sc.rush_fd) || 0) + (at.pass_fd || 0) * (Number(sc.pass_fd) || 0);
+        if (Math.abs(fd) >= 0.05) bits.push('first downs ' + (fd > 0 ? '+' : '') + fd.toFixed(1));
+        if (Math.abs(ra) >= 0.05) bits.push('bonuses ' + (ra > 0 ? '+' : '') + ra.toFixed(1));
+        const rest = typ - fd - E.typical.rare * ra;
+        if (Math.abs(rest) >= 0.05) bits.push('other league rules ' + (rest > 0 ? '+' : '') + rest.toFixed(1));
+        out.why = (out.why || []).concat([{ key: 'extras', label: 'League scoring', impactPct: 0, note: 'Your league\'s extra rules: ' + (bits.join(', ') || (typ > 0 ? '+' : '') + typ.toFixed(1)) }]);
+    }
     function safetyCheck(pid, out, input, opts, ctx) {
         if (!out || !out.available || !out.points || !(out.sleeper > 0)) return;
         const player = opts.playersData && opts.playersData[pid];
@@ -2203,6 +2241,7 @@
         safetyCheck(pid, out, input, opts, ctx);
         out.everyDown = everyDown(pid, out, input, opts, ctx);
         wrModel(pid, out, input, opts, ctx);
+        leagueExtras(pid, out, input, opts, ctx);
         qbMarket(pid, out, input, opts, ctx);
         return out;
     }

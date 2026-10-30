@@ -285,6 +285,33 @@ test('the server build\'s numbers stand in when the page runs the same projectio
     globalThis.S = saved.S; App.WeeklyProj = saved.WP; globalThis.document = saved.doc; App.ServerProj = saved.SP;
 });
 
+test('a player asked for before this week\'s server numbers arrive waits for them; nothing downloads (A8)', async () => {
+    const saved = { S: globalThis.S, WP: App.WeeklyProj, doc: globalThis.document, SP: App.ServerProj, SI: App.ServerIntel };
+    let loads = 0;
+    globalThis.document = { querySelector: (q) => (/dhq-proj-model/.test(q) ? { content: 'm1' } : null), createElement: () => { loads++; throw new Error('no loading in this test'); }, head: {} };
+    globalThis.S = { currentLeagueId: 'L3', leagues: [{ league_id: 'L3', scoring_settings: {} }], players: { a: { team: 'BUF', position: 'WR' }, c: { team: 'KC', position: 'QB', injury_status: 'Out' } } };
+    App.WeeklyProj = { displayWeek: () => 8, hasProjWeek: () => false, projLine: () => null };
+    App.ServerProj = null;
+    let arrive;
+    const settled = new Promise(r => { arrive = r; });
+    App.ServerIntel = { projSettled: () => settled };
+    D._st.deps = null; D._st.error = null;
+    assert.equal(D.get('a'), null, 'not here yet');
+    await new Promise(r => setTimeout(r, 120));
+    assert.equal(loads, 0, 'the engine waits for the server');
+    App.ServerProj = { leagueId: 'L3', week: 8, builtAt: new Date().toISOString(), app: { model: 'm1', results: { a: { median: 11.2, mean: 11.9 } }, none: [], inj: {} } };
+    arrive(true);
+    await new Promise(r => setTimeout(r, 20));
+    assert.equal(D._st.results.a.mean, 11.9);
+    assert.equal(loads, 0, 'everyone was covered: nothing downloaded');
+    // his tag changed since the build: after the server answers, only he is computed here
+    assert.equal(D.get('c'), null);
+    await new Promise(r => setTimeout(r, 120));
+    assert.ok(loads > 0, 'the engine loads for the one player the server could not cover');
+    D._st.deps = null; D._st.error = null; D._st.queue.clear(); D._st.results = {};
+    globalThis.S = saved.S; App.WeeklyProj = saved.WP; globalThis.document = saved.doc; App.ServerProj = saved.SP; App.ServerIntel = saved.SI;
+});
+
 test('later weeks come from the server build; a changed injury tag or a missing player is projected here', async () => {
     const saved = { S: globalThis.S, WP: App.WeeklyProj, doc: globalThis.document, SI: App.ServerIntel };
     globalThis.document = { querySelector: (q) => (/dhq-proj-model/.test(q) ? { content: 'm1' } : null), createElement: () => { throw new Error('no loading in this test'); }, head: {} };
